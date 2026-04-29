@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Telecheck Command Center</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0f17; --panel:#111826; --panel2:#0d1422; --border:#1f2a3d;
+    --text:#e5e9f0; --muted:#8b95a7; --accent:#6aa9ff; --accent2:#9ee37d;
+    --warn:#ffb454; --danger:#ff6b6b; --chip:#1a2438;
+    --code:#0a1020;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Inter,Roboto,sans-serif}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .app{display:grid;grid-template-columns:340px 1fr;height:100vh;min-height:0}
+  /* Sidebar */
+  aside{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+  .brand{padding:14px 16px;border-bottom:1px solid var(--border)}
+  .brand h1{margin:0;font-size:15px;letter-spacing:.3px}
+  .brand .sub{color:var(--muted);font-size:12px;margin-top:2px}
+  .search{padding:10px 12px;border-bottom:1px solid var(--border)}
+  .search input{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:6px;outline:none}
+  .search input:focus{border-color:var(--accent)}
+  .tabs{display:flex;border-bottom:1px solid var(--border);background:var(--panel2)}
+  .tabs button{flex:1;background:transparent;color:var(--muted);border:0;padding:10px;cursor:pointer;font-size:12px;border-bottom:2px solid transparent}
+  .tabs button.active{color:var(--text);border-bottom-color:var(--accent)}
+  .nav{overflow:auto;padding:6px 0;flex:1;min-height:0}
+  .group{padding:6px 12px}
+  .group h3{margin:10px 4px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .group h3 .count{background:var(--chip);color:var(--muted);padding:1px 6px;border-radius:10px;font-size:10px}
+  .group h3 .pill{background:#15324a;color:var(--accent);padding:1px 6px;border-radius:10px;font-size:10px}
+  .group h3.danger .pill{background:#3a1818;color:var(--danger)}
+  .item{display:block;padding:6px 8px;border-radius:5px;color:var(--text);font-size:12.5px;cursor:pointer;border:1px solid transparent}
+  .item small{color:var(--muted);display:block;font-size:10.5px;margin-top:1px}
+  .item:hover{background:var(--panel2);text-decoration:none}
+  .item.active{background:#15233b;border-color:var(--accent)}
+  .item .v{color:var(--accent2);font-size:10px;margin-left:6px}
+  /* Main */
+  main{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .topbar{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--panel2);flex-wrap:wrap}
+  .topbar .path{color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,monospace}
+  .topbar .actions{margin-left:auto;display:flex;gap:8px}
+  .btn{background:var(--chip);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px}
+  .btn:hover{border-color:var(--accent)}
+  .content{overflow:auto;padding:24px 36px;flex:1;min-height:0}
+  .content.home{padding:24px}
+  /* Markdown */
+  .md{max-width:920px}
+  .md h1,.md h2,.md h3,.md h4{border-bottom:1px solid var(--border);padding-bottom:6px;margin-top:1.6em}
+  .md h1{font-size:24px}
+  .md h2{font-size:19px}
+  .md h3{font-size:16px;border-bottom:0}
+  .md code{background:var(--code);padding:1px 5px;border-radius:3px;font-size:12.5px}
+  .md pre{background:var(--code);padding:12px;border-radius:6px;overflow:auto;border:1px solid var(--border)}
+  .md pre code{background:transparent;padding:0}
+  .md table{border-collapse:collapse;margin:12px 0;width:100%}
+  .md th,.md td{border:1px solid var(--border);padding:6px 10px;text-align:left;font-size:13px}
+  .md th{background:var(--panel2)}
+  .md blockquote{border-left:3px solid var(--accent);margin:10px 0;padding:4px 12px;color:var(--muted);background:var(--panel2)}
+  .md a{color:var(--accent)}
+  /* Home */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px}
+  .card h4{margin:0 0 6px;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+  .card p{margin:0;color:var(--muted);font-size:12px}
+  .card .row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{background:var(--chip);border:1px solid var(--border);color:var(--text);padding:3px 8px;border-radius:12px;font-size:11px;cursor:pointer}
+  .chip:hover{border-color:var(--accent)}
+  .stat{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px}
+  .stat div{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:120px}
+  .stat .n{font-size:20px;font-weight:600;color:var(--accent)}
+  .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .banner{background:linear-gradient(135deg,#15233b,#1a3a3a);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:8px}
+  .banner h2{margin:0 0 6px;font-size:18px}
+  .banner p{margin:0;color:var(--muted);font-size:13px}
+  .skill{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px dashed var(--border)}
+  .skill:last-child{border-bottom:0}
+  .skill code{color:var(--accent2);font-size:11px;background:var(--code);padding:1px 5px;border-radius:3px;white-space:nowrap}
+  .skill .d{font-size:12px;color:var(--muted)}
+  details summary{cursor:pointer;color:var(--muted);font-size:12px;padding:6px 0}
+  .hidden{display:none!important}
+  .empty{color:var(--muted);padding:24px;text-align:center}
+  .legend{font-size:11px;color:var(--muted);padding:8px 12px}
+  .err{color:var(--danger);padding:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <h1>Telecheck Command Center</h1>
+      <div class="sub">FINAL US REGION BASELINE · 75 docs</div>
+    </div>
+    <div class="search"><input id="q" placeholder="Search docs (title, version, topic)…" /></div>
+    <div class="tabs">
+      <button class="active" data-tab="docs">Documents</button>
+      <button data-tab="skills">Skills</button>
+      <button data-tab="map">Hierarchy</button>
+    </div>
+    <div class="nav" id="nav-docs"></div>
+    <div class="nav hidden" id="nav-skills"></div>
+    <div class="nav hidden" id="nav-map"></div>
+    <div class="legend">Click any doc to view. Conflicts: top of hierarchy wins.</div>
+  </aside>
+  <main>
+    <div class="topbar">
+      <span id="crumb" class="path">Home</span>
+      <div class="actions">
+        <select class="btn" id="src-select" title="Document source"></select>
+        <button class="btn" id="btn-home">Home</button>
+        <button class="btn" id="btn-raw">Open on GitHub</button>
+        <button class="btn" id="btn-print">Print</button>
+      </div>
+    </div>
+    <div class="content home" id="content"></div>
+  </main>
+</div>
+
+<script>
+const BUNDLE = "Telecheck Master Bundle FINAL US REGION BASELINE";
+const GH_OWNER = "arthurmenson";
+const GH_REPO  = "telecheckONE";
+const GH_BRANCH_DEFAULT = "main";
+// "github" | "local"  — and which branch when github
+const SOURCES = {
+  github_main:   { kind:"github", branch:"main",   label:"GitHub · main" },
+  github_branch: { kind:"github", branch:"claude/charming-poincare-854339", label:"GitHub · claude/charming-poincare-854339" },
+  local:         { kind:"local",                    label:"Local files"  },
+};
+let SOURCE_KEY = localStorage.getItem("tc.source") || "github_main";
+
+// Doc registry: grouped per CLAUDE.md source-of-truth hierarchy.
+// Each entry: [filename, label, optional version]
+const GROUPS = [
+  { id:"boot", title:"Boot Sequence (read first)", priority:0, items:[
+    ["CLAUDE_CODE_BOOT_SEQUENCE.md","Claude Code Boot Sequence"],
+    ["Telecheck_Active_Document_Index_v1_0.md","Active Document Index","v1.0"],
+    ["Telecheck_Artifact_Registry_v2_9.md","Artifact Registry","v2.9"],
+    ["Telecheck_Project_Upload_Manifest_v2.md","Upload Manifest","v2"],
+    ["Telecheck_Project_Upload_Manifest_Post_Remediation.md","Upload Manifest (Post-Remediation)"],
+    ["Telecheck_Reviewer_Brief_v1_0.md","Reviewer Brief","v1.0"],
+  ]},
+  { id:"invariants", title:"Platform Invariants (floor)", priority:1, items:[
+    ["Telecheck_Contracts_Pack_v5_00_INVARIANTS.md","Invariants (22)","v5.1"],
+    ["Telecheck_Contracts_Pack_v5_00_SOURCE_OF_TRUTH.md","Source of Truth","v5.1"],
+  ]},
+  { id:"adr", title:"Architecture Decisions (ADR)", priority:2, items:[
+    ["Telecheck_ADR_Set_v1_0.md","ADR Set","v1.0"],
+    ["Telecheck_ADR_Addendum_016_to_019.md","ADR Addendum 016–019"],
+    ["Telecheck_ADR_Addendum_020_to_025.md","ADR Addendum 020–025"],
+    ["Telecheck_ADR_Addendum_026.md","ADR Addendum 026 (us-east-1 / us-west-2)"],
+  ]},
+  { id:"contracts", title:"Cross-cutting Contracts (v5.1)", priority:3, items:[
+    ["Telecheck_Contracts_Pack_v5_README.md","Contracts Pack README"],
+    ["Telecheck_Contracts_Pack_v5_Update_Spec.md","Contracts Pack Update Spec"],
+    ["Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md","Audit Events"],
+    ["Telecheck_Contracts_Pack_v5_00_DOMAIN_EVENTS.md","Domain Events"],
+    ["Telecheck_Contracts_Pack_v5_00_ERROR_MODEL.md","Error Model"],
+    ["Telecheck_Contracts_Pack_v5_00_IDEMPOTENCY.md","Idempotency"],
+    ["Telecheck_Contracts_Pack_v5_00_GLOSSARY.md","Glossary (canonical terms)"],
+    ["Telecheck_Contracts_Pack_v5_00_CCR_RUNTIME.md","Country-driven Config Runtime"],
+    ["Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md","AI Layering (Mode 1 / Mode 2)"],
+    ["Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md","Forms Engine"],
+    ["Telecheck_Contracts_Pack_v5_00_MARKET_LAUNCH.md","Market Launch","v5.0"],
+    ["Telecheck_Contracts_Pack_v5_00_GOVERNANCE_CONTROLS.md","Governance Controls"],
+    ["Telecheck_Contracts_Pack_v5_00_TYPES.md","Types"],
+  ]},
+  { id:"master", title:"Master Platform PRD", priority:4, items:[
+    ["Telecheck_Master_Platform_PRD_v1_9.md","Master Platform PRD","v1.9"],
+  ]},
+  { id:"slices", title:"Slice PRDs (17)", priority:5, items:[
+    ["Telecheck_AI_Clinical_Assistant_Slice_PRD_v1_0.md","AI Clinical Assistant","v1.0"],
+    ["Telecheck_Acquisition_Engagement_Tools_Slice_PRD_v1_0.md","Acquisition & Engagement","v1.0"],
+    ["Telecheck_Admin_Backend_Slice_PRD_v1_1.md","Admin Backend","v1.1"],
+    ["Telecheck_Admin_Configuration_Surfaces_Slice_PRD_v1_0.md","Admin Configuration Surfaces","v1.0"],
+    ["Telecheck_Adverse_Event_Reporting_Slice_PRD_v1_0.md","Adverse Event Reporting","v1.0"],
+    ["Telecheck_Async_Consult_Slice_PRD_v1_0.md","Async Consult","v1.0"],
+    ["Telecheck_Community_Platform_Slice_PRD_v1_0.md","Community Platform","v1.0"],
+    ["Telecheck_Consent_Delegated_Access_Slice_PRD_v1_0.md","Consent & Delegated Access","v1.0"],
+    ["Telecheck_Fake_Medication_Detection_Slice_PRD_v1_0.md","Fake Medication Detection","v1.0"],
+    ["Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md","Forms / Intake Engine","v2.1"],
+    ["Telecheck_Herb_Drug_Interaction_Engine_Slice_PRD_v1_0.md","Herb–Drug Interaction Engine","v1.0"],
+    ["Telecheck_Labs_Document_Interpretation_Slice_PRD_v1_0.md","Labs & Document Interpretation","v1.0"],
+    ["Telecheck_Market_Rollout_Cockpit_Slice_PRD_v1_0.md","Market Rollout Cockpit","v1.0"],
+    ["Telecheck_Medication_Interaction_Engine_Slice_PRD_v1_0.md","Medication Interaction Engine","v1.0"],
+    ["Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md","Pharmacy + Refill","v2.1"],
+    ["Telecheck_RPM_CCM_Slice_PRD_v1_0.md","RPM / CCM","v1.0"],
+    ["Telecheck_Sync_Video_Consult_Slice_PRD_v1_0.md","Sync Video Consult","v1.0"],
+    ["Telecheck_Tenant_Threading_Addendum_v1_0.md","Tenant Threading Addendum","v1.0"],
+  ]},
+  { id:"eng", title:"Engineering Specs", priority:6, items:[
+    ["Telecheck_Canonical_Data_Model_v1_2.md","Canonical Data Model","v1.2"],
+    ["Telecheck_State_Machines_v1_1.md","State Machines","v1.1"],
+    ["Telecheck_OpenAPI_v0_2.md","OpenAPI","v0.2"],
+    ["Telecheck_System_Architecture_v1_2.md","System Architecture","v1.2"],
+    ["Telecheck_RBAC_Permissions_Matrix_v1_1.md","RBAC Permissions Matrix","v1.1"],
+    ["Telecheck_Identity_Authentication_Spec_v1_0.md","Identity & Authentication","v1.0"],
+    ["Telecheck_Notification_Spec_v1_1.md","Notification Spec","v1.1"],
+    ["Telecheck_Messaging_Inbox_Spec_v1_0.md","Messaging Inbox","v1.0"],
+    ["Telecheck_Payment_Billing_Spec_v1_0.md","Payment & Billing","v1.0"],
+    ["Telecheck_Engineering_Handoff_Build_Guide_v1_3.md","Engineering Handoff / Build Guide","v1.3"],
+  ]},
+  { id:"ux", title:"Experience / Design / IA", priority:7, items:[
+    ["Telecheck_Design_System_v1_1.md","Design System","v1.1"],
+    ["Telecheck_Design_Implementation_Contract_v1_0.md","Design Implementation Contract (PROVISIONAL)","v1.0"],
+    ["Telecheck_Patient_App_IA_v1_0.md","Patient App IA","v1.0"],
+    ["Telecheck_Clinician_Portal_IA_v1_0.md","Clinician Portal IA","v1.0"],
+    ["Telecheck_Admin_Operator_IA_v1_1.md","Admin Operator IA","v1.1"],
+    ["Telecheck_Unified_Admin_Sidebar_v1_0.md","Unified Admin Sidebar","v1.0"],
+  ]},
+  { id:"ops", title:"Operations / Launch", priority:8, items:[
+    ["Telecheck_Ghana_Launch_Playbook_v1_2.md","Ghana Launch Playbook","v1.2"],
+    ["Telecheck_Operational_Readiness_Todo_v1_5.md","Operational Readiness Todo","v1.5"],
+    ["Telecheck_Consolidated_Launch_Tracker_v1_0.md","Consolidated Launch Tracker","v1.0"],
+    ["Telecheck_Guardrail_Templates_v1_0.md","Guardrail Templates","v1.0"],
+    ["Telecheck_Protocol_Library_Ghana_v1_0.md","Ghana Protocol Library","v1.0"],
+    ["Telecheck_Flagged_Items_Resolution_v1_0.md","Flagged Items Resolution","v1.0"],
+    ["Telecheck_Future_Scope_USSD_AI_Bridge_v0_1.md","Future: USSD ↔ AI Bridge","v0.1"],
+  ]},
+  { id:"gov", title:"Governance · Reviews · Releases", priority:9, items:[
+    ["Telecheck_Promotion_Ledger.md","Promotion Ledger (append-only)"],
+    ["Telecheck_Adversarial_Counsel_Review_Sessions_1_to_3.md","Adversarial Counsel Review S1–S3"],
+    ["Telecheck_Adversarial_Counsel_Review_Sessions_1_to_3_Post_Remediation.md","Adversarial Counsel Review (Post-Remediation)"],
+    ["Telecheck_Red_Team_Review.md","Red Team Review"],
+    ["TELECHECK_VALIDATION_REPORT_US_REGION_BASELINE.md","Validation Report (US Baseline)"],
+    ["TELECHECK_RELEASE_NOTES_US_REGION_BASELINE.md","Release Notes (US Baseline)"],
+    ["TELECHECK_RELEASE_NOTES_FINAL_REMEDIATED.md","Release Notes (Final Remediated)"],
+    ["Telecheck_Investor_One_Pager.md","Investor One-Pager"],
+  ]},
+];
+
+// Skills curated for spec-bundle work
+const SKILLS = [
+  ["engineering:documentation","Write/maintain technical docs — perfect for slice PRDs, ADR text, runbooks."],
+  ["engineering:architecture","Create/evaluate ADRs with trade-off analysis."],
+  ["engineering:system-design","Service boundaries, data modeling — when adding to System Architecture or CDM."],
+  ["engineering:code-review","Review code/diffs once the code repo lands."],
+  ["engineering:testing-strategy","Test plan + coverage strategy."],
+  ["engineering:tech-debt","Identify/categorize debt and refactor priorities."],
+  ["engineering:debug","Structured reproduce → isolate → diagnose → fix."],
+  ["engineering:incident-response","Triage, status updates, blameless postmortem."],
+  ["engineering:deploy-checklist","Pre-deploy verification (migrations, flags, rollback)."],
+  ["engineering:standup","Generate standup updates from recent activity."],
+  ["design:design-system","Audit/extend the Design System v1.1."],
+  ["design:design-handoff","Engineering handoff specs (tokens, props, states)."],
+  ["design:design-critique","Structured design feedback."],
+  ["design:accessibility-review","WCAG 2.1 AA audit."],
+  ["design:ux-copy","Microcopy, errors, empty states, CTAs."],
+  ["design:user-research","Plan/conduct/synthesize user research."],
+  ["productivity:task-management","Shared TASKS.md tracker."],
+  ["productivity:memory-management","Two-tier memory; decode internal shorthand."],
+  ["anthropic-skills:docx","Generate Word docs (reviewer briefs, exports)."],
+  ["anthropic-skills:pdf","Read/produce PDFs."],
+  ["anthropic-skills:pptx","Slide decks (investor / launch)."],
+  ["anthropic-skills:xlsx","Spreadsheet work (trackers, manifests)."],
+  ["security-review","Security review of pending branch changes (slash command)."],
+  ["review","Review a pull request (slash command)."],
+  ["init","Initialize CLAUDE.md for the future code repo."],
+];
+
+const AGENTS = [
+  ["appsec-expert","Security architecture review, threat modeling, vuln assessment."],
+  ["database-integration-expert","Schema, RLS, migrations, query perf."],
+  ["frontend-dev-expert","React / RN / TS / a11y / perf."],
+  ["test-qa-engineer","Test plans, automation, bug analysis."],
+  ["documentation-expert","API docs, READMEs, runbooks."],
+  ["Explore","Fast codebase exploration."],
+  ["Plan","Implementation planning."],
+  ["general-purpose","Multi-step research / search."],
+];
+
+// ---------- render ----------
+const $ = s => document.querySelector(s);
+const navDocs = $("#nav-docs"), navSkills = $("#nav-skills"), navMap = $("#nav-map");
+const content = $("#content"), crumb = $("#crumb");
+
+function docHref(file){
+  const s = SOURCES[SOURCE_KEY];
+  const path = encodeURI(BUNDLE + "/" + file);
+  if(s.kind==="github") return `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${s.branch}/${path}`;
+  return BUNDLE + "/" + file;
+}
+function docViewHref(file){
+  const s = SOURCES[SOURCE_KEY];
+  const path = encodeURI(BUNDLE + "/" + file);
+  if(s.kind==="github") return `https://github.com/${GH_OWNER}/${GH_REPO}/blob/${s.branch}/${path}`;
+  return BUNDLE + "/" + file;
+}
+
+function renderSidebar(){
+  navDocs.innerHTML = GROUPS.map(g=>`
+    <div class="group" data-group="${g.id}">
+      <h3>${g.title} <span class="count">${g.items.length}</span> <span class="pill">tier ${g.priority}</span></h3>
+      ${g.items.map(([f,label,v])=>`
+        <a class="item" data-file="${f}" data-label="${label}">${label}${v?`<span class="v">${v}</span>`:""}<small>${f}</small></a>
+      `).join("")}
+    </div>`).join("");
+  navDocs.querySelectorAll(".item").forEach(a=>a.addEventListener("click",()=>openDoc(a.dataset.file,a.dataset.label)));
+
+  navSkills.innerHTML = `
+    <div class="group"><h3>Skills <span class="count">${SKILLS.length}</span></h3>
+      ${SKILLS.map(([n,d])=>`<div class="skill"><code>/${n}</code><div class="d">${d}</div></div>`).join("")}
+    </div>
+    <div class="group"><h3>Subagents <span class="count">${AGENTS.length}</span></h3>
+      ${AGENTS.map(([n,d])=>`<div class="skill"><code>${n}</code><div class="d">${d}</div></div>`).join("")}
+    </div>`;
+
+  navMap.innerHTML = `
+    <div class="group"><h3>Source-of-truth hierarchy</h3>
+      <ol style="padding-left:18px;color:var(--muted);font-size:12px;line-height:1.7">
+        <li><b>Invariants</b> — 22 floor guarantees</li>
+        <li><b>ADRs</b> + addendums (026 latest)</li>
+        <li><b>Cross-cutting Contracts</b> v5.1</li>
+        <li><b>Master PRD</b> v1.9</li>
+        <li><b>Slice PRDs</b> (17)</li>
+        <li><b>Engineering specs</b> — CDM v1.2 · OpenAPI v0.2 · State Machines v1.1 · System Architecture v1.2</li>
+        <li><b>Experience</b> — Design System v1.1 · IA · DIC v1.0 (PROVISIONAL)</li>
+        <li><b>Operations</b> — Ghana Playbook v1.2 · Readiness v1.5 · Guardrails · Protocols</li>
+      </ol>
+      <div style="font-size:11px;color:var(--muted);padding:0 6px">
+        <p><b>Conflict rules:</b> Slice vs CDM → CDM wins · Slice vs OpenAPI → OpenAPI wins · Slice vs State Machines → State Machines wins · ADR-025 vs ADR-026 → 026 wins.</p>
+        <p><b>Hard rules:</b> never edit Active Doc Index §4 (Superseded). Promotion Ledger is append-only. Manifest must be rebuilt from filesystem, not prose. Don't relax invariants. Glossary terms are canonical.</p>
+      </div>
+    </div>`;
+}
+
+function renderHome(){
+  crumb.textContent = "Home";
+  content.classList.add("home");
+  const totalDocs = GROUPS.reduce((a,g)=>a+g.items.length,0);
+  content.innerHTML = `
+    <div class="banner">
+      <h2>Telecheck — FINAL US REGION BASELINE</h2>
+      <p>Multi-tenant AI telehealth platform spec bundle. ${totalDocs} indexed docs. Code repo not yet built — all work is editing the spec corpus.</p>
+    </div>
+    <div class="stat">
+      <div><div class="n">41</div><div class="l">Canonical entities</div></div>
+      <div><div class="n">178</div><div class="l">OpenAPI endpoints</div></div>
+      <div><div class="n">13</div><div class="l">State machines</div></div>
+      <div><div class="n">22</div><div class="l">Platform invariants</div></div>
+      <div><div class="n">25</div><div class="l">ADRs</div></div>
+      <div><div class="n">17</div><div class="l">Slice PRDs</div></div>
+      <div><div class="n">15</div><div class="l">Modules (modular monolith)</div></div>
+      <div><div class="n">2</div><div class="l">Day-1 tenants (Heros · Telecheck-Ghana)</div></div>
+    </div>
+    <div class="grid">
+      ${GROUPS.map(g=>`
+        <div class="card">
+          <h4>${g.title} <span class="chip">${g.items.length}</span></h4>
+          <p>Tier ${g.priority} in source-of-truth hierarchy.</p>
+          <div class="row">
+            ${g.items.slice(0,4).map(([f,l])=>`<span class="chip" data-file="${f}" data-label="${l}">${l}</span>`).join("")}
+            ${g.items.length>4?`<span class="chip" data-group="${g.id}">+${g.items.length-4} more…</span>`:""}
+          </div>
+        </div>`).join("")}
+    </div>`;
+  content.querySelectorAll(".chip[data-file]").forEach(c=>c.addEventListener("click",()=>openDoc(c.dataset.file,c.dataset.label)));
+  content.querySelectorAll(".chip[data-group]").forEach(c=>c.addEventListener("click",()=>{
+    document.querySelector(`.group[data-group="${c.dataset.group}"]`)?.scrollIntoView({behavior:"smooth"});
+  }));
+}
+
+let currentFile = null;
+async function openDoc(file,label){
+  currentFile = file;
+  crumb.textContent = `${BUNDLE} / ${file}`;
+  content.classList.remove("home");
+  content.innerHTML = `<div class="empty">Loading ${file}…</div>`;
+  navDocs.querySelectorAll(".item").forEach(i=>i.classList.toggle("active", i.dataset.file===file));
+  try{
+    const r = await fetch(docHref(file));
+    if(!r.ok) throw new Error(r.status+" "+r.statusText);
+    const md = await r.text();
+    content.innerHTML = `<div class="md">${marked.parse(md)}</div>`;
+    content.scrollTop = 0;
+  }catch(e){
+    const s = SOURCES[SOURCE_KEY];
+    const hint = s.kind==="local"
+      ? `Local fetch failed. If you opened via <code>file://</code>, browsers block local fetches — switch the Source dropdown to <b>GitHub</b>, or run <code>python -m http.server 8000</code> and open <a href="http://localhost:8000/">localhost:8000</a>.`
+      : `GitHub fetch failed (${e.message}). Confirm the file is committed on branch <b>${s.branch}</b> at <a href="https://github.com/${GH_OWNER}/${GH_REPO}/tree/${s.branch}" target="_blank">${GH_OWNER}/${GH_REPO}</a>.`;
+    content.innerHTML = `<div class="err">Failed to load <code>${file}</code>.<br><br>${hint}</div>`;
+  }
+}
+
+// search
+$("#q").addEventListener("input",e=>{
+  const q = e.target.value.trim().toLowerCase();
+  navDocs.querySelectorAll(".group").forEach(g=>{
+    let visible = 0;
+    g.querySelectorAll(".item").forEach(i=>{
+      const hit = !q || i.textContent.toLowerCase().includes(q) || i.dataset.file.toLowerCase().includes(q);
+      i.classList.toggle("hidden",!hit);
+      if(hit) visible++;
+    });
+    g.classList.toggle("hidden", visible===0);
+  });
+});
+
+// tabs
+document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("active",x===b));
+  navDocs.classList.toggle("hidden", b.dataset.tab!=="docs");
+  navSkills.classList.toggle("hidden", b.dataset.tab!=="skills");
+  navMap.classList.toggle("hidden", b.dataset.tab!=="map");
+}));
+
+// topbar actions
+$("#btn-home").addEventListener("click",renderHome);
+$("#btn-print").addEventListener("click",()=>window.print());
+$("#btn-raw").addEventListener("click",()=>{
+  if(!currentFile) return;
+  window.open(SOURCES[SOURCE_KEY].kind==="github" ? docViewHref(currentFile) : docHref(currentFile), "_blank");
+});
+
+// source selector
+const sel = $("#src-select");
+sel.innerHTML = Object.entries(SOURCES).map(([k,s])=>`<option value="${k}">${s.label}</option>`).join("");
+sel.value = SOURCE_KEY;
+sel.addEventListener("change",()=>{
+  SOURCE_KEY = sel.value;
+  localStorage.setItem("tc.source", SOURCE_KEY);
+  if(currentFile){
+    const active = navDocs.querySelector(".item.active");
+    openDoc(currentFile, active?.dataset.label||currentFile);
+  }
+});
+
+renderSidebar();
+renderHome();
+</script>
+</body>
+</html>
