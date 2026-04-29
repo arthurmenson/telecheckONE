@@ -1,0 +1,10 @@
+{
+  "name": "telecheck-command-center",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local viewer for the Telecheck spec bundle.",
+  "scripts": {
+    "start": "node server.js",
+    "build:embed": "node -e \"const fs=require('fs'),p=require('path');const b='Telecheck Master Bundle FINAL US REGION BASELINE';const out={};for(const f of fs.readdirSync(b).sort())if(f.endsWith('.md'))out[f]=fs.readFileSync(p.join(b,f),'utf8');fs.writeFileSync('docs-data.js','window.DOCS = '+JSON.stringify(out)+';');console.log('embedded',Object.keys(out).length,'docs')\""
+  }
+}

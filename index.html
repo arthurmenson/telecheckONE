@@ -132,9 +132,9 @@ const SOURCES = {
   github_branch: { kind:"github", branch:"claude/charming-poincare-854339", label:"GitHub · claude/charming-poincare-854339" },
   local:         { kind:"local",                    label:"Local files"  },
 };
-// "embedded" = use bundled docs-data.js (default, works offline / private repo)
-let SOURCE_KEY = localStorage.getItem("tc.source") || "embedded";
-SOURCES.embedded = { kind:"embedded", label:"Embedded (bundled)" };
+// Default to local files so edits to the spec bundle show up live.
+let SOURCE_KEY = localStorage.getItem("tc.source") || "local";
+SOURCES.embedded = { kind:"embedded", label:"Embedded (bundled snapshot)" };
 
 // Doc registry: grouped per CLAUDE.md source-of-truth hierarchy.
 // Each entry: [filename, label, optional version]
