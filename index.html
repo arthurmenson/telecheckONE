@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Telecheck Command Center</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="docs-data.js"></script>
 <style>
   :root{
     --bg:#0b0f17; --panel:#111826; --panel2:#0d1422; --border:#1f2a3d;
@@ -131,7 +132,9 @@ const SOURCES = {
   github_branch: { kind:"github", branch:"claude/charming-poincare-854339", label:"GitHub · claude/charming-poincare-854339" },
   local:         { kind:"local",                    label:"Local files"  },
 };
-let SOURCE_KEY = localStorage.getItem("tc.source") || "github_main";
+// "embedded" = use bundled docs-data.js (default, works offline / private repo)
+let SOURCE_KEY = localStorage.getItem("tc.source") || "embedded";
+SOURCES.embedded = { kind:"embedded", label:"Embedded (bundled)" };
 
 // Doc registry: grouped per CLAUDE.md source-of-truth hierarchy.
 // Each entry: [filename, label, optional version]
@@ -372,16 +375,24 @@ async function openDoc(file,label){
   content.innerHTML = `<div class="empty">Loading ${file}…</div>`;
   navDocs.querySelectorAll(".item").forEach(i=>i.classList.toggle("active", i.dataset.file===file));
   try{
-    const r = await fetch(docHref(file));
-    if(!r.ok) throw new Error(r.status+" "+r.statusText);
-    const md = await r.text();
+    let md;
+    if(SOURCES[SOURCE_KEY].kind === "embedded"){
+      if(!window.DOCS) throw new Error("docs-data.js not loaded");
+      md = window.DOCS[file];
+      if(md == null) throw new Error("not found in embedded bundle");
+    } else {
+      const r = await fetch(docHref(file));
+      if(!r.ok) throw new Error(r.status+" "+r.statusText);
+      md = await r.text();
+    }
     content.innerHTML = `<div class="md">${marked.parse(md)}</div>`;
     content.scrollTop = 0;
   }catch(e){
     const s = SOURCES[SOURCE_KEY];
-    const hint = s.kind==="local"
-      ? `Local fetch failed. If you opened via <code>file://</code>, browsers block local fetches — switch the Source dropdown to <b>GitHub</b>, or run <code>python -m http.server 8000</code> and open <a href="http://localhost:8000/">localhost:8000</a>.`
-      : `GitHub fetch failed (${e.message}). Confirm the file is committed on branch <b>${s.branch}</b> at <a href="https://github.com/${GH_OWNER}/${GH_REPO}/tree/${s.branch}" target="_blank">${GH_OWNER}/${GH_REPO}</a>.`;
+    let hint;
+    if(s.kind==="embedded") hint = `Embedded load failed (${e.message}). Make sure <code>docs-data.js</code> sits next to <code>index.html</code>, then reload.`;
+    else if(s.kind==="local") hint = `Local fetch failed. If you opened via <code>file://</code>, browsers block local fetches — switch Source to <b>Embedded</b>, or run <code>python -m http.server 8000</code>.`;
+    else hint = `GitHub fetch failed (${e.message}). Repo may be private (raw.githubusercontent.com requires auth) — switch Source to <b>Embedded</b>.`;
     content.innerHTML = `<div class="err">Failed to load <code>${file}</code>.<br><br>${hint}</div>`;
   }
 }
@@ -413,7 +424,8 @@ $("#btn-home").addEventListener("click",renderHome);
 $("#btn-print").addEventListener("click",()=>window.print());
 $("#btn-raw").addEventListener("click",()=>{
   if(!currentFile) return;
-  window.open(SOURCES[SOURCE_KEY].kind==="github" ? docViewHref(currentFile) : docHref(currentFile), "_blank");
+  // Always link to the GitHub web view of the file on main, regardless of source
+  window.open(`https://github.com/${GH_OWNER}/${GH_REPO}/blob/main/${encodeURI(BUNDLE+"/"+currentFile)}`, "_blank");
 });
 
 // source selector
