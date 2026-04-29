@@ -1,0 +1,948 @@
+# Telecheck — Canonical Data Model
+
+**Version:** 1.2
+**Status:** Canonical for development
+**Owner:** Engineering Lead
+**Supersedes:** Canonical Data Model v1.0
+**Parent documents:** System Architecture v1.2, Master Platform PRD v1.9, Contracts Pack v5.1 (filenames retain v5_00 convention; headers govern), ADR Addendum 020–025 (with ADR-025 superseded by ADR-026)
+
+---
+
+## Change log from v1.0
+
+v1.1 reflects the multi-tenancy decision (ADR-023):
+
+1. **`tenant_id` added to every entity** as a non-null foreign key. No exceptions.
+2. **New entities for multi-tenancy** added: Tenant, TenantBrand, CountryProfile, CCRConfig, AdapterConfig, TenantUser.
+3. **Account entity scoped to tenant** — same person can have separate accounts in different tenants; cross-tenant identity is not in scope.
+4. **Audit envelope updated** to require tenant_id on every audit row.
+5. **Indexing recommendations** updated to include tenant_id as the leading column on most tenant-scoped indexes.
+6. **PostgreSQL Row-Level Security policies** specified for every tenant-scoped table.
+7. **Encryption-at-rest mapping** updated — per-tenant KMS key per ADR-024.
+
+The total entity count rises from 27 to 33: 27 original (all tenant-scoped) + 6 new tenant-management entities.
+
+---
+
+## 1. Purpose
+
+This document defines the canonical data entities of the Telecheck platform — what they are, what they own, what their relationships are, and how they are scoped. It is the source of truth for database schema design.
+
+Engineering implements migrations against this model. Slice PRDs reference these entities. The Audit and Contracts pack derive their record envelopes from this model.
+
+---
+
+## 2. Conventions
+
+- **Primary keys:** ULID (`ulid` type or VARCHAR(26)) for human-readability and time-ordering. Prefixed by entity type (e.g., `acc_01H...` for accounts).
+- **Foreign keys:** stored as the referenced entity's primary key type (ULID).
+- **Timestamps:** all entities have `created_at` and `updated_at` (timestamptz, UTC). Some have additional lifecycle timestamps (e.g., `submitted_at`, `confirmed_at`).
+- **Tenant scoping:** every entity has `tenant_id` (NOT NULL, foreign key to `tenants.id`). PostgreSQL Row-Level Security policy enforces tenant isolation per ADR-023.
+- **Soft deletion:** clinical entities use `deleted_at` (timestamptz, nullable). Audit entities are append-only — never deleted, never updated (ADR-013).
+- **Versioning:** entities that have versioned states (e.g., Consent, Protocol, IntakeForm) use a separate version entity (e.g., ConsentVersion) with the parent entity tracking `current_version_id`.
+- **Encryption at rest:** all PHI columns encrypted via per-tenant KMS key. Encryption is transparent at the application layer — the database uses pgcrypto with KMS-managed keys.
+
+---
+
+## 3. The 41 entities — overview
+
+v1.2 expands to 41 entities: 6 tenant-management entities (introduced in v1.1), 27 inherited from v1.0 (now tenant-scoped), and 8 NEW ecom entities (introduced in v1.2 per CRITICAL-02 remediation; schemas in §4-bis).
+
+### 3.1 Tenant management (NEW in v1.1) — 6 entities
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 1 | Tenant | Tenant Configuration | Root entity for multi-tenancy |
+| 2 | TenantBrand | Tenant Configuration | Brand identity per tenant |
+| 3 | CountryProfile | Tenant Configuration | Platform-wide CCR templates per country |
+| 4 | CCRConfig | Tenant Configuration | Per-tenant overrides of CCR template values |
+| 5 | AdapterConfig | Tenant Configuration | Per-tenant integration adapter selections |
+| 6 | TenantUser | Tenant Configuration | Platform-admin and tenant-admin user accounts |
+
+### 3.2 Identity & Account — 4 entities
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 7 | Account | Identity & Account | Patient or delegate account, tenant-scoped |
+| 8 | Session | Identity & Account | Authenticated session token |
+| 9 | OTP | Identity & Account | One-time password challenges |
+| 10 | AuthDevice | Identity & Account | Registered devices for an account |
+
+### 3.3 Consent & Access — 4 entities
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 11 | Consent | Consent & Access | Patient's consent records (one per consent type) |
+| 12 | ConsentVersion | Consent & Access | Versioned consent terms text |
+| 13 | Delegation | Consent & Access | Delegate access grant |
+| 14 | DelegationScope | Consent & Access | Specific scopes within a delegation |
+
+### 3.4 Care Delivery — 3 entities
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 15 | Consult | Care Delivery | Async or sync consultation; converts seamlessly per ADR-012 |
+| 16 | ConsultEvent | Care Delivery | State transitions and events on a consult |
+| 17 | Episode | Care Delivery | Long-running care episode (chronic condition management) |
+
+### 3.5 Pharmacy & Fulfillment — 5 entities
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 18 | MedicationRequest | Pharmacy & Fulfillment | Renamed from "Prescription" per Contracts Pack vocabulary |
+| 19 | Refill | Pharmacy & Fulfillment | Refill request and lifecycle |
+| 20 | Dispensing | Pharmacy & Fulfillment | Pharmacist confirmation of dispensing |
+| 21 | Shipment | Pharmacy & Fulfillment | Last-mile delivery tracking |
+| 22 | ProductCatalog | Pharmacy & Fulfillment | Per-tenant medication and product catalog |
+
+### 3.6 Clinical Intelligence — 3 entities
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 23 | InteractionSignal | Clinical Intelligence | Signals raised by interaction engine |
+| 24 | Protocol | Clinical Intelligence | Versioned clinical protocol |
+| 25 | ProtocolVersion | Clinical Intelligence | Specific version of a protocol with envelope, exclusions, thresholds |
+
+### 3.7 Labs & Documents — 2 entities
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 26 | LabResult | Labs & Documents | Lab values with extraction provenance |
+| 27 | Document | Labs & Documents | Patient-uploaded documents |
+
+### 3.8 RPM & CCM — 1 entity
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 28 | RPMReading | RPM & CCM | Readings ingested from devices or manual entry |
+
+### 3.9 Community — 1 entity
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 29 | CommunityPost | Community | Posts and replies in patient groups |
+
+### 3.10 Notification & Comms — 1 entity
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 30 | Notification | Notification & Comms | Notification records (one per send attempt) |
+
+### 3.11 Audit — 1 entity
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 31 | AuditEvent | Audit | Append-only audit per ADR-013 |
+
+### 3.12 Ecom & Subscription Management (NEW in v1.2) — 8 entities
+
+| # | Entity | Owner module | Notes |
+|---|---|---|---|
+| 32 | Subscription | Pharmacy & Fulfillment | Auto-renewing prescription subscription (Hims/Ro mechanic) |
+| 33 | SubscriptionEvent | Pharmacy & Fulfillment | Append-only event log for subscription state transitions |
+| 34 | Cart | Ecom Backend | Multi-product checkout container |
+| 35 | CartItem | Ecom Backend | Individual product entry within a cart |
+| 36 | DiscountCode | Ecom Backend | Per-tenant promotional codes |
+| 37 | DiscountCodeRedemption | Ecom Backend | Append-only redemption log |
+| 38 | AffiliateAccount | Ecom Backend | Affiliate marketing partner account |
+| 39 | AffiliateConversion | Ecom Backend | Conversion event with attribution and commission |
+
+(Note: IntakeForm and IntakeResponse are managed by the Forms/Intake Engine module; their schema is in the slice PRD and FORMS_ENGINE contract.)
+
+---
+
+## 4. New tenant management entities — schemas
+
+### 4.1 Tenant
+
+The root entity for multi-tenancy.
+
+```sql
+CREATE TABLE tenants (
+  id              VARCHAR(26) PRIMARY KEY,           -- tnt_01H...
+  country         CHAR(2) NOT NULL,                  -- ISO 3166-1 alpha-2
+  status          VARCHAR(20) NOT NULL,              -- 'active', 'suspended', 'draft', 'archived'
+  display_name    VARCHAR(200) NOT NULL,             -- "Heros Health", "Telecheck Ghana"
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  activated_at    TIMESTAMPTZ,
+  suspended_at    TIMESTAMPTZ,
+  archived_at     TIMESTAMPTZ,
+  
+  -- Operational metadata
+  created_by      VARCHAR(26) NOT NULL,              -- tenant_user_id of platform admin who created
+  notes           TEXT,                              -- internal notes for platform admin
+  
+  CONSTRAINT tenant_country_valid CHECK (country IN ('US', 'GH'))  -- extend as countries added
+);
+
+CREATE INDEX idx_tenants_status ON tenants (status);
+CREATE INDEX idx_tenants_country ON tenants (country);
+```
+
+### 4.2 TenantBrand
+
+Per-tenant brand identity and customization.
+
+```sql
+CREATE TABLE tenant_brands (
+  tenant_id       VARCHAR(26) PRIMARY KEY REFERENCES tenants(id),
+  
+  -- Display identity
+  brand_name      VARCHAR(200) NOT NULL,             -- "Heros", "Telecheck"
+  logo_url        TEXT,                              -- S3 URL
+  primary_color   VARCHAR(7),                        -- hex
+  secondary_color VARCHAR(7),                        -- hex
+  accent_color    VARCHAR(7),                        -- hex
+  
+  -- Domains
+  custom_domain   VARCHAR(255),                      -- "app.heroshealth.com"
+  custom_domain_verified BOOLEAN NOT NULL DEFAULT FALSE,
+  
+  -- Legal
+  terms_of_service_url TEXT,
+  privacy_policy_url  TEXT,
+  
+  -- Support
+  support_email   VARCHAR(255),
+  support_phone   VARCHAR(50),
+  
+  -- Design tokens (JSON for flexibility)
+  design_tokens   JSONB,                             -- color, typography, spacing overrides per Design System
+  
+  -- Notification copy variant overrides (per-template overrides)
+  notification_copy_overrides JSONB,
+  
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+### 4.3 CountryProfile
+
+Platform-wide CCR templates per country. Not tenant-scoped — these are platform-level.
+
+```sql
+CREATE TABLE country_profiles (
+  country         CHAR(2) PRIMARY KEY,               -- ISO code
+  
+  -- Regulatory
+  regulatory_module VARCHAR(100) NOT NULL,           -- 'us_hipaa_state_telehealth', 'gh_dpa_mdc'
+  
+  -- Payment
+  default_payment_processor VARCHAR(50) NOT NULL,    -- 'stripe', 'paystack'
+  supported_payment_methods JSONB NOT NULL,          -- ['card', 'mobile_money', ...]
+  
+  -- Currency
+  currency_code   CHAR(3) NOT NULL,                  -- 'USD', 'GHS'
+  currency_symbol VARCHAR(5) NOT NULL,
+  
+  -- Locale
+  default_locale  VARCHAR(10) NOT NULL,              -- 'en-US', 'en-GH'
+  date_format     VARCHAR(20) NOT NULL,              -- 'MM/DD/YYYY', 'DD/MM/YYYY'
+  time_format     VARCHAR(10) NOT NULL,              -- '12h', '24h'
+  measurement_units VARCHAR(20) NOT NULL,            -- 'imperial', 'metric'
+  phone_format    VARCHAR(50) NOT NULL,
+  address_format  JSONB NOT NULL,
+  
+  -- Emergency
+  emergency_number VARCHAR(20) NOT NULL,
+  crisis_helplines JSONB NOT NULL,                   -- list of {name, number, available_hours}
+  
+  -- Notification defaults
+  default_notification_channels JSONB NOT NULL,
+  default_quiet_hours JSONB NOT NULL,
+  
+  -- Adapter availability — which integration adapters are usable in this country
+  available_clinician_network_adapters JSONB NOT NULL,  -- ['telecheck_pllc', 'openloop', 'wheel']
+  available_pharmacy_adapters         JSONB NOT NULL,
+  available_sms_providers             JSONB NOT NULL,
+  
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+### 4.4 CCRConfig
+
+Per-tenant CCR overrides. Most tenants inherit the country profile defaults; some override.
+
+```sql
+CREATE TABLE ccr_configs (
+  id              VARCHAR(26) PRIMARY KEY,
+  tenant_id       VARCHAR(26) NOT NULL REFERENCES tenants(id),
+  config_key      VARCHAR(100) NOT NULL,             -- e.g., 'notification.sms_provider'
+  config_value    JSONB NOT NULL,
+  
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  
+  UNIQUE (tenant_id, config_key)
+);
+
+CREATE INDEX idx_ccr_configs_tenant ON ccr_configs (tenant_id);
+```
+
+### 4.5 AdapterConfig
+
+Per-tenant integration adapter selections (clinician network, pharmacy).
+
+```sql
+CREATE TABLE adapter_configs (
+  id              VARCHAR(26) PRIMARY KEY,
+  tenant_id       VARCHAR(26) NOT NULL REFERENCES tenants(id),
+  adapter_type    VARCHAR(50) NOT NULL,              -- 'clinician_network', 'pharmacy', 'payment'
+  adapter_name    VARCHAR(100) NOT NULL,             -- 'openloop', 'truepill', 'stripe', etc.
+  
+  -- Adapter-specific configuration (API keys, account IDs, etc.) — encrypted
+  adapter_config  JSONB NOT NULL,                    -- encrypted at rest with tenant key
+  
+  -- Status
+  status          VARCHAR(20) NOT NULL,              -- 'active', 'inactive', 'testing'
+  
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  
+  -- A tenant can have multiple adapters of the same type if multi-pharmacy (e.g., Truepill + Honeybee)
+  -- Selection between active adapters is per-prescription routing logic
+  UNIQUE (tenant_id, adapter_type, adapter_name)
+);
+
+CREATE INDEX idx_adapter_configs_tenant ON adapter_configs (tenant_id);
+CREATE INDEX idx_adapter_configs_tenant_type ON adapter_configs (tenant_id, adapter_type);
+```
+
+### 4.6 TenantUser
+
+Platform-admin and tenant-admin user accounts. Distinct from patient Account entity.
+
+```sql
+CREATE TABLE tenant_users (
+  id              VARCHAR(26) PRIMARY KEY,
+  
+  -- A platform admin has tenant_id = NULL (operates across tenants)
+  -- A tenant admin has tenant_id set (scoped to one tenant)
+  tenant_id       VARCHAR(26) REFERENCES tenants(id),
+  
+  email           VARCHAR(255) NOT NULL,
+  display_name    VARCHAR(200) NOT NULL,
+  
+  -- Auth
+  password_hash   TEXT,                              -- bcrypt; or NULL if SSO-only
+  mfa_enabled     BOOLEAN NOT NULL DEFAULT FALSE,
+  mfa_secret_encrypted TEXT,                         -- encrypted
+  
+  -- Roles
+  role            VARCHAR(50) NOT NULL,              -- 'platform_admin', 'tenant_admin', 'tenant_operator', 'tenant_billing', 'tenant_clinical_lead', etc.
+  
+  -- Status
+  status          VARCHAR(20) NOT NULL,              -- 'active', 'invited', 'suspended', 'deactivated'
+  invited_at      TIMESTAMPTZ,
+  activated_at    TIMESTAMPTZ,
+  last_login_at   TIMESTAMPTZ,
+  
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  
+  UNIQUE (email)
+);
+
+CREATE INDEX idx_tenant_users_tenant ON tenant_users (tenant_id);
+CREATE INDEX idx_tenant_users_role ON tenant_users (role);
+```
+
+---
+
+## 4-bis. Ecom & subscription management entities — schemas (NEW in v1.2)
+
+Per Adversarial Counsel Review v1.0 finding CRITICAL-02, the 8 ecom entities introduced by Pharmacy + Refill v2.1 and Admin Backend v1.1 slice PRDs are canonicalized here. Slice PRDs reference these schemas; they do not carry their own copies.
+
+### 4.7 Subscription
+
+Auto-renewing prescription subscription. Powers the US DTC subscription business model. Per Pharmacy + Refill v2.X §8 state machine.
+
+```sql
+CREATE TABLE subscriptions (
+  id                          VARCHAR(26) PRIMARY KEY,
+  tenant_id                   VARCHAR(26) NOT NULL REFERENCES tenants(id),
+  patient_id                  VARCHAR(26) NOT NULL REFERENCES accounts(id),
+
+  -- What is being subscribed to
+  product_id                  VARCHAR(26) NOT NULL REFERENCES product_catalog(id),
+  prescription_id             VARCHAR(26) NOT NULL REFERENCES medication_requests(id),
+
+  -- Cadence and pricing
+  cadence                     VARCHAR(20) NOT NULL,    -- 'monthly' | 'quarterly' | 'biannual'
+  unit_price                  DECIMAL(10, 2) NOT NULL,
+  currency                    CHAR(3) NOT NULL,
+
+  -- State machine (per State Machines v1.1 §14)
+  status                      VARCHAR(30) NOT NULL,    -- DRAFT | ACTIVE | FULFILLING | PAUSED | SWITCHING | CANCELLATION_PENDING | CANCELLED | DECLINED | PAYMENT_FAILED_TERMINAL | SAFETY_HOLD
+
+  -- Lifecycle dates
+  started_at                  TIMESTAMPTZ NOT NULL,
+  paused_at                   TIMESTAMPTZ,
+  pause_until                 TIMESTAMPTZ,
+  cancelled_at                TIMESTAMPTZ,
+  cancel_reason               VARCHAR(100),
+  next_renewal_at             TIMESTAMPTZ,
+  last_fulfilled_at           TIMESTAMPTZ,
+
+  -- Pre-authorization (per medication class)
+  preauth_window_months       INTEGER NOT NULL,
+  preauth_renewals_remaining  INTEGER NOT NULL,
+
+  -- Payment
+  payment_method_id           VARCHAR(100),
+
+  -- Optimistic concurrency
+  version                     INTEGER NOT NULL DEFAULT 1,
+
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_subscriptions_tenant ON subscriptions (tenant_id);
+CREATE INDEX idx_subscriptions_patient ON subscriptions (tenant_id, patient_id);
+CREATE INDEX idx_subscriptions_status_renewal ON subscriptions (tenant_id, status, next_renewal_at);
+CREATE INDEX idx_subscriptions_product ON subscriptions (tenant_id, product_id);
+
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON subscriptions
+  USING (tenant_id = current_setting('app.tenant_id')::VARCHAR);
+```
+
+**Constraints and invariants:**
+- Status transitions strictly per State Machines v1.1 §14
+- A subscription in SAFETY_HOLD cannot transition to ACTIVE without an event-bound clinician sign-off
+- A subscription in CANCELLED is terminal; re-enrollment creates a new subscription
+- `pause_until` is required when status = PAUSED; auto-resume at that timestamp unless cancelled or extended
+- Maximum pause duration is 90 days from `paused_at` (tenant-configurable down, not up)
+
+### 4.8 SubscriptionEvent
+
+Append-only event log for subscription state transitions and significant lifecycle moments. Used for audit, analytics, and replay.
+
+```sql
+CREATE TABLE subscription_events (
+  id              VARCHAR(26) PRIMARY KEY,
+  tenant_id       VARCHAR(26) NOT NULL REFERENCES tenants(id),
+  subscription_id VARCHAR(26) NOT NULL REFERENCES subscriptions(id),
+
+  event_type      VARCHAR(50) NOT NULL,     -- 'created' | 'activated' | 'paused' | 'resumed' | 'switching_initiated' | 'switched' | 'cancellation_pending' | 'cancelled' | 'declined' | 'payment_failed' | 'terminated_payment_failure' | 'safety_hold' | 'released_from_safety_hold'
+  event_data      JSONB NOT NULL,           -- per-event-type payload
+  actor_type      VARCHAR(20) NOT NULL,     -- 'patient' | 'clinician' | 'system' | 'tenant_operator' | 'platform_admin'
+  actor_id        VARCHAR(26),
+
+  occurred_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_subscription_events_subscription ON subscription_events (subscription_id, occurred_at);
+CREATE INDEX idx_subscription_events_tenant_type ON subscription_events (tenant_id, event_type);
+
+ALTER TABLE subscription_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON subscription_events
+  USING (tenant_id = current_setting('app.tenant_id')::VARCHAR);
+```
+
+**Constraints:**
+- Append-only — no UPDATE or DELETE operations
+- Mirrored into AuditEvent per AUDIT_EVENTS v5.1 (Category C for operational events; Category A for switch approval and SAFETY_HOLD)
+
+### 4.9 ProductCatalog
+
+Per-tenant medication and product catalog. Defines what a tenant can offer to its patients, with pricing and adapter routing.
+
+```sql
+CREATE TABLE product_catalog (
+  id                              VARCHAR(26) PRIMARY KEY,
+  tenant_id                       VARCHAR(26) NOT NULL REFERENCES tenants(id),
+
+  -- Identification
+  display_name                    VARCHAR(200) NOT NULL,
+  generic_name                    VARCHAR(200) NOT NULL,
+  rxnorm_code                     VARCHAR(20),
+  ndc_codes                       JSONB,
+
+  -- Form / strength
+  form                            VARCHAR(50),         -- 'injection_solution' | 'tablet' | 'topical_solution' | etc.
+  strength                        VARCHAR(50),
+  package_size                    VARCHAR(50),
+
+  -- Categorization
+  program                         VARCHAR(50) NOT NULL,    -- 'weight_loss' | 'ed' | 'hair_loss' | 'skincare' | 'diabetes' | etc.
+  category                        VARCHAR(50) NOT NULL,    -- 'primary_treatment' | 'supplement' | 'support'
+
+  -- Pharmacy routing
+  available_adapters              JSONB NOT NULL,           -- ['truepill', 'honeybee']
+  preferred_adapter               VARCHAR(50),
+
+  -- Compounding
+  is_compounded                   BOOLEAN NOT NULL DEFAULT FALSE,
+  compounding_pharmacy_type       VARCHAR(20),              -- '503A' | '503B' | NULL
+
+  -- Pricing (per cadence, in tenant currency per CCR)
+  pricing                         JSONB NOT NULL,           -- {"monthly": 199.00, "quarterly": 549.00, "one_time": 99.00}
+
+  -- Subscription support
+  subscription_eligible           BOOLEAN NOT NULL DEFAULT TRUE,
+
+  -- Status
+  status                          VARCHAR(20) NOT NULL,     -- 'active' | 'out_of_stock' | 'discontinued'
+
+  -- Operational
+  description_patient_facing      TEXT,
+  description_clinical            TEXT,
+
+  created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_product_catalog_tenant ON product_catalog (tenant_id);
+CREATE INDEX idx_product_catalog_program ON product_catalog (tenant_id, program, status);
+CREATE INDEX idx_product_catalog_rxnorm ON product_catalog (rxnorm_code);
+
+ALTER TABLE product_catalog ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON product_catalog
+  USING (tenant_id = current_setting('app.tenant_id')::VARCHAR);
+```
+
+### 4.10 Cart
+
+Multi-product checkout container. Used when a patient adds multiple products in one intake or browse session.
+
+```sql
+CREATE TABLE carts (
+  id                      VARCHAR(26) PRIMARY KEY,
+  tenant_id               VARCHAR(26) NOT NULL REFERENCES tenants(id),
+  patient_id              VARCHAR(26) NOT NULL REFERENCES accounts(id),
+  intake_submission_id    VARCHAR(26),     -- nullable; cart can be standalone
+
+  status                  VARCHAR(20) NOT NULL,    -- 'open' | 'checked_out' | 'abandoned' | 'expired'
+
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at              TIMESTAMPTZ
+);
+
+CREATE INDEX idx_carts_tenant_patient ON carts (tenant_id, patient_id, status);
+CREATE INDEX idx_carts_intake ON carts (intake_submission_id);
+
+ALTER TABLE carts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON carts
+  USING (tenant_id = current_setting('app.tenant_id')::VARCHAR);
+```
+
+### 4.11 CartItem
+
+Individual product entry within a cart.
+
+```sql
+CREATE TABLE cart_items (
+  id              VARCHAR(26) PRIMARY KEY,
+  tenant_id       VARCHAR(26) NOT NULL REFERENCES tenants(id),
+  cart_id         VARCHAR(26) NOT NULL REFERENCES carts(id),
+  product_id      VARCHAR(26) NOT NULL REFERENCES product_catalog(id),
+
+  quantity        INTEGER NOT NULL DEFAULT 1,
+  cadence         VARCHAR(20),               -- 'monthly' | 'quarterly' | 'one_time'
+  unit_price      DECIMAL(10, 2) NOT NULL,   -- snapshot at add-to-cart
+
+  added_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  removed_at      TIMESTAMPTZ
+);
+
+CREATE INDEX idx_cart_items_cart ON cart_items (cart_id);
+CREATE INDEX idx_cart_items_tenant_product ON cart_items (tenant_id, product_id);
+
+ALTER TABLE cart_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON cart_items
+  USING (tenant_id = current_setting('app.tenant_id')::VARCHAR);
+```
+
+### 4.12 DiscountCode
+
+Per-tenant promotional codes for marketing campaigns and acquisition incentives.
+
+```sql
+CREATE TABLE discount_codes (
+  id                              VARCHAR(26) PRIMARY KEY,
+  tenant_id                       VARCHAR(26) NOT NULL REFERENCES tenants(id),
+
+  code                            VARCHAR(50) NOT NULL,
+  code_type                       VARCHAR(30) NOT NULL,    -- 'single_use' | 'multi_use' | 'single_use_per_patient'
+
+  discount_type                   VARCHAR(20) NOT NULL,    -- 'percentage' | 'fixed_amount'
+  discount_value                  DECIMAL(10, 2) NOT NULL,
+
+  -- Scope
+  applies_to                      VARCHAR(20) NOT NULL,    -- 'all_products' | 'specific_products' | 'specific_programs'
+  applies_to_ids                  JSONB,
+
+  -- Lifecycle
+  valid_from                      TIMESTAMPTZ NOT NULL,
+  valid_until                     TIMESTAMPTZ,
+
+  -- Usage caps
+  max_total_uses                  INTEGER,                  -- NULL = unlimited
+  max_uses_per_patient            INTEGER NOT NULL DEFAULT 1,
+  current_uses                    INTEGER NOT NULL DEFAULT 0,
+
+  -- Status
+  status                          VARCHAR(20) NOT NULL,     -- 'active' | 'expired' | 'exhausted' | 'disabled'
+
+  -- Constraints
+  minimum_subscription_value      DECIMAL(10, 2),
+  first_time_subscriber_only      BOOLEAN NOT NULL DEFAULT FALSE,
+
+  -- Audit
+  created_by                      VARCHAR(26) NOT NULL REFERENCES tenant_users(id),
+
+  created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  UNIQUE (tenant_id, code)
+);
+
+CREATE INDEX idx_discount_codes_tenant_status ON discount_codes (tenant_id, status);
+CREATE INDEX idx_discount_codes_validity ON discount_codes (tenant_id, valid_from, valid_until);
+
+ALTER TABLE discount_codes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON discount_codes
+  USING (tenant_id = current_setting('app.tenant_id')::VARCHAR);
+```
+
+### 4.13 DiscountCodeRedemption
+
+Append-only redemption log for anti-fraud and analytics.
+
+```sql
+CREATE TABLE discount_code_redemptions (
+  id                  VARCHAR(26) PRIMARY KEY,
+  tenant_id           VARCHAR(26) NOT NULL REFERENCES tenants(id),
+  discount_code_id    VARCHAR(26) NOT NULL REFERENCES discount_codes(id),
+  patient_id          VARCHAR(26) NOT NULL REFERENCES accounts(id),
+
+  -- Application context
+  applied_to_resource_type VARCHAR(50) NOT NULL,    -- 'subscription' | 'cart' | 'one_time_purchase'
+  applied_to_resource_id   VARCHAR(26) NOT NULL,
+  amount_discounted        DECIMAL(10, 2) NOT NULL,
+
+  -- Anti-fraud
+  ip_address          INET,
+  user_agent          TEXT,
+
+  redeemed_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_dcr_code ON discount_code_redemptions (discount_code_id, redeemed_at);
+CREATE INDEX idx_dcr_patient ON discount_code_redemptions (tenant_id, patient_id);
+
+ALTER TABLE discount_code_redemptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON discount_code_redemptions
+  USING (tenant_id = current_setting('app.tenant_id')::VARCHAR);
+```
+
+### 4.14 AffiliateAccount
+
+Affiliate marketing partner account. Per-tenant.
+
+```sql
+CREATE TABLE affiliate_accounts (
+  id                          VARCHAR(26) PRIMARY KEY,
+  tenant_id                   VARCHAR(26) NOT NULL REFERENCES tenants(id),
+
+  display_name                VARCHAR(200) NOT NULL,
+  contact_email               VARCHAR(255) NOT NULL,
+
+  -- Tracking
+  unique_slug                 VARCHAR(50) NOT NULL,
+  utm_default_source          VARCHAR(100),
+  utm_default_medium          VARCHAR(100),
+
+  -- Commission
+  commission_type             VARCHAR(20) NOT NULL,    -- 'percentage' | 'flat_per_conversion'
+  commission_value            DECIMAL(10, 2) NOT NULL,
+  attribution_window_days     INTEGER NOT NULL DEFAULT 30,
+
+  -- Payout (US)
+  stripe_connect_account_id   VARCHAR(100),
+
+  -- Payout (Ghana — manual at launch)
+  payout_method               VARCHAR(50),             -- 'stripe_connect' | 'manual_bank' | 'mobile_money'
+  payout_details              JSONB,                    -- encrypted at rest per encryption mapping §7
+
+  -- Status
+  status                      VARCHAR(20) NOT NULL,    -- 'active' | 'paused' | 'terminated'
+
+  -- Lifecycle
+  approved_at                 TIMESTAMPTZ,
+  approved_by                 VARCHAR(26) REFERENCES tenant_users(id),
+
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  UNIQUE (tenant_id, unique_slug)
+);
+
+CREATE INDEX idx_affiliate_accounts_tenant ON affiliate_accounts (tenant_id, status);
+CREATE INDEX idx_affiliate_accounts_slug ON affiliate_accounts (tenant_id, unique_slug);
+
+ALTER TABLE affiliate_accounts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON affiliate_accounts
+  USING (tenant_id = current_setting('app.tenant_id')::VARCHAR);
+```
+
+### 4.15 AffiliateConversion
+
+Conversion event with attribution and commission. Append-only.
+
+```sql
+CREATE TABLE affiliate_conversions (
+  id                      VARCHAR(26) PRIMARY KEY,
+  tenant_id               VARCHAR(26) NOT NULL REFERENCES tenants(id),
+
+  affiliate_account_id    VARCHAR(26) NOT NULL REFERENCES affiliate_accounts(id),
+  patient_id              VARCHAR(26) NOT NULL REFERENCES accounts(id),
+
+  -- Source attribution
+  attribution_link_id     VARCHAR(26),
+  utm_source              VARCHAR(100),
+  utm_medium              VARCHAR(100),
+  utm_campaign            VARCHAR(100),
+  utm_content             VARCHAR(100),
+
+  -- Conversion event
+  conversion_type         VARCHAR(30) NOT NULL,    -- 'signup' | 'first_subscription' | 'first_purchase'
+  conversion_value        DECIMAL(10, 2),
+
+  -- Commission
+  commission_amount       DECIMAL(10, 2) NOT NULL,
+  commission_status       VARCHAR(20) NOT NULL,    -- 'pending' | 'approved' | 'paid' | 'reversed'
+
+  -- Reversal (refund handling)
+  reversed_at             TIMESTAMPTZ,
+  reversal_reason         VARCHAR(200),
+
+  -- Payout linkage
+  payout_id               VARCHAR(26),
+
+  occurred_at             TIMESTAMPTZ NOT NULL,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_affiliate_conversions_account ON affiliate_conversions (affiliate_account_id, occurred_at);
+CREATE INDEX idx_affiliate_conversions_tenant_status ON affiliate_conversions (tenant_id, commission_status);
+CREATE INDEX idx_affiliate_conversions_patient ON affiliate_conversions (tenant_id, patient_id);
+
+ALTER TABLE affiliate_conversions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON affiliate_conversions
+  USING (tenant_id = current_setting('app.tenant_id')::VARCHAR);
+```
+
+---
+
+
+
+Every inherited entity from v1.0 receives `tenant_id` as a NOT NULL column with a foreign key to `tenants.id`. The standard pattern is:
+
+```sql
+-- Example: Account entity (Identity & Account module)
+CREATE TABLE accounts (
+  id              VARCHAR(26) PRIMARY KEY,
+  tenant_id       VARCHAR(26) NOT NULL REFERENCES tenants(id),  -- NEW in v1.1
+  
+  phone_number    VARCHAR(50) NOT NULL,
+  display_name    VARCHAR(200),
+  status          VARCHAR(20) NOT NULL,
+  
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at      TIMESTAMPTZ,
+  
+  -- Phone uniqueness is per-tenant, not global
+  -- Same person can have separate accounts in different tenants
+  UNIQUE (tenant_id, phone_number)
+);
+
+CREATE INDEX idx_accounts_tenant_phone ON accounts (tenant_id, phone_number);
+CREATE INDEX idx_accounts_tenant_status ON accounts (tenant_id, status);
+
+-- Row-Level Security
+ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON accounts
+  USING (tenant_id = current_setting('app.tenant_id')::varchar);
+```
+
+The `current_setting('app.tenant_id')` is set per-database-connection by the application layer middleware, after tenant resolution. RLS ensures any query that bypasses application-layer filtering still cannot see cross-tenant data.
+
+### 5.1 Same person, different tenants
+
+A person who is a Heros Health patient and (theoretically) also a Telecheck-Ghana patient has two separate Account records in two separate tenants. From the platform's view they are different patients. This is by design per ADR-023.
+
+### 5.2 Indexing implication
+
+Indexes on tenant-scoped tables should typically lead with `tenant_id`:
+
+```sql
+-- GOOD - tenant_id leads
+CREATE INDEX idx_consults_tenant_status ON consults (tenant_id, status);
+
+-- BAD - tenant_id doesn't lead, queries that filter by tenant_id won't use this index efficiently
+CREATE INDEX idx_consults_status ON consults (status);
+```
+
+For queries that filter by `tenant_id` and another column (which is most queries), the leading-tenant_id index pattern is required.
+
+---
+
+## 6. The Audit envelope (updated for tenant scoping)
+
+Per Contracts Pack AUDIT-EVENTS, with tenant_id added per ADR-023.
+
+```sql
+CREATE TABLE audit_events (
+  id              VARCHAR(26) PRIMARY KEY,
+  tenant_id       VARCHAR(26) NOT NULL REFERENCES tenants(id),  -- REQUIRED per ADR-023
+  
+  -- Categorization
+  category        VARCHAR(20) NOT NULL,              -- 'A' (clinical), 'B' (governance), 'C' (operational)
+  action          VARCHAR(100) NOT NULL,             -- e.g., 'consult.submitted', 'refill.approved'
+  
+  -- Subject
+  aggregate_type  VARCHAR(50) NOT NULL,              -- 'consult', 'refill', etc.
+  aggregate_id    VARCHAR(26) NOT NULL,
+  
+  -- Actor
+  actor_type      VARCHAR(20) NOT NULL,              -- 'patient', 'clinician', 'admin', 'system', 'protocol', 'ai'
+  actor_id        VARCHAR(26),                       -- nullable for system actions
+  actor_metadata  JSONB,                             -- e.g., {protocol_id, protocol_version, model_version}
+  
+  -- Context
+  occurred_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  request_id      VARCHAR(26),                       -- request correlation
+  session_id      VARCHAR(26),                       -- session correlation
+  ip_address      INET,
+  user_agent      TEXT,
+  
+  -- Payload (the change itself)
+  payload         JSONB NOT NULL,
+  
+  -- Hash chain for immutability per ADR-013
+  prev_hash       VARCHAR(64) NOT NULL,              -- SHA-256 of previous record's hash
+  record_hash     VARCHAR(64) NOT NULL,              -- SHA-256 of this record's content
+  
+  -- IMMUTABLE: no UPDATE, no DELETE permitted
+  CONSTRAINT audit_no_modification CHECK (true)      -- enforced via trigger
+);
+
+-- Block UPDATE and DELETE
+CREATE TRIGGER audit_no_modify
+  BEFORE UPDATE OR DELETE ON audit_events
+  FOR EACH ROW EXECUTE FUNCTION raise_audit_immutability_error();
+
+-- Tenant scoping at DB layer
+ALTER TABLE audit_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON audit_events
+  USING (tenant_id = current_setting('app.tenant_id')::varchar OR current_setting('app.platform_admin', true) = 'true');
+
+-- Indexes
+CREATE INDEX idx_audit_tenant_aggregate ON audit_events (tenant_id, aggregate_type, aggregate_id, occurred_at DESC);
+CREATE INDEX idx_audit_tenant_actor ON audit_events (tenant_id, actor_type, actor_id, occurred_at DESC);
+CREATE INDEX idx_audit_tenant_action ON audit_events (tenant_id, action, occurred_at DESC);
+```
+
+Notes:
+- Audit table writes always include `tenant_id`. Cross-tenant audit queries are restricted to platform admin.
+- Hash chain (per ADR-013) is computed across all records globally (not per-tenant) to preserve overall integrity. Tenant scoping is for read access; the chain is platform-wide.
+- Audit data encrypted at rest with separate per-tenant KMS key from clinical data per ADR-024.
+
+---
+
+## 7. Encryption-at-rest mapping
+
+Per ADR-024, every tenant has a unique encryption key in AWS KMS.
+
+| Data category | Encryption key | Notes |
+|---|---|---|
+| Clinical data (consults, prescriptions, labs, RPM readings, etc.) | Tenant clinical key (KMS) | Per-tenant; rotated per AWS best practice |
+| Patient PII (account, profile, address, phone) | Tenant clinical key (KMS) | Same key as clinical |
+| Audit events | Tenant audit key (KMS) | Separate key from clinical per ADR-024 |
+| Subscription / payment metadata (Telecheck-side records, not card data) | Tenant clinical key (KMS) | Card data is never stored by Telecheck |
+| Tenant configuration (CCR overrides, adapter configs with API keys) | Tenant config key (KMS) | Separate key from clinical |
+| Platform-admin operational data | Platform-admin key (KMS) | Distinct from any tenant key |
+| Backups | Same per-tenant keys as primary data | Encrypted at the source; AWS KMS handles key access |
+
+A tenant's data, if exfiltrated from another tenant's compromised application bug, cannot be decrypted without access to the affected tenant's KMS key.
+
+---
+
+## 8. Cross-references and inheritance from v1.0
+
+The following entity definitions from v1.0 are inherited and tenant-scoped per §5 above. Their schemas are managed in their owning module's slice PRD or in the Contracts Pack. They are NOT re-detailed here:
+
+- Identity & Account: Account, Session, OTP, AuthDevice (4)
+- Consent & Access: Consent, ConsentVersion, Delegation, DelegationScope (4)
+- Care Delivery: Consult, ConsultEvent, Episode (3)
+- Pharmacy & Fulfillment: MedicationRequest, Refill, Dispensing, Shipment, ProductCatalog (5)
+- Clinical Intelligence: InteractionSignal, Protocol, ProtocolVersion (3)
+- Labs & Documents: LabResult, Document (2)
+- RPM & CCM: RPMReading (1)
+- Community: CommunityPost (1)
+- Notification & Comms: Notification (1)
+- Audit: AuditEvent (1) — schema in §6 above
+
+Plus new in v1.1 within Pharmacy & Fulfillment: Subscription, SubscriptionEvent (2) — for Hims/Ro-class subscription mechanics. Schemas in Pharmacy + Refill Slice PRD v2.1 (Session 2 deliverable).
+
+---
+
+## 9. Migration from v1.0 to v1.1
+
+For an engineering team that has any v1.0-based schema in flight:
+
+1. Create the 6 new tenant-management tables (Tenant, TenantBrand, CountryProfile, CCRConfig, AdapterConfig, TenantUser).
+2. Insert seed records for the 2 launch tenants (Telecheck-Ghana, Heros) and the 2 country profiles (US, GH).
+3. For every existing tenant-scoped table, add `tenant_id VARCHAR(26)` column.
+4. Backfill existing data with the appropriate `tenant_id` (typically all existing data belongs to one tenant — easy backfill).
+5. Set the column NOT NULL after backfill.
+6. Add foreign key constraint to `tenants.id`.
+7. Add RLS policies per the §5 pattern.
+8. Update all indexes to lead with `tenant_id` where appropriate.
+9. Update all queries to set `app.tenant_id` per request.
+
+This migration is non-trivial but well-scoped. For a greenfield build, the schema starts with multi-tenancy from day 1 — no migration needed.
+
+---
+
+## 10. Validation rules and constraints
+
+Per Contracts Pack INVARIANTS:
+
+- Every tenant-scoped table has `tenant_id` NOT NULL with foreign key
+- Every tenant-scoped table has RLS policy
+- Every tenant-scoped index leads with `tenant_id`
+- Audit table writes are append-only (UPDATE/DELETE blocked at DB layer)
+- Cross-tenant joins are not permitted at the application layer (lint check)
+- Cross-tenant queries from non-platform-admin contexts are blocked at the RLS layer
+
+Engineering must verify these in CI before merge.
+
+---
+
+## 11. What's NOT in this model
+
+- **Federated identity across tenants.** A patient is tenant-scoped. Cross-tenant patient identity is post-launch.
+- **Cross-tenant data sharing.** Tenants are isolated. No "share data with another tenant" features.
+- **Tenant-of-tenants.** Tenants are flat — no hierarchical tenant structure. (Future product can layer this if needed; not in v1.1.)
+- **Per-region data residency at the entity level.** Region is deployment-level (us-east-1 per ADR-026; supersedes ADR-025 af-south-1), not entity-level. If per-tenant region pinning becomes a requirement, that's a future schema addition (`tenant.primary_region`).
+
+---
+
+## Document control
+
+- **v1.2** — Adds 8 ecom entities introduced by Pharmacy + Refill v2.1 and Admin Backend v1.1 slice PRDs: Subscription, SubscriptionEvent, ProductCatalog, Cart, CartItem, DiscountCode, DiscountCodeRedemption, AffiliateAccount, AffiliateConversion. New §4-bis (§4.7 through §4.15) carries full SQL DDL with tenant_id, RLS policies, indexes, constraints, and invariants for each. Total entity count: 41 (6 tenant-management + 27 inherited + 8 ecom). Pattern C remediation per Adversarial Counsel Review v1.0 finding CRITICAL-02 — schemas previously living in slice PRDs are now in canonical engineering spec; slice PRDs reference these by section number. Existing v1.1 content (tenant management entities, tenant scoping rules, audit envelope, encryption mapping) preserved without modification.
+- **v1.1** — Multi-tenancy applied to all entities per ADR-023. Six new tenant-management entities added. Audit envelope updated to require tenant_id. RLS policies specified for every tenant-scoped table. Encryption-at-rest mapping updated for per-tenant KMS keys per ADR-024. Total entity count: 33 (27 inherited + 6 new).
+- **v1.0** — Initial canonical (single-tenant assumption); superseded.
+- **Next review:** after engineering applies the migration; after the first non-trivial cross-tenant query bug is detected and resolved (or never detected, which is the goal).
+- **Change discipline:** changes to entity schemas, tenant scoping, RLS policies, or encryption keys require Engineering Lead sign-off and update to this document. Slice PRDs and Contracts Pack must align.

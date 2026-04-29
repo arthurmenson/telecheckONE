@@ -1,0 +1,153 @@
+# 00-GOVERNANCE-CONTROLS.md — Contracts Pack v5
+
+**Status:** canonical · **Version:** 5.1 · **Owner:** product lead + clinical safety officer + market operations lead · **Consumers:** admin configuration surfaces, AI governance, moderation governance, market rollout
+**Source:** Net-new contracts from consolidated Contracts Pack, reconciled into modular structure per Artifact Registry v2.3 §2 Decision 1.
+
+---
+
+## 1. Scope
+
+This contract governs configuration validation, incident response, and safety-signal enforcement. These are cross-cutting governance controls that apply to all configurable elements of the platform: protocols, guardrail templates, moderation policies, and Market Packs.
+
+---
+
+## 2. Configuration validation contracts
+
+### CONFIG-001: Configuration below the floor is rejected
+
+Any configuration (guardrail template, moderation policy, protocol definition, Market Pack) that would violate a FLOOR contract is rejected at validation time, before deployment.
+
+- **Enforcement:** Configuration validator runs the full floor contract checklist against every proposed configuration.
+- **Violation behavior:** Deployment rejected with specific floor contract violations listed.
+- **Audit:** Validation attempt logged with results.
+
+### CONFIG-002: Configuration changes produce a new version
+
+Every configuration change produces a new version of the configuration object. The previous version is retained and available for rollback.
+
+- **Enforcement:** Configuration service uses versioned storage. In-place modification of a version is rejected.
+- **Audit:** Version change logged with author, diff, and reason.
+
+### CONFIG-003: Configuration changes require authorized roles
+
+Configuration changes require authorization from roles specified in the configuration object's governance metadata. No configuration change is anonymous.
+
+- **Enforcement:** Configuration service validates actor role against required roles per RBAC Permissions Matrix.
+- **Violation behavior:** Change rejected with "insufficient authorization" error.
+- **Audit:** Authorization check logged.
+
+---
+
+## 3. Incident and rollback contracts
+
+### INCIDENT-001: Emergency Safe Mode
+
+In a severe incident, the platform can enter Emergency Safe Mode for a market. All configurable behavior reverts to the strictest defaults:
+- All protocols deactivated (fallback to clinician review for all actions)
+- All guardrail templates reverted to Conservative Default
+- All moderation policies reverted to strictest mode
+- All protocol-authorized pathways become clinician-review-only
+
+Authorization: Country Launch Director or Support Lead.
+
+- **Enforcement:** Emergency Safe Mode is a Market Pack state. Entering this state reverts all configuration objects to defaults.
+- **Audit:** Entry and exit logged with authorization chain, reason, and revert scope.
+
+### INCIDENT-002: Specific capability rollback
+
+Individual capabilities (a specific protocol, a specific guardrail template, a specific moderation policy) can be rolled back without affecting other capabilities.
+
+- **Enforcement:** Configuration objects are independently versionable and independently deactivatable.
+- **Audit:** Rollback logged with scope, actor, and reason.
+
+### INCIDENT-003: Rollback completes within 60 seconds
+
+Any rollback action (specific or Emergency Safe Mode) takes effect within 60 seconds of authorization. Active connections receive updated configuration at next interaction.
+
+- **Enforcement:** Configuration propagation pipeline has a 60-second SLA.
+- **Audit:** Rollback timing logged (authorization_time, effective_time, propagation_duration).
+
+---
+
+## 4. Safety-signal enforcement contracts
+
+### SIGNAL-001: Interaction engine is mandatory for prescribing and refills
+
+Every prescribing and refill decision must be preceded by a complete Medication Interaction & Validation Engine run. No prescription or refill bypasses the check.
+
+- **Enforcement:** Prescribing and refill approval services call the interaction engine before proceeding. If the engine call fails or times out, the action falls back to clinician review (never auto-approved without the check).
+- **Violation behavior:** If engine is unavailable: action queued for clinician review with "safety check unavailable" flag. Never auto-approved.
+- **Audit:** Engine call logged for every prescribing/refill decision. Engine-unavailable events logged and alerted.
+
+### SIGNAL-002: Critical signals cannot be silently suppressed
+
+Critical and major interaction signals are always visible to the clinician. Guardrail configuration may adjust display of minor signals but may not suppress critical or major signals.
+
+- **Enforcement:** Signal display logic treats critical and major signals as mandatory-visible. Configuration validator rejects templates that suppress these severities.
+- **Audit:** Signal display logged per clinician decision session.
+
+### SIGNAL-003: Override produces a permanent audit record
+
+When a clinician overrides a block or warn signal, the override is recorded permanently with: clinician_id, rationale, signal_id, signal_severity, engine_version, knowledge_base_version, timestamp. Override records are never deleted. Overrides do not carry forward to the next refill cycle — each cycle re-evaluates signals fresh.
+
+- **Enforcement:** Override service writes to append-only audit.
+- **Audit:** Self-enforcing.
+
+### SIGNAL-004: Protocol execution is gated by signals
+
+Protocol-authorized actions check the interaction engine before execution. Critical signals block protocol execution (fallback to clinician review). Major signals block unless the protocol explicitly addresses that signal class. This gate is mandatory and not configurable.
+
+- **Enforcement:** Protocol execution service calls the interaction engine gate before proceeding. Gate logic is platform-level, not protocol-configurable.
+- **Violation behavior:** Protocol execution blocked. Fallback to clinician review with protocol context attached.
+- **Audit:** Protocol gate evaluation logged with all signals and gate result.
+
+---
+
+## 5. Cross-references
+
+| Contract | Related floor contracts | Related ADRs |
+|---|---|---|
+| CONFIG-001 | All FLOOR contracts (floor cannot be configured away) | ADR-005 (protocolized autonomy) |
+| CONFIG-002 | — | ADR-013 (immutable audit) |
+| CONFIG-003 | — | — |
+| INCIDENT-001 | All FLOOR contracts (Emergency Safe Mode restores floor-level behavior) | — |
+| INCIDENT-002 | PROTO-004 (one-action protocol rollback), GUARD-003 (one-action guardrail rollback) | — |
+| INCIDENT-003 | — | — |
+| SIGNAL-001 | FLOOR-001 (no autonomous prescribing outside protocol) | ADR-006 (engine timing) |
+| SIGNAL-002 | — | — |
+| SIGNAL-003 | AUDIT-001 (append-only audit) | ADR-013 (immutable audit) |
+| SIGNAL-004 | FLOOR-001 (no autonomous prescribing), FLOOR-002 (no autonomous dispensing) | ADR-005 (protocolized autonomy) |
+
+---
+
+## Change log
+
+| Version | Change |
+|---|---|
+| v5.0 | New file. Absorbs CONFIG-001 through CONFIG-003, INCIDENT-001 through INCIDENT-003, and SIGNAL-001 through SIGNAL-004 from the consolidated Contracts Pack (per Artifact Registry v2.3 §2 Decision 1 reconciliation note). These contracts were net-new content not present in v4.2 modular files. |
+| v5.1 | Adds tenant-scoped governance section. Per ADR-023, configuration validation, incident handling, and safety-signal enforcement operate on tenant-scoped resources where the resource is tenant-scoped (most cases). Tenant Clinical Lead approval required for tenant-scoped clinical configuration changes per RBAC v1.1; Platform Clinical Governance approval required for platform-scoped configuration changes (e.g., Guardrail Templates v1.X overrides at platform level, Protocol Library platform-default updates). Cross-tenant incidents require Platform Admin coordination. Threading remediation per Adversarial Counsel Review v1.0 finding CRITICAL-01. |
+
+---
+
+## 6. Tenant scoping (added v5.1)
+
+Per ADR-023 multi-tenancy Model A:
+
+### 6.1 Configuration validation (extends §2)
+
+- **Tenant-scoped configurations** validate within their tenant scope: tenant Clinical Lead approval (per RBAC v1.1) for clinical configurations; tenant Admin approval for non-clinical operational configurations.
+- **Platform-scoped configurations** validate at the platform layer: Platform Clinical Governance approval for clinical configurations affecting all tenants; Platform Admin approval for operational platform-default configurations.
+- A tenant cannot relax a platform-floor configuration (e.g., cannot disable I-019 crisis detection within their tenant).
+
+### 6.2 Incident and rollback (extends §3)
+
+- **Tenant-scoped incidents** (e.g., a tenant's intake form has a clinical-correctness defect) are owned by the affected tenant's Tenant Clinical Lead with platform engineering support.
+- **Platform-scoped incidents** (e.g., a guardrail template defect affecting multiple tenants) are owned by Platform Clinical Governance with notification to all affected tenants.
+- Rollback authority follows the configuration-validation layer: tenant-scoped rollback authorized by tenant Clinical Lead; platform-scoped rollback authorized by Platform Clinical Governance.
+- Cross-tenant incident notification per Tenant Admin's tenant-defined escalation contact (configured in Tenant Admin Backend per Admin Backend Slice v1.X).
+
+### 6.3 Safety-signal enforcement (extends §4)
+
+- Safety signals are evaluated per-patient (always tenant-scoped per the patient-tenant relationship).
+- Override authorization per RBAC v1.1: clinician override authority is scoped to clinicians authorized for that tenant.
+- Cross-tenant signal pattern detection (a defect appearing in multiple tenants) flagged at platform level for Platform Clinical Governance review with tenant notification.
