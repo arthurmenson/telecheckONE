@@ -86,12 +86,14 @@ Slice PRDs reference these. If a slice PRD appears to define a schema that disag
 
 ---
 
-## 6. Heros tenant (HIGH-12 product decision)
+## 6. Telecheck-US tenant (Heros Health DBA) — HIGH-12 product decision
 
-- Heros launches **greenfield**. ZERO existing patients on day 1.
+*(Section retitled and rewritten in place 2026-05-02 per Codex Round-3 Scope 4 HIGH-1 finding — the prior `Heros tenant` heading and `Heros launches greenfield` / `Heros migration` phrasing violated the C3 brand-structure rule that bare `Heros` MUST NOT be used as a tenant or operator identifier. Per Master PRD v1.10 §17 + Glossary v5.2 §Brand and tenant terms.)*
+
+- **Telecheck-US (Heros Health DBA — operating tenant)** launches **greenfield**. ZERO existing patients on day 1.
 - No migration tooling. No bulk-import-from-Rimo. No patient data import.
 - The bulk-import endpoint in ProductCatalog and CSV import in Forms Engine are tenant-onboarding tools for catalog/forms — NOT patient data migration.
-- If a doc references "Heros migration" — that's stale; treat as removed.
+- If a doc references `Heros migration` or `Heros/Rimo migration` (using bare `Heros` as a tenant or operator identifier outside §17 contextual carve-outs) — that's stale; treat as removed and use `Telecheck-US tenant migration` (operating-tenant identifier) or `Heros Health DBA migration` (consumer-DBA scope) per the C3 vocabulary depending on context.
 
 ---
 
