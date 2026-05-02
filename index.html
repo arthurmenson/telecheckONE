@@ -482,6 +482,15 @@ function metaText(){
   return `Last updated ${PROGRESS?.updated || "?"}${ro}`;
 }
 
+// Refresh every visible "X min ago" label without re-rendering the page.
+// Tagging contract: any element rendered with a timestamp gets
+// class="timeago" data-ts="<iso>". This walks them all and updates textContent.
+function refreshTimeAgo(){
+  document.querySelectorAll(".timeago").forEach(el => {
+    el.textContent = timeAgo(el.dataset.ts || "");
+  });
+}
+
 function timeAgo(iso){
   if(!iso) return "—";
   const d = new Date(iso); if(isNaN(d)) return "—";
@@ -638,7 +647,7 @@ function renderFlightPanel(targetId){
   el.innerHTML = `
     <div class="head">
       <h3><span class="live-dot"></span> Now in flight <span class="legend-pill">${items.length}</span></h3>
-      <span class="last" title="${last||""}">Bundle ${timeAgo(last)}</span>
+      <span class="last" title="${esc(last||"")}">Bundle <span class="timeago" data-ts="${esc(last||"")}">${esc(timeAgo(last))}</span></span>
     </div>
     ${items.length===0
       ? `<div class="empty">Nothing flagged In dev / In review / Blocked yet — set a card's status in the Cockpit tab.</div>`
@@ -652,7 +661,7 @@ function renderFlightPanel(targetId){
             <div class="bar"><i style="width:${pct}%;background:${c}"></i></div>
             <div class="meta">
               <span style="color:${c}">● ${esc(s.label)} · ${pct}%</span>
-              <span>${a.owner?("👤 "+esc(a.owner)+" · "):""}${esc(timeAgo(a.updatedAt))}</span>
+              <span>${a.owner?("👤 "+esc(a.owner)+" · "):""}<span class="timeago" data-ts="${esc(a.updatedAt||"")}">${esc(timeAgo(a.updatedAt))}</span></span>
             </div>
           </div>`;
         }).join("")}</div>`
@@ -674,6 +683,9 @@ function startLivePoll(){
   if(LIVE_TIMER) return;
   LIVE_TIMER = setInterval(async ()=>{
     if(document.hidden) return;
+    // Always refresh time-ago labels each tick so "X min ago" stays current
+    // even when there are no data changes or saves in flight.
+    refreshTimeAgo();
     if(saveStatus === "saving") return; // don't clobber an in-flight save
     const prevAt = PROGRESS?.updatedAt;
     try{
@@ -685,15 +697,13 @@ function startLivePoll(){
         // Re-render whatever panels are visible.
         if(content.classList.contains("home")) renderHome();
         else if(crumb.textContent === "Cockpit") { renderCockpitSidebar(); renderCockpit(); }
-        else renderFlightPanel("flight-mini"); // no-op if not present
-      } else {
-        // Even when no data change, refresh "X min ago" labels.
-        document.querySelectorAll(".flight").forEach(p=>{
-          if(p.id) renderFlightPanel(p.id);
-        });
+        // Time-ago refresh fires automatically via the next tick.
       }
     }catch{}
   }, 5000);
+  // Repaint timestamps when the user switches back to the tab (catches up
+  // on time elapsed while the poll loop was paused).
+  document.addEventListener("visibilitychange", () => { if(!document.hidden) refreshTimeAgo(); });
 }
 
 function aggregateStats(areas, sm){
@@ -817,7 +827,7 @@ function renderArea(a, sm){
   return `<div class="area" id="area-${esc(a.id)}" data-id="${esc(a.id)}" data-status="${esc(a.status)}" style="border-left-color:${c}">
     <div class="title">
       <div>
-        <div class="cat">${esc(a.category)} · <span title="${esc(a.updatedAt||"")}">${esc(timeAgo(a.updatedAt))}</span></div>
+        <div class="cat">${esc(a.category)} · <span title="${esc(a.updatedAt||"")}"><span class="timeago" data-ts="${esc(a.updatedAt||"")}">${esc(timeAgo(a.updatedAt))}</span></span></div>
         <h4>${esc(a.name)}</h4>
       </div>
     </div>
