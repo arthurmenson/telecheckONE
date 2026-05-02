@@ -140,6 +140,31 @@
   .flight .row-card .bar > i{display:block;height:100%}
   .flight .empty{color:var(--muted);font-size:12px;font-style:italic;padding:6px 0}
   .flight .row-card.recent{box-shadow:0 0 0 2px rgba(158,227,125,.35)}
+  /* Lifecycle stepper */
+  .lifecycle{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+  .lifecycle .lc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
+  .lifecycle .lc-head h3{margin:0;font-size:14px}
+  .lifecycle .lc-head .now{font-size:11px;color:var(--muted)}
+  .lifecycle .lc-head .now b{color:var(--accent2)}
+  .stepper{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding-bottom:6px}
+  .step{flex:1 0 130px;min-width:130px;display:flex;flex-direction:column;align-items:center;position:relative;cursor:pointer;padding:0 4px}
+  .step:not(:last-child)::after{content:"";position:absolute;top:14px;left:calc(50% + 14px);right:calc(-50% + 14px);height:2px;background:var(--border);z-index:0}
+  .step.done:not(:last-child)::after{background:var(--accent2)}
+  .step .dot{width:28px;height:28px;border-radius:50%;background:var(--chip);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);font-weight:600;z-index:1;position:relative;transition:all .2s}
+  .step.done .dot{background:var(--accent2);border-color:var(--accent2);color:#0b0f17}
+  .step.active .dot{background:#15233b;border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 4px rgba(106,169,255,.18);animation:pulse-step 1.8s infinite}
+  @keyframes pulse-step{0%{box-shadow:0 0 0 0 rgba(106,169,255,.4)}70%{box-shadow:0 0 0 9px rgba(106,169,255,0)}100%{box-shadow:0 0 0 0 rgba(106,169,255,0)}}
+  .step .lbl{margin-top:6px;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.25}
+  .step.done .lbl{color:var(--text)}
+  .step.active .lbl{color:var(--accent);font-weight:600}
+  .step:hover .lbl{color:var(--text)}
+  .lc-detail{margin-top:10px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;font-size:12.5px}
+  .lc-detail .d-label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+  .lc-detail .d-exit{margin-top:6px;color:var(--muted);font-size:11.5px;font-style:italic}
+  .lc-edit{display:flex;gap:6px;margin-top:8px}
+  .lc-edit select{background:var(--chip);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 8px;font-size:12px;flex:1}
+  .lc-edit button{background:var(--accent);border:0;color:#0b0f17;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer}
+  .lc-edit button:disabled{opacity:.5;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -400,6 +425,77 @@ function timeAgo(iso){
   return Math.floor(s/86400)+"d ago";
 }
 
+function renderLifecycle(targetId, opts){
+  const el = document.getElementById(targetId); if(!el) return;
+  const lc = PROGRESS?.lifecycle;
+  if(!lc || !Array.isArray(lc.stages) || !lc.stages.length){
+    el.innerHTML = `<div class="lc-head"><h3>Program lifecycle</h3></div><div style="color:var(--muted);font-size:12px">No lifecycle defined.</div>`;
+    return;
+  }
+  const editable = !!opts?.editable && !PROGRESS?._readonly;
+  const idx = Math.max(0, lc.stages.findIndex(s=>s.id===lc.current));
+  const cur = lc.stages[idx];
+  const pct = Math.round((idx / Math.max(1, lc.stages.length-1)) * 100);
+  el.innerHTML = `
+    <div class="lc-head">
+      <h3>Program lifecycle</h3>
+      <div class="now">Currently in <b>${cur?.label||"?"}</b> · stage ${idx+1} of ${lc.stages.length} · ${pct}% through program</div>
+    </div>
+    <div class="stepper">
+      ${lc.stages.map((s,i)=>{
+        const cls = i<idx ? "done" : (i===idx ? "active" : "upcoming");
+        const mark = i<idx ? "✓" : (i+1);
+        return `<div class="step ${cls}" data-i="${i}" data-id="${s.id}" title="${(s.description||"").replace(/"/g,"&quot;")}">
+          <div class="dot">${mark}</div>
+          <div class="lbl">${s.label}</div>
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="lc-detail">
+      <div class="d-label">${cur?.label||"Current stage"}</div>
+      <div>${cur?.description||""}</div>
+      ${cur?.exit ? `<div class="d-exit">Exit criteria: ${cur.exit}</div>` : ""}
+      ${editable ? `<div class="lc-edit">
+        <select id="lc-select">${lc.stages.map((s,i)=>`<option value="${s.id}" ${i===idx?"selected":""}>${i+1}. ${s.label}</option>`).join("")}</select>
+        <button id="lc-set">Set current stage</button>
+      </div>` : ""}
+    </div>
+  `;
+  el.querySelectorAll(".step").forEach(st=>st.addEventListener("click",()=>{
+    const id = st.dataset.id;
+    const sel = document.getElementById("lc-select");
+    if(sel) sel.value = id;
+    // Show detail for clicked stage even if not committing
+    const stg = lc.stages.find(s=>s.id===id);
+    const detail = el.querySelector(".lc-detail");
+    if(stg && detail){
+      detail.querySelector(".d-label").textContent = stg.label + (id===lc.current?" (current)":"");
+      detail.querySelectorAll(":scope > div")[1].textContent = stg.description||"";
+      const exitEl = detail.querySelector(".d-exit");
+      if(exitEl) exitEl.textContent = stg.exit ? "Exit criteria: " + stg.exit : "";
+    }
+  }));
+  if(editable){
+    el.querySelector("#lc-set")?.addEventListener("click", async ()=>{
+      const id = el.querySelector("#lc-select").value;
+      if(id === lc.current) return;
+      const next = JSON.parse(JSON.stringify(PROGRESS));
+      next.lifecycle.current = id;
+      saveStatus = "saving"; setMeta("Saving lifecycle…");
+      try{
+        const r = await fetch("/api/progress",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(next)});
+        if(!r.ok) throw new Error(await r.text());
+        const j = await r.json();
+        PROGRESS = next; PROGRESS.updatedAt = j.updatedAt;
+        saveStatus = "idle"; setMeta(metaText());
+        renderLifecycle(targetId,opts);
+      }catch(e){
+        saveStatus = "error"; setMeta("Save failed: "+e.message);
+      }
+    });
+  }
+}
+
 const ACTIVE_STATES = new Set(["in-dev","in-review","blocked"]);
 function activeAreas(){
   if(!PROGRESS) return [];
@@ -558,6 +654,7 @@ function renderCockpit(){
         </select>
       </div>
     </div>
+    <div class="lifecycle" id="lc-cockpit"></div>
     <div class="flight" id="flight-cockpit"></div>
     <div class="legend-row">
       ${PROGRESS.states.map(s=>`<span class="legend-pill"><span class="legend-dot" style="background:${s.color}"></span>${s.label} · ${stats.byStatus[s.id]||0}</span>`).join("")}
@@ -577,6 +674,7 @@ function renderCockpit(){
       `).join("")}
     </div>
   `;
+  renderLifecycle("lc-cockpit", {editable:true});
   renderFlightPanel("flight-cockpit");
   bindCockpitHandlers();
 }
@@ -712,6 +810,7 @@ function renderHome(){
       <h2>Telecheck — FINAL US REGION BASELINE</h2>
       <p>Multi-tenant AI telehealth platform spec bundle. ${totalDocs} indexed docs. Code repo not yet built — all work is editing the spec corpus.</p>
     </div>
+    <div class="lifecycle" id="lc-home"></div>
     <div class="flight" id="flight-home"></div>
     <div class="stat">
       <div><div class="n">41</div><div class="l">Canonical entities</div></div>
@@ -738,8 +837,8 @@ function renderHome(){
   content.querySelectorAll(".chip[data-group]").forEach(c=>c.addEventListener("click",()=>{
     document.querySelector(`.group[data-group="${c.dataset.group}"]`)?.scrollIntoView({behavior:"smooth"});
   }));
-  if(PROGRESS) renderFlightPanel("flight-home");
-  else loadProgress().then(()=>renderFlightPanel("flight-home"));
+  const paint = ()=>{ renderLifecycle("lc-home"); renderFlightPanel("flight-home"); };
+  if(PROGRESS) paint(); else loadProgress().then(paint);
 }
 
 let currentFile = null;

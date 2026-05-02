@@ -54,6 +54,28 @@ function validateProgress(p){
   if (!Array.isArray(p.states) || p.states.length === 0) errs.push("states[] required");
   if (!Array.isArray(p.areas))  errs.push("areas[] required");
   if (errs.length) return errs;
+  // Optional lifecycle block
+  if (p.lifecycle != null) {
+    if (typeof p.lifecycle !== "object") errs.push("lifecycle must be object");
+    else {
+      if (!Array.isArray(p.lifecycle.stages) || p.lifecycle.stages.length === 0)
+        errs.push("lifecycle.stages[] required");
+      else {
+        const stageIds = new Set();
+        const allowedStage = new Set(["id","label","description","exit"]);
+        for (const [i,s] of p.lifecycle.stages.entries()){
+          if (!s || typeof s !== "object") { errs.push(`lifecycle.stages[${i}] must be object`); continue; }
+          for (const k of Object.keys(s)) if (!allowedStage.has(k)) errs.push(`lifecycle.stages[${i}] unknown field "${k}"`);
+          if (typeof s.id !== "string" || !s.id) errs.push(`lifecycle.stages[${i}].id required`);
+          else if (stageIds.has(s.id)) errs.push(`duplicate lifecycle stage id "${s.id}"`);
+          else stageIds.add(s.id);
+          if (typeof s.label !== "string") errs.push(`lifecycle.stages[${i}].label must be string`);
+        }
+        if (typeof p.lifecycle.current !== "string" || !stageIds.has(p.lifecycle.current))
+          errs.push(`lifecycle.current "${p.lifecycle.current}" not in stages[]`);
+      }
+    }
+  }
   const stateIds = new Set();
   for (const [i, s] of p.states.entries()) {
     if (!s || typeof s.id !== "string" || typeof s.label !== "string" || typeof s.color !== "string")

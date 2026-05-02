@@ -1,6 +1,59 @@
 {
   "schema": 1,
   "updated": "2026-05-02",
+  "lifecycle": {
+    "current": "spec-baseline",
+    "stages": [
+      {
+        "id": "spec-baseline",
+        "label": "Spec Baseline",
+        "description": "FINAL US REGION BASELINE: 75 docs, 17 slice PRDs, 25 ADRs, 22 invariants frozen.",
+        "exit": "Reviewer Brief signed off; Promotion Ledger entry recorded."
+      },
+      {
+        "id": "eng-bootstrap",
+        "label": "Engineering Bootstrap",
+        "description": "Code repo init, CI, CLAUDE.md from EHBG §13, IaC skeleton, secrets, baseline RLS migration.",
+        "exit": "Repo green on CI; tenant_id RLS policy enforces on every PHI table."
+      },
+      {
+        "id": "foundation-build",
+        "label": "Foundation Build",
+        "description": "Auth/Identity, RBAC, KMS-per-tenant, Audit append-only, CCR runtime, Forms Engine, AI service skeleton.",
+        "exit": "Invariants I-019 / I-023…I-027 verifiably enforced end-to-end."
+      },
+      {
+        "id": "slice-build",
+        "label": "Slice Build",
+        "description": "17 slice PRDs implemented in EHBG sprint order. Modular monolith; AI Service separated.",
+        "exit": "All slices ship behind feature flags with green smoke + contract tests."
+      },
+      {
+        "id": "internal-alpha",
+        "label": "Internal Alpha",
+        "description": "Two-tenant smoke (Heros Health greenfield + Telecheck-Ghana pilot). Synthetic patients only.",
+        "exit": "Operational Readiness v1.5 checklist ≥ 90% green."
+      },
+      {
+        "id": "pilot",
+        "label": "Pilot",
+        "description": "Real users, scoped cohorts. Ghana Launch Playbook v1.2 enacted. Crisis-detection drills.",
+        "exit": "Adverse-event reporting closed-loop; SLOs met for 30 days."
+      },
+      {
+        "id": "ga-launch",
+        "label": "GA Launch",
+        "description": "Public availability per Market Launch contract. us-east-1 primary, us-west-2 cold DR (ADR-026).",
+        "exit": "Launch retro published; on-call rotation steady-state."
+      },
+      {
+        "id": "post-launch",
+        "label": "Scale & Iterate",
+        "description": "New countries via CCR, additional tenants, slice extraction from monolith as boundaries warrant.",
+        "exit": "Continuous."
+      }
+    ]
+  },
   "states": [
     {
       "id": "not-started",
@@ -448,5 +501,5 @@
       "updatedAt": "2026-05-02T05:58:17.535Z"
     }
   ],
-  "updatedAt": "2026-05-02T05:58:17.535Z"
+  "updatedAt": "2026-05-02T14:12:06.078Z"
 }
