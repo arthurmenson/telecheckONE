@@ -105,9 +105,9 @@ High-stakes canonicality calls that resolve known conflicts. Each is dated and r
 ### Decision 6 — Engineering Handoff canonical version
 
 - **Artifact:** Engineering Handoff & Build Guide
-- **Canonical version:** **v1.2**
-- **Notes:** Restored §10a Day-1-7 plan from v1.0 (lost in v1.1 compression). Restored embedded CLAUDE.md template in §13 (lost in v1.1 compression). §7 reframed: engineering implements per CDM v1.2; engineering does not author schemas. Sprint plan revised 26 weeks → 24 weeks following Heros greenfield decision (no migration sprint).
-- **Decision date:** 2026-04-25 (HIGH-08, HIGH-09, MEDIUM-16, LOW-20 remediation)
+- **Canonical version:** **v1.3** *(updated 2026-05-02 per Codex Round-6 Scope 4 HIGH-1 finding — was previously stated as v1.2 in this Decision block, contradicting §3 inventory which already canonized v1.3. Corrected to align Decision block with §3 inventory and on-disk filename `Telecheck_Engineering_Handoff_Build_Guide_v1_3.md`. v1.2 is superseded.)*
+- **Notes:** Restored §10a Day-1-7 plan from v1.0 (lost in v1.1 compression). Restored embedded CLAUDE.md template in §13 (lost in v1.1 compression). §7 reframed: engineering implements per CDM v1.2; engineering does not author schemas. Sprint plan revised 26 weeks → 24 weeks following Telecheck-US (Heros Health DBA) greenfield decision (no migration sprint). **v1.3 (canonical) and the 2026-05-02 C3 hygiene-cycle template rewrite (operating-tenant + DBA + legal-entity + consumer-subdomain framing) per v1.10.1 hygiene cycle physical merge** are reflected in the on-disk file. v1.2 is superseded.
+- **Decision date:** 2026-04-25 (HIGH-08, HIGH-09, MEDIUM-16, LOW-20 remediation); 2026-05-02 (Codex Round-6 Scope 4 HIGH-1 version-pointer correction; v1.10.1 hygiene cycle C3 template rewrite)
 
 ### Decision 7 — Operational Readiness Tracker canonical version
 

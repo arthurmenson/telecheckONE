@@ -141,6 +141,23 @@ If ANY condition is unmet, the activation gate REJECTS the launch for that (Prog
 
 ## Research data partnership activation gate (added v5.1 per ADR-028)
 
+ADR-028 Posture A activation is a **two-stage per-country gate**. Each transition has its own activation review:
+
+### Stage 1 — `inactive → consent_only` activation gate (added v5.1 patch 2026-05-02 per Codex Round-6 Scope 3 HIGH-1 finding to make the previously implicit gate explicit; aligns with CCR_RUNTIME v5.2 launch defaults of `inactive` per Round-3/Round-4 patches and Forms Engine I-030 enforcement per FORMS_ENGINE v5.2)
+
+When a country's CCR `research_data_partnership_active` transitions from `inactive` to `consent_only`, the activation gate MUST verify ALL of:
+
+1. **CCR `research_ethics_review_body` is populated**: `name`, `jurisdiction`, `approval_reference_id`, `approval_validity_from`, `approval_validity_to`, `approval_scope`, `per_dsa_review_required` all non-null. `approval_validity_to >= now`.
+2. **Ethics-reviewed consent text version pin**: the 5th-tier research data-use consent text content has been ethics-reviewed by the designated REC body (per CCR `research_ethics_review_body.approval_reference_id`) AND a version pin recording the reviewed-text content hash is in place at the platform consent module. The pin is what Forms Engine reads when rendering the consent block per FORMS_ENGINE v5.2 research consent integration.
+3. **Audit event readiness**: `research.consent_granted` and `research.consent_revoked` audit emission paths are operational; the audit pipeline accepts these events with the canonical payload schema and hash-chains them per I-003/I-016/I-027.
+4. **Forms Engine static validation passed**: per FORMS_ENGINE v5.2 research consent integration §I-030 enforcement, every form-version-publish-time static analysis for forms in this country has been re-run post-activation-readiness and rejects any of the 6 categories of dependency on `research_consent_status` (L2 BranchingLogic, L3 Eligibility, L4 ApprovalGovernance, L1 PresentationContent variation excluding consent block itself, intake-flow gating, surface visibility).
+5. **CCR runtime validator readiness**: per CCR_RUNTIME v5.2, the runtime validator that rejects `consent_only` transitions when `research_ethics_review_body` is null is deployed and live (the runtime backstop for this activation review).
+6. **Country Launch Director sign-off** for the per-country `inactive → consent_only` transition (separate from the Stage 2 quad sign-off below; Country Launch Director owns per-country launch authority per the standard MARKET_LAUNCH lifecycle).
+
+If ANY of the 6 conditions is unmet, the Stage 1 gate REJECTS the transition. The country remains in `inactive` state (no consent prompt, no consent audit events, no consent records collected). A failed activation attempt produces a Category B audit record naming the failed condition. After Stage 1 passes, the country is in `consent_only` state: the 5th-tier consent prompt renders; consent records accrue; export pipeline remains inactive (Stage 2 not yet active).
+
+### Stage 2 — `consent_only → active` activation gate (added v5.1 per ADR-028 — this is the original gate, retained verbatim)
+
 When a country's CCR `research_data_partnership_active` transitions from `consent_only` to `active`, the activation gate MUST verify ALL of:
 
 1. CCR `research_ethics_review_body` is populated and `approval_validity_to >= now`.

@@ -33,9 +33,9 @@ Every audit event contains:
   // Sentinel `rejected_invalid_attempt` (v5.2 patch 2026-05-02 per Codex Round-5 Scope 1 MEDIUM) is VALID ONLY in the audit envelope of `*.execution_rejected` events
   //   (`prescribing.execution_rejected`, `refill.execution_rejected`, `medication_order.execution_rejected`); runtime validation MUST reject the sentinel everywhere else
   //   (any successful AIExecution record, any non-rejection action audit). Per AUDIT_EVENTS v5.2 §I-012 closure rule + execution_rejected exception.
-  "ai_workload_type":  "conversational_assistant | protocol_execution | autonomous_agent | multi_agent_supervisor | tool_using_agent | rejected_invalid_attempt (only on *.execution_rejected events) | null",
-  // Active at v1.0: advisory, suggestion, action_with_confirm. Reserved: action_with_audit_only, fully_autonomous. Sentinel rejected_invalid_attempt — same carve-out as above.
-  "autonomy_level":    "advisory | suggestion | action_with_confirm | action_with_audit_only | fully_autonomous | rejected_invalid_attempt (only on *.execution_rejected events) | null",
+  "ai_workload_type":  "conversational_assistant | protocol_execution | autonomous_agent | multi_agent_supervisor | tool_using_agent | rejected_invalid_attempt (only on *.execution_rejected events) | n/a (only on I-012 clinician-only approval audit records where no AI workload was upstream — patch 2026-05-02 per Codex Round-6 Scope 1 MEDIUM-1) | null",
+  // Active at v1.0: advisory, suggestion, action_with_confirm. Reserved: action_with_audit_only, fully_autonomous. Sentinel rejected_invalid_attempt — same carve-out as above. n/a — same I-012 clinician-only carve-out as above.
+  "autonomy_level":    "advisory | suggestion | action_with_confirm | action_with_audit_only | fully_autonomous | rejected_invalid_attempt (only on *.execution_rejected events) | n/a (only on I-012 clinician-only approval audit records where no AI workload was upstream) | null",
   // Reserved nullable agentic-context fields (added v5.2; populate only when corresponding capability activates per ADR-030/031/032/033/034).
   "agent_id":          "<ULID> | null",
   "agent_version":     "<semver> | null",
@@ -123,10 +123,10 @@ Like all Category A records, rejection events are tenant-scoped per `tenant_id`,
 
 | Action | Actor types | Detail payload |
 |---|---|---|
-| `prescribing.initiated` | clinician, ai_mode_2 | medication, patient, program_id |
-| `prescribing.approved` | clinician | medication_request_id, medication, dosing, approval_pathway, interaction_signals[], overrides[] |
-| `prescribing.declined` | clinician | medication_request_id, reason_code, reason_text, recommended_action |
-| `prescribing.modified` | clinician | medication_request_id, original_dose, modified_dose, modification_reason |
+| `prescribing.initiated` | clinician, **ai_workload (ai_workload_type=protocol_execution)** [v1.10+]; legacy alias `ai_mode_2` permitted only for pre-v1.10 backfill records | medication, patient, program_id, **autonomy_level (required for I-012 actions per §I-012 closure rule)**, ai_workload_type |
+| `prescribing.approved` | clinician (human signer per I-012 three-clause rule) | medication_request_id, medication, dosing, approval_pathway, interaction_signals[], overrides[], **ai_workload_type, autonomy_level (required for all I-012-scoped approvals per §I-012 closure rule — patch 2026-05-02 per Codex Round-6 Scope 1 MEDIUM-1; for clinician-only approvals where the upstream AI workload was `protocol_execution` at `action_with_confirm`, the envelope inherits the action_id's preceding workload/autonomy values; for purely human-driven approvals with no AI involvement, the fields are populated as `ai_workload_type = "n/a"` and `autonomy_level = "n/a"` — this prevents schema-driven implementations from omitting the fields and recreating the protocol_engine bypass)** |
+| `prescribing.declined` | clinician | medication_request_id, reason_code, reason_text, recommended_action, ai_workload_type, autonomy_level |
+| `prescribing.modified` | clinician | medication_request_id, original_dose, modified_dose, modification_reason, ai_workload_type, autonomy_level |
 | `refill.approved` | clinician, **ai_workload (ai_workload_type=protocol_execution)** [v1.10+]; legacy alias `protocol_engine` permitted only for pre-v1.10 backfill records | refill_id, approval_pathway, clinician_id or protocol_version, interaction_signals[], overrides[], **autonomy_level (required for I-012 actions per §I-012 closure rule)**, ai_workload_type, supervising_policy_id |
 | `refill.declined` | clinician, **ai_workload (ai_workload_type=protocol_execution)** [v1.10+]; legacy alias `protocol_engine` permitted only for pre-v1.10 backfill records | refill_id, declined_by, reason_code, reason_text, autonomy_level, ai_workload_type |
 | `protocol_authorized_prescribing` | **ai_workload (ai_workload_type=protocol_execution)** [v1.10+]; legacy alias `protocol_engine` permitted only for pre-v1.10 backfill records | medication_request_id, protocol_version, accountable_clinician_id, engine_versions, all_signals[], gate_check_results, **autonomy_level (required for I-012 actions per §I-012 closure rule)**, ai_workload_type, supervising_policy_id |

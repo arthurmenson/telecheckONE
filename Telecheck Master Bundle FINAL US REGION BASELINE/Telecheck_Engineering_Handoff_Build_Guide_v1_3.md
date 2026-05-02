@@ -58,7 +58,7 @@ v1.1 supersedes v1.0 to incorporate the multi-tenancy + Tier-1 ecom + dual-marke
 6. **22-26 week timeline per Master PRD v1.9 §6** — was 16w in v1.0; expanded for Tier-1 + multi-tenancy + dual-market.
 7. **Design Implementation Contract v1.0** referenced as canonical authority for design–engineering boundary.
 8. **Engineering deliverables for new entities** (Subscription, SubscriptionEvent, ProductCatalog, Cart, CartItem, DiscountCode, AffiliateAccount, AffiliateConversion) detailed.
-9. **Heros launches greenfield** — no migration tooling in scope. Per HIGH-12 remediation decision 2026-04-25, Heros patients on Rimo do NOT migrate to Telecheck. Heros acquires patients fresh through Telecheck's standard intake flow. Engineering carries no migration work stream.
+9. **Telecheck-US (Heros Health DBA) launches greenfield** — no migration tooling in scope. *(Operating-tenant + DBA framing rewritten 2026-05-02 per Codex Round-6 Scope 4 HIGH-2 finding to align with C3 brand-structure rule per Master PRD v1.10 §17 + Glossary v5.2 — was previously `Heros launches greenfield`, using bare `Heros` as a tenant identifier in violation of the C3 rule.)* Per HIGH-12 remediation decision 2026-04-25, Telecheck-US patients on Rimo do NOT migrate to Telecheck (no Rimo-to-Telecheck patient migration). The Telecheck-US tenant operator (Telecheck Health LLC, trading patient-facing as Heros Health DBA at heroshealth.com) acquires patients fresh through Telecheck's standard intake flow. Engineering carries no migration work stream.
 10. **OR Tracker v1.4 alignment** — sprint structure mapped to OR items.
 
 The v1.0 architectural spine, work stream pattern, and engineering discipline rules are preserved where still applicable.

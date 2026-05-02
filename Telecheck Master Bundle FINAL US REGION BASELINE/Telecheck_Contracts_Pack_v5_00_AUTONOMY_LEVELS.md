@@ -168,11 +168,11 @@ No platform code path may resolve `fully_autonomous` to an executed clinical act
 
 ## 5 · Per-action validation
 
-Every `AIExecution` MUST satisfy ALL of:
+Every `AIExecution` MUST satisfy ALL of (*field name `workload_type` superseded by canonical `ai_workload_type` 2026-05-02 per Codex Round-6 Scope 1 MEDIUM-2 finding to align with TYPES, WORKLOAD_TAXONOMY, AUDIT_EVENTS, STATE_MACHINES — generated validators MUST use `ai_workload_type` as the field name; any legacy `workload_type` references in older drafts are non-canonical*):
 
-1. `workload_type` is a value defined in WORKLOAD_TAXONOMY contract.
+1. `ai_workload_type` is a value defined in WORKLOAD_TAXONOMY contract.
 2. `autonomy_level` is a value defined in this contract AND activated per §4.
-3. The `(workload_type, autonomy_level)` pair is permitted per WORKLOAD_TAXONOMY §2 / §3 `autonomy_level_range`.
+3. The `(ai_workload_type, autonomy_level)` pair is permitted per WORKLOAD_TAXONOMY §2 / §3 `autonomy_level_range`.
 4. For `autonomy_level ∈ {action_with_audit_only, fully_autonomous}`: a valid `PolicyAuthorization` reference must be supplied via `supervising_policy_id`. v1.0 enforces this as a hard validation rejection (no PolicyAuthorization framework yet, so these reserved levels cannot pass validation; this enforces the reserved status at runtime).
 5. **For I-012-governed actions (`medication_request` / prescription, refill, medication-order) executed by `protocol_execution` workload (mirrors Master PRD §13.7 v0.3):** transition to `executed` state MUST be rejected UNLESS **all** three of the following hold: (a) `autonomy_level == action_with_confirm` (string equality; not membership in a set); (b) an explicit clinician confirmation event exists in the immutable audit chain, scoped to this `action_id`, prior to the transition; (c) the confirming actor holds a role authorized to sign for the action class under RBAC v1.1 / I-012. Therefore `executed` MUST be rejected when `autonomy_level ∈ {advisory, suggestion, action_with_audit_only, fully_autonomous}`, when `autonomy_level` is `null` / unknown / absent, or when any required confirmation evidence is missing — including any future enum value not yet authorized by an ADR-029 successor. The reserved levels cannot reach `executed` for I-012 actions until **both** (i) a successor ADR (ADR-030 or later) explicitly supersedes I-012 for the action class in scope, AND (ii) an activation audit event recording the supersession is present in the immutable audit chain. ADR approval alone is never sufficient. (v0.4 patch — mirrors Master PRD §13.7 v0.3 normative wording exactly.)
 6. Platform-floor invariants apply regardless of level (I-019 crisis detection, I-023..I-026 tenant isolation, I-027 audit append-only).
