@@ -224,6 +224,24 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
+// Boot-time self-check: refuse to start if the seed file would fail validation.
+// Catches the case where someone hand-edits progress.json into a state the
+// server itself would reject on every subsequent PUT.
+try {
+  if (fs.existsSync(PROGRESS_FILE)) {
+    const seed = JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8"));
+    const seedErrs = validateProgress(seed);
+    if (seedErrs.length) {
+      console.error("FATAL: progress.json fails validation; refusing to start.");
+      for (const e of seedErrs) console.error("  - " + e);
+      process.exit(2);
+    }
+  }
+} catch (e) {
+  console.error("FATAL: could not read/parse progress.json:", e.message);
+  process.exit(2);
+}
+
 server.listen(PORT, HOST, () => {
   console.log(`Telecheck Command Center → http://${HOST}:${PORT}/`);
   console.log(`Serving: ${ROOT}`);

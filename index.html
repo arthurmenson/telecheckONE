@@ -412,6 +412,12 @@ function statusMap(){
   return m;
 }
 
+// Returns { written, resp }
+//   written = exact document the server accepted (incl. retry-merged fields)
+//   resp    = server's JSON response with revision/updated/updatedAt
+// Callers MUST adopt `written` as the new local source of truth, otherwise the
+// next save sends a stale doc that the server can't tell from a real edit and
+// silently reverts whatever was merged in during retry.
 async function putProgress(doc, attempt){
   const ifMatch = `"r${doc.revision || 0}"`;
   const r = await fetch("/api/progress",{
@@ -420,9 +426,6 @@ async function putProgress(doc, attempt){
     body: JSON.stringify(doc),
   });
   if(r.status === 409){
-    // Server has a newer revision. Replay only fields THIS client edited (vs
-    // BASELINE) onto the server's latest doc. mergeForRetry throws on
-    // same-field collisions so we never silently revert another user's edit.
     const conflict = await r.json();
     const server = conflict.current;
     if(attempt && attempt >= 1){ throw Object.assign(new Error("retry exhausted"), {conflict:true}); }
@@ -434,7 +437,13 @@ async function putProgress(doc, attempt){
     try { msg = (await r.text()).slice(0,200) || msg; } catch {}
     throw new Error(msg);
   }
-  return r.json();
+  const resp = await r.json();
+  // Stamp the server's authoritative revision/timestamps onto the doc we sent.
+  const written = JSON.parse(JSON.stringify(doc));
+  written.revision  = resp.revision;
+  written.updated   = resp.updated;
+  written.updatedAt = resp.updatedAt;
+  return { written, resp };
 }
 
 // Replay only fields the local client actually edited (mine !== baseline) onto
@@ -501,11 +510,16 @@ function persistProgress(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async ()=>{
     try{
-      const j = await putProgress(PROGRESS);
-      PROGRESS.revision = j.revision;
-      PROGRESS.updated  = j.updated;
-      PROGRESS.updatedAt = j.updatedAt;
-      BASELINE = snapshot(PROGRESS); // advance the immutable baseline on success
+      const { written } = await putProgress(PROGRESS);
+      // Adopt the exact doc the server accepted as new source of truth.
+      // If the retry path merged in another user's fields, this brings them
+      // into PROGRESS so our next save doesn't revert them.
+      const cockpitWasOpen = !content.classList.contains("home") && crumb.textContent === "Cockpit";
+      PROGRESS = written;
+      BASELINE = snapshot(PROGRESS);
+      // Re-render visible panels so any merged-in remote changes show up now.
+      if(content.classList.contains("home")) renderHome();
+      else if(cockpitWasOpen) { renderCockpitSidebar(); renderCockpit(); }
       saveStatus = "ok"; renderSaveStatus();
       const meta = $("#cock-meta"); if(meta) meta.textContent = metaText();
     }catch(e){
@@ -663,10 +677,8 @@ function bindLcSetButton(el, opts, targetId){
     next.lifecycle.current = id;
     saveStatus = "saving"; setMeta("Saving lifecycle…");
     try{
-      const j = await putProgress(next);
-      PROGRESS = next;
-      PROGRESS.revision = j.revision;
-      PROGRESS.updatedAt = j.updatedAt;
+      const { written } = await putProgress(next);
+      PROGRESS = written; // adopt merged doc as authoritative
       BASELINE = snapshot(PROGRESS);
       saveStatus = "idle"; setMeta(metaText());
       renderLifecycle(targetId, opts);
