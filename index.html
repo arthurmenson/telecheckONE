@@ -123,6 +123,23 @@
   .save-pill.ok{color:var(--accent2)}
   .save-pill.err{color:var(--danger)}
   .group-divider{grid-column:1/-1;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:14px 0 -6px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+  /* In-flight live panel */
+  .flight{background:linear-gradient(135deg,#15233b,#1a3a3a);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+  .flight .head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .flight .head h3{margin:0;font-size:14px;display:flex;align-items:center;gap:8px}
+  .flight .live-dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);box-shadow:0 0 0 0 rgba(158,227,125,.7);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(158,227,125,.5)}70%{box-shadow:0 0 0 7px rgba(158,227,125,0)}100%{box-shadow:0 0 0 0 rgba(158,227,125,0)}}
+  .flight .last{margin-left:auto;font-size:11px;color:var(--muted)}
+  .flight .grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+  .flight .row-card{background:rgba(0,0,0,.18);border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:6px;padding:8px 10px;cursor:pointer;transition:border-color .15s}
+  .flight .row-card:hover{border-color:var(--accent)}
+  .flight .row-card .n{font-size:12.5px;font-weight:600;display:flex;justify-content:space-between;gap:6px}
+  .flight .row-card .n em{font-style:normal;color:var(--muted);font-weight:400;font-size:10.5px}
+  .flight .row-card .meta{font-size:10.5px;color:var(--muted);display:flex;justify-content:space-between;margin-top:4px;gap:6px}
+  .flight .row-card .bar{height:3px;background:var(--chip);border-radius:2px;margin-top:6px;overflow:hidden}
+  .flight .row-card .bar > i{display:block;height:100%}
+  .flight .empty{color:var(--muted);font-size:12px;font-style:italic;padding:6px 0}
+  .flight .row-card.recent{box-shadow:0 0 0 2px rgba(158,227,125,.35)}
 </style>
 </head>
 <body>
@@ -372,6 +389,91 @@ function metaText(){
   return `Last updated ${PROGRESS?.updated || "?"}${ro}`;
 }
 
+function timeAgo(iso){
+  if(!iso) return "—";
+  const d = new Date(iso); if(isNaN(d)) return "—";
+  const s = Math.max(0, Math.floor((Date.now() - d.getTime())/1000));
+  if(s < 30) return "just now";
+  if(s < 60) return s+"s ago";
+  if(s < 3600) return Math.floor(s/60)+"m ago";
+  if(s < 86400) return Math.floor(s/3600)+"h ago";
+  return Math.floor(s/86400)+"d ago";
+}
+
+const ACTIVE_STATES = new Set(["in-dev","in-review","blocked"]);
+function activeAreas(){
+  if(!PROGRESS) return [];
+  // Active first, then most recently touched.
+  return PROGRESS.areas
+    .filter(a => ACTIVE_STATES.has(a.status))
+    .sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||""));
+}
+
+function renderFlightPanel(targetId){
+  const el = document.getElementById(targetId); if(!el) return;
+  const sm = statusMap();
+  const items = activeAreas();
+  const recentCutoff = Date.now() - 5*60*1000; // 5 min "hot"
+  const last = PROGRESS?.updatedAt;
+  el.innerHTML = `
+    <div class="head">
+      <h3><span class="live-dot"></span> Now in flight <span class="legend-pill">${items.length}</span></h3>
+      <span class="last" title="${last||""}">Bundle ${timeAgo(last)}</span>
+    </div>
+    ${items.length===0
+      ? `<div class="empty">Nothing flagged In dev / In review / Blocked yet — set a card's status in the Cockpit tab.</div>`
+      : `<div class="grid2">${items.map(a=>{
+          const s = sm[a.status]||{color:"#888",label:a.status};
+          const recent = a.updatedAt && new Date(a.updatedAt).getTime() > recentCutoff;
+          return `<div class="row-card ${recent?"recent":""}" data-id="${a.id}" style="border-left-color:${s.color}" title="${(a.notes||"").replace(/"/g,"&quot;")}">
+            <div class="n"><span>${a.name}</span><em>${a.category}</em></div>
+            <div class="bar"><i style="width:${a.progress||0}%;background:${s.color}"></i></div>
+            <div class="meta">
+              <span style="color:${s.color}">● ${s.label} · ${a.progress||0}%</span>
+              <span>${a.owner?("👤 "+a.owner+" · "):""}${timeAgo(a.updatedAt)}</span>
+            </div>
+          </div>`;
+        }).join("")}</div>`
+    }
+  `;
+  el.querySelectorAll(".row-card").forEach(c=>c.addEventListener("click",()=>{
+    switchTab("cockpit");
+    setTimeout(()=>{
+      const card = document.getElementById("area-"+c.dataset.id);
+      card?.scrollIntoView({behavior:"smooth",block:"center"});
+      card?.animate([{boxShadow:"0 0 0 2px var(--accent)"},{boxShadow:"0 0 0 0 transparent"}],{duration:1100});
+    },50);
+  }));
+}
+
+// Live polling — refetch /api/progress every 5s; if updatedAt changed, re-render visible panels.
+let LIVE_TIMER = null;
+function startLivePoll(){
+  if(LIVE_TIMER) return;
+  LIVE_TIMER = setInterval(async ()=>{
+    if(document.hidden) return;
+    if(saveStatus === "saving") return; // don't clobber an in-flight save
+    const prevAt = PROGRESS?.updatedAt;
+    try{
+      const r = await fetch("/api/progress",{cache:"no-cache"});
+      if(!r.ok) return;
+      const next = await r.json();
+      if(next.updatedAt && next.updatedAt !== prevAt){
+        PROGRESS = next;
+        // Re-render whatever panels are visible.
+        if(content.classList.contains("home")) renderHome();
+        else if(crumb.textContent === "Cockpit") { renderCockpitSidebar(); renderCockpit(); }
+        else renderFlightPanel("flight-mini"); // no-op if not present
+      } else {
+        // Even when no data change, refresh "X min ago" labels.
+        document.querySelectorAll(".flight").forEach(p=>{
+          if(p.id) renderFlightPanel(p.id);
+        });
+      }
+    }catch{}
+  }, 5000);
+}
+
 function aggregateStats(areas, sm){
   const total = areas.length || 1;
   const byStatus = {};
@@ -456,6 +558,7 @@ function renderCockpit(){
         </select>
       </div>
     </div>
+    <div class="flight" id="flight-cockpit"></div>
     <div class="legend-row">
       ${PROGRESS.states.map(s=>`<span class="legend-pill"><span class="legend-dot" style="background:${s.color}"></span>${s.label} · ${stats.byStatus[s.id]||0}</span>`).join("")}
     </div>
@@ -474,6 +577,7 @@ function renderCockpit(){
       `).join("")}
     </div>
   `;
+  renderFlightPanel("flight-cockpit");
   bindCockpitHandlers();
 }
 
@@ -484,7 +588,7 @@ function renderArea(a, sm){
   return `<div class="area" id="area-${a.id}" data-id="${a.id}" data-status="${a.status}" style="border-left-color:${s.color}">
     <div class="title">
       <div>
-        <div class="cat">${a.category}</div>
+        <div class="cat">${a.category} · <span title="${a.updatedAt||""}">${timeAgo(a.updatedAt)}</span></div>
         <h4>${a.name}</h4>
       </div>
     </div>
@@ -608,6 +712,7 @@ function renderHome(){
       <h2>Telecheck — FINAL US REGION BASELINE</h2>
       <p>Multi-tenant AI telehealth platform spec bundle. ${totalDocs} indexed docs. Code repo not yet built — all work is editing the spec corpus.</p>
     </div>
+    <div class="flight" id="flight-home"></div>
     <div class="stat">
       <div><div class="n">41</div><div class="l">Canonical entities</div></div>
       <div><div class="n">178</div><div class="l">OpenAPI endpoints</div></div>
@@ -633,6 +738,8 @@ function renderHome(){
   content.querySelectorAll(".chip[data-group]").forEach(c=>c.addEventListener("click",()=>{
     document.querySelector(`.group[data-group="${c.dataset.group}"]`)?.scrollIntoView({behavior:"smooth"});
   }));
+  if(PROGRESS) renderFlightPanel("flight-home");
+  else loadProgress().then(()=>renderFlightPanel("flight-home"));
 }
 
 let currentFile = null;
@@ -719,7 +826,7 @@ sel.addEventListener("change",()=>{
 
 renderSidebar();
 renderHome();
-loadProgress(); // warm cache so cockpit feels instant
+loadProgress().then(()=>{ renderFlightPanel("flight-home"); startLivePoll(); });
 </script>
 </body>
 </html>

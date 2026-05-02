@@ -62,7 +62,7 @@ function validateProgress(p){
     else stateIds.add(s.id);
   }
   const seenIds = new Set();
-  const allowedFields = new Set(["id","name","category","status","progress","owner","notes","docs"]);
+  const allowedFields = new Set(["id","name","category","status","progress","owner","notes","docs","updatedAt"]);
   for (const [i, a] of p.areas.entries()) {
     if (!a || typeof a !== "object") { errs.push(`areas[${i}] must be object`); continue; }
     for (const k of Object.keys(a)) if (!allowedFields.has(k)) errs.push(`areas[${i}] has unknown field "${k}"`);
@@ -114,13 +114,28 @@ const server = http.createServer(async (req, res) => {
           res.writeHead(422, { "Content-Type": "application/json; charset=utf-8" });
           return res.end(JSON.stringify({ ok: false, errors: errs }));
         }
+        // Stamp updatedAt on areas whose tracked fields changed.
+        const now = new Date().toISOString();
+        let prevAreas = [];
+        try { prevAreas = JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8")).areas || []; } catch {}
+        const prev = new Map(prevAreas.map(a => [a.id, a]));
+        const tracked = ["status","progress","owner","notes"];
+        let changed = 0;
+        for (const a of parsed.areas) {
+          const p = prev.get(a.id);
+          const diff = !p || tracked.some(k => (a[k] ?? "") !== (p[k] ?? ""))
+            || JSON.stringify(a.docs||[]) !== JSON.stringify(p?.docs||[]);
+          if (diff) { a.updatedAt = now; changed++; }
+          else if (p?.updatedAt) { a.updatedAt = p.updatedAt; }
+        }
         parsed.schema = parsed.schema || 1;
-        parsed.updated = new Date().toISOString().slice(0,10);
+        parsed.updated = now.slice(0,10);
+        parsed.updatedAt = now;
         atomicWriteJson(PROGRESS_FILE, parsed);
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ ok: true, updated: parsed.updated, areas: parsed.areas.length }));
-        const ts = new Date().toISOString().slice(11,19);
-        console.log(`[${ts}] 200 PUT /api/progress (${parsed.areas.length} areas)`);
+        res.end(JSON.stringify({ ok: true, updated: parsed.updated, updatedAt: now, changed, areas: parsed.areas.length }));
+        const ts = now.slice(11,19);
+        console.log(`[${ts}] 200 PUT /api/progress (${parsed.areas.length} areas, ${changed} changed)`);
       } catch (e) {
         res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
         res.end("Bad request: " + e.message);
