@@ -382,18 +382,27 @@ function safeColor(c){
   return (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : "#888888";
 }
 
+// BASELINE = immutable copy of the last document the server confirmed.
+// Used to identify which fields THIS client actually edited (local !== baseline)
+// vs which fields just look different because the server moved on
+// (server !== baseline). Without it, mergeForRetry can resurrect stale values.
+let BASELINE = null;
+function snapshot(o){ return o ? JSON.parse(JSON.stringify(o)) : null; }
+
 async function loadProgress(){
   try{
     const r = await fetch("/api/progress",{cache:"no-cache"});
     if(!r.ok) throw new Error(r.status+" "+r.statusText);
     PROGRESS = await r.json();
+    BASELINE = snapshot(PROGRESS);
   }catch(e){
     // fallback: try the static file (works without server)
     try{
       const r2 = await fetch("progress.json",{cache:"no-cache"});
       PROGRESS = await r2.json();
       PROGRESS._readonly = true;
-    }catch(e2){ PROGRESS = null; }
+      BASELINE = snapshot(PROGRESS);
+    }catch(e2){ PROGRESS = null; BASELINE = null; }
   }
 }
 
@@ -411,14 +420,13 @@ async function putProgress(doc, attempt){
     body: JSON.stringify(doc),
   });
   if(r.status === 409){
-    // Server has a newer revision. Refetch + replay our local-only fields onto
-    // the server's version, bump revision, retry once. If our edit still
-    // collides with someone else's edit on the same field, server's value wins
-    // and we surface a soft conflict notice.
+    // Server has a newer revision. Replay only fields THIS client edited (vs
+    // BASELINE) onto the server's latest doc. mergeForRetry throws on
+    // same-field collisions so we never silently revert another user's edit.
     const conflict = await r.json();
     const server = conflict.current;
-    if(attempt && attempt >= 1){ throw Object.assign(new Error("conflict"), {conflict:true}); }
-    const merged = mergeForRetry(server, doc);
+    if(attempt && attempt >= 1){ throw Object.assign(new Error("retry exhausted"), {conflict:true}); }
+    const merged = mergeForRetry(server, doc, BASELINE); // may throw {conflict, fields}
     return putProgress(merged, (attempt||0)+1);
   }
   if(!r.ok){
@@ -429,24 +437,51 @@ async function putProgress(doc, attempt){
   return r.json();
 }
 
-// Replay only fields the local client touched onto the server's latest doc.
-// "Touched" = anything that differs between PROGRESS (last good baseline) and doc.
-function mergeForRetry(server, mine){
+// Replay only fields the local client actually edited (mine !== baseline) onto
+// the server's latest doc. If the same field was also edited on the server
+// (server !== baseline), that's a true same-field collision: throw so the
+// caller can surface a conflict instead of silently picking a winner.
+function mergeForRetry(server, mine, baseline){
+  const eq = (a,b) => JSON.stringify(a) === JSON.stringify(b);
   const out = JSON.parse(JSON.stringify(server));
+  const collisions = [];
+
   // Lifecycle.current
-  if(mine.lifecycle?.current && mine.lifecycle.current !== server.lifecycle?.current){
-    out.lifecycle = out.lifecycle || {}; out.lifecycle.current = mine.lifecycle.current;
+  const baseLcCur = baseline?.lifecycle?.current;
+  const myLcCur   = mine?.lifecycle?.current;
+  const svLcCur   = server?.lifecycle?.current;
+  if(myLcCur !== baseLcCur){ // I edited it
+    if(svLcCur !== baseLcCur && svLcCur !== myLcCur){
+      collisions.push("lifecycle.current");
+    } else {
+      out.lifecycle = out.lifecycle || {}; out.lifecycle.current = myLcCur;
+    }
   }
-  // Per-area shallow merge of tracked fields where mine differs from server.
+
+  // Per-area
   const sMap = new Map((server.areas||[]).map(a=>[a.id,a]));
-  out.areas = (mine.areas||[]).map(myArea=>{
-    const sv = sMap.get(myArea.id) || myArea;
+  const bMap = new Map((baseline?.areas||[]).map(a=>[a.id,a]));
+  out.areas = (mine.areas||[]).map(myArea => {
+    const sv = sMap.get(myArea.id);
+    const bv = bMap.get(myArea.id);
+    if(!sv) return myArea; // brand new area — keep
     const merged = {...sv};
     for(const k of ["status","progress","owner","notes","stage","docs"]){
-      if(JSON.stringify(myArea[k]) !== JSON.stringify(sv[k])) merged[k] = myArea[k];
+      const mineEdited   = bv ? !eq(myArea[k], bv[k]) : myArea[k] !== undefined;
+      if(!mineEdited) continue;
+      const serverEdited = bv ? !eq(sv[k], bv[k])    : false;
+      if(serverEdited && !eq(myArea[k], sv[k])){
+        collisions.push(`areas[${myArea.id}].${k}`);
+      } else {
+        merged[k] = myArea[k];
+      }
     }
     return merged;
   });
+
+  if(collisions.length){
+    throw Object.assign(new Error("same-field conflict"), { conflict:true, fields: collisions });
+  }
   return out;
 }
 
@@ -460,13 +495,15 @@ function persistProgress(){
       PROGRESS.revision = j.revision;
       PROGRESS.updated  = j.updated;
       PROGRESS.updatedAt = j.updatedAt;
+      BASELINE = snapshot(PROGRESS); // advance the immutable baseline on success
       saveStatus = "ok"; renderSaveStatus();
       const meta = $("#cock-meta"); if(meta) meta.textContent = metaText();
     }catch(e){
       saveStatus = "err"; renderSaveStatus();
-      if(e.conflict){
-        const meta = $("#cock-meta"); if(meta) meta.textContent = "Conflict — refresh to see latest";
-      }
+      const meta = $("#cock-meta");
+      if(meta) meta.textContent = e.conflict
+        ? `Conflict on ${(e.fields||["field"]).slice(0,2).join(", ")} — refresh to see latest`
+        : "Save failed";
     }
   }, 350);
 }
@@ -620,11 +657,14 @@ function bindLcSetButton(el, opts, targetId){
       PROGRESS = next;
       PROGRESS.revision = j.revision;
       PROGRESS.updatedAt = j.updatedAt;
+      BASELINE = snapshot(PROGRESS);
       saveStatus = "idle"; setMeta(metaText());
       renderLifecycle(targetId, opts);
     }catch(e){
       saveStatus = "error";
-      setMeta(e.conflict ? "Conflict — refresh to see latest" : ("Save failed: "+(e.message||"")));
+      setMeta(e.conflict
+        ? `Conflict on ${(e.fields||["field"]).slice(0,2).join(", ")} — refresh to see latest`
+        : ("Save failed: "+(e.message||"")));
     }
   });
 }
@@ -694,6 +734,7 @@ function startLivePoll(){
       const next = await r.json();
       if(next.updatedAt && next.updatedAt !== prevAt){
         PROGRESS = next;
+        BASELINE = snapshot(PROGRESS);
         // Re-render whatever panels are visible.
         if(content.classList.contains("home")) renderHome();
         else if(crumb.textContent === "Cockpit") { renderCockpitSidebar(); renderCockpit(); }
@@ -737,7 +778,7 @@ function renderCockpitSidebar(){
       </div>
     </div>
     ${Object.entries(cats).map(([cat,items])=>`
-      <div class="group"><h3>${cat} <span class="count">${items.length}</span></h3>
+      <div class="group"><h3>${esc(cat)} <span class="count">${items.length}</span></h3>
         ${items.map(a=>`<a class="item" data-area="${esc(a.id)}">${esc(a.name)}<small style="color:${safeColor(sm[a.status]?.color)}">${esc(sm[a.status]?.label||a.status)} · ${Math.max(0,Math.min(100,Number(a.progress)||0))}%</small></a>`).join("")}
       </div>`).join("")}
   `;
@@ -805,7 +846,7 @@ function renderCockpit(){
     </div>
     <div class="board" id="board">
       ${Object.entries(cats).map(([cat,items])=>`
-        <div class="group-divider" data-cat="${cat}">${cat} · ${items.length}</div>
+        <div class="group-divider" data-cat="${esc(cat)}">${esc(cat)} · ${items.length}</div>
         ${items.map(a=>renderArea(a,sm)).join("")}
       `).join("")}
     </div>

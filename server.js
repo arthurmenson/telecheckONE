@@ -98,6 +98,7 @@ function validateProgress(p){
     else seenIds.add(a.id);
     if (typeof a.name !== "string") errs.push(`areas[${i}].name must be string`);
     if (typeof a.category !== "string") errs.push(`areas[${i}].category must be string`);
+    else if (a.category.length > 80 || /[<>]/.test(a.category)) errs.push(`areas[${i}].category must be ≤80 chars and free of < >`);
     if (typeof a.status !== "string" || !stateIds.has(a.status)) errs.push(`areas[${i}].status "${a.status}" not in states[]`);
     if (typeof a.progress !== "number" || !Number.isFinite(a.progress)) errs.push(`areas[${i}].progress must be number`);
     if (a.owner != null && typeof a.owner !== "string") errs.push(`areas[${i}].owner must be string`);
