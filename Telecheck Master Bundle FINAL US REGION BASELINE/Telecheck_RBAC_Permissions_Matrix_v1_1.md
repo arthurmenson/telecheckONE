@@ -4,7 +4,7 @@
 **Status:** Canonical for development
 **Owner:** Engineering Lead + Product (Telecheck)
 **Supersedes:** RBAC Permissions Matrix v1.0
-**Parent documents:** Master Platform PRD v1.9, System Architecture v1.2, Canonical Data Model v1.2, ADR Addendum 020–025 (with ADR-025 superseded by ADR-026)
+**Parent documents:** Master Platform PRD v1.10, System Architecture v1.2, Canonical Data Model v1.2, ADR Addendum 020–025 (with ADR-025 superseded by ADR-026)
 
 ---
 

@@ -23,8 +23,8 @@ Telecheck is an AI-powered telehealth, pharmacy, and health intelligence platfor
 
 The set contains four types of documents. Know which type you're reading:
 
-**Canonical product and platform truth** (use these as authoritative specifications):
-Master Platform PRD v1.9, all launch slice PRDs, Contracts Pack v5.1 (modular file set; filenames retain `v5_00` legacy pattern; headers govern), ADR Set v1.0 + ADR Addendum 016–019 + ADR Addendum 020–025 (with ADR-025 superseded by ADR-026) + ADR Addendum 026, Canonical Data Model v1.2, State Machines v1.1, OpenAPI v0.2, RBAC Permissions Matrix v1.1, System Architecture v1.2, Design System v1.1, Patient App IA v1.0, Clinician Portal IA v1.0, Admin Operator IA v1.1, Notification Spec v1.1, Protocol Library Ghana v1.0, Guardrail Templates v1.0, Payment & Billing Spec v1.0, Identity & Authentication Spec v1.0, Messaging & Inbox Spec v1.0, Artifact Registry v2.9
+**Canonical product and platform truth** (use these as authoritative specifications; *post-v1.10 promotion 2026-05-01 + v1.10.1 hygiene cycle 2026-05-02*):
+Master Platform PRD v1.10 (v1.9 superseded), all launch slice PRDs, Contracts Pack v5.2 for the 11 amended/new files in v1.10 cycle (modular file set; filenames retain `v5_00` legacy pattern; headers govern; ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1), ADR Set v1.0 + ADR Addendum 016–019 + ADR Addendum 020–025 (with ADR-025 superseded by ADR-026) + ADR Addendum 026 + ADR-027 + ADR-028 + ADR-029, Canonical Data Model v1.2 (48 active entities + 7 reserved-future per v1.10 cycle), State Machines v1.1 (18 active + 4 reserved-future transitions), OpenAPI v0.2 (187 endpoints across 22 modules), RBAC Permissions Matrix v1.1 (3 new research roles), System Architecture v1.2 (16 modules including Research Data Export Module), Design System v1.1, Design Implementation Contract v1.1 Canonical for development, Patient App IA v1.0, Clinician Portal IA v1.0, Admin Operator IA v1.1, Notification Spec v1.1, Protocol Library Ghana v1.0, Guardrail Templates v1.0, Payment & Billing Spec v1.0, Identity & Authentication Spec v1.0, Messaging & Inbox Spec v1.0, Artifact Registry v2.10
 
 **Supporting review history** (context for how decisions were made — read for understanding, not as specs):
 Red-Team Review, Flagged Items Resolution v1.0, Consolidated Launch Tracker v1.0
@@ -184,7 +184,7 @@ These are the items the Master PRD §23 identifies as decisions that must be res
 
 ---
 
-## Known gaps (from Artifact Registry v2.9 §5)
+## Known gaps (from Artifact Registry v2.10 §5)
 
 | Gap | Impact on review |
 |---|---|

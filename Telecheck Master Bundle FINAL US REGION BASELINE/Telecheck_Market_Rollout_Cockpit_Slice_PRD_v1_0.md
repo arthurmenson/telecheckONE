@@ -3,7 +3,7 @@
 **Version:** 1.0
 **Status:** Canonical for development
 **Owner:** Market Control Plane Lead
-**Parent document:** Telecheck Master Platform PRD v1.9, §6, §14
+**Parent document:** Telecheck Master Platform PRD v1.10, §6, §14
 **Companion documents:** Admin — Guardrail Configuration Slice PRD (#18), Admin — Moderation Policy Configuration Slice PRD (#19), Admin — Protocol Activation & Governance Slice PRD (#20), v5 Contracts Pack
 
 ---

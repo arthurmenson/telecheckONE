@@ -3,7 +3,7 @@
 **Version:** 1.1
 **Status:** Canonical for development — NEW slice introduced in Session 2 of multi-tenancy + Tier-1 ecom + dual-market scope expansion
 **Owner:** Product (Telecheck)
-**Parent documents:** Master Platform PRD v1.9 §9.3, ADR-023 (multi-tenancy), ADR-024 (country-driven config), RBAC Permissions Matrix v1.1
+**Parent documents:** Master Platform PRD v1.10 §9.3, ADR-023 (multi-tenancy), ADR-024 (country-driven config), RBAC Permissions Matrix v1.1
 **Companion documents:** Forms/Intake Engine Slice PRD v2.1, Pharmacy + Refill Slice PRD v2.1, Admin Operator IA v1.1 (existing), Admin Configuration Surfaces Slice PRD v1.0 (existing), Market Rollout Cockpit Slice PRD v1.0, Payment & Billing Spec v1.0
 **Format:** Markdown
 

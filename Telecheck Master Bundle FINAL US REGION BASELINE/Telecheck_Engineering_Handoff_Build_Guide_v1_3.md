@@ -4,7 +4,7 @@
 **Status:** Canonical for development
 **Owner:** Engineering Lead
 **Supersedes:** Engineering Handoff & Build Guide v1.0, v1.1, v1.2
-**Parent documents:** Master Platform PRD v1.9, ADR Set v1.0 + Addendum 016–019 + Addendum 020–025 (with ADR-025 superseded by ADR-026) + Addendum 026, System Architecture v1.2, Canonical Data Model v1.2, RBAC Permissions Matrix v1.1, Design Implementation Contract v1.0 (PROVISIONAL), Forms/Intake Engine Slice PRD v2.1, Pharmacy + Refill Slice PRD v2.1, Admin Backend Slice PRD v1.1, all other slice PRDs (extended by Tenant Threading Addendum v1.0 where applicable), Operational Readiness To-Do v1.4
+**Parent documents:** Master Platform PRD v1.10, ADR Set v1.0 + Addendum 016–019 + Addendum 020–025 (with ADR-025 superseded by ADR-026) + Addendum 026 + ADR-027 + ADR-028 + ADR-029, System Architecture v1.2, Canonical Data Model v1.2, RBAC Permissions Matrix v1.1, Design Implementation Contract v1.1 (Canonical for development; supersedes v1.0 PROVISIONAL per v1.10 promotion 2026-05-01), Forms/Intake Engine Slice PRD v2.1, Pharmacy + Refill Slice PRD v2.1, Admin Backend Slice PRD v1.1, all other slice PRDs (extended by Tenant Threading Addendum v1.0 where applicable), Operational Readiness To-Do v1.5
 **Companion documents:** Contracts Pack v5.1 (filenames retain v5_00 convention; headers govern), OpenAPI v0.2, State Machines v1.1, Tenant Threading Addendum v1.0, Unified Admin Sidebar v1.0, Active Document Index v1.0
 **Format:** Markdown
 
@@ -104,11 +104,11 @@ The clinical-safety invariants from the original Telecheck-Ghana scope are prese
 
 ## §2 The corpus you're inheriting
 
-Authoritative documents (canonical files per Registry v2.9; final bundle file count to be computed in Cycle U-004):
+Authoritative documents (canonical files per Artifact Registry v2.10; bundle file count = 87 per Project Upload Manifest v2 §3 post-v1.10 promotion 2026-05-01):
 
 ### Product truth
-- Master Platform PRD v1.9 — the product
-- Operational Readiness To-Do v1.4 — what's not done yet (106 active items, 4 tiers)
+- Master Platform PRD v1.10 — the product (v1.9 superseded 2026-05-01 per v1.10 PRD Update Cycle Phase 6 promotion ceremony; preserved at existing path for traceability)
+- Operational Readiness To-Do v1.5 — what's not done yet
 - Red Team Review, Flagged Items Resolution, Consolidated Launch Tracker, Reviewer Brief, Future Scope: USSD + AI Bridge, Investor One Pager
 
 ### Contracts layer (Contracts Pack v5)
@@ -138,8 +138,8 @@ Forms/Intake Engine v2.0, Pharmacy + Refill v2.1 (consolidated), Admin Backend v
 - Investor Pitch (Ghana), Nigeria Investor Pitch, Investor One Pager
 
 ### Cross-cutting
-- Promotion Ledger (P-001 through P-007)
-- Artifact Registry v2.9
+- Promotion Ledger (P-001 through P-009; P-008 = v1.10 promotion 2026-05-01; P-009 = v1.10.1 hygiene cycle 2026-05-02)
+- Artifact Registry v2.10 (per v1.10 PRD Update Cycle Phase 6 promotion 2026-05-01; supersedes v2.9)
 
 ---
 
@@ -672,14 +672,14 @@ Telecheck is a multi-tenant AI-powered telehealth platform. *(Operating-tenant +
 Architecture is global. Code, schema, audit, and config use operating-tenant identifiers (`Telecheck-{country}`); patient-facing surfaces source the consumer DBA via `tenant.consumer_dba`, never from `tenant.id`. See /docs/spec/Telecheck_Master_Platform_PRD_v1_10.md for full context.
 
 ## How to find authoritative answers
-- WHAT to build: /docs/spec/Telecheck_Master_Platform_PRD_v1_8.md
-- WHICH version of any artifact: /docs/spec/Telecheck_Artifact_Registry_v2_9.md
-- ARCHITECTURE decisions: /docs/spec/Telecheck_ADR_Set_v1_0.md + Addendum 016-019 + Addendum 020-025
-- API surface: /docs/spec/Telecheck_OpenAPI_v0_2.md (178 endpoints across 21 modules)
-- DATA model: /docs/spec/Telecheck_Canonical_Data_Model_v1_2.md (41 entities)
-- STATE machines: /docs/spec/Telecheck_State_Machines_v1_1.md (14 state machines)
-- RUNTIME contracts: /docs/spec/Telecheck_Contracts_Pack_v5_*.md (v5.1, multi-tenant aware)
-- RBAC: /docs/spec/Telecheck_RBAC_Permissions_Matrix_v1_1.md (dual hierarchy: Platform Admin + Tenant Admin)
+- WHAT to build: /docs/spec/Telecheck_Master_Platform_PRD_v1_10.md
+- WHICH version of any artifact: /docs/spec/Telecheck_Artifact_Registry_v2_10.md
+- ARCHITECTURE decisions: /docs/spec/Telecheck_ADR_Set_v1_0.md + Addendum 016-019 + Addendum 020-025 (with ADR-025 superseded by ADR-026) + Addendum 026 + ADR-027 + ADR-028 + ADR-029
+- API surface: /docs/spec/Telecheck_OpenAPI_v0_2.md (187 endpoints across 22 modules; v1.10 cycle adds research data module)
+- DATA model: /docs/spec/Telecheck_Canonical_Data_Model_v1_2.md (48 active entities + 7 reserved-future per v1.10 cycle additions)
+- STATE machines: /docs/spec/Telecheck_State_Machines_v1_1.md (18 active state machines + 4 reserved-future transitions on ProtocolAuthorizedAction per v1.10 cycle additions)
+- RUNTIME contracts: /docs/spec/Telecheck_Contracts_Pack_v5_*.md (v5.2 for 11 amended/new files in v1.10 cycle; ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1)
+- RBAC: /docs/spec/Telecheck_RBAC_Permissions_Matrix_v1_1.md (dual hierarchy: Platform Admin + Tenant Admin; v1.10 cycle adds 3 research roles)
 - TENANT THREADING for v1.0 slices: /docs/spec/Telecheck_Tenant_Threading_Addendum_v1_0.md
 - PER-FEATURE detail: /docs/spec/Telecheck_*_Slice_PRD_v*.md
 

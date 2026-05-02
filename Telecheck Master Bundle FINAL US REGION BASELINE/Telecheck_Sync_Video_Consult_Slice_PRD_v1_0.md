@@ -3,7 +3,7 @@
 **Version:** 1.0
 **Status:** Canonical for development
 **Owner:** Synchronous Care Lead
-**Parent document:** Telecheck Master Platform PRD v1.9, §10 Pillar 1, §11.1, §12
+**Parent document:** Telecheck Master Platform PRD v1.10, §10 Pillar 1, §11.1, §12
 **Companion documents:** Async Consult Slice PRD v1.0, AI Clinical Assistant Slice PRD v1.0, Forms/Intake Engine Slice PRD v1.0, Medication Interaction & Validation Engine Slice PRD v1.0, Pharmacy Portal Slice PRD v1.0, Consent & Delegated Access Slice PRD v1.0
 
 ---

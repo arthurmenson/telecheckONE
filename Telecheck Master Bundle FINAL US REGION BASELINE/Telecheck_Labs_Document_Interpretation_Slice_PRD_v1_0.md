@@ -3,7 +3,7 @@
 **Version:** 1.0
 **Status:** Canonical for development
 **Owner:** Clinical Governance Lead
-**Parent document:** Telecheck Master Platform PRD v1.9, §10 Pillar 2 & Pillar 5, §11.1
+**Parent document:** Telecheck Master Platform PRD v1.10, §10 Pillar 2 & Pillar 5, §11.1
 **Companion documents:** Medication Interaction & Validation Engine Slice PRD v1.0, AI Clinical Assistant Slice PRD v1.0, Refill Slice PRD v1.0, v5 Contracts Pack
 
 ---

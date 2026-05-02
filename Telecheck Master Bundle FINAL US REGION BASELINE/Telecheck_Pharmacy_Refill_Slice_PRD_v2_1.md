@@ -4,7 +4,7 @@
 **Status:** Canonical for development
 **Owner:** Product (Telecheck)
 **Supersedes:** Refill Slice PRD v1.0; Pharmacy Portal Slice PRD v1.0 (consolidated into this single Pharmacy + Refill spec at v2.0)
-**Parent documents:** Master Platform PRD v1.9 §9.2, ADR-023 (multi-tenancy), ADR-024 (country-driven config), Contracts Pack v5.1 (filenames retain v5_00 convention; headers govern)
+**Parent documents:** Master Platform PRD v1.10 §9.2, ADR-023 (multi-tenancy), ADR-024 (country-driven config), Contracts Pack v5.1 (filenames retain v5_00 convention; headers govern)
 **Companion documents:** Forms/Intake Engine Slice PRD v2.1, Admin Backend Slice PRD v1.1, Medication Interaction & Validation Engine Slice PRD v1.0, Consent & Delegated Access Slice PRD v1.0, Payment & Billing Spec v1.0, Notification Spec v1.1
 **Format:** Markdown
 

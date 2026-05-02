@@ -3,7 +3,7 @@
 **Version:** 1.5
 **Status:** Canonical tracking document
 **Owner:** Country Launch Director (overall) — individual items have named accountable roles
-**Parent documents:** Master Platform PRD v1.9, ADR Addendum 016–019, ADR Addendum 020–025 (with ADR-025 superseded by ADR-026), ADR Addendum 026, Forms/Intake Engine Slice PRD v2.1, Pharmacy + Refill Slice PRD v2.1, Admin Backend Slice PRD v1.1, Future Scope: USSD + AI Bridge v0.1, Patient UI/UX Pressure Review (2026-04-25), Adversarial Counsel Review (2026-04-25), Red-Team Review v1.0, Flagged Items Resolution v1.0
+**Parent documents:** Master Platform PRD v1.10, ADR Addendum 016–019, ADR Addendum 020–025 (with ADR-025 superseded by ADR-026), ADR Addendum 026, ADR-027, ADR-028, ADR-029, Forms/Intake Engine Slice PRD v2.1, Pharmacy + Refill Slice PRD v2.1, Admin Backend Slice PRD v1.1, Future Scope: USSD + AI Bridge v0.1, Patient UI/UX Pressure Review (2026-04-25), Adversarial Counsel Review (2026-04-25), Red-Team Review v1.0, Flagged Items Resolution v1.0
 **Companion documents:** Ghana Launch Playbook v1.2, Consolidated Launch Tracker v1.0, Market Rollout Cockpit Slice PRD v1.0
 **Format:** Markdown (must remain markdown — this is a working tracker; status changes frequently)
 
@@ -487,8 +487,8 @@ When a new operational gap is identified:
 
 | Document | What it tracks | This tracker's relationship |
 |---|---|---|
-| Artifact Registry v2.9 | Which versions of which artifacts are canonical | Disjoint — this tracker tracks operational evidence, not artifacts |
-| Promotion Ledger v1.0 (P-001 through P-005) | User-requested promotion of artifacts to canonical | Disjoint — this tracker tracks operational gaps, not document promotions |
+| Artifact Registry v2.10 (per v1.10 PRD Update Cycle Phase 6 promotion 2026-05-01) | Which versions of which artifacts are canonical | Disjoint — this tracker tracks operational evidence, not artifacts |
+| Promotion Ledger v1.0 (P-001 through P-009) | User-requested promotion of artifacts to canonical | Disjoint — this tracker tracks operational gaps, not document promotions |
 | Consolidated Launch Tracker v1.0 | Open clinical/product questions, pre-launch decisions | Partial overlap — items here that resolve open tracker questions are cross-referenced |
 | Cockpit Evidence Locker | Per-market regulatory/clinical evidence artifacts | Downstream — operational evidence produced here is filed in the locker |
 | Ghana Launch Playbook v1.1 | Launch sequence, go/no-go criteria | Upstream — Tier 1 items in this tracker map to go/no-go categories in §6 of the Playbook |

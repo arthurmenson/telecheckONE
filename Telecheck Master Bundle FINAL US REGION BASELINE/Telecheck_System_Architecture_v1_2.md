@@ -4,7 +4,7 @@
 **Status:** Canonical for development
 **Owner:** Engineering Lead
 **Supersedes:** System Architecture v1.0, v1.1
-**Parent documents:** Master Platform PRD v1.9, Contracts Pack v5.1 (filenames retain v5_00 convention; headers govern), Canonical Data Model v1.2, ADR Set v1.0 + ADR Addendum 016–019 + ADR Addendum 020–025 (with ADR-025 superseded by ADR-026) + ADR Addendum 026
+**Parent documents:** Master Platform PRD v1.10, Contracts Pack v5.1 (filenames retain v5_00 convention; headers govern), Canonical Data Model v1.2, ADR Set v1.0 + ADR Addendum 016–019 + ADR Addendum 020–025 (with ADR-025 superseded by ADR-026) + ADR Addendum 026
 
 ---
 
