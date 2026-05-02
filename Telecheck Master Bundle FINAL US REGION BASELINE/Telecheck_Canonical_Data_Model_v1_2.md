@@ -850,15 +850,25 @@ CREATE TABLE audit_events (
   -- IMMUTABLE: no UPDATE, no DELETE permitted
   CONSTRAINT audit_no_modification CHECK (true),     -- enforced via trigger
   
-  -- I-012 closure rule constraint (per AUDIT_EVENTS v5.2 §I-012 closure rule):
-  -- For I-012 action-class records, ai_workload_type AND autonomy_level MUST be non-null regardless of actor_type.
+  -- Schema version field (added v1.10 cycle per Codex Round-12 Scope 2 HIGH cutover-safety patch 2026-05-02)
+  -- Discriminates pre-v1.10 backfill rows (where AUDIT_EVENTS v5.2 §nullability rule explicitly permits null
+  -- ai_workload_type/autonomy_level on legacy events) from v1.10+ rows where I-012 closure rule applies.
+  schema_version  VARCHAR(8) NOT NULL DEFAULT 'v1.10',  -- 'v1.0' | 'v1.10' | future. Pre-v1.10 backfill rows MUST be loaded with schema_version = 'v1.0' to bypass the I-012 CHECK below; v1.10+ writes default to 'v1.10' and ARE subject to the CHECK.
+  
+  -- I-012 closure rule constraint (per AUDIT_EVENTS v5.2 §I-012 closure rule; cutover-safe gate per Codex Round-12 Scope 2 HIGH 2026-05-02):
+  -- For I-012 action-class records emitted at v1.10+, ai_workload_type AND autonomy_level MUST be non-null regardless of actor_type.
+  -- Pre-v1.10 backfill rows (schema_version = 'v1.0') are exempt — AUDIT_EVENTS v5.2 explicitly states legacy nullability is permitted
+  -- for backfill. Per I-003 audit immutability, historical audit rows MUST NOT be retroactively updated to fabricate workload evidence;
+  -- if an old action needs workload-evidence overlay for any reason, emit a NEW audit record (compensating event) at v1.10 schema_version
+  -- with the workload evidence, never UPDATE the historical row.
   -- Action-class set per AUDIT_EVENTS v5.2 (single source of truth):
   --   prescribing.{initiated, approved, declined, modified, execution_rejected},
   --   refill.{approved, declined, execution_rejected},
   --   protocol_authorized_{prescribing, refill_renewal, dispensing_release},
   --   medication_order.execution_rejected.
   CONSTRAINT audit_i012_workload_evidence_required CHECK (
-    action NOT IN ('prescribing.initiated', 'prescribing.approved', 'prescribing.declined', 'prescribing.modified',
+    schema_version != 'v1.10'  -- legacy rows exempt
+    OR action NOT IN ('prescribing.initiated', 'prescribing.approved', 'prescribing.declined', 'prescribing.modified',
                    'prescribing.execution_rejected', 'refill.approved', 'refill.declined', 'refill.execution_rejected',
                    'protocol_authorized_prescribing', 'protocol_authorized_refill_renewal',
                    'protocol_authorized_dispensing_release', 'medication_order.execution_rejected')

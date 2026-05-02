@@ -409,7 +409,13 @@ A specialization of ConsentRecord with `consent_type = research_data_use` (added
   "consent_cohort_snapshot_hash_initiated": "<SHA-256; recorded at research.export_initiated>",
   "consent_cohort_snapshot_hash_completed": "<SHA-256; recorded at completion-time check; null when status=invalidated due to early abort>",
   "export_artifact_hash":               "<SHA-256> | null (null when status=invalidated; non-null when status=completed)",
-  "invalidation_reason":                "dsa_inactive | k_anonymity_violation | permitted_domain_drift | consent_cohort_change | consent_revocation_mid_export" | null,  // Patch 2026-05-02 per Codex Round-2 Scope 2 HIGH-1 finding: this enum is the canonical shared enum mirrored in AUDIT_EVENTS v5.2 §5 research.export_completed payload. The two contracts MUST stay aligned. No separate "other" bucket is permitted — all 5 conditions of the OpenAPI export-complete gate map deterministically to one of the 5 values.
+  "grant_artifact_id":                  "<pau_<ULID> for PolicyAuthorization OR named-equivalent grant artifact ID per CCR_RUNTIME v5.2 research_export_authorized_signers attestation evidence-locker; required at status=initiated; re-validated at status=completed per OpenAPI 6-condition gate; added v5.2 patch 2026-05-02 per Codex Round-12 Scope 3 HIGH-2 finding>",
+  "grant_artifact_type":                "policy_authorization | signers_attestation | <future grant types>",
+  "grant_artifact_validity_to":         "<ISO 8601; grant expiry timestamp; export MUST reject delivery if grant_artifact_validity_to < completion-time>",
+  "grant_signer_chain_attestation_hash":"<SHA-256 hash of the multi-party signer chain attested at initiation; re-validated at completion to ensure no signer was rescinded>",
+  "grant_validation_at_initiated_at":   "<ISO 8601; grant validation timestamp at initiation>",
+  "grant_validation_at_completed_at":   "<ISO 8601; grant re-validation timestamp at completion> | null (null when status=invalidated due to early abort before completion-time check)",
+  "invalidation_reason":                "dsa_inactive | k_anonymity_violation | permitted_domain_drift | consent_cohort_change | consent_revocation_mid_export | grant_artifact_invalidated" | null,  // Patch 2026-05-02 per Codex Round-2 Scope 2 HIGH-1 finding: this enum is the canonical shared enum mirrored in AUDIT_EVENTS v5.2 §5 research.export_completed payload. The two contracts MUST stay aligned. No separate "other" bucket is permitted — all 5 conditions of the OpenAPI export-complete gate map deterministically to one of the 5 values.
   "retention_class":                    "<retention class identifier>",
   "started_at":                         "<ISO 8601>",
   "completed_at":                       "<ISO 8601>",
