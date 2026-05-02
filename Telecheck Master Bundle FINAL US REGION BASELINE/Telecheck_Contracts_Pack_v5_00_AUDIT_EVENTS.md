@@ -1,6 +1,6 @@
 # 00 · Audit Events
 
-**Status:** canonical · **Version:** 5.1 · **Owner:** engineering lead + compliance officer · **Consumers:** all services, compliance, clinical safety, patient-access
+**Status:** canonical · **Version:** 5.2 · **Owner:** engineering lead + compliance officer · **Consumers:** all services, compliance, clinical safety, patient-access
 
 This document defines the audit event schema, complete action catalog, safety classification matrix, hash chain integrity model, and patient self-access rules. Per I-003, audit records are immutable and append-only. No exceptions.
 
@@ -15,17 +15,32 @@ Every audit event contains:
   "audit_id":          "aud_<ULID>",
   "timestamp":         "<ISO 8601 with timezone>",
   "tenant_id":         "tnt_<ULID>",
-  "actor_type":        "patient | clinician | pharmacist | operator | delegate | protocol_engine | ai_mode_1 | ai_mode_2 | system | platform_admin",
+  "actor_type":        "patient | clinician | pharmacist | operator | delegate | protocol_engine | ai_workload | ai_mode_1 | ai_mode_2 | system | platform_admin",
   "actor_id":          "<authenticated identity ULID>",
   "actor_tenant_id":   "tnt_<ULID> | null (null only for platform_admin actors)",
   "target_patient_id": "<patient this action affects>",
   "delegate_context":  { "delegate_id": "...", "scope": "..." } | null,
   "action":            "<action from the catalog below>",
   "category":          "A | B | C",
+  "audit_sensitivity_level": "standard | high_pii",     // active values; reserved levels added with ADR amendment (added v5.2 per I-031)
   "resource_type":     "<aggregate type>",
   "resource_id":       "<aggregate ID>",
   "detail":            { <action-specific payload> },
   "engine_versions":   { "interaction_engine": "...", "herb_drug_engine": "...", "ai_model": "...", "protocol": "...", "guardrail_template": "...", "knowledge_base": "..." } | null,
+  // Workload-taxonomy fields (added v5.2 per ADR-029 / WORKLOAD_TAXONOMY contract).
+  // Full enum lists active + reserved values; reserved values are runtime-rejected per source contract until activation audit event recorded.
+  // Active at v1.0: conversational_assistant, protocol_execution. Reserved: autonomous_agent, multi_agent_supervisor, tool_using_agent.
+  "ai_workload_type":  "conversational_assistant | protocol_execution | autonomous_agent | multi_agent_supervisor | tool_using_agent | null",
+  // Active at v1.0: advisory, suggestion, action_with_confirm. Reserved: action_with_audit_only, fully_autonomous.
+  "autonomy_level":    "advisory | suggestion | action_with_confirm | action_with_audit_only | fully_autonomous | null",
+  // Reserved nullable agentic-context fields (added v5.2; populate only when corresponding capability activates per ADR-030/031/032/033/034).
+  "agent_id":          "<ULID> | null",
+  "agent_version":     "<semver> | null",
+  "tool_call_id":      "<ULID> | null",
+  "memory_read_set_id":  "<ULID> | null",
+  "memory_write_set_id": "<ULID> | null",
+  "supervising_policy_id": "<ULID> | null",
+  "knowledge_source_versions": [ { "knowledge_base_id": "...", "version": "..." } ] | null,
   "signals":           [ { "signal_id": "...", "severity": "...", "source_engine": "...", "check_class": "..." } ] | null,
   "override":          { "signal_id": "...", "rationale": "...", "clinician_id": "..." } | null,
   "linked_events":     [ "<domain_event_id>" ],
@@ -40,6 +55,27 @@ Every audit event contains:
   }
 }
 ```
+
+**Workload-taxonomy nullability + sensitivity rules (added v5.2 per ADR-029 + I-031):**
+
+- `audit_sensitivity_level` is required on every record. Default value `standard`. Records emitted by the research data export pipeline (events listed below in the `research.export_*` family) carry `audit_sensitivity_level = high_pii` per I-031.
+- `ai_workload_type` and `autonomy_level` are **required** for new v1.10 AI events where `actor_type = ai_workload`. They are nullable in two cases only: (a) legacy events backfilled from before v1.10 promotion; (b) non-AI events (where `actor_type ≠ ai_workload`).
+- Reserved agentic-context fields (`agent_id`, `agent_version`, `tool_call_id`, `memory_read_set_id`, `memory_write_set_id`, `supervising_policy_id`, `knowledge_source_versions[]`) are nullable across all events. They populate only when the corresponding capability activates (per ADR-030/031/032/033/034 as applicable).
+- Schema additive only — no audit migration required; legacy records receive `null` for these fields.
+
+**Enum coverage rule (added v5.2):** The schema enum lists the full set of values defined in the source-of-truth contract (WORKLOAD_TAXONOMY for `ai_workload_type`; AUTONOMY_LEVELS for `autonomy_level`), including reserved values. Values being present in the schema does NOT activate them — runtime validation per the source contract rejects reserved values unless their activation prerequisites are recorded in the audit chain (ADR + activation audit event two-condition AND). This avoids cross-contract enum drift while preserving the runtime gate.
+
+**Actor type addition (added v5.2):** New `actor_type = ai_workload` is the canonical actor type for AI events going forward. Aliases `ai_mode_1` and `ai_mode_2` are preserved for backward-compat (Mode 1 ≡ `actor_type = ai_workload, ai_workload_type = conversational_assistant`; Mode 2 ≡ `actor_type = ai_workload, ai_workload_type = protocol_execution`). New v1.10+ emitters MUST use `actor_type = ai_workload`. Audit retrieval queries that filter by AI workload SHOULD use `ai_workload_type` rather than the actor_type aliases.
+
+**I-012 preservation rule — audit-side enforcement (added v5.2; mirrors Master PRD §13.7 v0.3 normative wording):** The audit envelope MUST support the §13.7 reject-unless three-clause rule. For action records governed by I-012 (prescription, refill, medication-order), the state machine integration MUST emit an audit record only when ALL three of the following are present in the audit chain for that `action_id`:
+
+1. The action's `autonomy_level` field equals `action_with_confirm` (string equality; not membership in a set).
+2. An explicit clinician confirmation event (`prescribing.approved` or equivalent) exists in the immutable audit chain prior to the `*.executed` transition, scoped to the same `action_id`.
+3. The confirming actor's `actor_id` resolves to a role authorized to sign for the action class under RBAC v1.1 / I-012.
+
+If any of the three conditions is unmet, the state machine rejects the `executed` transition before any audit record is emitted. Reserved autonomy levels (`action_with_audit_only`, `fully_autonomous`) and null/unknown/absent values are explicitly rejected by this rule. Reserved levels can reach `executed` for I-012 actions ONLY when **both** (a) a successor ADR (ADR-030 or later) explicitly supersedes I-012 for the action class in scope, AND (b) an activation audit event recording the supersession is present in the immutable audit chain. ADR approval alone is never sufficient. Future enum values not yet authorized by an ADR-029 successor default to **rejected**.
+
+**Source of truth:** Master PRD §13.7 (single normative source of truth for I-012 + autonomy-level interaction). This audit-side rule mirrors the §13.7 normative wording exactly, including the two-condition AND for reserved-level activation.
 
 **Tenant-scope rules (added v5.1):**
 - `tenant_id` is the tenant whose data the action affects. Required on every audit record. Null only for platform-scope actions that have no tenant target (e.g., a Platform Admin creating a new tenant — that audit record has `tenant_id` set to the new tenant being created).
@@ -120,6 +156,39 @@ Every audit event contains:
 | `incident_opened` | operator | incident_id, severity, affected_services[], patient_impact_estimate |
 | `incident_resolved` | operator | incident_id, resolution_detail, root_cause, preventive_actions[] |
 | `signal_enforcement_trigger` | system | signal_type, threshold_exceeded, enforcement_action_taken |
+
+#### Research events (added v5.2 per ADR-028)
+
+| Action | Actor types | Detail payload | audit_sensitivity_level |
+|---|---|---|---|
+| `research.consent_granted` | patient | consent_id, consent_type ("research_data_use"), scope, version_presented, consent_text_version | standard |
+| `research.consent_revoked` | patient | consent_id, consent_type ("research_data_use"), scope, revocation_reason, revocation_effective_at, asymmetric_retraction_acknowledgment | standard |
+| `research.dsa_activated` | privacy_officer + approver (dual-control per I-015) | dsa_id, dsa_version, partner_id, partner_name, dsa_validity_from, dsa_validity_to, permitted_data_domains[], k_min_required, ethics_review_body_reference | standard |
+| `research.cohort_defined` | operator | cohort_definition_id, cohort_version, dsa_id, dsa_version, inclusion_criteria_artifact_id, exclusion_criteria_artifact_id, requested_data_domains[], k_threshold_target | standard |
+| `research.export_initiated` | system, operator | cohort_definition_id, cohort_version, dsa_id, dsa_version, dsa_status_at_export (`active`), permitted_data_domains_at_export[], requester_id, requester_role, requester_partner_id, requested_field_set, k_min_required, k_threshold_target, consent_cohort_snapshot_hash (SHA-256), export_started_at, status (`initiated`) | **high_pii** (per I-031) |
+| `research.export_completed` | system | cohort_definition_id, cohort_version, dsa_id, dsa_version, dsa_status_at_export (`active` if delivery succeeded; `expired`/`suspended`/`retired` if invalidation triggered per I-029), permitted_data_domains_at_export[] (snapshot at completion), requester_id, requester_role, requester_partner_id, exported_field_set, k_threshold_actual, k_min_required, suppressed_cell_count, export_completed_at, export_artifact_hash (null if invalidated), retention_class, consent_cohort_snapshot_hash, status (`completed` or `invalidated`), invalidation_reason (null if `status=completed`; one of `dsa_status_change`, `k_threshold_violation`, `permitted_domain_drift`, `consent_revocation_mid_export`, `other`) | **high_pii** (per I-031) |
+
+**I-029 binding for `research.export_completed` (per I-029 + GOVERNANCE_CONTROLS v5.2 incident discipline):** Per I-029, the **domain-side delivery** (`research_export.delivered` event + actual export artifact leaving the platform) MUST be rejected if any I-029 condition is unmet (DSA inactive, k-anonymity below k_min_required, permitted-domain drift, consent-cohort change). However, the **audit-side completion-attempt** (`research.export_completed` event in the immutable audit chain) is governed by a different rule — bare suppression of the audit record is forbidden per I-003 (audit gap = audit defect).
+
+The two-event audit pattern for failed exports:
+
+1. `research.export_completed` MAY emit with `status = invalidated`, the violated state recorded in payload (e.g., `dsa_status_at_export = expired`, `k_threshold_actual` showing the violation, etc.), `invalidation_reason` populated, and `export_artifact_hash = null` (no artifact was delivered).
+2. Concurrent `signal_enforcement_trigger` Category B audit (per existing v5.1 catalog) captures the enforcement action: artifact destruction, partner notification per DSA terms, engineering review trigger.
+
+This pattern preserves I-003 (audit completeness) while enforcing I-029 (delivery rejection). The `status` field on the export events is the authoritative discriminator: `completed` = delivery succeeded; `invalidated` = delivery rejected, audit captured.
+
+**I-030 binding (audit-side cross-check):** Audit retrieval surfaces that filter records by `research_consent_status` MUST NOT influence any care-delivery surface response. This is enforced upstream at the application layer per I-030; audit retrieval itself is read-only and serves cohort definition and reconciliation only.
+
+**Research export tenant-scope rule (added v5.2):** Research data export events (the `research.export_*` family above) carry `tenant_id` of the **operating tenant** where consent was collected (e.g., Telecheck-Ghana for Heros Health Ghana DBA patients), even though the research partnership is anchored at the Telecheck parent / platform level per Master PRD §15.3. The DSA reference (`dsa_id`) on the event identifies the parent-level partnership; the tenant scope identifies the data origin. This dual identification supports the §15.3 partnership-level governance model without losing tenant-scoped accountability per I-027. Cohort definitions and de-identified cohort outputs that span multiple tenants emit one audit record per contributing tenant (not a single multi-tenant record), each scoped to that tenant's contribution.
+
+#### Marketing events (added v5.2 per ADR-027)
+
+| Action | Actor types | Detail payload | audit_sensitivity_level |
+|---|---|---|---|
+| `marketing.surface_rendered` | system | tenant_id, country_of_care, surface_id, surface_type, ccr_marketing_policy_version_id, marketing_copy_version_id, governance_review_reference_id (the §13.2 Governance review process artifact ID for this copy version), governance_review_reviewer_ids[], governance_review_approval_timestamp, governance_review_approval_validity_until (per `marketing_governance_review_cadence_months` per §13.2), rendered_claim_classes[], patient_id (per tenant-isolation), session_id | standard |
+| `marketing.surface_drift` | system | tenant_id, country_of_care, surface_id, ccr_marketing_policy_version_id, expected_marketing_copy_version_id, observed_marketing_copy_version_id, drift_type (`copy_version` / `policy_version` / `approval_lapsed`), suspension_action_taken | standard |
+
+**Auto-suspension binding (per Master PRD §13.2):** A `marketing.surface_drift` event MUST be accompanied by an immediate platform action that suspends the affected surface. The surface is re-enabled only after a fresh re-review under the §13.2 Governance review process. The suspension itself is audited as a Category B governance event (`signal_enforcement_trigger` with appropriate `enforcement_action_taken` payload).
 
 ### Category C — Operational and engagement actions
 
@@ -249,10 +318,15 @@ Records past retention are archived, not deleted. Archived records are retrievab
 - **Omitting `tenant_id` from audit records (added v5.1).** Every record carries `tenant_id`. A null `tenant_id` is reserved for platform-level meta-events with no tenant target; almost every operational audit has a tenant target. I-027.
 - **Differentiating cross-tenant access from same-tenant access only via `actor_tenant_id` comparison (added v5.1).** Cross-tenant access requires the `break_glass` block to be populated with reason, time bound, and Privacy Officer review status. The comparison alone is not the audit; the break-glass session is. I-024.
 - **Returning audit records to a Tenant Admin that span multiple tenants (added v5.1).** Tenant Admin retrieval is filtered to their authorized tenant scope at the query layer, not just the UI layer. I-023.
+- **Emitting an AI audit event with null `ai_workload_type` or `autonomy_level` (added v5.2).** New v1.10+ AI events require both fields populated per WORKLOAD_TAXONOMY §1 nullability rule. Null is reserved for legacy backfill and non-AI events only.
+- **Confusing `audit_sensitivity_level` with the safety-classification matrix Categories A/B/C (added v5.2).** They are orthogonal: `audit_sensitivity_level` governs retention/access/query treatment within a category; the A/B/C category governs which retention rule applies. An export event is Category B (governance) AND `audit_sensitivity_level = high_pii` (elevated treatment within Category B).
+- **Using the `ai_mode_1` / `ai_mode_2` actor type aliases in new v1.10+ code (added v5.2).** Use `actor_type = ai_workload` with `ai_workload_type` set. Aliases are deprecated for new code (preserved for existing records per I-003).
+- **Bare suppression of failed `research.export_completed` (added v5.2).** Per I-029 + I-003 audit-completeness, failed exports MAY emit `research.export_completed` with `status = invalidated` plus concurrent `signal_enforcement_trigger`. Silent invalidation is forbidden.
 
 ---
 
 ## Document control
 
+- **v5.2 (2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact)** — Adds workload-taxonomy envelope fields (`ai_workload_type`, `autonomy_level`) per ADR-029; reserved nullable agentic-context fields (`agent_id`, `agent_version`, `tool_call_id`, `memory_read_set_id`, `memory_write_set_id`, `supervising_policy_id`, `knowledge_source_versions[]`); `audit_sensitivity_level` field with `standard` / `high_pii` enum (`high_pii` for research exports per I-031); new `actor_type = ai_workload` (with `ai_mode_1` / `ai_mode_2` preserved as backward-compat aliases); 6 new research events (`research.consent_granted`, `research.consent_revoked`, `research.dsa_activated`, `research.cohort_defined`, `research.export_initiated`, `research.export_completed`) — the `export_*` family at `audit_sensitivity_level = high_pii` per I-031, carrying `status` enum (`completed | invalidated`) + `invalidation_reason` for failed-completion audit per I-003; 2 new marketing events (`marketing.surface_rendered`, `marketing.surface_drift`) per ADR-027; research-export tenant-scope rule (operating-tenant ID, parent-level DSA reference); I-012 preservation rule mirroring Master PRD §13.7 v0.3 reject-unless three-clause normative wording. Per ADR-027, ADR-028, ADR-029. No existing fields modified or removed; v5.2 is purely additive. Substantive content originally documented in `Telecheck_v1_10_PRD_Update/Phase3_AUDIT_EVENTS_v1_10_Edits_2026-05-01.md`; physical merge applied 2026-05-02 per v1.10.1 hygiene cycle.
 - **v5.0** — Initial Audit Events contract.
 - **v5.1** — Adds `tenant_id` and `actor_tenant_id` and optional `break_glass` block to the audit envelope per ADR-023 multi-tenancy. Adds tenant-scope rules for retrieval. Adds Anti-patterns specific to multi-tenancy. Adds Platform Admin actor type. Threading remediation per Adversarial Counsel Review v1.0 finding CRITICAL-01. Existing record schema fields preserved; envelope is purely additive.

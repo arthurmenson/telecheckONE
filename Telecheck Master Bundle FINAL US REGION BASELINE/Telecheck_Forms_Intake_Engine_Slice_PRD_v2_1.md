@@ -726,9 +726,98 @@ Per ADR-018 — copy is English at launch (Track A). Per ADR-019 — lab interpr
 
 ---
 
+## 25. v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 51)
+
+### 25.1 Marketing copy in the Forms Engine four-layer architecture (Row 51 — per ADR-027)
+
+The Forms Engine four-layer architecture (Layout / Logic / Data / Approval governance — preserved at v2.1) handles marketing copy in the **L1 (presentation) layer**.
+
+**L1 classification distinction.** Marketing copy embedded in L1 (transition copy, educational interstitials, trust blocks, conversion CTAs, drug-class/molecule-class call-outs) MUST be classified at form-version-publish time as one of:
+
+- **Program-level** (program / category-class messaging, no specific-molecule or brand-name claim) — no §13.2 governance review required.
+- **Molecule-level** (specific molecule mention, brand name, or fail-closed borderline per ADR-027 v0.6 Decision §7) — requires Master PRD §13.2 Governance review process per Decision §4 of ADR-027 (triple sign-off: Product + Regulatory Affairs + Clinical Safety).
+
+The classification is a structural attribute of the L1 element, not free-text editorial guidance.
+
+**L4 approval governance enforcement.** The L4 approval governance layer MUST verify, at form-version-publish time, that any L1 element classified as molecule-level resolves to a `MarketingCopy` entity (per TYPES v5.2) in `approved` status before the form version is allowed to transition to `published`. A molecule-level L1 element with no resolvable approved `MarketingCopy` reference is a publish-time rejection per FORMS_ENGINE v5.2 static-analysis discipline.
+
+**Runtime CCR gate.** At render time, the Acquisition & Engagement Tools slice §13 country-conditional marketing surface logic governs whether molecule-level L1 elements actually render in a given patient's `country_of_care`, gated on CCR `marketing.molecule_level_marketing_permitted` per ADR-027.
+
+**Cross-references:** ADR-027 v0.6 Decision §4; Master PRD v1.10 §13.2; FORMS_ENGINE v5.2; TYPES v5.2 (`MarketingCopy`); CCR_RUNTIME v5.2 marketing block; Acquisition & Engagement Tools Slice PRD §13.
+
+### 25.2 C3 brand-structure cascade — §13 verification marker (Row 40 — verify-only, no edit)
+
+**Verification:** §13 line "Per v1.0 §7. Same model. Tenant-scoped. Particularly relevant for the Telecheck-Ghana tenant (per Herb-Drug Engine Slice)." has been verified consistent with the v1.10 C3 brand-structure vocabulary. **No substantive edit applied.**
+
+`Telecheck-Ghana` is the canonical operating-tenant identifier under C3 (operating tenants follow `Telecheck-{country}` naming; `Telecheck` is platform/B2B-only; consumer DBA `Heros Health Ghana` is country-instanced and patient-facing — not operator-facing in this herb-drug clinical context). The §13 reference describes the operating-tenant scope of herbal-medicine reporting (a clinical/operational context), so the operating-tenant identifier is the correct reference. Sentinel marker placed per Phase 5 delta Row 40 verification request.
+
+**Cross-references:** Master Platform PRD v1.10 §17 (brand-structure rules); Phase 5 Slice/Engineering/Operations delta artifact (`Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md`) Row 40.
+
+### 25.3 Research data-use consent block field type (Row 61 — per ADR-028, Cycle C5)
+
+**New field type / consent block variant:** `research_data_use_consent_block`. This is a new L1 (presentation) element type renderable inside any form template that surfaces consent at intake or at care-touchpoint moments.
+
+**Render gate (CCR-driven).** A `research_data_use_consent_block` element renders only when CCR `research_data_partnership_active ≠ inactive` for the patient's `country_of_care` (per FORMS_ENGINE v5.2 form lifecycle research consent integration). When CCR is `inactive`, the element is omitted from rendered output entirely — it does not present, collapse, gray out, or otherwise signal the existence of research participation. This preserves I-030 in markets where Posture A is not yet activated.
+
+**Block content sourcing.** Block prose is sourced from CCR `research_ethics_review_body.approval_reference_id` per CCR_RUNTIME v5.2 research block, version-pinned per Master PRD v1.10 §15.2 (per Consent & Delegated Access Slice §16). Forms Engine does not author research consent text editorially; it surfaces the version-pinned text resolved from CCR.
+
+**I-030 static analysis at form-version-publish time.** Per FORMS_ENGINE v5.2 I-030 enforcement, static analysis at form-version-publish time rejects all six categories of dependency on `research_consent_status` (the runtime grant state of a patient's `ResearchConsent`):
+
+1. **Branching condition** — no L2 (logic-layer) branch may evaluate `research_consent_status` (e.g., `if research_consent = granted, show panel A; else show panel B`).
+2. **Element visibility** — no L1 element may be conditionally shown/hidden based on `research_consent_status`.
+3. **Validation rule** — no L3 (data-layer) validation may admit/reject input based on `research_consent_status`.
+4. **Eligibility / triage** — no eligibility, triage, or routing decision (Mode 2 input contract per §10) may consume `research_consent_status`.
+5. **Pricing / commerce** — no pricing display, cart upsell, or subscription handoff (§17) may vary based on `research_consent_status`.
+6. **Outcome messaging** — no completion message, recommendation, or follow-up scheduling may differ based on `research_consent_status`.
+
+A form version that violates any of the six categories is a publish-time rejection. The static-analysis verdict is recorded in the form-version audit trail.
+
+**Audit linkage.** Grant/revoke interactions on the block emit `research.consent_granted` / `research.consent_revoked` per AUDIT_EVENTS v5.2 §5 (audit class `high_pii` per I-031). The Forms Engine attaches the rendering form-version pin and the resolved CCR `research_ethics_review_body.approval_reference_id` to the audit payload.
+
+**Cross-references:** ADR-028 v0.5; Master PRD v1.10 §15.2; INVARIANTS v5.2 I-029, I-030, I-031; FORMS_ENGINE v5.2 (research consent integration; six-category I-030 static analysis); CCR_RUNTIME v5.2 research block; TYPES v5.2 (`ResearchConsent`); Consent & Delegated Access Slice §16; AUDIT_EVENTS v5.2 §5.
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 61 (Cycle C5).
+
+### 25.4 Program porting workflow (Row 88 — per Master PRD §10.5, Cycle C6)
+
+**Scope.** This subsection documents how a program defined for one market (a `ProgramCatalogEntry` per TYPES v5.2 with an active `ProgramMarketPolicy` for source market) ports to another market via a new `ProgramMarketPolicy` for the target market plus Pattern A immutable per-market form versions.
+
+**Four-layer model anchor.** Per Master PRD v1.10 §10.5 (canonical), the program catalog architecture is a four-layer model:
+
+1. **Layer 1 — Program (platform-level catalog entry).** A `ProgramCatalogEntry` is platform-level and market-agnostic (e.g., "GLP-1 weight management"). The program defines the clinical category and platform-level interfaces; it does not contain market-specific config.
+2. **Layer 2 — ProgramMarketPolicy.** A per-market activation policy binds a `ProgramCatalogEntry` to a specific operating tenant (e.g., `Telecheck-US`, `Telecheck-Ghana`) under the consumer DBA for that market (e.g., `Heros Health` US, `Heros Health Ghana` GH). The policy carries market-specific eligibility, formulary references, regulatory module bindings, pricing, and CCR-resolved configuration.
+3. **Layer 3 — Forms Engine instantiation (Pattern A).** Per-market form versions are immutable and tagged with the operating-tenant identifier and the `ProgramMarketPolicy` reference. A US form version and a Ghana form version for the same program are independent immutable artifacts; one is not a "live edit" of the other.
+4. **Layer 4 — CCR Runtime resolution.** At runtime, `country_of_care` resolves to a CCR pack which selects the correct `ProgramMarketPolicy` and form version. CCR-driven render gates (e.g., `research_data_partnership_active`, `marketing.molecule_level_marketing_permitted`) are applied at render time.
+
+**Porting workflow (informative — see worked example for normative checklist).**
+
+A. **Catalog entry confirmation.** Confirm the platform-level `ProgramCatalogEntry` is appropriate for both source and target markets (no fork at Layer 1).
+B. **Target ProgramMarketPolicy authoring.** Author a new `ProgramMarketPolicy` for the target market with target-market eligibility, formulary, regulatory module, pricing, and CCR pack reference. Source-market policy is NOT mutated; the target gets its own policy.
+C. **Pattern A target form version.** Author a new immutable form version for the target market — branched conceptually from the source-market form version but recorded as an independent artifact under the target operating tenant. Brand structure (Telecheck operating-tenant identifier, Heros Health country-instanced consumer DBA) follows Master PRD v1.10 §17.
+D. **CCR pack delta resolution.** Reconcile CCR keys that differ between source and target markets — payment processor, SMS provider, formulary references, marketing posture, research posture — and confirm L4 approval governance constraints are met (per §25.1 marketing-copy classification and §25.3 research consent block render gate).
+E. **Static analysis re-run.** Re-run form-version-publish-time static analysis against the target form version (six-category I-030 enforcement per §25.3; molecule-level L1 element resolution to approved `MarketingCopy` per §25.1; Mode 2 input contract conformance per §10).
+F. **Activation review.** Activation of the target `ProgramMarketPolicy` is gated by Market Rollout Cockpit Slice activation review (existing Cockpit slice §3-§6 — out of scope of this slice).
+
+**Worked example (normative — see referenced artifact).** The `Telecheck-US` GLP-1 program (Heros Health DBA) → `Telecheck-Ghana` GLP-1 program (Heros Health Ghana DBA) port is documented as an 89-item, 9-section worked example in `Telecheck_Program_Porting_Checklist_GLP1_v1_0.md` (in `Telecheck_v1_10_PRD_Update/` at draft; promoted to bundle as a canonical artifact at v1.10 promotion per Master PRD v1.10 §10.5 cross-reference). The checklist covers Layer 1 catalog confirmation through Layer 4 CCR resolution and is the reference implementation of the porting workflow described above.
+
+**Forms Engine constraints during porting.**
+
+- Source-market form versions are NOT mutated by the port. Pattern A immutability per Forms Engine v2.1 is preserved.
+- The target form version is a new artifact under the target operating tenant; tenant scoping (§5) is enforced at authoring and at runtime.
+- The target form version inherits the target tenant's brand per §5.2 (consumer DBA per Master PRD v1.10 §17 brand structure).
+- The §10 Mode 2 input contract is re-validated for the target market — outputs flowing to AI Mode 2 must conform to the multi-tenant adapted contract for the target operating tenant.
+
+**Cross-references:** Master PRD v1.10 §10.5 (canonical — program catalog architecture, four-layer model); Master PRD v1.10 §17 (brand-structure rules); TYPES v5.2 (`ProgramCatalogEntry`, `ProgramMarketPolicy`); ADR-024 (CCR country-driven configuration); Pattern A (Forms Engine v2.1 immutable per-market form versions); `Telecheck_Program_Porting_Checklist_GLP1_v1_0.md` (worked example — Telecheck-US GLP-1 Heros Health DBA → Telecheck-Ghana GLP-1 Heros Health Ghana DBA); §25.1 (marketing-copy classification); §25.3 (research consent block); Market Rollout Cockpit Slice (activation review and Market Pack abstraction).
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 88 (Cycle C6).
+
+---
+
 ## Document control
 
 - **v2.1** — Clarifies §14.3 conversion event taxonomy naming convention per Adversarial Counsel Review v1.0 finding LOW-23 — event names are PostHog snake_case verb_object convention; same names are canonical across all consumers (PostHog, Metabase, AI anomaly detection); no translation or aliasing across systems. Substantive event taxonomy, four-layer separation, builder workflow, and A/B test infrastructure unchanged.
+- **v1.10 cycle addition (2026-05-02 — v1.10.1 hygiene cycle physical merge of Phase5 delta Row 51):** Added §25 marketing-copy classification in the L1 (presentation) layer per ADR-027 Decision §4. L4 approval governance verifies molecule-level L1 elements resolve to a `MarketingCopy` entity in `approved` status before publish. Runtime country-conditional gating handled in Acquisition & Engagement Tools Slice §13.
+- **v1.10 cycle addition (2026-05-02 — v1.10.1 hygiene cycle physical merge of Phase5 delta Row 40, verify-only):** Added §25.2 verification marker confirming §13 "Telecheck-Ghana tenant" reference is consistent with v1.10 C3 brand-structure vocabulary. No substantive edit; sentinel marker per Phase 5 delta Row 40 verification request.
 - **v2.0** — Tier-1 conversion-optimized rewrite. Adds: tenant scoping (per ADR-023), visual builder for tenant admins, transition messages, educational interstitials, trust blocks, pricing displays, cart upsells, save-and-resume, A/B testing native (PostHog-backed), JSON import/export, abandonment recovery, subscription handoff to Refill v2.0, per-tenant analytics dashboard, accessibility explicit (WCAG 2.1 AA), expanded conversion event taxonomy. Preserves clinical-safety rigor of v1.0 (Mode 2 input contract, consent block integration, medication reconciliation, delegate intake patterns).
 - **v1.0** — Initial slice (single-tenant Ghana focus). Superseded by v2.0 on 2026-04-25.
 - **Next review:** after first tenant deploys a non-trivial customized form via the builder; after first A/B test reaches statistical significance; after first abandonment recovery campaign completes a measurement window.

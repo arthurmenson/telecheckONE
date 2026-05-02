@@ -764,9 +764,100 @@ The Subscription machine has the deepest cross-machine wiring of any state machi
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §State_Machines rows 71, 97)
+
+### Research consent + export state machines (Row 71 — NEW per ADR-028)
+
+#### `ResearchConsent` state machine
+
+States: `pending`, `granted`, `revoked`.
+
+Transitions:
+- `pending → granted` (patient grants 5th-tier research data-use consent; emits `research_consent.granted` domain event + `research.consent_granted` audit event)
+- `granted → revoked` (patient revokes; emits `research_consent.revoked` + `research.consent_revoked`; cohort definition module updates eligible-patient-set; in-flight cohorts depending on this patient suspended)
+
+**Forbidden transitions:** `revoked → granted` (no resurrection of a revoked consent — per asymmetric retraction rule of Master PRD §15.2). A new grant after revoke creates a **new ResearchConsent entity** per consent immutability discipline.
+
+**Guards on `pending → granted`:**
+1. CCR `research_data_partnership_active != inactive` for the patient's `country_of_care`.
+2. `research_consent_text_version` matches the approved text per CCR `research_ethics_review_body.approval_reference_id` AND `approval_validity_to >= now`.
+3. `asymmetric_retraction_acknowledgment = true` (patient has acknowledged that aggregate data already shared cannot be retracted).
+
+Per I-030, no care-delivery state machine MAY consume ResearchConsent state events.
+
+#### `DataSharingAgreement` state machine
+
+States: `draft`, `in_review`, `active`, `expired`, `suspended`, `retired`.
+
+Transitions:
+- `draft → in_review` (DSA submitted to ADR-028 quad sign-off pipeline)
+- `in_review → active` (Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead quad sign-off recorded; partner organization signed; REC concurrence per `research_ethics_review_body.per_dsa_review_required`)
+- `active → expired` (validity_to < now)
+- `active → suspended` (regulatory or governance trigger)
+- `suspended → active` (suspension cleared; re-evaluation against current CCR research keys)
+- `expired | suspended → retired` (formal sunset; preserves DSA record for audit but no further export operations)
+
+Renewal creates a **new DSA version** (new `dsa_id` ULID) — DSAs are immutable once active per audit-chain provenance.
+
+#### `ResearchExportRequest` state machine
+
+States: `queued`, `processing`, `ready`, `delivered`, `expired`, `invalidated`.
+
+Transitions:
+- `queued → processing` (export pipeline begins de-identification + k-anonymity computation; emits `research.export_initiated` audit event at `audit_sensitivity_level = high_pii` per I-031)
+- `processing → ready` (de-identification complete; k-anonymity actual computed)
+- `ready → delivered` (k-anonymity verified ≥ k_min_required AND `dsa_status_at_export = active` AND `permitted_data_domains_at_export` matches snapshot AND consent-cohort snapshot hash unchanged; emits `research_export.delivered` domain event + `research.export_completed` audit event with `status = completed`)
+- `ready → invalidated` OR `processing → invalidated` (any I-029 condition unmet)
+- `delivered → expired` (retention class TTL elapsed; export artifact destroyed)
+
+**Per I-029 reject-unless rule for `ready → delivered`:** the transition MUST be rejected (and `delivered` MUST NOT be reached) when ANY of the following:
+- `dsa_status_at_export ≠ active` (DSA expiry, suspension, or retirement during export)
+- `k_threshold_actual < k_min_required` (k-anonymity violation)
+- `permitted_data_domains_at_export` differs from the `research.export_initiated` snapshot (CCR drift mid-export)
+- consent-cohort change (a `research_consent.revoked` event for any patient in the cohort during the export window)
+
+**Audit-side discipline (per AUDIT_EVENTS v5.2 §5 + GOVERNANCE_CONTROLS v5.2 §7.2):** when `ready → invalidated` fires, the audit-side `research.export_completed` event MAY emit with `status = invalidated` and the violated state recorded in payload (e.g., `dsa_status_at_export = expired`); concurrently, a `signal_enforcement_trigger` Category B audit event captures the enforcement action (export artifact destruction; partner notification per DSA terms; engineering review trigger). Bare suppression of the completion event (no audit record at all) is forbidden — silent invalidation is an audit gap per I-003.
+
+The domain event `research_export.delivered` is **NOT emitted** for invalidated exports; the audit-side `research.export_completed` (with `status = invalidated`) records the failed completion. This is the asymmetry between domain-event and audit-event semantics under I-029.
+
+### `ProtocolAuthorizedAction` lifecycle (Row 97 — NEW per ADR-029)
+
+States (active at v1.0): `draft`, `ai_recommended`, `human_confirmed`, `executed`, `completed`.
+
+Reserved future states (NOT implemented as executable code paths at v1.0; documented as non-normative future sketches): `audit_only_executed`, `autonomous_executed`, `autonomy_suspended`, `escalated_for_review`.
+
+Transitions (active at v1.0):
+- `draft → ai_recommended` (AI workload at `protocol_execution` produces a recommendation; `autonomy_level ∈ {advisory, suggestion, action_with_confirm}`)
+- `ai_recommended → human_confirmed` (clinician reviews AI recommendation; explicit confirmation event emitted to immutable audit chain scoped to the action_id; confirming actor RBAC v1.1 / I-012 authorized role check passes)
+- `human_confirmed → executed` (action executed per protocol authorization)
+- `executed → completed` (downstream pipeline reports completion)
+
+**I-012 reject-unless three-clause rule (mirrors Master PRD §13.7 v0.3 — single normative source of truth):** the state machine validator MUST reject any transition to `executed` for I-012-governed actions (prescription, refill, medication-order) UNLESS all three of the following hold simultaneously, evaluated per `action_id`:
+
+1. `autonomy_level == action_with_confirm` (string equality; not membership in a set).
+2. An explicit clinician confirmation event exists in the immutable audit chain scoped to this `action_id` prior to the transition.
+3. The confirming actor holds a role authorized to sign for the action class under RBAC v1.1 / I-012.
+
+**Reserved transitions (non-normative future sketches, NOT implemented as executable code paths at v1.0):**
+
+- `ai_recommended → audit_only_executed` — reserved for `autonomy_level = action_with_audit_only`. Activation requires successor ADR (ADR-030 or later) AND activation audit event in the immutable audit chain. ADR approval alone is never sufficient.
+- `ai_recommended → autonomous_executed` — reserved for `autonomy_level = fully_autonomous`. Activation prerequisites are a strict superset of `action_with_audit_only` per AUTONOMY_LEVELS §3.2.
+- `* → autonomy_suspended → escalated_for_review` — reserved for runtime-detected autonomy-policy violation; activation contingent on PolicyAuthorization framework (ADR-030 + GOVERNANCE_CONTROLS v5.2 §8 placeholder).
+
+Per ADR-029 + AI_LAYERING v5.2 §10 + AUTONOMY_LEVELS contract.
+
+### State machine count post-v1.10
+
+Active state machines: **14 (v1.1 baseline) + 3 research (ResearchConsent, DataSharingAgreement, ResearchExportRequest) + 1 ProtocolAuthorizedAction = 18**.
+
+Reserved-future transitions (non-normative sketches in this doc): 4 (ProtocolAuthorizedAction reserved transitions per the table above).
+
+---
+
 ## Document control
 
 - **v1.1** — Adds §15 Subscription State Machine (10 states: DRAFT, ACTIVE, FULFILLING, PAUSED, SWITCHING, CANCELLATION_PENDING, CANCELLED, DECLINED, PAYMENT_FAILED_TERMINAL, SAFETY_HOLD) per Pharmacy + Refill Slice PRD v2.X §8 — relocated to canonical State Machines per Pattern C remediation. Renumbers §15 Cross-machine interactions to §16 and extends with 6 new subscription-related cross-machine entries (period_end → Refill, Refill DELIVERED → Subscription completion, switch approval → Refill, SAFETY_HOLD → Refill+Pharmacy, payment_failed_terminal → Subscription, cancellation → Affiliate reversal). Total state machines: 14 plus interaction engine transaction flow. Threading remediation per Adversarial Counsel Review v1.0 finding CRITICAL-03. Existing 13 state machines preserved without modification.
+- **v1.1 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §State_Machines rows 71, 97)** — Additive content under "v1.10 cycle additions" section above. 3 new research state machines per ADR-028: ResearchConsent (`pending → granted → revoked`; `revoked → granted` forbidden per asymmetric retraction; new grant after revoke creates new entity); DataSharingAgreement (`draft → in_review → active → expired | suspended → retired`; renewal creates new DSA version); ResearchExportRequest (`queued → processing → ready → delivered | invalidated; delivered → expired`) with full I-029 reject-unless rule for `ready → delivered` transition (DSA active + k-anonymity actual ≥ required + permitted-domain match + consent-cohort hash match) and audit-side `status = invalidated` discipline paired with `signal_enforcement_trigger` Category B audit. 1 new ProtocolAuthorizedAction state machine per ADR-029: only `draft → ai_recommended → human_confirmed → executed → completed` path implemented as executable code at v1.0; reserved transitions (`audit_only_executed`, `autonomous_executed`, `autonomy_suspended → escalated_for_review`) documented as non-normative future sketches. I-012 reject-unless three-clause rule mirroring Master PRD §13.7 v0.3 (string equality `autonomy_level == action_with_confirm`; audit-chain clinician confirmation scoped to action_id; confirming actor RBAC role authorized) applied to all I-012 `executed` transitions. Reserved levels gated on successor ADR + activation audit event two-condition AND (ADR approval alone never sufficient). Total active state machines post-v1.10: **18 + 4 reserved-future transitions on ProtocolAuthorizedAction**. Per ADR-028 + ADR-029 + Master PRD v1.10 §13.7 + INVARIANTS v5.2 + AUDIT_EVENTS v5.2 + AUTONOMY_LEVELS contract + GOVERNANCE_CONTROLS v5.2. Existing v1.1 state machines preserved without modification; v1.10 additions are purely additive. No version-number bump (entry-level refresh).
 - **v1.0** — Initial state machines document. Formalizes 13 state machines plus the interaction engine transaction flow from all slice PRDs. Covers: Refill (19 states), Async Consult (16 states), Sync Video Consult (14 states), Pharmacy Fulfillment (14 states), Lab Upload (11 states), RPM Alert (7 states), Adverse Event (9 states), Community Content Moderation (9 states + crisis), Consent Lifecycle (4 states), Market Pack (8 states), Configuration Object (10 states), Payment (9 states), and Interaction Engine (transaction flow).
 - **Next review:** after engineering review validates state completeness and transition guards; after integration testing validates cross-machine interactions.
 - **Change discipline:** changes to valid states, transitions, or guard conditions require engineering lead sign-off and must be reflected in the corresponding slice PRD if they alter the product model.

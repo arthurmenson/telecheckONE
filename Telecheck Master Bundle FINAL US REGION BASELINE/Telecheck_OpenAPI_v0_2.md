@@ -1295,9 +1295,42 @@ Note: US uses Stripe Connect; Ghana is manual reconciliation at launch — for G
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §OpenAPI rows 28, 74)
+
+### Tenant identifier convention (Row 28 — C3 brand-structure refresh)
+
+All path templates and example values using `Heros-Health` as a tenant identifier MUST use `Telecheck-US`. Sweep:
+
+- `/tenants/{tenant_id}/...` — example values use `Telecheck-US` and `Telecheck-Ghana`, never `Heros-Health` or `heros`.
+- Payload examples — `tenant_id: "tnt_<ULID>"` is the canonical type; the human-readable identifier `Telecheck-US` may appear in `tenant.id` examples per CDM v1.2 §Tenant entity refresh.
+- Patient-facing surfaces (notifications, app shell, marketing copy) source from `tenant.consumer_dba` (Heros Health / Heros Health Ghana), never from `tenant.id`.
+
+### Research data endpoints (Row 74 — NEW per ADR-028)
+
+All endpoints below are tenant-scoped per I-023; export endpoints emit at `audit_sensitivity_level = high_pii` per I-031.
+
+| Method + path | Purpose | Auth role | Audit class | Notes |
+|---|---|---|---|---|
+| `POST /research/consents/grant` | Grant 5th-tier research data-use consent. | Patient (or authorized delegate) | A (consent) | Guards: CCR `research_data_partnership_active != inactive`; consent text version match; asymmetric retraction acknowledgment. Emits `research_consent.granted` + `research.consent_granted`. Per I-030, MUST NOT cascade to care-delivery. |
+| `POST /research/consents/revoke` | Revoke 5th-tier research consent. | Patient (or authorized delegate) | A (consent) | Emits `research_consent.revoked` + `research.consent_revoked`. Cohort definition module excludes patient from future cohorts; in-flight cohorts dependent on this patient suspended. |
+| `POST /research/cohort-definitions` | Create a cohort definition (operator surface; tenant-scoped). | Research Data Steward | B | Cohort definitions versioned, audited via `research.cohort_defined`; reviewed against active DSA permitted_data_domains subset. |
+| `GET /research/cohort-definitions/{cohort_definition_id}` | Retrieve cohort definition. | Research Data Steward, Research Ethics Committee Member (read-only) | C | |
+| `POST /research/exports/initiate` | Initiate research data export pipeline. | Research Data Steward | A | Emits `research.export_initiated` at `audit_sensitivity_level = high_pii`. Begins de-identification + k-anonymity computation. |
+| `POST /research/exports/{export_id}/complete` | Complete (or fail) export per I-029 verification. | System (export pipeline) | A | Per I-029, MUST verify `dsa_status_at_export = active` AND `k_threshold_actual >= k_min_required` AND `permitted_data_domains_at_export` matches snapshot. On failure: emits `research.export_completed` with `status = invalidated` + `signal_enforcement_trigger` Category B per GOVERNANCE_CONTROLS v5.2 §7.2. On success: emits `research_export.delivered` domain event + `research.export_completed` with `status = completed`. |
+| `GET /research/dsas/{dsa_id}` | Retrieve DSA details. | Research Data Steward, Privacy Officer, Regulatory Affairs Lead, Research Ethics Committee Member (read-only) | C | |
+| `POST /research/dsas/activate` | Activate a DSA (state transition `in_review → active`). | Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead (quad sign-off per ADR-028 v0.4); REC concurrence per `research_ethics_review_body.per_dsa_review_required` | A (governance) | Activation gate per MARKET_LAUNCH v5.1 Research data partnership activation gate. |
+| `GET /research/audit/exports` | Retrieve research export audit chain (high_pii sensitivity). | Research Ethics Committee Member, Privacy Officer, Regulatory Affairs Lead, External Research Partner (scoped to own DSA) | A (high_pii audit retrieval) | Restricted retrieval per I-031; access logged at audit envelope. Cross-tenant access requires break-glass per RBAC v1.1. |
+
+### Endpoint count post-v1.10
+
+Total endpoints post-v1.10: **178 (v0.2 baseline) + 9 research = 187 endpoints across 22 modules** (research data export module added per System Architecture v1.2 v1.10 cycle additions).
+
+---
+
 ## Document control
 
 - **v0.2** — Adds 33 new endpoints across 6 new modules: Tenant Configuration (6), Subscriptions (7), Product Catalog (5), Carts (6), Discount Codes (4), Affiliates (5). Total: 178 endpoints across 21 modules. All new endpoints schema-aligned to Canonical Data Model v1.2 §4-bis ecom entities. Threading remediation per Adversarial Counsel Review v1.0 finding CRITICAL-04. Existing 145 endpoints across 15 modules preserved without modification. Authentication, error envelope, idempotency, pagination, and delegation conventions unchanged from v0.1.
+- **v0.2 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §OpenAPI rows 28, 74)** — Additive content under "v1.10 cycle additions" section above. Tenant identifier sweep (Row 28): all `Heros-Health` example values → `Telecheck-US` per C3 brand structure; patient-facing surfaces source `tenant.consumer_dba`. 9 new research data endpoints (Row 74) per ADR-028: consent grant/revoke, cohort definition create/retrieve, export initiate/complete, DSA retrieve/activate, research audit retrieval. All tenant-scoped per I-023; export endpoints at `audit_sensitivity_level = high_pii` per I-031. DSA activation requires ADR-028 v0.4 quad sign-off + REC concurrence. Total endpoints post-v1.10: **187 endpoints across 22 modules** (research data export module added per System Architecture v1.2 v1.10 cycle additions). Per ADR-028 + INVARIANTS v5.2 + AUDIT_EVENTS v5.2 + RBAC v1.1 + CDM v1.2 v1.10 cycle additions. Existing v0.2 endpoints preserved without modification; v1.10 additions are purely additive. No version-number bump (entry-level refresh; OpenAPI remains at v0.2 in headers and references).
 - **v0.1** — Initial OpenAPI specification. 145 endpoints across 15 modules. 75 critical-path endpoints defined with full request/response shapes. Covers all 14 System Architecture modules plus health check. Every endpoint includes auth requirements, role restrictions, and contract references where applicable. Error envelope, idempotency, pagination, and delegation conventions defined.
 - **Next:** v0.3 after engineering review validates all 178 endpoint shapes against CDM v1.2 entities; convert to OpenAPI 3.1 YAML for code generation.
 - **Change discipline:** changes to endpoint paths, authentication requirements, or contract references require Engineering Lead sign-off.

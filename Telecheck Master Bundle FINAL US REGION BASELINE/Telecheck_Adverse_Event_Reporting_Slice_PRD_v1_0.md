@@ -467,8 +467,44 @@ Adverse event audit records are retained per the strictest applicable requiremen
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 9)
+
+**Cycle C2 — Emerging-markets framing reframe.** External regulatory reporting in §8.1 ("Ghana FDA reporting (anchor market)") and elsewhere is reframed conceptually as **emerging-market regulatory reporting**: the destination authority is resolved per CCR `regulatory.adverse_event_reporting.authority` for the launch market — Ghana FDA at v1.0 Telecheck-Ghana pilot. The platform's external reporting layer is destination-agnostic; format, cadence, severity thresholds, and anonymization standards are configured per market in the Market Rollout Cockpit (already documented in §8.2 Multi-market reporting).
+
+WHO references in this slice (§4 definition, §16 Q2 WHO-UMC causality methodology, partnership-related references) are preserved where partnership-specific — they are methodology and partnership citations, not jurisdictional reporting destinations, and remain valid regardless of CCR posture per the v1.10 cycle Cycle C2 framing.
+
+**Cross-references (v1.10):** ADR-024 (CCR country-driven configuration), CCR `regulatory.adverse_event_reporting.authority`, Master PRD v1.10 §11.1, Market Rollout Cockpit Slice (per-market reporting configuration). Note that AE data may feed Posture A research data flow (`research_permitted_data_domains.pharmacovigilance_signal`) at Release 2 per ADR-028 — see Row 78 / v1.10 cycle Cycle C5 extension treatment in the Phase 5 delta.
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 9 (Cycle C2).
+
+### Row 78 — AE data integration with ADR-028 research data flow (Cycle C5)
+
+**Scope clarification.** AE Reporting at v1.0 is **internal safety surveillance** per the current §1 strategic role. Reportable adverse events are detected, recorded, escalated, and reported to the destination authority resolved per CCR `regulatory.adverse_event_reporting.authority` (Ghana FDA at v1.0 Telecheck-Ghana pilot, per Row 9 framing). **AE Reporting at v1.0 does not feed any external research data flow.**
+
+**Release 2 trajectory under ADR-028 Posture A.** AE data MAY feed pharmacovigilance signal flow at Release 2 via the closed-enum `research_permitted_data_domains.pharmacovigilance_signal` (one of the four ADR-028 permitted domains) under Posture A — **aggregate, audit-trail-driven, and governed by I-029 research export gates**. The Release 2 trajectory is conditional on:
+
+1. **Active DSA** for the patient's `country_of_care` with a research partner organization aligned with `pharmacovigilance_signal` (e.g., WHO/UN at the parent-level partnership).
+2. **Active 5th-tier `ResearchConsent`** per Consent & Delegated Access Slice §16; consent-zero-impact on care delivery preserved per I-030 — AE detection, escalation, and internal reporting are unaffected by research consent state.
+3. **k-anonymity ≥ CCR `research_export_k_anonymity_minimum`** per I-029. Below-threshold cohorts are rejected at the research export pipeline.
+4. **CCR `research_data_partnership_active = active`** for the operating market.
+5. **Authorized signers** per CCR `research_export_authorized_signers` (multi-party approval).
+6. **Audit envelope** per AUDIT_EVENTS v5.2 §5 research events (audit class `high_pii` per I-031).
+
+**Posture A vs. Posture B distinction (absolute non-goal preserved).** Aggregate, audit-trail-driven pharmacovigilance signal sharing under Posture A is in the Release 2 scope. **Behavior-changing post-market protocols** — i.e., research outputs that modify Telecheck care delivery, prescribing protocols, alert thresholds, or treatment recommendations based on research findings — remain **Posture B (absolute non-goal)** per ADR-028 v0.5. The AE Reporting slice does NOT consume any research output as a behavior modifier; AE-driven internal protocol updates (§7.3 AI feedback loops) are Telecheck-internal and remain unchanged.
+
+**Scope boundary — export pipeline ownership.** As with RPM/CCM (cross-reference RPM/CCM Slice Row 77), any export of AE data into a Posture A research data flow is governed by the **research export pipeline** (a separate platform component, not by the AE Reporting slice directly). The AE Reporting slice is the upstream data producer; export decisions, k-anonymity enforcement, audit governance, and DSA matching are owned by the research export pipeline downstream. AE-record-level transformations into pharmacovigilance signals are performed at the export layer, not in the AE Reporting slice.
+
+**Pre-Release-2 posture.** Until ADR-028 Posture A activates per the MARKET_LAUNCH v5.1 11-condition activation gate, AE data MUST NOT flow to any external research partner. The §8 external reporting layer is restricted to regulatory destinations (Ghana FDA at v1.0; multi-market reporting at §8.2 future) and remains scope-bound per Row 9 framing.
+
+**Cross-references (Row 78):** ADR-028 v0.5 (Research data partnership Posture A — Release 2 goal — §6 permitted-domains list including `pharmacovigilance_signal`); Master PRD v1.10 §15.2; INVARIANTS v5.2 I-029 (research export gates), I-030 (consent-zero-impact on care delivery), I-031 (high_pii audit class); CCR_RUNTIME v5.2 research block; TYPES v5.2 (`DataSharingAgreement`, `ResearchConsent`, `ResearchDataExport`, `CohortDefinition`); AUDIT_EVENTS v5.2 §5 (research events); MARKET_LAUNCH v5.1 (11-condition activation gate); Consent & Delegated Access Slice §16 (5th-tier consent); RPM/CCM Slice Row 77 (parallel research data feed framing); Market Rollout Cockpit Slice Row 76 (Market Pack research block).
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 78 (Cycle C5).
+
+---
+
 ## Document control
 
 - **v1.0** — Initial Adverse Event Reporting slice PRD. Defines three detection pathways (patient-reported, clinician-identified, system-detected), severity classification with reporting timelines, structured adverse event record with auto-populated platform context, internal escalation pathway, external reporting to Ghana FDA, protocol and AI feedback loops, pattern detection, and integration with the Market Rollout Cockpit. Derived from Master PRD v1.6 §11.1 and §23 Q4.
+- **v1.10 cycle additions (2026-05-02 — v1.10.1 hygiene cycle physical merge of Phase5 delta Rows 9, 78):** Row 9 (Cycle C2) — emerging-markets framing reframe of external regulatory reporting; destination authority resolved per CCR `regulatory.adverse_event_reporting.authority`; WHO references preserved as methodology/partnership citations. Row 78 (Cycle C5) — AE data may feed pharmacovigilance signal flow at Release 2 via `research_permitted_data_domains.pharmacovigilance_signal` under ADR-028 Posture A; aggregate, audit-trail-driven, governed by I-029; behavior-changing post-market protocols remain Posture B (absolute non-goal). Export pipeline ownership boundary clarified (research export pipeline owns export decisions; AE slice is upstream producer). Body unchanged at v1.0 baseline.
 - **Next review:** after Ghana FDA report format and submission method are agreed (Q1 above); after causality assessment methodology is selected (Q2); after Consent & Delegated Access slice confirms adverse-event reporting consent coverage (Q3).
 - **Change discipline:** changes to severity classification, reporting timelines, external reporting requirements, detection pathway logic, or feedback loop definitions require explicit owner sign-off and must be validated against the v5 Contracts Pack and regulatory agreements.

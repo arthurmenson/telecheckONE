@@ -64,7 +64,7 @@ Every market in Telecheck is represented as a **Market Pack** — a structured, 
 
 | Component | Description |
 |---|---|
-| **Market identity** | Country, region, operating entity, launch date, current rollout state |
+| **Market identity** | Country, region, **structured C3 brand-identity vocabulary** (`tenant_identifier` = `Telecheck-{country}` per operating-tenant naming, e.g., `Telecheck-US` / `Telecheck-Ghana`; `consumer_dba` = `Heros Health` country-instanced, e.g., `Heros Health` (US) / `Heros Health Ghana` (GH); `legal_entity` = `Telecheck Health LLC` (US) / `Telecheck-Ghana Ltd.` (GH); `consumer_subdomain` = `heroshealth.com` (US) / `ghana.heroshealth.com` (GH)), launch date, current rollout state. Bare "operating entity" / "brand" fields deprecated in favor of the structured vocabulary above per v1.10 C3 cascade. |
 | **Policy configuration** | Consent model, identity requirements, emergency escalation logic, sensitive-category rules, **jurisdictional data residency rules** (consent regime, retention, DPC obligations, sub-processor disclosure — *not* physical region; per ADR-026 / I-028 physical region is single us-east-1 at launch), allowed modules |
 | **Protocol library** | All approved protocols for this market — each with version, activation state, accountable approver, eligibility criteria, exclusion rules, review date, expiry date, rollback target |
 | **Guardrail assignments** | Which AI guardrail templates are active, per program. Each with version, deployment date, test suite status |
@@ -380,8 +380,94 @@ Every cockpit action is audited:
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta)
+
+### Row 21 — §4.1 Market Pack C3 brand-structure metadata
+
+§4.1 Market Pack metadata field set updated to structured C3 brand-structure vocabulary per v1.10 C3 cascade (Phase 5 delta Row 21):
+
+- `tenant_identifier` = `Telecheck-{country}` (operating-tenant naming; e.g., `Telecheck-US`, `Telecheck-Ghana`)
+- `consumer_dba` = `Heros Health` (global consumer DBA, country-instanced where surfaced — e.g., `Heros Health` US / `Heros Health Ghana` GH)
+- `legal_entity` = `Telecheck Health LLC` (US) / `Telecheck-Ghana Ltd.` (GH)
+- `consumer_subdomain` = `heroshealth.com` (US) / `ghana.heroshealth.com` (GH)
+
+Bare "operating entity" / "brand" fields are deprecated; the structured vocabulary above is canonical per v1.10 C3 cascade. "Telecheck" is platform/B2B-only and never consumer-facing; "Heros Health" is the consumer DBA. Cross-references: Master Platform PRD v1.10 §17 (brand-structure rules), Tenant Threading Addendum v1.0, Phase 5 Slice/Engineering/Operations delta artifact (`Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md`).
+
+### Row 56 — Market Pack marketing block (per ADR-027)
+
+The Market Pack abstraction is updated to include a marketing block carrying the country-conditional DTC marketing posture configuration per ADR-027.
+
+**Marketing block fields (sourced from CCR_RUNTIME v5.2 marketing block):**
+
+- `molecule_level_marketing_permitted` — 3-state enum: `permitted` | `prohibited` | `pending_evidence`. Drives whether molecule-level marketing surfaces render in this country (per Acquisition & Engagement Tools Slice §13).
+- `marketing_copy_governance_evidence` — structured `MarketingCopyGovernanceEvidence` object per TYPES v5.2 carrying triple-sign-off attestations (Product + Regulatory Affairs + Clinical Safety), reviewer identities, signature timestamps, evidence artifact references, and approval validity range.
+- `marketing_governance_review_cadence_months` — integer; review cadence after which an approved `MarketingCopy` enters expired state and requires fresh §13.2 review.
+- `marketing_governance_lead_designation_artifact_id` — reference to the artifact designating the Marketing copy governance lead for this country (required signer for Product axis of triple sign-off; surfaces in Admin Configuration Surfaces Slice §12 admin console).
+
+**Default ship state per country pack.** Country packs ship with the marketing block populated as follows:
+
+- `prohibited` — default for new markets where regulatory engagement has not begun. Molecule-level marketing surfaces suppressed at runtime; Forms Engine L1 molecule-level elements blocked at publish per FORMS_ENGINE §25.
+- `pending_evidence` — for emerging markets where regulatory engagement is underway but the §7.9 6-condition activation gate has not yet been fully satisfied. Drafting and submission allowed via Admin Configuration Surfaces §12; publishing gated on activation gate completion.
+- `permitted` — set only after MARKET_LAUNCH v5.1 marketing posture activation gate (6 conditions) has been satisfied AND `marketing_copy_governance_evidence` is populated AND `marketing_governance_lead_designation_artifact_id` references an active designation artifact.
+
+The Cockpit's activation review (§4 of this slice) MUST validate the marketing block state transition `prohibited | pending_evidence → permitted` against the MARKET_LAUNCH v5.1 6-condition gate. The dependency checker (§5) MUST flag any Market Pack proposing `permitted` without complete `marketing_copy_governance_evidence`.
+
+**Cross-references:** ADR-027 v0.6 (Country-Conditional DTC Marketing Posture, Accepted at v1.10); CCR_RUNTIME v5.2 marketing block; TYPES v5.2 (`MarketingCopyGovernanceEvidence`); MARKET_LAUNCH v5.1 marketing posture activation gate; Master PRD v1.10 §7.9, §13.2; Acquisition & Engagement Tools Slice §13; Admin Configuration Surfaces Slice §12; Forms/Intake Engine Slice §25.
+
+### Row 76 — Market Pack research block (Cycle C5 — per ADR-028)
+
+The Market Pack abstraction (§4.1) is extended in v1.10 to include a **research block** that surfaces ADR-028 Posture A research data partnership configuration. The research block carries the 3-state activation enum plus the 7-key research configuration block per CCR_RUNTIME v5.2 research block.
+
+**Research block fields (sourced from CCR_RUNTIME v5.2 research block):**
+
+- `research_data_partnership_active` — closed enum: `inactive | consent_only | active`. The 3-state model:
+  - `inactive` — no research consent surface presented; no `ResearchDataExport` permitted; default for new markets.
+  - `consent_only` — 5th-tier research consent surface presented (per Consent & Delegated Access Slice §16), consent records collected, but no export pipeline active. Default for markets that have completed REC engagement but have no active DSA.
+  - `active` — full Posture A pipeline active: consent surface + DSA active + export pipeline active subject to I-029 (k-anonymity ≥ k_min, audit-trail-driven, governed by ADR-028 §6 permitted-domains list).
+- 7-key research configuration block (per CCR_RUNTIME v5.2):
+  - `research_ethics_review_body` (with `approval_reference_id` for consent text version pinning)
+  - `research_data_partnership_partner_organization` (parent-level partner reference — e.g., WHO/UN at the Posture A activation gate)
+  - `research_permitted_data_domains` (closed enum subset — `chronic_disease_longitudinal | ncd_surveillance | pharmacovigilance_signal | population_health_aggregate`)
+  - `research_data_sharing_agreement_reference` (active `DataSharingAgreement` pointer per TYPES v5.2)
+  - `research_export_k_anonymity_minimum` (k_min for I-029 enforcement)
+  - `research_export_authorized_signers` (multi-party export approval roster)
+  - `research_consent_text_version_pin` (binds Forms Engine `research_data_use_consent_block` to a specific REC-approved text version)
+
+**Country pack defaults:**
+
+- New markets ship with `research_data_partnership_active = inactive` and the 7 research keys unset (or set to inactive sentinel). Forms Engine `research_data_use_consent_block` does not render; no audit events emit.
+- Markets that have completed REC engagement but have not activated the export pipeline ship with `research_data_partnership_active = consent_only`, with `research_ethics_review_body.approval_reference_id` and `research_consent_text_version_pin` populated. Other 5 keys remain unset until DSA is signed and pipeline activates.
+
+**Cockpit dependency checks (§4 / §5).** Market Pack activation review for `consent_only → active` transition requires evidence of: signed `DataSharingAgreement`, REC approval reference for consent text, populated `research_export_authorized_signers` roster, configured `research_export_k_anonymity_minimum`, MARKET_LAUNCH v5.1 11-condition research data partnership activation gate evidence, and dual-control sign-off per I-015. The cockpit dependency checker treats the 11-condition gate as an automated-where-possible check (per existing §5 dependency-checking model). The activation review for `inactive → consent_only` requires only REC approval reference + consent text version pin (no DSA required at this stage).
+
+**Cross-references (Row 76):** ADR-028 v0.5 (Research data partnership Posture A — Release 2 goal); Master PRD v1.10 §15.2; CCR_RUNTIME v5.2 research block; INVARIANTS v5.2 I-029 (research export gates), I-030 (consent-zero-impact on care delivery), I-031 (high_pii audit class); MARKET_LAUNCH v5.1 (11-condition activation gate); TYPES v5.2 (`DataSharingAgreement`, `ResearchEthicsReviewBody`, `ResearchDataExport`, `CohortDefinition`); Forms/Intake Engine Slice §25.3 (`research_data_use_consent_block` field type); Consent & Delegated Access Slice §16 (5th-tier consent).
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 76 (Cycle C5).
+
+### Row 86 — Cross-reference to Master PRD §10.5 program catalog architecture (Cycle C6)
+
+The Market Pack abstraction (§4.1) is consistent with Master PRD v1.10 §10.5's four-layer program catalog architecture model:
+
+| Master PRD §10.5 layer | Cockpit Market Pack mapping |
+|---|---|
+| **Layer 1 — Program (`ProgramCatalogEntry`)** | Platform-level catalog entry. NOT carried in Market Pack — Market Pack scopes per-market activation, not the platform catalog itself. |
+| **Layer 2 — `ProgramMarketPolicy`** | Per-market activation policy. Market Pack carries the binding from `ProgramCatalogEntry` to operating tenant + per-market eligibility, formulary, regulatory module, pricing, and CCR pack reference. |
+| **Layer 3 — Forms Engine instantiation (Pattern A)** | Per-market form versions are immutable artifacts referenced from `ProgramMarketPolicy`. Market Pack carries form-version pins; Forms Engine v2.1 owns authoring. |
+| **Layer 4 — CCR Runtime resolution** | Market Pack carries the CCR pack (per ADR-024 country-driven configuration) which the Cockpit publishes; runtime resolution is performed by the CCR runtime, not the Cockpit. |
+
+**Verification.** The Cockpit Market Pack abstraction is consistent with the four-layer model: Market Pack scope is Layer 2 + Layer 4 (the per-market activation policy and the CCR pack), while Forms Engine v2.1 owns Layer 3 (form versions), and the platform catalog (Layer 1) is platform-wide and not per-market. Cockpit activation review is the gating mechanism for Layer 2 activation per `ProgramMarketPolicy`.
+
+**Program porting interaction.** When a program ports from one market to another (e.g., Telecheck-US GLP-1 Heros Health DBA → Telecheck-Ghana GLP-1 Heros Health Ghana DBA per `Telecheck_Program_Porting_Checklist_GLP1_v1_0.md`), the Cockpit activation review for the target market is the activation gate — the source market's `ProgramMarketPolicy` is not mutated, and the target market gets its own Market Pack publication via Cockpit. See Forms/Intake Engine Slice §25.4 (Program porting workflow) for the upstream Forms Engine view of the same operation.
+
+**Cross-references (Row 86):** Master PRD v1.10 §10.5 (canonical — program catalog architecture, four-layer model); TYPES v5.2 (`ProgramCatalogEntry`, `ProgramMarketPolicy`); ADR-024 (CCR country-driven configuration); Forms/Intake Engine Slice §25.4 (Program porting workflow); `Telecheck_Program_Porting_Checklist_GLP1_v1_0.md` (worked example — Telecheck-US GLP-1 Heros Health DBA → Telecheck-Ghana GLP-1 Heros Health Ghana DBA).
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 86 (Cycle C6).
+
+---
+
 ## Document control
 
 - **v1.0** — Initial Market Rollout Cockpit slice PRD. Defines the Market Pack abstraction, three cockpit levels (country workspace, activation review, incident/rollback), dependency checker, blast-radius preview, evidence locker, readiness checklist, persona-scoped views, rollout states including Emergency Safe Mode, and review cadence enforcement. Derived from Master PRD v1.6 §6 and §14, Red-Team Review, and Flagged Items Resolution v1.0.
+- **v1.10 cycle delta (body unchanged at v1.0 baseline; §4.1 amended in-place; Market Pack marketing block + research block added; §10.5 four-layer model cross-reference added)** — 2026-05-02 per v1.10.1 hygiene cycle. Phase 5 delta Row 21 physically merged: §4.1 Market Pack metadata uses structured C3 vocabulary (`tenant_identifier` / `consumer_dba` / `legal_entity` / `consumer_subdomain`). Phase 5 delta Row 56 physically merged: Market Pack now carries a marketing block (`molecule_level_marketing_permitted` 3-state enum + `marketing_copy_governance_evidence` + `marketing_governance_review_cadence_months` + `marketing_governance_lead_designation_artifact_id`) per ADR-027 v0.6. Phase 5 delta Row 76 physically merged: Market Pack now carries a research block (`research_data_partnership_active` 3-state enum + 7-key research configuration) per ADR-028 v0.5; activation review and dependency checker enforce `consent_only → active` transition against MARKET_LAUNCH v5.1 11-condition gate. Phase 5 delta Row 86 physically merged: Market Pack abstraction explicitly verified consistent with Master PRD v1.10 §10.5 four-layer program catalog architecture (Layer 2 + Layer 4 scoped). See "v1.10 cycle additions" section above and `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md`.
 - **Next review:** after the three companion admin slice PRDs (#18, #19, #20) are drafted, to ensure composition interfaces are aligned; after Ghana launch operations begin producing real cockpit usage data.
 - **Change discipline:** changes to the Market Pack structure, rollout states, dependency checker scope, activation review requirements, Emergency Safe Mode definition, or evidence locker structure require explicit owner sign-off and must be reflected in the Master PRD §14 if they alter the platform model.

@@ -508,6 +508,7 @@ These rules cannot be broken under any circumstance:
 
 ## Document control
 
+- **v1.1 cycle additions — 2026-05-02 (per v1.10.1 hygiene cycle, Phase5 delta Group 5C, Rows 20 + 33):** Row 20 reconciles the Tenant brand token overlay model with the C3 brand-structure cascade (per-tenant theming keys off consumer DBA, not operating-tenant ID; structured `consumer_dba` / `consumer_subdomain` / `primary_color` token namespace replaces ad-hoc bare-string tenant fields). Row 33 adds a new "Heros consumer-brand identity tokens" section (logo, colors, typography, voice, photography placeholder substitution rules; authoritative visual reference is `telecheck-design-system/project/Patient interactive mock v7.html`). Body file content otherwise unchanged at v1.1 baseline.
 - **v1.1** — Adds Tenant brand token overlay model section per ADR-023 multi-tenancy and CRITICAL-05 / MEDIUM-17 remediation. Defines tenant-overridable vs platform-fixed tokens; runtime resolution rule; tenant brand authoring authority via Admin Backend; brand validation rules; accessibility floor enforcement. Threading remediation per Adversarial Counsel Review v1.0 finding MEDIUM-17. Existing color system, typography scale, spacing, component library, interaction patterns, delegate overlay, emergency surface, dark-mode readiness, iconography, platform adaptations, design tokens, and 10 hard rules preserved without modification.
 - **v1.0** — Initial Design System. Defines color system (5 palettes, 8 content source indicators, 4 severity levels), typography (8-level type scale, Inter font), spacing (12-token scale), component library (8 component categories), interaction patterns (6 behavioral specifications), delegate overlay, emergency surface, dark-mode readiness, iconography, platform adaptations, design tokens, and 10 hard rules. Derived from Patient App IA v1.0, Clinician Portal IA v1.0, and Master PRD v1.6 §17.
 - **Next review:** after Figma component library is built from this specification; after first design review with engineering; after first tenant brand customization rolled out.
@@ -601,3 +602,53 @@ A tenant cannot view or copy another tenant's brand tokens. Platform Admin can v
 ### Brand transitions
 
 When a tenant changes their brand (e.g., a refresh, a logo update), the change is staged and applied at the next user session per the runtime resolution rule. There is no "live brand swap" mid-session. Brand changes are audited per AUDIT_EVENTS v5.1.
+
+---
+
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Group 5C)
+
+### Row 20 — Per-tenant theming reconciled with C3 brand-structure cascade
+
+The Tenant brand token overlay model (above) accommodates the Master PRD §17 / ADR-027 v0.6 brand-structure cascade as follows:
+
+- Per-tenant theming variables work with the **consumer DBA** at runtime, not the operating-tenant identifier. For Telecheck-US the consumer DBA is `Heros Health`; for Telecheck-Ghana the consumer DBA is `Heros Health Ghana`.
+- Operating-tenant identifiers (`Telecheck-US`, `Telecheck-Ghana`) are **internal/B2B-only** and are not patient-facing. Design tokens key off `consumer_dba` (and downstream consumer-brand fields), not the operating tenant ID.
+- The `--brand-display-name` example previously listed as `"Heros" vs "Telecheck-Ghana"` should be read as the consumer-DBA-instanced values: `"Heros Health"` (consumer DBA, US) vs `"Heros Health Ghana"` (consumer DBA, GH).
+- The `tenant_brand` design token namespace is updated per the structured C3 vocabulary: `consumer_dba`, `consumer_subdomain`, `primary_color`, `secondary_color`, `logo_asset_id`, `logo_mark_asset_id`, `voice_profile_id` (replaces ad-hoc bare-string tenant fields).
+- "Platform default brand" rule (above) preserved — platform default at launch surfaces the Telecheck-Ghana operating-tenant brand (instanced via Heros Health Ghana consumer DBA) as the canonical fallback.
+
+### Row 33 — Heros consumer-brand identity tokens (NEW section)
+
+This section specifies the canonical Heros Health consumer-brand identity that the Patient App and any consumer-facing surfaces render through the tenant-overridable token layer.
+
+**Authoritative visual reference:** `telecheck-design-system/project/Patient interactive mock v7.html` (per CLAUDE.md "Authoritative mock" declaration; Patient mock v7 binding visual reference once v1.10 / DIC v1.1 promotes).
+
+**Logo:**
+- Primary wordmark: Heros Health full wordmark (placeholder asset in `telecheck-design-system/project/assets/logo/`; substitute before customer ship).
+- Logo mark: Heros Health symbol/glyph (compact use; nav bar, app icon).
+- Country-instanced lockups: `Heros Health` (US, default), `Heros Health Ghana` (GH). Country qualifier rendered in the tagline slot, not the wordmark itself.
+
+**Colors (consumer-brand layer; tenant-overridable per overlay model):**
+- `--color-brand-primary` — Heros Health primary (per Patient mock v7 token set).
+- `--color-brand-primary-pressed` — interaction state derived per overlay model.
+- `--color-brand-secondary` — Heros Health supporting brand color.
+- `--color-brand-accent` — accent color (used sparingly).
+- AI surfaces continue to use Iris (`#6E5BD6`) per Master PRD §16 — Iris is platform-fixed and not subject to consumer-brand override (see "Platform-fixed tokens" above; Iris is reserved exclusively for AI-authored content).
+
+**Typography:**
+- Default headings + body: Inter (platform default per §4.2 Font stack). Manrope is referenced in the design handoff as a placeholder substitution candidate; substitution occurs before customer ship per the design handoff substitution discipline.
+- Tenant override permitted within approved font list per overlay model.
+
+**Voice (consumer-brand layer):**
+- Heros Health voice profile applies to consumer-facing copy: warm, plain-spoken, honest status.
+- "Honest status" rule (Master PRD §16; §14 Hard rule 9 above): never aspirational, softened, or hedge-slop copy. "Submit prescription" not "Send for review" if the action commits.
+- AI / human distinction enforced by three cues (color + glyph + label) — never relax to color-only. The `ai-spark` glyph and "Telecheck AI" label always accompany Iris on first reveal.
+
+**Photography placeholder substitution rules:**
+- All photography in the design handoff (`telecheck-design-system/project/`) is placeholder. Customer-shipped product MUST replace placeholder photography with licensed, approved imagery before customer ship.
+- Substitution discipline: any image asset surfaced to a patient must be tagged `production-approved` in the asset registry. Assets tagged `placeholder` MUST NOT render in production builds.
+- AI / human cues (color + glyph + label) are not affected by photography substitution.
+
+**Cross-references:** Master PRD §16, §17; Design Implementation Contract v1.1 (Canonical for development) §103; ADR-027 v0.6 marketing copy governance posture; CLAUDE.md design handoff section (Authoritative mock = Patient interactive mock v7).
+
+---

@@ -1,6 +1,6 @@
 # 00 · Domain Events
 
-**Status:** canonical · **Version:** 5.1 · **Owner:** engineering lead · **Consumers:** all backend services, event consumers, observability
+**Status:** canonical · **Version:** 5.2 · **Owner:** engineering lead · **Consumers:** all backend services, event consumers, observability
 
 This document defines the domain event envelope, naming conventions, payload schemas for key events, aggregate catalog, ordering guarantees, and consumer contracts. Per I-016, domain events are immutable once emitted. Corrections are compensating events.
 
@@ -207,6 +207,30 @@ Same as `interaction_signal.produced.v1` with:
 
 ---
 
+## Research domain events (added v5.2 per ADR-028)
+
+| Event name | Producer | Subscribers | Payload (key fields) | Notes |
+|---|---|---|---|---|
+| `research_consent.granted` | Consent module (5th-tier consent grant per Master PRD §15.2) | Audit pipeline (emits `research.consent_granted` per AUDIT_EVENTS v5.2 §5); Cohort definition module (eligible-patient-set update); Notifications module (no patient-facing notification; internal only) | consent_id, tenant_id, patient_id, **consent_type** (`research_data_use`), **scope**, **version_presented** (consent text version per CCR `research_ethics_review_body.approval_reference_id`), granted_at | Per I-016 immutable. Per I-030 MUST NOT cascade to any care-delivery event subscriber. Payload mirrors AUDIT_EVENTS v5.2 §5 `research.consent_granted` event fields. |
+| `research_consent.revoked` | Consent module | Audit pipeline (`research.consent_revoked`); Cohort definition module (eligible-patient-set update — patient excluded from future cohorts; already-shared aggregate data not retracted per §15.2 asymmetry); Export pipeline (suspend any in-flight cohort that depends on this patient) | consent_id, tenant_id, patient_id, **consent_type** (`research_data_use`), **scope**, **version_presented**, revocation_reason, revoked_at, revocation_effective_at, **asymmetric_retraction_acknowledgment** (boolean — patient has acknowledged that aggregate data already shared cannot be retracted per §15.2) | Per I-016 immutable. Per I-030 MUST NOT cascade to any care-delivery event subscriber. Payload mirrors AUDIT_EVENTS v5.2 §5 `research.consent_revoked` event fields. |
+| `research_export.requested` | Operator surface (cohort definition layer) | Audit pipeline (`research.export_initiated` per AUDIT_EVENTS v5.2 §5); Export pipeline (begins de-identification + k-anonymity computation) | export_id, tenant_id, country_of_care, cohort_definition_id, cohort_version, dsa_id, dsa_version, dsa_status_at_export, permitted_data_domains_at_export, requester_id, requester_role, requester_partner_id, requested_field_set, k_min_required, k_threshold_target, consent_cohort_snapshot_hash, requested_at | Per I-016 immutable. Audit at `audit_sensitivity_level: high_pii` per I-031. |
+| `research_export.delivered` | Export pipeline (k-anonymity verified + de-identification complete + DSA still active + permitted-domain still in scope) | Audit pipeline (`research.export_completed` per AUDIT_EVENTS v5.2 §5); Notifications module (partner notification per DSA terms); Retention scheduler (export artifact retention class) | export_id, tenant_id, country_of_care, cohort_definition_id, cohort_version, dsa_id, dsa_version, dsa_status_at_export, permitted_data_domains_at_export, requester_id, requester_role, requester_partner_id, exported_field_set, k_threshold_actual (≥ k_min per I-029), k_min_required, suppressed_cell_count, consent_cohort_snapshot_hash, export_artifact_hash, retention_class, delivered_at | Per I-016 immutable. Per I-029 invariant binding: any condition unmet → **the domain event `research_export.delivered` is NOT emitted** (delivery did not occur). Distinct from the audit-side `research.export_completed` event (AUDIT_EVENTS v5.2 §5), which MAY emit with `status = invalidated` to record the attempted-and-failed completion per the audit-path discipline in GOVERNANCE_CONTROLS Research export INCIDENT controls. Audit at `audit_sensitivity_level: high_pii` per I-031. |
+
+---
+
+## Marketing domain events (added v5.2 per ADR-027)
+
+| Event name | Producer | Subscribers | Payload (key fields) | Notes |
+|---|---|---|---|---|
+| `marketing.surface_published` | Marketing copy governance review (status `approved` reached per §13.2) | Audit pipeline; Marketing surface rendering services; CCR cache invalidation | marketing_copy_id, tenant_id, country_of_care, version, classification, governance_review_reference_id, approval_validity_until | Per I-016 immutable. Required precondition for any `marketing.surface_rendered` audit event per AUDIT_EVENTS v5.2 §6. |
+| `marketing.surface_suspended` | Drift detector (per §13.2 auto-suspension) OR governance review (cadence lapse) OR operator action | Audit pipeline (`marketing.surface_drift` per AUDIT_EVENTS v5.2 §6 if drift-driven); Marketing surface rendering services (immediate suspension); Notifications module | marketing_copy_id, tenant_id, country_of_care, version, suspension_reason, suspension_effective_at | Per I-016 immutable. Surface re-enabled only via fresh `marketing.surface_published` event after re-review. |
+
+### Tenant-scope rule for research and marketing events (added v5.2)
+
+Mirroring the AUDIT_EVENTS v5.2 §4 research-export tenant-scope rule: research and marketing domain events carry `tenant_id` of the **operating tenant** where consent (research) or copy approval (marketing) was collected. Cohort definitions or marketing copies that span multiple tenants emit one event per contributing tenant (not a single multi-tenant event), each scoped to that tenant's contribution.
+
+---
+
 ## Aggregate catalog (v5)
 
 | Aggregate | Key events | Partition key |
@@ -227,6 +251,9 @@ Same as `interaction_signal.produced.v1` with:
 | `ai_session` | started, message_sent, message_received, escalated, crisis_detected, ended | ai_session_id |
 | `safety_hold` | activated, bridge_supply_dispensed, resolved | patient_id |
 | `config_object` | drafted, validated, approved, deployed, rolled_back | config_object_id |
+| `research_consent` (added v5.2) | granted, revoked | tenant_id:patient_id |
+| `research_export` (added v5.2) | requested, delivered | tenant_id:export_id |
+| `marketing_surface` (added v5.2) | published, suspended | tenant_id:marketing_copy_id |
 
 ---
 
@@ -279,3 +306,4 @@ Each consumer group tracks its lag (latest event processed vs latest event emitt
 
 - **v5.0** — Initial Domain Events contract.
 - **v5.1** — Adds `tenant_id` to event envelope, `tenant_id` to actor block, composite `partition_key` rules for tenant-scoped streams, single-tenant consumer-default rules, anti-patterns specific to multi-tenancy. Adds Platform Admin actor type. Threading remediation per Adversarial Counsel Review v1.0 finding CRITICAL-01. Existing envelope fields preserved; envelope is purely additive.
+- **v5.2 (2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact `Phase3_Group3_Contracts_v1_10_Edits_2026-05-01.md` §DOMAIN_EVENTS)** — Adds 4 research domain events (`research_consent.granted`, `research_consent.revoked`, `research_export.requested`, `research_export.delivered`) per ADR-028 with full payload definitions including `consent_type`, `version_presented`, `scope`, `asymmetric_retraction_acknowledgment` for consent events, and complete cohort + DSA + k-anonymity + audit-pairing fields for export events. Adds 2 marketing domain events (`marketing.surface_published`, `marketing.surface_suspended`) per ADR-027. Adds tenant-scope rule for research and marketing events (operating-tenant scoped; multi-tenant cohorts/copies emit one event per contributing tenant). Adds 3 new aggregates to the catalog (`research_consent`, `research_export`, `marketing_surface`) with composite `tenant_id:aggregate_id` partition keys. Per I-029 binding: failed-export `research_export.delivered` is NOT emitted (audit-side `research.export_completed` records the attempted-and-failed completion per `status = invalidated`). Per I-030: research consent events MUST NOT cascade to care-delivery subscribers. Existing events preserved without modification; v5.2 is purely additive.

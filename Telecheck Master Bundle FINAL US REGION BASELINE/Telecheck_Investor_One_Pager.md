@@ -39,7 +39,11 @@ Acquisition engines (food scanning, fitness tracking, pregnancy tracking, AI ass
 
 ## Market
 
-**Anchor market: Ghana.** 34.5M population, 70% internet penetration, 113% mobile connection rate. Real chronic-care demand (diabetes, hypertension), real herb-drug interaction demand, real counterfeit medication risk. Clinical partners: Korle Bu Hospital, Ghana FDA. Mobile money infrastructure established.
+**Pilot market: Ghana, within emerging markets.** 34.5M population, 70% internet penetration, 113% mobile connection rate. Real chronic-care demand (diabetes, hypertension), real herb-drug interaction demand, real counterfeit medication risk. Clinical partners: Korle Bu Hospital, Ghana FDA. Mobile money infrastructure established. Ghana is the first concrete deployment in a broader emerging-markets posture (per ADR-024 country-driven configuration).
+
+**Brand structure:** Emerging markets are vertically integrated under the Heros Health consumer brand (country-instanced via subdomains — `heroshealth.com`, `ghana.heroshealth.com`, etc.). Telecheck is the platform / B2B brand that operates underneath; tenant-operator teams and platform infrastructure use the `Telecheck-{country}` operating-tenant naming. The B2B platform line (telehealth-platform-as-a-service for partner organizations) is sold under the Telecheck brand.
+
+**Strategic capability — Posture A research data partnership (Release 2):** Per ADR-028, the platform is architected for parent-level WHO/UN research data partnerships at Release 2. 5th-tier optional patient consent, country-scoped Research Ethics Committee oversight, cohort-level k-anonymity-floored aggregate exports, signed Data Sharing Agreement gating. Behavior-changing post-market protocols remain absolute non-goal (Posture B excluded).
 
 **Expansion path:** Ghana → West Africa (Nigeria, Kenya) → global including US. Architecture is global from day one — jurisdiction-aware governance, per-market protocol activation, cloud-hosted.
 
@@ -66,4 +70,10 @@ Mobile-first, low-friction patient acquisition led by tracking, self-assessment,
 
 ---
 
-*Telecheck is a smart digital healthcare platform that combines telemedicine, pharmacy, labs, monitoring, and AI into one system. Ghana launch ready. Global architecture. Defensible intelligence.*
+*Telecheck is a smart digital healthcare platform that combines telemedicine, pharmacy, labs, monitoring, and AI into one system. Pilot market Ghana (within emerging markets) launch ready under the Heros Health consumer DBA. Global architecture. Defensible intelligence.*
+
+---
+
+## Document control / v1.10 cycle additions
+
+- **v1.10 cycle additions — 2026-05-02 (per v1.10.1 hygiene cycle physical merge of Phase5 delta Group 5E, Rows 15 + 23 + 80):** "Anchor market: Ghana" reframed as "Pilot market: Ghana, within emerging markets" (C2). Brand structure made explicit: emerging markets vertically integrated under Heros Health consumer DBA (country-instanced via subdomains); B2B platform line sold under Telecheck (C3). Posture A research data partnership added as Release 2 strategic capability (C5; per ADR-028 v0.5). Body copy otherwise preserved.

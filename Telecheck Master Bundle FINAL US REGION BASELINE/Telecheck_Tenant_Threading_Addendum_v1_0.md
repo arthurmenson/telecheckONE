@@ -275,9 +275,39 @@ Future remediation cycles may bump individual v1.0 documents to v1.1 incorporati
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §Tenant_Threading row 31)
+
+### Tenant ID examples sweep — C3 brand-structure refresh (Row 31)
+
+All §3.X slice addenda using `Heros-Health` as the US tenant ID example are renamed to `Telecheck-US`. Where consumer-brand context is relevant (patient-facing surfaces, marketing copy, notification sender display name), the parenthetical qualifier "Heros Health DBA" is appended.
+
+**Before / after pattern (applies wherever `Heros-Health` appeared as a tenant ID example in v1.0 §3.X content):**
+
+| Before | After |
+|---|---|
+| `tenant_id: Heros-Health` | `tenant_id: Telecheck-US` |
+| "the Heros tenant" | "the Telecheck-US tenant (Heros Health DBA)" |
+| "Heros admin selects..." | "Telecheck-US tenant admin (Heros Health DBA scope) selects..." |
+| `https://heros-health.example.com/...` | `https://heroshealth.com/...` (consumer subdomain per `tenant.consumer_subdomain`) |
+| sender_display_name: "Heros" | sender_display_name: "Heros Health" (consumer DBA, sourced from `tenant.consumer_dba`, never from `tenant.id`) |
+
+The same sweep applies symmetrically to Telecheck-Ghana: bare `Heros-Ghana` or `Telecheck Ghana` references in §3.X addenda are normalized to operating tenant `Telecheck-Ghana` with consumer DBA `Heros Health Ghana` where consumer-brand context applies.
+
+**Cross-references:**
+- Master PRD v1.10 §17 (canonical brand-vs-identifier rule)
+- Glossary v5.2 §Brand and tenant terms
+- CDM v1.2 v1.10 cycle additions §Tenant entity (consumer_dba, legal_entity, consumer_subdomain columns)
+- RBAC v1.1 v1.10 cycle additions §Tenant scoping examples (Row 29)
+- MARKET_LAUNCH v5.1 §Cross-reference to Master PRD §10.5 (program catalog architecture)
+
+This sweep is **mechanical** (find-and-replace pattern with optional DBA qualifier where consumer-brand context applies). No semantic change to the tenant-threading model itself; only the example values change. The §3.X subsection structure and per-slice threading content remain valid.
+
+---
+
 ## Document control
 
 - **v1.0 (refreshed 2026-04-26 per ADR-026, US Region Migration Cycle U-003)** — Added single Phase 2 media-routing note in §3.3 Sync Video Consult Slice Per-country adapter notes: optional LiveKit edge node in af-south-1 or eu-west-1 for Ghana media RTT reduction while data plane remains us-east-1. Explicitly Phase 2; not launch scope. No other §3.X content modified; no broader topology change. No version bump (single additive note within an existing subsection; consistent with this addendum's per-section additive structure).
 - **v1.0** — NEW addendum produced as remediation for Adversarial Counsel Review v1.0 finding CRITICAL-05. Threads multi-tenancy and country-driven configuration through 14 unchanged v1.0 slice PRDs and IA documents. Authoritative at the same tier as the documents it extends. May be superseded section-by-section as individual documents are bumped to v1.1 in future cycles.
+- **v1.0 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §Tenant_Threading row 31)** — Additive content under "v1.10 cycle additions" section above. Mechanical tenant-ID examples sweep per C3 brand structure: all `Heros-Health` US tenant ID examples → `Telecheck-US` with `Heros Health` DBA qualifier where consumer-brand context applies; symmetric refresh for Telecheck-Ghana / Heros Health Ghana. Sender display names sourced from `tenant.consumer_dba` per CDM v1.2 v1.10 cycle additions, never from `tenant.id`. No semantic change to tenant-threading model; example values only. Per Master PRD v1.10 §17 + Glossary v5.2 §Brand and tenant terms + CDM v1.2 v1.10 cycle additions + RBAC v1.1 v1.10 cycle additions. No version-number bump (entry-level refresh; addendum remains at v1.0).
 - **Next review:** after the first individual v1.0 → v1.1 slice PRD bump completes, to verify the addendum's content was correctly absorbed and the §3.X subsection can be marked superseded.
 - **Change discipline:** per-document additions to this addendum require Engineering Lead + Tenant Clinical Lead sign-off where the addition affects clinical workflow.

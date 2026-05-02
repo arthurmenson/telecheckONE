@@ -208,9 +208,41 @@ For an engineering team that has v1.0 RBAC partially in place:
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §RBAC rows 29, 73)
+
+### Tenant scoping examples — C3 brand-structure refresh (Row 29)
+
+All Tenant Admin role examples in this matrix that referenced `Heros tenant admin` are rewritten to `Telecheck-US tenant admin (Heros Health DBA scope)`. The role description's scope clarification distinguishes operating-tenant identifier (`Telecheck-US`) from the patient-facing consumer DBA (`Heros Health`). Same pattern applies to `Telecheck-Ghana tenant admin (Heros Health Ghana DBA scope)`.
+
+### Research data roles (Row 73 — NEW per ADR-028)
+
+Three new roles added to the **Tenant Admin hierarchy** (with Platform Admin oversight per existing dual-hierarchy rules):
+
+| Role | Hierarchy | Permissions | Bound by |
+|---|---|---|---|
+| `Research Data Steward` | Tenant Admin | Define cohorts (`POST /research/cohort-definitions`); manage DSA lifecycle (excluding activation, which requires quad sign-off); initiate exports (`POST /research/exports/initiate`); read DSA + cohort audit chain at high_pii sensitivity. | I-029 (export gate) + I-031 (audit retention) audit obligations; tenant-scoped per I-023. Cannot single-handedly activate a DSA — activation is quad sign-off (Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead per ADR-028 v0.4) + REC concurrence per `research_ethics_review_body.per_dsa_review_required`. |
+| `Research Ethics Committee Member` | External oversight (read-only, scoped) | Read research export audit chain (high_pii sensitivity); read consent text history (per CCR `research_ethics_review_body.approval_reference_id`); read DSA details. **Cannot modify state**; cannot initiate exports; cannot define cohorts. | Read-only oversight role; access logged per I-031 audit envelope. Per-DSA scope per `research_ethics_review_body.per_dsa_review_required`. |
+| `External Research Partner` | External (highly scoped) | Receive delivered exports per signed DSA; read own DSA details. **Cannot access patient-level data**; cannot navigate to other partners' DSAs; cannot modify cohort definitions; cannot retrieve audit chain. | Strictly partner-scoped per signed DSA; per-DSA isolation enforced at API layer + data layer. No cross-DSA access. |
+
+**Activation gate signers** for the `consent_only → active` CCR transition (per MARKET_LAUNCH v5.1 Research data partnership activation gate):
+- Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead (quad sign-off per ADR-028 v0.4)
+- REC concurrence per `research_ethics_review_body.per_dsa_review_required`
+- Country Launch Director (per MARKET_LAUNCH v5.1 — separate from quad sign-off; per-country launch authority)
+
+**Activation gate signers** for the marketing posture activation (per MARKET_LAUNCH v5.1 Marketing posture activation gate):
+- Marketing copy governance lead + Clinical Safety Officer + Regulatory Affairs Lead (triple sign-off per ADR-027 v0.5/v0.6)
+- Country Launch Director
+
+### Role count post-v1.10
+
+Total roles post-v1.10: **(v1.1 baseline roles) + 3 research roles**. Marketing copy governance lead is a workstream-discipline designation (not a new RBAC role; uses existing Marketing role with the governance-lead designation artifact ID per CCR `marketing_governance_lead_designation_artifact_id`).
+
+---
+
 ## Document control
 
 - **v1.1** — Two role hierarchies introduced (Platform Admin + Tenant). Platform Admin operations on specific tenants are audited and notify tenant admins. Tenant Owner / Tenant Admin distinction. Per-resource permissions matrix updated for multi-tenancy. Break-glass procedure documented. Migration notes from v1.0 included.
+- **v1.1 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §RBAC rows 29, 73)** — Additive content under "v1.10 cycle additions" section above. Tenant Admin role examples reframed to operating-tenant naming with consumer-DBA qualifier (`Telecheck-US tenant admin (Heros Health DBA scope)`, `Telecheck-Ghana tenant admin (Heros Health Ghana DBA scope)`) per C3 brand structure. 3 new research roles added per ADR-028: Research Data Steward (define cohorts, manage DSA lifecycle excluding activation, initiate exports — bound by I-029 / I-031); Research Ethics Committee Member (external oversight, read-only, scoped to per-DSA); External Research Partner (highly scoped, receives delivered exports per signed DSA only). Activation gate signers documented for marketing posture (ADR-027 v0.5/v0.6 triple sign-off + Country Launch Director per MARKET_LAUNCH v5.1) and research data partnership (ADR-028 v0.4 quad sign-off + REC concurrence + Country Launch Director per MARKET_LAUNCH v5.1). Per ADR-027 + ADR-028 + INVARIANTS v5.2 + AUDIT_EVENTS v5.2 + MARKET_LAUNCH v5.1. Existing v1.1 roles and break-glass procedure preserved without modification. No version-number bump (entry-level refresh).
 - **v1.0** — Initial RBAC matrix (single-tenant assumption); superseded.
 - **Next review:** after engineering implements the platform-admin / tenant-admin separation and runs a security review against the matrix.
 - **Change discipline:** changes to roles, permissions, or break-glass procedure require Engineering Lead + Privacy Officer + Product Lead sign-off.

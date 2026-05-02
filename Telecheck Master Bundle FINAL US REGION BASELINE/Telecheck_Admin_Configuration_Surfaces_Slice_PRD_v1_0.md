@@ -376,8 +376,38 @@ All three surfaces share the same audit model:
 
 ---
 
+## 12. v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 52)
+
+### 12.1 Marketing copy governance admin surface (Row 52 — per ADR-027)
+
+This section adds a new admin configuration surface for marketing-copy lifecycle management, scoped to the Tenant Admin and the Marketing copy governance lead role per ADR-027 v0.6.
+
+**Surface purpose.** The Marketing copy governance admin surface is the operator-side console for the full marketing-copy lifecycle described in ADR-027:
+
+- **Draft** marketing copy (free-form authoring; structured `MarketingCopy` entity per TYPES v5.2).
+- **Classify** copy as program-level or molecule-level per Master PRD §13.2 working definition (5 criteria; borderline fail-closed).
+- **Submit** to the §13.2 Governance review process (triple sign-off: Product + Regulatory Affairs + Clinical Safety).
+- **View** review status (draft / in_review / approved / rejected / suspended / expired) and reviewer attestations recorded against the structured `marketing_copy_governance_evidence` object per CCR_RUNTIME v5.2 marketing block.
+- **View** approval validity expiry and review-cadence countdown driven by CCR `marketing_governance_review_cadence_months`.
+- **Suspend** an approved surface (operator-initiated; emits `marketing.surface_suspended` per DOMAIN_EVENTS v5.2).
+- **Republish** a suspended surface after the §13.2 review process completes a fresh pass (emits `marketing.surface_published` per DOMAIN_EVENTS v5.2).
+
+**Roles.** The surface is scoped to:
+
+- **Tenant Admin** — full read/write access to marketing copy in the tenant's scope.
+- **Marketing copy governance lead** — designated per CCR `marketing_governance_lead_designation_artifact_id`; required signer for the Product axis of triple sign-off.
+
+Other governance signers (Regulatory Affairs, Clinical Safety) sign in via the §13.2 review surface but do not require write access to the marketing-copy admin console.
+
+**Activation gate dependency.** The surface is active only when the MARKET_LAUNCH v5.1 marketing posture activation gate (6 conditions) has been satisfied for the country_of_care AND CCR `marketing.molecule_level_marketing_permitted = permitted` for that country. When `permitted = pending_evidence`, the surface allows drafting and submission only — publishing is gated on activation. When `permitted = prohibited`, the surface is read-only (existing molecule-level copy archived; new molecule-level submissions blocked at L4 publish per Forms Engine §25).
+
+**Cross-references:** ADR-027 v0.6 (Country-Conditional DTC Marketing Posture, Accepted at v1.10); MARKET_LAUNCH v5.1 marketing posture activation gate; Master PRD v1.10 §13.2; CCR_RUNTIME v5.2 marketing block; TYPES v5.2 (`MarketingCopy`, `MarketingCopyGovernanceEvidence`); AUDIT_EVENTS v5.2 §6; DOMAIN_EVENTS v5.2 (`marketing.surface_published`, `marketing.surface_suspended`).
+
+---
+
 ## Document control
 
 - **v1.0** — Combined Admin Configuration Surfaces slice PRD covering Guardrail Configuration (#18), Moderation Policy Configuration (#19), and Protocol Activation & Governance (#20). Defines shared architecture (configuration objects, lifecycle, floor enforcement, role-based access), individual surface parameters and editor capabilities, test-before-deploy workflow, cross-surface dependency detection, and integration with the Market Rollout Cockpit. Derived from Master PRD v1.6 §14 and §13.1–§13.5.
+- **v1.10 cycle addition (2026-05-02 — v1.10.1 hygiene cycle physical merge of Phase5 delta Row 52):** Added §12 Marketing copy governance admin surface per ADR-027 v0.6. Tenant Admin / Marketing copy governance lead surface for drafting, classifying (program/molecule), submitting to §13.2 Governance review process, viewing approval validity, suspending/republishing. Activation gated on MARKET_LAUNCH v5.1 6-condition gate and CCR `marketing.molecule_level_marketing_permitted` state.
 - **Next review:** after the Market Rollout Cockpit is operational and cross-surface dependency checking is implemented; after the first protocol activation in Ghana provides real-world feedback on the activation workflow.
 - **Change discipline:** changes to configuration lifecycle stages, platform floor enforcement model, deployment approval requirements, or rollback mechanics require explicit owner sign-off and must be reflected in the Master PRD §14 if they alter the platform model.

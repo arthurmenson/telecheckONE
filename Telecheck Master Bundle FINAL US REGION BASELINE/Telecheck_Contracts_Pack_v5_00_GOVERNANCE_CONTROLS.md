@@ -1,6 +1,7 @@
 # 00-GOVERNANCE-CONTROLS.md — Contracts Pack v5
 
-**Status:** canonical · **Version:** 5.1 · **Owner:** product lead + clinical safety officer + market operations lead · **Consumers:** admin configuration surfaces, AI governance, moderation governance, market rollout
+**Status:** canonical · **Version:** 5.2 · **Owner:** product lead + clinical safety officer + market operations lead · **Consumers:** admin configuration surfaces, AI governance, moderation governance, market rollout
+
 **Source:** Net-new contracts from consolidated Contracts Pack, reconciled into modular structure per Artifact Registry v2.3 §2 Decision 1.
 
 ---
@@ -151,3 +152,60 @@ Per ADR-023 multi-tenancy Model A:
 - Safety signals are evaluated per-patient (always tenant-scoped per the patient-tenant relationship).
 - Override authorization per RBAC v1.1: clinician override authority is scoped to clinicians authorized for that tenant.
 - Cross-tenant signal pattern detection (a defect appearing in multiple tenants) flagged at platform level for Platform Clinical Governance review with tenant notification.
+
+---
+
+## 7. Research data export control envelope (added v5.2 per ADR-028)
+
+### 7.1 Research export CONFIG controls
+
+| Config control | Bound by | Owner |
+|---|---|---|
+| Activation state of research data partnership | CCR `research_data_partnership_active` 3-state enum | Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead (quad sign-off per ADR-028 v0.4) |
+| Permitted data domains for export | CCR `research_permitted_data_domains` closed enum (subset of `chronic_disease_longitudinal | ncd_surveillance | pharmacovigilance_signal | population_health_aggregate`) | Same quad sign-off + REC concurrence per `research_ethics_review_body.per_dsa_review_required` |
+| K-anonymity threshold | CCR `k_min_default` (default 11; per-DSA increases permitted; decreases below `k_min_default` prohibited per I-029) | Privacy Officer + Engineering Lead + REC concurrence |
+| Cross-border transfer mechanism | CCR `cross_border_research_transfer_permitted` enum + `cross_border_research_transfer_evidence` companion structured object | Privacy Officer + Legal counsel artifact (per Master PRD §22.3) |
+| DSA activation | DataSharingAgreement entity (per TYPES v5.2) | Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead quad sign-off + partner organization sign |
+
+### 7.2 Research export INCIDENT controls
+
+**Incident response audit-path discipline (aligned with AUDIT_EVENTS v5.2 §5 export event family):** When an incident triggers export invalidation, the audit chain MUST capture the failure transparently. Per AUDIT_EVENTS v5.2 §5: `research.export_completed` MAY emit with the violated state recorded in payload (e.g., `dsa_status_at_export = expired`, `permitted_data_domains_at_export` showing drift, `k_threshold_actual < k_min_required`); the event's `status` field carries `invalidated` to mark the failed completion. Concurrently, the export pipeline MUST emit a `signal_enforcement_trigger` Category B audit event capturing the enforcement action (export artifact destruction; partner notification; engineering review trigger). The two records compose to give a complete audit trail of "what happened" + "what we did about it." Bare suppression of the completion event (no record at all) is forbidden — silent invalidation is an audit gap per I-003.
+
+| Incident type | Triggers | Response |
+|---|---|---|
+| DSA expiry mid-export | `dsa_status_at_export` ≠ `active` at completion-time check | Per I-029: `research.export_completed` MAY emit with `dsa_status_at_export = expired/suspended/retired` and `status = invalidated`; export artifact destroyed; `signal_enforcement_trigger` Category B audit emitted with enforcement action detail; partner notified per DSA terms. |
+| K-anonymity threshold violation | `k_threshold_actual < k_min_required` at de-identification | Per I-029: `research.export_completed` MAY emit with `k_threshold_actual` value recorded and `status = invalidated`; export artifact destroyed; `signal_enforcement_trigger` Category B audit emitted; engineering review of cohort definition required before re-attempt. |
+| Permitted-domain drift | `permitted_data_domains_at_export` does not match the `research.export_initiated` snapshot at completion time | Per I-029: `research.export_completed` MAY emit with `permitted_data_domains_at_export` showing drift and `status = invalidated`; export artifact destroyed; `signal_enforcement_trigger` Category B audit emitted; CCR audit triggered to determine whether enum was modified mid-export (governance violation if so). |
+| Consent revocation mid-export | `research_consent.revoked` event for any patient in the cohort during the export window | Cohort suspended; `signal_enforcement_trigger` Category B audit emitted; if k-anonymity remains satisfiable after exclusion, cohort can recompute and re-export under new `consent_cohort_snapshot_hash` (new `research.export_initiated` event with new snapshot); if not satisfiable, export invalidated per the standard discipline above. |
+
+### 7.3 Research export SIGNAL controls
+
+The platform emits dashboard / monitoring signals on:
+
+- DSA expiry within 30 days (warning) / 7 days (urgent escalation)
+- REC approval expiry within 30 days
+- Cohort cell suppression rate exceeding 25% (potential cohort design issue)
+- Marketing copy governance review approaching cadence expiry (per `marketing_governance_review_cadence_months`)
+- Cross-border transfer evidence approaching counsel artifact expiry
+
+---
+
+## 8. PolicyAuthorization framework — placeholder (added v5.2 per ADR-029 / future ADR-030)
+
+**PolicyAuthorization placeholder.** The PolicyAuthorization entity (per TYPES v5.2 placeholder skeleton; AUTONOMY_LEVELS contract §6 cross-reference) is the autonomy-grant primitive for AI workloads operating at autonomy levels above `action_with_confirm`. **At v1.0, PolicyAuthorization is NOT activated** — no AI workload may invoke an autonomy level requiring it. The skeleton exists to:
+
+1. Document the data shape that future ADR-030 implementations will consume.
+2. Reserve the `pau_` ID prefix and the placeholder schema in TYPES v5.2.
+3. Provide the runtime validator with a target type to reject (per AUTONOMY_LEVELS §5 rule 4 — reserved autonomy levels MUST be rejected for lack of a valid PolicyAuthorization reference at v1.0).
+
+When ADR-030 (Tiered Autonomy Progression Model) activates, the PolicyAuthorization skeleton becomes operative. Activation prerequisites per AUTONOMY_LEVELS contract §3.1 / §3.2 (including triple sign-off, per-market regulatory clearance, named successor invariant superseding I-012, augmented safety case for `fully_autonomous`, activation audit event in immutable audit chain).
+
+This contract does NOT implement PolicyAuthorization at v1.0 — only documents the placeholder. Implementation lands when ADR-030 is accepted and a follow-on GOVERNANCE_CONTROLS revision is authored.
+
+---
+
+## Document control
+
+- **v5.0** — Initial governance controls contract (CONFIG, INCIDENT, SIGNAL contracts).
+- **v5.1** — Adds §6 Tenant scoping per ADR-023. Tenant-scoped vs platform-scoped configuration / incident / signal controls. Threading remediation per Adversarial Counsel Review v1.0 finding CRITICAL-01. Existing CONFIG/INCIDENT/SIGNAL contracts preserved without modification.
+- **v5.2 (2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact `Phase3_Group3_Contracts_v1_10_Edits_2026-05-01.md` §GOVERNANCE_CONTROLS)** — Adds §7 Research data export control envelope per ADR-028: §7.1 CONFIG controls (activation state, permitted data domains, k-anonymity threshold, cross-border transfer mechanism, DSA activation — all bound by ADR-028 v0.4 quad sign-off + REC concurrence + counsel artifacts as applicable); §7.2 INCIDENT controls with audit-path discipline (DSA expiry mid-export, k-anonymity threshold violation, permitted-domain drift, consent revocation mid-export — all use the AUDIT_EVENTS v5.2 §5 incident-response pattern of `research.export_completed` with `status = invalidated` paired with `signal_enforcement_trigger` Category B audit; bare suppression forbidden per I-003); §7.3 SIGNAL controls (DSA expiry warnings, REC approval expiry, cohort suppression rate, marketing review cadence expiry, cross-border counsel artifact expiry). Adds §8 PolicyAuthorization framework placeholder per ADR-029 / future ADR-030 (NOT activated at v1.0; documents shape, reserves `pau_` prefix and skeleton schema in TYPES v5.2, provides validator a target type to reject for reserved autonomy levels). Per ADR-028 + ADR-029 + INVARIANTS v5.2 I-029 / I-030 / I-031 + AUDIT_EVENTS v5.2 §5 + AUTONOMY_LEVELS contract §3.1/§3.2/§5 + Master PRD v1.10 §15.3. Existing §1–§6 (CONFIG / INCIDENT / SIGNAL contracts + tenant scoping) preserved without modification. v5.2 is purely additive.

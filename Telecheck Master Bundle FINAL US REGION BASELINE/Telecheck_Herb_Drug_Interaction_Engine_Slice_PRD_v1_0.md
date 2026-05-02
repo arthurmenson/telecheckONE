@@ -448,6 +448,18 @@ The herb–drug engine succeeds when:
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 8)
+
+**Cycle C2 — Emerging-markets framing reframe.** §1 "strongest differentiators and its most distinctive Ghana-specific capability" and "Strategic positioning ... institutional partnership with Korle Bu Hospital and the Ghana FDA" are reframed conceptually as an **emerging-markets differentiator** (piloting in Ghana via Telecheck-Ghana; expandable per CCR herb-drug knowledge-base scope). The capability is not Ghana-specific in architecture — phytochemical-aware interaction checking applies wherever herbal medicine use is concurrent with prescription medication, and the knowledge-base scope and governance are CCR-driven per ADR-024. Concrete pilot citations (Korle Bu Hospital, Ghana FDA) are preserved where they refer to the actual Telecheck-Ghana pilot relationships rather than to the architectural posture.
+
+**Master PRD §3 Pillar reference verified.** Master PRD v1.10 §10 Pillar 5 (Herb–Drug Interaction Engine) remains the parent reference; Master PRD §3 Strategic Pillars carry the emerging-markets framing post-v1.10 promotion.
+
+**Cross-references (v1.10):** ADR-024 (CCR country-driven configuration), Master PRD v1.10 §3 (strategic pillars — emerging-markets framing), Master PRD v1.10 §10 Pillar 5.
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 8 (Cycle C2).
+
+---
+
 ## Document control
 
 - **v1.0** — Initial Herb–Drug Interaction Engine slice PRD. Defines three check classes (pharmacokinetic, pharmacodynamic, herb–condition), the evidence quality field (established/emerging/theoretical), patient reporting pathways (structured entry with local names, free text, photo upload), knowledge base scope and governance, signal consumption model, and edge case handling. Derived from Master PRD v1.6 §10 Pillar 5, Medication Interaction Engine Slice PRD v1.0 §8, and Flagged Items Resolution v1.0.
