@@ -422,15 +422,15 @@ Per ADR-026 (supersedes ADR-025): AWS, single region (us-east-1 Virginia), with 
 | DR region | us-west-2 (cold DR per ADR-026) |
 | DR testing | Quarterly failover test |
 
-### 11.4 Cross-border posture (per ADR-026)
+### 11.4 Cross-border posture (per ADR-026; rewritten in place 2026-05-02 per Codex Scope 4 HIGH-1 finding to use C3 operating-tenant + DBA framing)
 
-The platform runs in `us-east-1` (United States). Both Heros (US tenant) and Telecheck-Ghana (Ghana tenant) data are processed in `us-east-1`. This is an explicit, accepted architectural posture per ADR-026.
+The platform runs in `us-east-1` (United States). Both **Telecheck-US (Heros Health DBA; operated by Telecheck Health LLC; consumer surface at heroshealth.com)** and **Telecheck-Ghana (Heros Health Ghana DBA; operated by Telecheck-Ghana Ltd.; consumer surface at ghana.heroshealth.com)** data are processed in `us-east-1`. This is an explicit, accepted architectural posture per ADR-026.
 
-**Heros (US tenant):** Standard HIPAA-region posture. Heros patient data is processed in the United States. The BAA chain (Heros → Telecheck → AWS US) is a standard chain.
+**Telecheck-US (operated by Telecheck Health LLC; trading as Heros Health DBA):** Standard HIPAA-region posture. Telecheck-US patient data is processed in the United States. The BAA chain — **patch 2026-05-02 per Codex Round-2 Scope 4 HIGH-2 finding (restored Telecheck parent/platform business-associate role that the prior in-place rewrite inadvertently dropped):** **Telecheck Health LLC (Telecheck-US tenant operator; Heros Health DBA consumer surface) → Telecheck parent/platform (business associate; data-plane operator and per-tenant KMS / RLS enforcement layer per ADR-023) → AWS US (subprocessor)** — is the standard HIPAA chain. The Telecheck parent/platform tier is a separate BAA party because it operates the multi-tenant data plane and per-tenant encryption keys; counsel review, subprocessor documentation, and launch-readiness evidence (per OR-303) MUST treat the platform tier as a separate business associate. Patient-facing surfaces source the consumer DBA brand (`Heros Health`) via `tenant.consumer_dba`; the operating-tenant identifier (`Telecheck-US`) is internal/B2B only.
 
-**Telecheck-Ghana (Ghana tenant):** Cross-border posture. Ghana patient data is processed in the United States. The architectural decision is recorded; the operational implementation has the following requirements:
+**Telecheck-Ghana (operated by Telecheck-Ghana Ltd.; trading as Heros Health Ghana DBA):** Cross-border posture. Telecheck-Ghana patient data is processed in the United States. The data-processing chain (consistent with the US-side restoration above per Codex Round-2 Scope 4 HIGH-2 patch) is **Telecheck-Ghana Ltd. (Telecheck-Ghana tenant operator; Heros Health Ghana DBA consumer surface) → Telecheck parent/platform (data-plane operator and per-tenant KMS / RLS enforcement layer per ADR-023) → AWS US (subprocessor)**. The architectural decision is recorded; the operational implementation has the following requirements:
 
-- Ghana DPC registration for cross-border processing with AWS (US) as a sub-processor
+- Ghana DPC registration for cross-border processing with the Telecheck parent/platform (data-plane operator) and AWS (US) as a sub-processor
 - Specific contractual mechanism (jurisdictional instrument under Ghana DPC) **[COUNSEL-REQUIRED]**
 - Patient-facing privacy notice disclosing US processing **[COUNSEL-REQUIRED]** for specific language
 - Clinician onboarding disclosure of US processing
@@ -542,10 +542,46 @@ Asynchronous events published:
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §System_Architecture rows 42, 72)
+
+### Cross-border posture refresh — C3 brand-structure cleanup (Row 42)
+
+§11.4 "Cross-border posture" prose updated to reflect operating-tenant naming with consumer-DBA qualifier:
+
+> "Both Telecheck-US (Heros Health DBA — operating tenant; consumer surface at heroshealth.com) and Telecheck-Ghana (Heros Health Ghana DBA — operating tenant; consumer surface at ghana.heroshealth.com) data are processed in us-east-1 per ADR-026 single-region posture (I-028 jurisdictional decoupling). Jurisdictional regulatory residency obligations remain country-driven via CCR; physical hosting region is single us-east-1 at launch."
+
+C3 brand-structure cleanup applied; previous v1.2 phrasing referencing "Heros" without qualifier or "Heros (US tenant)" superseded by the operating-tenant + DBA qualifier framing.
+
+### Research data export module (Row 72 — NEW per ADR-028)
+
+A new module is added to the system architecture: **Research Data Export Module** (positioned alongside Care Delivery and Governance modules, bringing module count to **16**).
+
+**Module purpose:** Implements the §15.3 4-layer research export pipeline. Tenant-scoped per I-023; export records carry operating-tenant ID per AUDIT_EVENTS v5.2 §4 research-export tenant-scope rule.
+
+**4-layer pipeline:**
+
+1. **Cohort definition layer.** Operator-side surface (Research Data Steward role per RBAC v1.1 v1.10 cycle additions) defines cohorts by clinical inclusion/exclusion criteria without seeing PHI. Cohort definitions versioned, audited via `research.cohort_defined`. Reviewed against active DSA `permitted_data_domains` subset (per CCR `research_permitted_data_domains` closed enum and DSA-side scope).
+2. **De-identification engine.** Transforms patient-level clinical records into de-identified records meeting CCR `de_identification_standard` (Safe Harbor + k-anonymity per default; `k_min_default = 11` at launch). Removal of 18 HIPAA Safe Harbor identifier categories combined with k-anonymity threshold for combination-attack protection.
+3. **Aggregation layer.** Produces population-level statistics (counts, distributions, longitudinal trends, prevalence, adherence rates, AE rates, outcome trajectories) without exposing patient-level data. Subject to `k_min` floor — cells with count < `k_min` suppressed (not silently merged) per I-029.
+4. **DSA enforcement.** Every external partner has a signed DSA (per DataSharingAgreement entity — CDM v1.2 v1.10 cycle additions). Access gated on DSA `validity_to >= now` AND `status = active`. Per-DSA `permitted_data_domains` MUST be subset of CCR country-level `research_permitted_data_domains`. Per-DSA `k_min_required` MAY exceed `k_min_default` but MUST NOT be lower (per I-029).
+
+**Audit posture:** All research export operations emit at `audit_sensitivity_level = high_pii` per I-031. Failed exports follow the AUDIT_EVENTS v5.2 §5 + GOVERNANCE_CONTROLS v5.2 §7.2 incident-response audit-path discipline (`research.export_completed` with `status = invalidated` paired with `signal_enforcement_trigger` Category B audit; bare suppression forbidden per I-003).
+
+**Tenant scoping:** The module is tenant-scoped per I-023. Export records carry the operating-tenant ID where consent was collected (parent-level partnership reference via DSA). Cohort definitions or marketing copies that span multiple tenants emit one event per contributing tenant per AUDIT_EVENTS v5.2 §4.
+
+**Activation:** Per ADR-028 quad sign-off (Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead) + REC concurrence per `research_ethics_review_body.per_dsa_review_required` + Country Launch Director per MARKET_LAUNCH v5.1 Research data partnership activation gate. NOT activated at v1.0 — Release 2 capability per ADR-028.
+
+### Module count post-v1.10
+
+**Total modules post-v1.10: 16** (15 v1.2 baseline + Research Data Export Module). Tenant Configuration module remains the 15th module per v1.1 baseline; Research Data Export Module is the 16th, added at v1.10 cycle for Release 2 activation.
+
+---
+
 ## Document control
 
 - **v1.2** — Region migration per ADR-026 (supersedes ADR-025). Hosting: us-east-1 primary, us-west-2 cold DR (was af-south-1 / us-east-1). New §11.4 "Cross-border posture" section explicitly documenting Heros (standard HIPAA region) and Telecheck-Ghana (Ghana data processed in us-east-1; jurisdictional mechanism `[COUNSEL-REQUIRED]`). §11.5 renumbered to §11.6 and reframed: warm DR, regional media routing for Ghana sync video, active-active, and per-country physical region routing all explicitly Phase 2+ or out of scope. RTO updated to "hours to low-tens-of-hours" reflecting cold DR posture (was 4 hours under warm-standby framing). Country-config abstractions (per ADR-024 and CCR runtime) continue to govern jurisdictional obligations; physical region is single us-east-1 at launch. No changes to tenant isolation mechanism (per-tenant KMS, RLS, tenant_id), the 15-module structure, or adapter abstractions. Substantive system-design content from v1.1 preserved unchanged.
+- **v1.2 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §System_Architecture rows 42, 72)** — Additive content under "v1.10 cycle additions" section above. §11.4 cross-border posture prose refreshed (Row 42) to operating-tenant + consumer-DBA qualifier framing per C3 brand structure (`Telecheck-US (Heros Health DBA)` and `Telecheck-Ghana (Heros Health Ghana DBA)` instead of bare `Heros` references). New Research Data Export Module added (Row 72) per ADR-028 — 16th module in the architecture; implements §15.3 4-layer pipeline (cohort definition layer → de-identification engine → aggregation layer → DSA enforcement); tenant-scoped per I-023; audit at high_pii per I-031; activation gated per MARKET_LAUNCH v5.1 + ADR-028 quad sign-off + REC concurrence + Country Launch Director. NOT activated at v1.0 (Release 2 capability). Per ADR-026 + ADR-028 + Master PRD v1.10 §15.3 + INVARIANTS v5.2 + AUDIT_EVENTS v5.2 + CCR_RUNTIME v5.2 + CDM v1.2 v1.10 cycle additions + RBAC v1.1 v1.10 cycle additions. Existing v1.2 content (15 modules, tenant isolation, adapter abstractions, region posture per ADR-026) preserved without modification. Module count post-v1.10: 16. No version-number bump (entry-level refresh).
 - **v1.1** — Multi-tenancy added (ADR-023). Country-driven configuration (ADR-024). New Tenant Configuration module (15th module). Adapter abstractions: PaymentProvider, ClinicianNetworkProvider, PharmacyProvider, LLMProvider. External integrations updated to native-first stack matrix (ADR-022). Hosting decision: AWS af-south-1 with us-east-1 DR (ADR-025). LiveKit self-hosted for sync video (ADR-021). Anthropic Claude primary LLM with multi-provider abstraction (ADR-020). 27 entities now all tenant-scoped per Canonical Data Model v1.2.
 - **v1.0** — Initial canonical (single-tenant, single-market assumption); superseded.
-- **Next review:** after engineering team reviews adapter abstractions for completeness; after first non-trivial tenant onboarding (Heros migration) tests the platform's multi-tenant boundaries in production.
+- **Next review:** after engineering team reviews adapter abstractions for completeness; after first non-trivial tenant onboarding test (greenfield `Telecheck-US` operating tenant onboarding under the Heros Health DBA consumer surface, per HIGH-12 greenfield decision — there is no `Heros migration` work stream) exercises the platform's multi-tenant boundaries in production. *(Updated 2026-05-02 per Codex Round-7 Scope 4 MEDIUM-2 finding — was previously stated as `Heros migration`, which violates the C3 brand-structure rule (bare `Heros` as tenant identifier) AND resurrects a removed scope item per HIGH-12 decision.)*
 - **Change discipline:** changes to module boundaries, data ownership, communication patterns, or multi-tenancy enforcement layers require Engineering Lead sign-off and must be reflected in the Canonical Data Model and State Machines.

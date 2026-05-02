@@ -1266,6 +1266,26 @@ Every pharmacy action is audited:
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 11)
+
+**Cycle C2 — Emerging-markets framing reframe.** Notification-channel and payment-rail selection (referenced at §11 reminders, §12 last-mile delivery, §14/§20 dependencies) is **CCR-driven, not Ghana-specific in architecture**. The Telecheck-Ghana pilot uses WhatsApp (primary) + SMS (fallback) for notifications, mobile money for payment rails, and motorcycle-courier last-mile delivery per the CCR Ghana profile. These selections resolve at runtime per CCR `operational.notification_channels.primary_engagement` and `operational.payment_rails`. Future markets configure their own channel/rail selections in the Market Pack — e.g., the Telecheck-US tenant uses Stripe for payment rails (per ADR-024) and US carrier last-mile delivery (UPS/USPS/FedEx) per the CCR US profile.
+
+The slice's references to WhatsApp, mobile money / Paystack, and motorbike-based last-mile delivery (§11, §12.1, §20) are preserved as operationally accurate descriptions of the Telecheck-Ghana pilot configuration, not as platform-default behavior.
+
+**Cross-references (v1.10):** ADR-024 (CCR country-driven configuration), CCR `operational.notification_channels.primary_engagement`, CCR `operational.payment_rails`, Market Rollout Cockpit Slice (Market Pack per-country channel/rail configuration), Notification Spec.
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 11 (Cycle C2).
+
+### C3 brand-structure cascade — §5 / §112 verification marker (Row 41 — verify-only, no edit)
+
+**Verification (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 41):** §5 line 112 "Telecheck-Ghana operated pharmacy infrastructure (where applicable)" has been verified consistent with the v1.10 C3 brand-structure vocabulary. **No substantive edit applied.**
+
+`Telecheck-Ghana` is the canonical operating-tenant identifier under C3 (operating tenants follow `Telecheck-{country}` naming; `Telecheck` is platform/B2B-only and never consumer-facing; the consumer DBA `Heros Health Ghana` is country-instanced and patient-facing — not the correct identifier for back-office pharmacy infrastructure operated by the tenant). The §5 reference describes operating-tenant-owned pharmacy infrastructure (an operational/back-office context), so the operating-tenant identifier is the correct reference. Sentinel marker placed per Phase 5 delta Row 41 verification request.
+
+**Cross-references (v1.10):** Master Platform PRD v1.10 §17 (brand-structure rules); Phase 5 Slice/Engineering/Operations delta artifact (`Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md`) Row 41.
+
+---
+
 ## Document control
 
 - **v2.1** — Remediation revision per Adversarial Counsel Review v1.0 finding HIGH-07. Carries forward in full the Refill Slice PRD v1.0 §3, §6, §7, §8, §9, §10, §11, §12, §13 content (now §21 with v1.0 section structure preserved) and Pharmacy Portal Slice PRD v1.0 §4, §8, §9, §11, §12 content (now §22 with v1.0 section structure preserved). v2.0's "preserved from v1.0" reference-style summaries replaced with actual content. Pattern C remediation: ProductCatalog, Subscription, SubscriptionEvent, Cart, CartItem schemas in this slice now reference Canonical Data Model v1.2 §4.7-§4.11 rather than carrying inline schema; subscription state machine narrative references State Machines v1.1 §15 rather than embedding the state machine. Anti-compression rule: v2.0 was 710 lines; Refill v1.0 was 417 lines; Pharmacy Portal v1.0 was 490 lines — v2.1 carries forward the full 907 lines of v1.0 content plus v2.0's ecom additions.

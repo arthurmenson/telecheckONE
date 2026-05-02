@@ -1,6 +1,6 @@
 # 00 · Platform Invariants
 
-**Status:** canonical · **Version:** 5.1 · **Owner:** engineering lead + clinical safety officer · **Consumers:** everyone
+**Status:** canonical · **Version:** 5.2 · **Owner:** engineering lead + clinical safety officer · **Consumers:** everyone
 
 Platform invariants are non-negotiable structural guarantees. They are not configurable, not market-specific, and not overridable by any feature, admin surface, protocol activation, or operator action. They are the floor beneath the floor.
 
@@ -198,6 +198,58 @@ The Telecheck platform runs in **one AWS region** (us-east-1 at launch per ADR-0
 
 ---
 
+### I-029 · Research data export 6-condition reject-unless gate
+
+*(Originally stated as a 3-condition gate. Expanded to 5-condition v5.2 patch 2026-05-02 per Codex Round-4 Scope 2 HIGH-2 finding. Expanded to canonical 6-condition gate v5.2 patch 2026-05-02 per Codex Round-12 Scope 3 HIGH-1 finding adding the per-export grant artifact re-validation requirement. The current canonical normative form is 6 conditions; aligned across AUDIT_EVENTS v5.2 §I-029 binding, STATE_MACHINES v1.1 ResearchExportRequest reject-unless rule, OpenAPI v0.2 `/research/exports/{export_id}/complete` endpoint contract, TYPES v5.2 `ResearchDataExport.invalidation_reason` enum, GOVERNANCE_CONTROLS v5.2 §7.2 incident matrix, and CCR_RUNTIME v5.2 §Reference to invariants.)*
+
+Every research data export from the platform to a research partner requires, at minimum, ALL of the following 6 conditions to be present and valid at completion-time evaluation:
+
+1. **`dsa_status_at_export = active`** — an active Data Sharing Agreement (DSA) with the receiving partner, with `dsa_validity_to >= now` (and not in `suspended` / `expired` / `retired` state) at the completion-time check. Failure → `invalidation_reason = dsa_inactive`.
+2. **`k_threshold_actual >= k_min_required`** — k-anonymity threshold met across the de-identified output, where `k_min` defaults to 11 per Master PRD §15.3 and CCR `de_identification_standard` enum. Per-DSA increases above `k_min` are permitted (e.g., `k = 20` for high-sensitivity domains); decreases below `k_min` are prohibited. Cohort cells with `count < k_min` are suppressed in aggregation outputs (not silently merged). Failure → `invalidation_reason = k_anonymity_violation`.
+3. **`permitted_data_domains_at_export` matches the `research.export_initiated` snapshot** — the export's data classes match the DSA's `permitted_data_domains` AND the country-level CCR `research_permitted_data_domains` AND have not drifted from the `research.export_initiated` event's snapshot. (Permitted data domains are a closed enum: `chronic_disease_longitudinal`, `ncd_surveillance`, `pharmacovigilance_signal`, `population_health_aggregate` — expansion of the enum requires ADR amendment per ADR-028 Decision §6; per-DSA scope MUST be a subset of the country-level CCR scope.) Failure → `invalidation_reason = permitted_domain_drift`.
+4. **`consent_cohort_snapshot_hash_completed = consent_cohort_snapshot_hash_initiated`** — the cohort defining the contributing patient set has not changed during the export window by any mechanism (additions, removals, version bumps). Failure → `invalidation_reason = consent_cohort_change`.
+5. **Every contributing patient has active `ResearchConsent` at completion-time evaluation** (per-patient active-consent gate) — for every contributing patient, their `ResearchConsent` entity MUST satisfy `consent_type = research_data_use`, `granted_at` non-null, `revoked_at` null. Covers BOTH (a) mid-export `research_consent.revoked` events that fire during the export window AND (b) pre-existing stale/invalid consent records that existed before initiation. Consent revocation is asymmetric on retraction per §15.2 — already-shared aggregate data cannot be retracted, but the failed export itself MUST NOT deliver. Failure → `invalidation_reason = consent_revocation_mid_export`.
+6. **Per-export grant artifact (added v5.2 patch 2026-05-02 per Codex Round-12 Scope 3 HIGH-1 finding):** the per-export grant artifact (PolicyAuthorization or named-equivalent per CCR_RUNTIME v5.2 + Cockpit research block + OpenAPI v0.2 `/research/exports/initiate` 6th initiation guard) MUST exist, MUST be unexpired at completion-time, MUST match the export by ID/hash binding, AND MUST still attest the same multi-party signer chain (ADR-028 v0.4 quad sign-off + REC concurrence per `per_dsa_review_required`). Grant expiry, revocation, or signer-chain-attestation invalidation between initiation and completion fails this condition. Failure → `invalidation_reason = grant_artifact_invalidated`.
+
+State machine validation MUST reject any **successful** export — i.e., the domain event `research_export.delivered` MUST NOT emit, the export artifact MUST NOT leave the platform, and the partner MUST NOT receive data — when ANY of the 6 conditions is unmet. The validator returns a structured error identifying which condition failed (mapping deterministically to one of the 6 `invalidation_reason` enum values: `dsa_inactive | k_anonymity_violation | permitted_domain_drift | consent_cohort_change | consent_revocation_mid_export | grant_artifact_invalidated`; no "fallthrough other" bucket).
+
+**Audit-side requirement (mirrors AUDIT_EVENTS v5.2 §5 + GOVERNANCE_CONTROLS v5.2 §7.2 incident matrix):** Even when delivery is rejected, the audit chain MUST capture the failed-completion attempt transparently. The audit event `research.export_completed` MUST emit with `status = invalidated`, `invalidation_reason` populated to the canonical enum value matching the violated condition, the violated state recorded in payload (e.g., `dsa_status_at_export = expired` for condition 1, `k_threshold_actual` for condition 2, `permitted_data_domains_at_export` for condition 3, etc.), and a concurrent `signal_enforcement_trigger` Category B audit capturing the enforcement action (export artifact destruction; partner notification per DSA terms; engineering review trigger). Bare suppression of the completion-attempt audit (no record at all) is forbidden — silent invalidation is an audit gap per I-003.
+
+Therefore: I-029's gate on the **domain-side delivery** is reject-on-failure (5-condition gate above); the **audit-side completion-attempt** MUST emit with `status = invalidated` and the canonical `invalidation_reason` to record the failure transparently.
+
+**Why:** Research exports of longitudinal health data carry combination-attack re-identification risk and trigger DSA-bound third-party data flows. Three independent gates (legal authorization, patient authorization, statistical re-identification protection) ensure that no single misconfiguration produces a problematic export.
+
+---
+
+### I-030 · Research consent declination has zero impact on care delivery
+
+A patient's decision to decline or revoke the research data-use consent (5th tier per Master PRD §15.2) MUST NOT cause any change in care delivery, clinician availability, medication access, intake flow gating, treatment options, escalation pathways, surface visibility, copy variation, or any other care-touching surface. The consenting cohort and the non-consenting cohort receive identical care.
+
+The platform's consent infrastructure MUST NOT branch any care-delivery decision on `research_consent_status`. Audit retrieval and operational reporting MAY differentiate the cohorts for research-export-pipeline purposes (cohort definition, k-threshold computation), but no patient-facing surface is influenced.
+
+State machine and policy validation MUST reject any care-delivery rule (`Eligibility`, `BranchingLogic`, `Approval`, RBAC scope) whose evaluation depends on `research_consent_status`. Such a dependency is a code-review-blocking violation per the same discipline as I-009 (no hardcoded country assumptions). Forms Engine four-layer architecture enforces this at form-version-publish time per FORMS_ENGINE v5.2.
+
+**Why:** Coercive consent — where declining research causes care reduction — is the failure mode that destroys trust in optional data partnerships. The technical guarantee that no care path can branch on research consent makes the patient-facing copy ("you can decline this and still receive full care") truthful at the architectural level, not just by policy.
+
+---
+
+### I-031 · Research data export is fully audited at high-sensitivity audit class
+
+Every research data export emits an immutable audit record at `audit_sensitivity_level: high_pii` (not the ordinary Category B governance class) capturing:
+
+- Cohort definition reference (`cohort_definition_id`, `cohort_version`)
+- The actual k-anonymity threshold used in the export (`k_threshold_actual`), which MUST be ≥ `k_min` per I-029
+- Requester identity (`requester_id`, `requester_partner_id`, `requester_role`)
+- Active DSA reference (`dsa_id`, `dsa_version`)
+- The exported field set (`exported_field_set` — the schema fragment of fields included in the export, not the values themselves)
+- Timestamp, retention class, and the audit chain hash linkage per I-003
+
+The audit chain MUST be queryable by ethics review boards, regulators, and the receiving partner organization (subject to tenant isolation per I-023..I-027) for export verification, integrity confirmation, and consent-revocation reconciliation.
+
+**Why:** Research data exports are the platform's most consequential data flow — once a de-identified cohort leaves the platform under a DSA, the platform cannot recall it. The ordinary governance audit class does not provide sufficient retention, access discipline, or query surface for this flow. The high-sensitivity audit class formalizes the elevated treatment.
+
+---
+
 ## Operating with the invariants
 
 ### When writing a feature spec
@@ -254,6 +306,7 @@ Invariants I-001, I-003, I-004, I-006–I-018, I-020–I-022 are **equally non-n
 
 ## Document control
 
+- **v5.2 (2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact)** — Adds I-029 (Research data export gates: active DSA + active research consent + k-anonymity ≥ k_min), I-030 (Research consent declination has zero impact on care), I-031 (Research data export at high-sensitivity audit class). Per ADR-028 (Research Data Partnership Posture A as Release 2 goal). No existing invariants modified or removed; v5.2 is purely additive. ID numbering: planning freeze v1.3 originally proposed I-024..I-026 for these; v1.5 hotfix renumbered to I-029..I-031 per Codex pre-acceptance HIGH-1 (ID collision with existing canonical I-024 cross-tenant break-glass, I-025 information-leak prevention, I-026 tenant configuration governance, I-027 audit envelope, I-028 single physical region). Substantive additions originally documented in `Telecheck_v1_10_PRD_Update/Phase3_INVARIANTS_v1_10_Edits_2026-05-01.md`; physical merge applied 2026-05-02 per v1.10.1 hygiene cycle.
 - **v5.1 (refreshed 2026-04-26 per ADR-026, US Region Migration Cycle U-003)** — Adds I-028 (Single physical region, single database, single schema; tenant isolation by logical means). Locks the single-region/single-DB/single-schema architectural posture as an invariant per ADR-026 locked decisions. No existing invariants modified or removed; additive only. No version bump (v5.1 retained; entry-level addition consistent with v5.1 additive discipline).
 - **v5.0** — Initial Platform Invariants. 22 invariants codified.
 - **v5.1** — Adds tenant-isolation invariants I-023 through I-027 per ADR-023 multi-tenancy Model A and ADR-024 country-driven configuration. Threading remediation per Adversarial Counsel Review v1.0 finding CRITICAL-01. No invariants modified or removed; v5.1 is purely additive.

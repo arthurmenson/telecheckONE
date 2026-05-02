@@ -14,7 +14,7 @@
 The existing Admin Operator IA v1.1 and Admin Configuration Surfaces Slice PRD v1.0 cover the **operator-of-the-platform** workflows: governance (Markets, Protocols, AI Guardrails), moderation, incidents, audit, and basic commerce. Those documents remain canonical for what they cover.
 
 This new Admin Backend Slice v1.0 covers the **gold-standard ecom backend** that the Tier-1 US DTC scope (per Master PRD v1.9 §9.3) added at launch:
-- Per-tenant ecom operations (Heros team running Heros, Telecheck-Ghana team running Telecheck-Ghana)
+- Per-tenant ecom operations (Telecheck-US tenant operator team [Heros Health DBA] running Telecheck-US, Telecheck-Ghana tenant operator team [Heros Health Ghana DBA] running Telecheck-Ghana)
 - Per-tenant Stripe / Paystack admin
 - Inventory management
 - Pricing rules and discount codes
@@ -30,9 +30,9 @@ The consolidation: Admin Operator IA v1.1 + Admin Configuration Surfaces v1.0 + 
 
 ## 1. Purpose and strategic role
 
-This slice owns the gold-standard ecom admin backend — the operational surface tenant teams use to run their DTC telehealth business day-to-day. For Heros, this is where the Heros operations team manages catalog, pricing, discounts, affiliate program, conversion analytics. For Telecheck-Ghana, similar but adapted for Ghana market and Paystack billing.
+This slice owns the gold-standard ecom admin backend — the operational surface tenant operator teams use to run their DTC telehealth business day-to-day. For the Telecheck-US tenant (Heros Health DBA, US market), this is where the Telecheck-US tenant operator team manages catalog, pricing, discounts, affiliate program, conversion analytics. For the Telecheck-Ghana tenant (Heros Health Ghana DBA, GH market), similar but adapted for Ghana market and Paystack billing.
 
-For Telecheck (the platform operator), this is the surface for managing tenants themselves: creating new tenants, configuring country, configuring brand, configuring integration adapters, viewing aggregate cross-tenant metrics.
+For Telecheck (the platform operator / B2B parent brand), this is the surface for managing tenants themselves: creating new tenants, configuring country, configuring consumer-DBA brand assets, configuring integration adapters, viewing aggregate cross-tenant metrics.
 
 **Critical design constraint:** the ecom admin must match Hims/Ro/Hero's operational tooling capability. Tenant teams migrating from Rimo or building DTC operations expect Shopify-class polish in the ecom admin: clean tables, fast filters, bulk actions, exportable views, mobile-responsive (operators check inventory on their phones).
 
@@ -64,8 +64,8 @@ For Telecheck (the platform operator), this is the surface for managing tenants 
 | **Platform Owner / Platform Admin** | Telecheck operator. Manages tenants. Sees aggregate cross-tenant metrics. Cannot see tenant-internal PHI by default (break-glass per RBAC v1.1). |
 | **Platform Operator** | Telecheck operator (limited). Cross-tenant visibility for support/diagnostics; no tenant suspension or billing modification. |
 | **Platform Support** | Telecheck operator (most limited). Read-only diagnostics across tenants. |
-| **Tenant Owner** | Tenant superuser (e.g., Heros COO). Full access within their tenant. Can manage other tenant users including Tenant Admins. |
-| **Tenant Admin** | Tenant operator (e.g., Heros operations lead). Full access within their tenant except cannot manage Tenant Owners. |
+| **Tenant Owner** | Tenant superuser (e.g., Telecheck-US tenant superuser — Heros Health DBA — such as the Heros Health COO). Full access within their tenant. Can manage other tenant users including Tenant Admins. |
+| **Tenant Admin** | Tenant operator (e.g., Telecheck-US tenant operations lead — Heros Health DBA). Full access within their tenant except cannot manage Tenant Owners. |
 | **Tenant Operator** | Day-to-day operations within their tenant: refill exception queue, payment exception queue, delivery exceptions. Limited config access. |
 | **Tenant Billing** | Subscription/payment management within their tenant: refunds, dunning, dispute handling. Pricing and discount code management. |
 | **Tenant Clinical Lead** | Clinical config within tenant: clinician onboarding, protocol activation, intake form clinical-field approval. |
@@ -182,10 +182,10 @@ Tenant Operator, Tenant Billing, Tenant Marketing, Tenant Clinical Lead, Tenant 
 
 Table of all tenants:
 
-| Tenant | Country | Brand | Status | Created | Active Patients | MRR | Last Active |
-|---|---|---|---|---|---|---|---|
-| Heros Health | US | Heros | active | 2026-XX-XX | 12,847 | $342K | 2 min ago |
-| Telecheck-Ghana | GH | Telecheck | active | 2026-XX-XX | 5,213 | GH₵ 187K | 1 min ago |
+| Tenant Identifier | Country | Consumer DBA | Legal Entity | Status | Created | Active Patients | MRR | Last Active |
+|---|---|---|---|---|---|---|---|---|
+| Telecheck-US | US | Heros Health | Telecheck Health LLC | active | 2026-XX-XX | 12,847 | $342K | 2 min ago |
+| Telecheck-Ghana | GH | Heros Health Ghana | Telecheck-Ghana Ltd. | active | 2026-XX-XX | 5,213 | GH₵ 187K | 1 min ago |
 
 Filters: country, status, created date range, active range, MRR range.
 Bulk actions: export to CSV, suspend, activate (with confirmation).
@@ -296,7 +296,7 @@ Per-tenant product list per Pharmacy + Refill v2.1 §7. Tenant admin can:
 - Edit existing product
 - Mark product out-of-stock (auto-pauses affected subscriptions per Pharmacy + Refill v2.1 §13.2)
 - Discontinue product (existing subscriptions migrate per discontinuation policy; new subscriptions blocked)
-- Bulk import via CSV (for tenant migration scenarios — Heros migration uses this pathway)
+- Bulk import via CSV (for tenant migration scenarios — Telecheck-US tenant [Heros Health DBA] migration uses this pathway)
 - Bulk export to CSV
 
 Tenant Clinical Lead approval required for: adding new Rx products, modifying compounding configuration, modifying clinical descriptions.
@@ -678,9 +678,25 @@ Platform Admin sees aggregate audit: counts of action types per tenant per perio
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 39)
+
+C3 brand-structure cascade applied to per-tenant prose, actor examples, tenant directory, and "Position relative to existing admin documents" section per v1.10 C3 (Phase 5 delta Row 39):
+
+- **Operating-tenant naming** (`Telecheck-{country}`) replaces bare `Heros` references where the operating tenant is meant; consumer-DBA framing (`Heros Health DBA` / `Heros Health Ghana DBA`) qualifies the consumer-brand context.
+- **§1 Position-relative prose:** "Heros team running Heros, Telecheck-Ghana team running Telecheck-Ghana" rewritten as "Telecheck-US tenant operator team [Heros Health DBA] running Telecheck-US, Telecheck-Ghana tenant operator team [Heros Health Ghana DBA] running Telecheck-Ghana".
+- **§1 Purpose prose:** Per-tenant prose ("For Heros, ... For Telecheck-Ghana, ...") rewritten with operating-tenant identifiers + DBA qualifiers.
+- **§3 Actors:** Tenant Owner / Tenant Admin example phrasing reframed with operating-tenant + DBA framing.
+- **§5.1.1 Tenant list table:** Columns updated from "Tenant | Country | Brand" to the structured C3 vocabulary "Tenant Identifier | Country | Consumer DBA | Legal Entity"; row values populated per C3 (Telecheck-US / Heros Health / Telecheck Health LLC; Telecheck-Ghana / Heros Health Ghana / Telecheck-Ghana Ltd.).
+- **§5.1.3 Bulk import note + Next review entry:** "Heros migration" / "Heros operations" replaced with "Telecheck-US tenant [Heros Health DBA]" framing.
+
+"Telecheck" remains platform/B2B-only and never consumer-facing; "Heros Health" is the consumer DBA, country-instanced via subdomains. Cross-references: Master Platform PRD v1.10 §17 (brand-structure rules), Tenant Threading Addendum v1.0, Phase 5 Slice/Engineering/Operations delta artifact (`Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md`).
+
+---
+
 ## Document control
 
+- **v1.10 cycle delta (body unchanged at v1.1 baseline; per-tenant prose + tenant directory amended in-place)** — 2026-05-02 per v1.10.1 hygiene cycle. Phase 5 delta Row 39 physically merged: §1 per-tenant prose, §3 Actors examples, §5.1.1 tenant list columns, §5.1.3 bulk import note, and Next review entry reframed using structured C3 brand vocabulary. See "v1.10 cycle additions" section above and `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md`.
 - **v1.1** — Clarifies §5.7 AI-assisted operator features provider selection per Adversarial Counsel Review v1.0 finding LOW-22 — non-clinical AI features default to Anthropic Claude per ADR-020; tenants may not override; cost-optimization may route to lighter models transparently; provider/model captured in audit. Also notes alignment with Unified Admin Sidebar v1.0 (per HIGH-10 remediation) — sidebar layout in this slice's §4 Navigation model is now reconciled with the canonical Unified Sidebar layout. Substantive workflow content unchanged.
 - **v1.0** — NEW slice introduced in Session 2 of multi-tenancy + Tier-1 ecom + dual-market scope expansion. Defines the gold-standard ecom admin backend covering: per-tenant subscription management, catalog management, pricing rules, discount codes, affiliate program MVP, conversion dashboards, AI-assisted operator features, brand/theming, tenant user management, audit log access. Platform Admin surfaces for tenant management and cross-tenant analytics. Two role hierarchies per RBAC v1.1. Preserves all existing Admin Operator IA v1.1 and Admin Configuration Surfaces v1.0 platform-admin governance surfaces.
-- **Next review:** after first Tenant Admin team (Heros operations or Telecheck-Ghana operations) completes onboarding to the admin backend; after first month of operational data flows through the conversion dashboards; after first AI-assisted operator feature reaches measurable adoption.
+- **Next review:** after first Tenant Admin team (Telecheck-US tenant operations [Heros Health DBA] or Telecheck-Ghana tenant operations [Heros Health Ghana DBA]) completes onboarding to the admin backend; after first month of operational data flows through the conversion dashboards; after first AI-assisted operator feature reaches measurable adoption.
 - **Change discipline:** changes to RBAC role hierarchies, audit envelope, AI feature scope (clinical vs non-clinical boundary), or break-glass procedure require Engineering Lead + Privacy Officer + Product Lead sign-off.

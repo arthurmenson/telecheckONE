@@ -1,6 +1,6 @@
 # 00 · Market Launch
 
-**Status:** canonical · **Version:** 5.0 · **Owner:** market operations lead + regulatory lead · **Consumers:** all program activation, all patient-facing surfaces
+**Status:** canonical · **Version:** 5.1 · **Owner:** market operations lead + regulatory lead · **Consumers:** all program activation, all patient-facing surfaces
 
 This document defines the Market Launch governance model — the sole authority for whether a program is available in a market. Per I-020, no other system overrides Market Launch's offerability decisions.
 
@@ -108,3 +108,75 @@ Each market is represented as a structured Market Pack — a versioned container
 - Rollout state
 
 The Market Pack is managed through the Market Rollout Cockpit (Admin — Market Rollout Cockpit Slice PRD).
+
+---
+
+## Cross-reference to Master PRD §10.5 (added v5.1)
+
+**Program catalog architecture cross-reference.** ProgramMarketPolicy (this contract's central entity) is one of the four layers in Master PRD v1.10 §10.5's program catalog architecture, alongside Program (platform-level catalog entry), Forms Engine four-layer instantiation, and CCR Runtime resolution. §10.5 makes the relationship explicit:
+
+- **Program** — platform-defined catalog entry per ProgramCatalogEntry type (TYPES v5.2). Defines clinical template, default protocol, default guardrail, intended market classes.
+- **ProgramMarketPolicy** — per-(tenant, country) instantiation of a Program. Defines per-market overrides: formulary, protocol selection, eligibility, pricing, approval pathway, marketing classification per CCR `molecule_level_marketing_permitted`.
+- **Forms Engine instantiation** — Pattern A immutable per-market form version per FORMS_ENGINE v5.2.
+- **CCR Runtime** — country-specific runtime resolution per CCR_RUNTIME v5.2.
+
+MARKET_LAUNCH governs the activation gate that brings a (Program, country) pair to live status. It does not redefine ProgramMarketPolicy — it is the entity's lifecycle authority.
+
+---
+
+## Marketing posture activation gate (added v5.1 per ADR-027)
+
+For any (Program, country) pair where the program involves prescription medication and the country supports molecule-level marketing per CCR `molecule_level_marketing_permitted = permitted`, the activation gate MUST verify ALL of:
+
+1. The CCR `marketing_copy_governance_evidence` structured object (per CCR_RUNTIME v5.2 marketing block) is fully populated with all required sub-fields per ADR-027 / Master PRD §13.2 (regulatory_jurisdiction, regulatory_authority, regulatory_interpretation_artifact_id, interpretation_date, scope, prohibited_claim_classes, governance_lead_designation_artifact_id; ethics_review_concurrence_artifact_id where local jurisdiction requires).
+2. **Tier-2 regulatory evidence** present for the country where applicable: e.g., for Telecheck-Ghana, Pharmacy Council guidance review artifact and Ghana FDA interpretation artifact are referenced from `regulatory_interpretation_artifact_id`. For other future markets, the analogous regulatory body's interpretation/clearance artifact MUST be present. (Country-specific Tier-2 evidence requirements drive from regulatory_authority; the governance review classifies as `protocol_authorized` per workload taxonomy §13.7.)
+3. At least one approved `MarketingCopy` (per TYPES v5.2) for that program × country pair exists, classification = `molecule_level`, `status = approved`, and `approval_validity_until >= now`. The copy's governance review reference resolves to the §13.2 Governance review process artifact.
+4. The Marketing copy governance lead, Clinical Safety Officer, and Regulatory Affairs Lead triple sign-off per ADR-027 v0.5 is recorded in the activation audit chain.
+5. **Country Launch Director activation sign-off** per Market Launch contract (separate from triple sign-off; Country Launch Director owns per-country launch authority and authorizes the activation transition per the standard MARKET_LAUNCH lifecycle).
+6. AUDIT_EVENTS v5.2 `marketing.surface_rendered` and `marketing.surface_drift` event emission paths are operational (governance review reference + approval timestamp + approval validity until populated; drift detector active; auto-suspension wiring per Master PRD §13.2).
+
+If ANY condition is unmet, the activation gate REJECTS the launch for that (Program, country) pair. This rejection is independent of (and additional to) all other Market Launch gate criteria. A failed activation attempt produces a Category B audit record naming the failed condition.
+
+---
+
+## Research data partnership activation gate (added v5.1 per ADR-028)
+
+ADR-028 Posture A activation is a **two-stage per-country gate**. Each transition has its own activation review:
+
+### Stage 1 — `inactive → consent_only` activation gate (added v5.1 patch 2026-05-02 per Codex Round-6 Scope 3 HIGH-1 finding to make the previously implicit gate explicit; aligns with CCR_RUNTIME v5.2 launch defaults of `inactive` per Round-3/Round-4 patches and Forms Engine I-030 enforcement per FORMS_ENGINE v5.2)
+
+When a country's CCR `research_data_partnership_active` transitions from `inactive` to `consent_only`, the activation gate MUST verify ALL of:
+
+1. **CCR `research_ethics_review_body` is populated**: `name`, `jurisdiction`, `approval_reference_id`, `approval_validity_from`, `approval_validity_to`, `approval_scope`, `per_dsa_review_required` all non-null. `approval_validity_to >= now`.
+2. **Ethics-reviewed consent text version pin**: the 5th-tier research data-use consent text content has been ethics-reviewed by the designated REC body (per CCR `research_ethics_review_body.approval_reference_id`) AND a version pin recording the reviewed-text content hash is in place at the platform consent module. The pin is what Forms Engine reads when rendering the consent block per FORMS_ENGINE v5.2 research consent integration.
+3. **Audit event readiness**: `research.consent_granted` and `research.consent_revoked` audit emission paths are operational; the audit pipeline accepts these events with the canonical payload schema and hash-chains them per I-003/I-016/I-027.
+4. **Forms Engine static validation passed**: per FORMS_ENGINE v5.2 research consent integration §I-030 enforcement, every form-version-publish-time static analysis for forms in this country has been re-run post-activation-readiness and rejects any of the 6 categories of dependency on `research_consent_status` (L2 BranchingLogic, L3 Eligibility, L4 ApprovalGovernance, L1 PresentationContent variation excluding consent block itself, intake-flow gating, surface visibility).
+5. **CCR runtime validator readiness**: per CCR_RUNTIME v5.2, the runtime validator that rejects `consent_only` transitions when `research_ethics_review_body` is null is deployed and live (the runtime backstop for this activation review).
+6. **Country Launch Director sign-off** for the per-country `inactive → consent_only` transition (separate from the Stage 2 quad sign-off below; Country Launch Director owns per-country launch authority per the standard MARKET_LAUNCH lifecycle).
+
+If ANY of the 6 conditions is unmet, the Stage 1 gate REJECTS the transition. The country remains in `inactive` state (no consent prompt, no consent audit events, no consent records collected). A failed activation attempt produces a Category B audit record naming the failed condition. After Stage 1 passes, the country is in `consent_only` state: the 5th-tier consent prompt renders; consent records accrue; export pipeline remains inactive (Stage 2 not yet active).
+
+### Stage 2 — `consent_only → active` activation gate (added v5.1 per ADR-028 — this is the original gate, retained verbatim)
+
+When a country's CCR `research_data_partnership_active` transitions from `consent_only` to `active`, the activation gate MUST verify ALL of:
+
+1. CCR `research_ethics_review_body` is populated and `approval_validity_to >= now`.
+2. CCR `research_permitted_data_domains` is non-empty (at least one closed-enum domain selected for the country) and is a subset of the closed enum (`chronic_disease_longitudinal | ncd_surveillance | pharmacovigilance_signal | population_health_aggregate`) — per ADR-028 Decision §6, expansion of the enum requires ADR amendment.
+3. CCR `cross_border_research_transfer_permitted` is set with appropriate companion evidence per `cross_border_research_transfer_evidence` structured object (counsel artifact ID, transfer mechanism, recipient country, onward transfer policy, DSA alignment artifact ID — all populated where the enum value requires).
+4. At least one DataSharingAgreement (per TYPES v5.2) is in `active` status with `validity_to >= now`, partner organization registered, AND `permitted_data_domains` (per DSA) is a subset of CCR `research_permitted_data_domains` (DSA cannot exceed country domain scope).
+5. DSA `k_min_required` ≥ CCR `k_min_default` (per-DSA may require higher k_min; never lower per I-029).
+6. **5th consent tier deployment verified:** the research data-use consent text version per CCR `research_ethics_review_body.approval_reference_id` is populated, ethics-reviewed, and rendered to live patient-facing intake/care surfaces. Forms Engine static analysis at form-version-publish time has confirmed I-030 compliance for all forms in the country (per FORMS_ENGINE v5.2 enforcement).
+7. **De-identification engine readiness verified:** the export pipeline implementation (cohort definition layer, de-identification engine producing Safe Harbor + k-anonymity output, aggregation layer, DSA enforcement) is deployed and operational in this country's tenant deployment per ADR-028 Decision §3 / Master PRD §15.3 4-layer pipeline.
+8. **Audit pipeline at high_pii sensitivity verified:** AUDIT_EVENTS v5.2 `audit_sensitivity_level = high_pii` retention/access discipline is operational for `research.export_*` event family; storage tier and access controls match per I-031.
+9. Per ADR-028 v0.4 quad sign-off: Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead is recorded in the activation audit chain.
+10. REC concurrence per `research_ethics_review_body.per_dsa_review_required` if applicable.
+11. Country Launch Director activation sign-off per Market Launch contract (separate from the quad sign-off; Country Launch Director owns the per-country launch authority).
+
+If ANY condition is unmet, the activation gate REJECTS the transition. The country remains in `consent_only` state (5th consent tier active; no exports). A failed activation attempt produces a Category B audit record naming the failed condition.
+
+---
+
+## Document control
+
+- **v5.0** — Initial Market Launch contract.
+- **v5.1 (2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact `Phase3_Group3_Contracts_v1_10_Edits_2026-05-01.md` §MARKET_LAUNCH)** — Adds Cross-reference to Master PRD §10.5 program catalog architecture (Program → ProgramMarketPolicy → Forms Engine instantiation → CCR Runtime resolution four-layer composition). Adds Marketing posture activation gate per ADR-027 (6 conditions including Tier-2 regulatory evidence, Country Launch Director activation sign-off, AUDIT_EVENTS v5.2 marketing surface event emission paths operational). Adds Research data partnership activation gate per ADR-028 (11 conditions including REC partnership designation, closed-enum `research_permitted_data_domains` country gate, DSA permitted-domain subset check, k_min_required ≥ k_min_default, 5th consent tier deployment verification with Forms Engine I-030 compliance, de-identification engine readiness, audit pipeline at high_pii sensitivity verified, ADR-028 quad sign-off, REC concurrence, Country Launch Director sign-off). Per ADR-027 + ADR-028 + Master PRD v1.10 §10.5 + §13.2 + §15.3 + INVARIANTS v5.2 I-029 / I-030 / I-031 + AUDIT_EVENTS v5.2 + FORMS_ENGINE v5.2 + CCR_RUNTIME v5.2 + TYPES v5.2 (MarketingCopy / DataSharingAgreement / ProgramCatalogEntry). Existing ProgramMarketPolicy entity, Seven launch gates, Status transitions, Compatibility checks, and Market Pack sections preserved without modification. v5.1 is purely additive.

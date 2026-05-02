@@ -381,8 +381,29 @@ The pregnancy tracking module provides general pregnancy guidance, not high-risk
 
 ---
 
+## 13. v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 50)
+
+### 13.1 Country-conditional marketing surface logic (Row 50 — per ADR-027)
+
+This section governs how the Acquisition & Engagement Tools slice renders any marketing-class surface (educational interstitials, conversion hooks, drug-class/molecule-class call-outs) in a country-conditional manner per ADR-027 (Country-Conditional DTC Marketing Posture).
+
+**Pre-render CCR consultation.** All surface-rendering services in this slice MUST consult CCR `marketing.molecule_level_marketing_permitted` (3-state enum: `permitted` | `prohibited` | `pending_evidence`) before rendering any molecule-level marketing surface. The CCR resolution scope is the patient's `country_of_care`. Default rendering behavior when `marketing.molecule_level_marketing_permitted ≠ permitted`: the slice MUST render program-level surfaces only (program/category-class messaging) and MUST suppress molecule-level surfaces (specific-molecule/brand-name claims).
+
+**Surface classification (5 criteria per Master PRD §13.2 working definition).** Marketing surfaces are classified at design time using the §13.2 5-criterion working definition (specific molecule mention, brand name reference, claim class, audience targeting, regulatory venue). Borderline cases fail-closed (treat as molecule-level) per ADR-027 v0.6 Decision §7.
+
+**Audit emission for every rendered molecule-level surface.** Each render of a molecule-level surface MUST emit `marketing.surface_rendered` per AUDIT_EVENTS v5.2 §6 carrying: CCR marketing policy version, MarketingCopy entity version, governance review reference, approval timestamp, approval validity expiry, claim classes, patient_id, country_of_care, surface_id.
+
+**Drift detection and auto-suspend.** A `marketing.surface_drift` event (per AUDIT_EVENTS v5.2 §6 + Master PRD §13.2) auto-suspends the affected surface. Detection triggers include: CCR policy version change after copy approval, MarketingCopy approval validity expiry, governance review cadence overrun (`marketing_governance_review_cadence_months`), or detection that rendered claim classes diverge from approved MarketingCopy. Republishing requires a fresh §13.2 governance review pass.
+
+**Marketing copy registration flow.** Copy is authored, then governance-reviewed under the Master PRD §13.2 Governance review process (triple sign-off per ADR-027 v0.6: Product + Regulatory Affairs + Clinical Safety), then registered as a `MarketingCopy` entity per TYPES v5.2. Only `MarketingCopy` entities in `approved` status may be referenced by surface-rendering services. The MarketingCopy registration carries the structured `marketing_copy_governance_evidence` object per CCR_RUNTIME v5.2 marketing block.
+
+**Cross-references:** ADR-027 (Country-Conditional DTC Marketing Posture, Accepted at v1.10); Master PRD v1.10 §7.9 (marketing posture activation gate operational requirements), §13.2 (Marketing copy governance process); AUDIT_EVENTS v5.2 §6 (`marketing.surface_rendered`, `marketing.surface_drift`); CCR_RUNTIME v5.2 marketing block (`molecule_level_marketing_permitted`, `marketing_copy_governance_evidence`, `marketing_governance_review_cadence_months`, `marketing_governance_lead_designation_artifact_id`); TYPES v5.2 (`MarketingCopy`, `MarketingCopyGovernanceEvidence`); MARKET_LAUNCH v5.1 marketing posture activation gate (6 conditions); DOMAIN_EVENTS v5.2 (`marketing.surface_published`, `marketing.surface_suspended`).
+
+---
+
 ## Document control
 
 - **v1.0** — Combined Acquisition & Engagement Tools slice PRD covering Food & Calorie Scanning, Fitness & Behavior Tracking, and Pregnancy Tracking. Defines shared design principles (clinical connection, low friction, clear wellness/clinical boundary), individual tool flows and clinical connections, acquisition-to-clinical-care conversion model, shared data architecture and consent model, and edge cases. Pregnancy tracking includes medication safety as primary clinical value, danger sign awareness, postpartum transition, and pregnancy loss sensitivity. Derived from Master PRD v1.6 §10 Pillar 5 and §18 acquisition engines.
+- **v1.10 cycle addition (2026-05-02 — v1.10.1 hygiene cycle physical merge of Phase5 delta Row 50):** Added §13 country-conditional marketing surface logic per ADR-027 (Accepted at v1.10). All molecule-level marketing surfaces consult CCR `marketing.molecule_level_marketing_permitted` and emit `marketing.surface_rendered` audit. Drift detection auto-suspends via `marketing.surface_drift`. Cross-references CCR_RUNTIME v5.2 marketing block, TYPES v5.2 MarketingCopy, AUDIT_EVENTS v5.2 §6, MARKET_LAUNCH v5.1 activation gate.
 - **Next review:** after food recognition model decision (Q1); after pregnancy content is clinically reviewed; after RPM/CCM slice defines dietary and activity data consumption format.
 - **Change discipline:** changes to clinical connection logic (medication flags, interaction references), pregnancy safety escalation, conversion design principles, or data-sharing scope require explicit owner sign-off.

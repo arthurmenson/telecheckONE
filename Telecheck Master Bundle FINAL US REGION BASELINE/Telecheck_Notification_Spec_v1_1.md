@@ -15,9 +15,11 @@ Every workflow in Telecheck ends with a notification. This document defines what
 
 ## 2. Channel hierarchy
 
+**Note (per v1.10.1 hygiene cycle Row 43):** WhatsApp-primary engagement is the launch posture for emerging markets (piloting with Telecheck-Ghana on 360dialog WhatsApp Business API per CCR `operational.notification_channels.primary_engagement`). The channel hierarchy below is the platform-default for emerging markets; CCR-driven per-country profiles override the hierarchy where appropriate (e.g., Telecheck-US tenant uses SMS+email-primary per US notification posture, with WhatsApp not applicable).
+
 | Channel | Role | When used | Fallback |
 |---|---|---|---|
-| **WhatsApp** | Primary engagement | All non-urgent notifications; appointment reminders; refill updates; community activity | SMS if WhatsApp undelivered after 5 minutes |
+| **WhatsApp** | Primary engagement (emerging markets; Telecheck-Ghana pilot on 360dialog) | All non-urgent notifications; appointment reminders; refill updates; community activity | SMS if WhatsApp undelivered after 5 minutes |
 | **SMS** | Critical fallback | Emergency alerts; payment confirmations; OTP; WhatsApp delivery failures | None (terminal) |
 | **In-app push** | Non-critical engagement | Community replies; general reminders; feature nudges | None (best-effort) |
 | **In-app inbox** | Persistent record | All notifications stored in notification center regardless of external delivery | None (always written) |
@@ -224,7 +226,7 @@ Per RBAC v1.1, the **Tenant Marketing** role (or higher within the tenant: Tenan
 
 ### What may vary per tenant
 
-- Sender display name (e.g., "Heros" vs "Telecheck-Ghana")
+- Sender display name — surfaces the consumer DBA, not the operating-tenant identifier. Examples: `"Heros Health"` (consumer DBA, US — operating tenant `Telecheck-US`) vs `"Heros Health Ghana"` (consumer DBA, GH — operating tenant `Telecheck-Ghana`). Operating-tenant identifiers are internal/B2B-only and MUST NOT appear in patient-facing sender display names. _(Sender display framing updated 2026-05-02 per v1.10.1 hygiene cycle Phase5 delta Group 5E Row 12 — C3 brand-structure cascade.)_
 - Tone (e.g., warm-conversational for one tenant, clinical-formal for another within accessibility floors)
 - Brand-specific copy phrasings within length and accessibility constraints
 - Localization (where applicable per CCR locale; Track A is English at launch)
@@ -261,6 +263,7 @@ Localization (multilingual content per language) is deferred to Track B per ADR-
 
 ## Document control
 
+- **v1.1 cycle additions — 2026-05-02 (per v1.10.1 hygiene cycle physical merge of Phase5 delta Group 5E, Rows 12 + 43):** Row 12 — Sender display name framing reconciled with C3 brand-structure cascade (sender display surfaces consumer DBA — `"Heros Health"` / `"Heros Health Ghana"` — not operating-tenant identifier `Telecheck-US` / `Telecheck-Ghana`). Row 43 — Channel hierarchy framing reconciled with C2 emerging-markets reframe ("WhatsApp-primary in Ghana" → "WhatsApp-primary in emerging markets, piloting with Telecheck-Ghana on 360dialog"; CCR-driven per-country profile note added). Body content otherwise preserved at v1.1 baseline.
 - **v1.1** — Adds Tenant-scoped variants and overrides section per ADR-023 multi-tenancy. Variant resolution order (tenant-specific → tenant-default → platform default). Tenant Marketing authoring authority per RBAC v1.1. Per-channel validation rules. Audit on variant authoring and selection. Localization explicitly deferred to Track B per ADR-018. Threading remediation per Adversarial Counsel Review v1.0 finding MEDIUM-14. Existing 55+ notification types, channel hierarchy, content rules, privacy constraints, quiet hours, delegate routing, delivery tracking, and WhatsApp template requirements preserved without modification.
 - **v1.0** — Initial Notification Specification. Defines 55+ notification types across 9 categories (async consult, sync video, prescriptions, refill/pharmacy, labs, RPM/CCM, community, AI/safety, account/payment). Channel hierarchy (WhatsApp → SMS → push → inbox). Content rules including privacy constraints. Quiet hours. Delegate routing. Delivery tracking. WhatsApp template requirements.
 - **Next review:** after WhatsApp Business API template submission (validate template format compatibility); after first tenant-variant rollout in production.

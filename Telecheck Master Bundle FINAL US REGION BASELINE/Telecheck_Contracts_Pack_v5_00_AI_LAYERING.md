@@ -1,8 +1,10 @@
 # 00-AI-LAYERING.md — Contracts Pack v5
 
-**Version:** 5.1
-**Supersedes:** v4.2 00-AI-LAYERING.md
-**Change summary:** Absorbs two-mode AI architecture from AI Clinical Assistant Slice PRD v1.0 and ADR-002. Adds Mode 1/Mode 2 distinction, guardrail template governance, AI scribe contracts, and AI-not-in-community boundary.
+**Version:** 5.2
+**Supersedes:** v5.1 (Adversarial Counsel Review remediation 2026-04-25); v4.2 00-AI-LAYERING.md
+**Change summary (v5.2 added 2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact `Phase3_Group2_Contracts_v1_10_Edits_2026-05-01.md` §AI_LAYERING):** Adds §10 Future Workload Expansion per ADR-029 — AI-ARCH-001 supersession scope statement (single source of truth: WORKLOAD_TAXONOMY contract §5); Mode 1/Mode 2 ↔ workload taxonomy mapping (Mode 1 → `conversational_assistant`; Mode 2 → `protocol_execution`); ADR-002 + ADR-005 preservation rules (current workloads remain bound by ADR-002 and ADR-005 at autonomy_level ≤ `action_with_confirm` per I-012); I-012 preservation rule mirroring Master PRD §13.7 v0.3 reject-unless three-clause normative wording exactly. Two-mode architecture (§2 AI-ARCH-001, AI-ARCH-002) preserved without modification — all five guardrail invariants, AI boundaries, audit, resilience, agreement tracking sections preserved.
+
+**v5.1 change summary:** Absorbs two-mode AI architecture from AI Clinical Assistant Slice PRD v1.0 and ADR-002. Adds Mode 1/Mode 2 distinction, guardrail template governance, AI scribe contracts, and AI-not-in-community boundary.
 
 ---
 
@@ -160,8 +162,48 @@ Per ADR-023 multi-tenancy Model A and CRITICAL-01 remediation, AI Mode 1 and Mod
 
 ---
 
+## 10. Future workload expansion (added v5.2 per ADR-029)
+
+The two-mode AI architecture in §2 (AI-ARCH-001, AI-ARCH-002) remains binding for current Mode 1 / Mode 2. Per ADR-029, the **WORKLOAD_TAXONOMY contract** introduces a property-based discriminator (`ai_workload_type`) that classifies AI invocations and reserves namespace placeholders for future workload types (`autonomous_agent`, `multi_agent_supervisor`, `tool_using_agent`).
+
+### 10.1 Supersession scope (canonical statement; single source of truth: WORKLOAD_TAXONOMY §5)
+
+> AI-ARCH-001 remains binding only as: **v1.0 has exactly two active workload types, `conversational_assistant` and `protocol_execution`.** AI-ARCH-001 no longer prohibits reserved future workload type names from existing in WORKLOAD_TAXONOMY's enum, but any **activation** of a reserved workload type requires successor ADR approval (ADR-030, 031, 032, 033, 034 as applicable).
+
+### 10.2 Mapping current Mode 1 / Mode 2 to workload taxonomy
+
+| AI-LAYERING term | Workload taxonomy value | Notes |
+|---|---|---|
+| Mode 1 | `conversational_assistant` | Identical semantics; relabeled. |
+| Mode 2 | `protocol_execution` | Identical semantics; relabeled. ADR-005 protocolized autonomy remains binding for current workloads. |
+
+Code, schema, audit, and config MUST use the workload taxonomy values (`conversational_assistant`, `protocol_execution`) in new v1.10+ artifacts. UI / operator-facing terminology may continue to use "Mode 1 / Mode 2" labels. The `actor_type = ai_mode_1` / `ai_mode_2` aliases in AUDIT_EVENTS are preserved for backward-compat; new code uses `actor_type = ai_workload` per AUDIT_EVENTS v5.2 §2.
+
+### 10.3 ADR-002 + ADR-005 preservation
+
+ADR-002 binary AI mode framing remains binding for current Mode 1 / Mode 2 until separate successor ADR. ADR-005 protocolized autonomy remains binding for `protocol_execution` workload at autonomy_level ≤ `action_with_confirm`. ADR-029 supersedes ADR-002 prospectively for new workload additions only — current workloads continue under ADR-002.
+
+### 10.4 I-012 preservation rule (mirrors Master PRD §13.7 v0.3 — single normative source)
+
+For prescription, refill, and medication-order actions governed by I-012, `protocol_execution` workload may only reach `executed` state through `action_with_confirm` with explicit clinician confirmation. The full reject-unless three-clause rule is canonicalized in Master PRD §13.7 (single normative source of truth) and mirrored in WORKLOAD_TAXONOMY §2.2 + AUTONOMY_LEVELS §2.3 + AUDIT_EVENTS §3.
+
+The platform MUST reject any I-012-governed transition to `executed` UNLESS all three of the following hold simultaneously, evaluated per `action_id`:
+
+1. `autonomy_level == action_with_confirm` (string equality; not membership in a set).
+2. An explicit clinician confirmation event exists in the immutable audit chain scoped to this `action_id` prior to the transition.
+3. The confirming actor holds a role authorized to sign for the action class under RBAC v1.1 / I-012.
+
+Reserved levels (`action_with_audit_only`, `fully_autonomous`) require both successor ADR approval AND activation audit event in the immutable audit chain — ADR approval alone never sufficient.
+
+### 10.5 AI scribe and lab interpretation classification
+
+AI Scribe (per §2 AI Scribe table) is currently a documentation-tool workload, not a clinical-decision workload. It does not yet have a workload-taxonomy classification per ADR-029. Lab interpretation runs as `protocol_execution` (Mode 2) per existing AI-LAYERING. Both classifications may be revisited under future ADR amendments without affecting current production semantics.
+
+---
+
 ## Document control
 
 - **v4.2** — Initial AI layering contract.
 - **v5.0** — See Change log table above.
 - **v5.1** — Adds §9 Tenant scoping per ADR-023. AI Mode 1 conversations tenant-scoped; Mode 2 protocol selection tenant-scoped; guardrail templates platform-scoped with tenant override capacity. Threading remediation per Adversarial Counsel Review v1.0 finding CRITICAL-01. Existing two-mode architecture, guardrail governance, AI boundaries, audit, provider resilience, and physician agreement tracking preserved without modification.
+- **v5.2 (2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact `Phase3_Group2_Contracts_v1_10_Edits_2026-05-01.md` §AI_LAYERING)** — Adds §10 Future workload expansion per ADR-029: §10.1 Supersession scope statement (single source of truth WORKLOAD_TAXONOMY §5) — AI-ARCH-001 remains binding as "v1.0 has exactly two active workload types"; §10.2 Mode 1/Mode 2 ↔ workload taxonomy mapping (Mode 1 → `conversational_assistant`, Mode 2 → `protocol_execution`); §10.3 ADR-002 + ADR-005 preservation rules (current workloads remain bound by ADR-002 / ADR-005 at autonomy_level ≤ `action_with_confirm`); §10.4 I-012 preservation rule mirroring Master PRD §13.7 v0.3 reject-unless three-clause normative wording (string equality + audit-chain confirmation + RBAC role); reserved levels require successor ADR + activation audit event (ADR approval alone never sufficient); §10.5 AI scribe and lab interpretation classification status. Per ADR-029 (AI workload taxonomy + autonomy levels), Master PRD v1.10 §13.7. Two-mode architecture (§2 AI-ARCH-001, AI-ARCH-002), all five guardrail invariants, AI boundaries, audit, provider resilience, agreement tracking, and §9 tenant scoping preserved without modification. v5.2 is purely additive.

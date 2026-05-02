@@ -51,7 +51,7 @@ A precursor closure cycle (Cycle 001 / F-001-01) restored two contract files (`M
 
 - **Single physical region at launch:** us-east-1 (Virginia, United States) primary
 - **Cold DR:** us-west-2 (Oregon, United States) — snapshot replication; RTO measured in hours-to-low-tens-of-hours, not minutes
-- **Both tenants share the same physical primary stack:** Heros (US tenant; greenfield in us-east-1) and Telecheck-Ghana (chronic care anchor)
+- **Both tenants share the same physical primary stack:** **Telecheck-US (Heros Health DBA; greenfield in us-east-1)** and Telecheck-Ghana (Heros Health Ghana DBA; chronic care anchor) *(updated 2026-05-02 per Codex Round-11 Scope 4 MEDIUM-1 finding — was previously stated as `Heros (US tenant)`, using bare `Heros` as a tenant identifier in violation of the C3 brand-structure rule per Master PRD v1.10 §17 + Glossary v5.2)*
 - **No per-country physical-region routing at launch:** the country abstractions in CCR govern jurisdictional and contractual obligations only, not physical region selection
 - **Cross-border posture for Telecheck-Ghana:** Ghana patient data is processed in us-east-1 (United States); jurisdictional mechanism (Ghana DPC registration, patient privacy notice language, sub-processor list) carries `[COUNSEL-REQUIRED]` markers
 - **Phase 2 / open option:** regional media routing for Ghana sync video (LiveKit edge node in `af-south-1` or `eu-west-1` while data plane remains us-east-1) — explicitly Phase 2, not launch scope
@@ -83,13 +83,13 @@ Multiple control-plane documents now explicitly distinguish jurisdictional regul
 - **OR-103** (data residency): closing rationale updated under ADR-026 (per-tenant KMS unchanged; physical region updated)
 - **OR-111** (deployment topology): topology under ADR-026 now reflects cold-DR posture (was warm-snapshot under ADR-025); CI/CD, runbooks, monitoring remain open
 - **OR-302** (Ghana DPC cross-border registration): rescoped — Ghana data processed in us-east-1; specific contractual mechanism, patient privacy notice language, and sub-processor list all marked `[COUNSEL-REQUIRED]`
-- **OR-303** (US BAA structure): simplified — standard HIPAA-region BAA chain (Heros → Telecheck → AWS US, all US-jurisdiction); was non-standard cross-border framing under ADR-025
+- **OR-303** (US BAA structure): simplified — standard HIPAA-region BAA chain. **Canonical 3-party chain (per System Architecture v1.2 §11.4 + OR-303 2026-05-02 supersession entry; updated 2026-05-02 per Codex Round-10 Scope 4 MEDIUM-3 finding to align with the canonical BAA chain — was previously stated as `Heros → Telecheck → AWS US` shorthand which violated C3 brand structure AND collapsed two distinct business-associate parties):** **Telecheck Health LLC (Telecheck-US tenant operator; Heros Health DBA consumer surface) → Telecheck parent/platform (separate business associate; data-plane operator + per-tenant KMS / RLS enforcement layer per ADR-023) → AWS US (subprocessor)**, all US-jurisdiction; was non-standard cross-border framing under ADR-025.
 
 Status log entries appended for the four reframings (2026-04-26).
 
 ### Engineering Handoff & Build Guide v1.3
 
-`Telecheck_Engineering_Handoff_Build_Guide_v1_2.md` → `Telecheck_Engineering_Handoff_Build_Guide_v1_3.md`. Region pair updated throughout (8 body refs + ADR refs); parent-document header bumped (Master PRD v1.9 / System Architecture v1.2 / ADR Addendum 026 added); body cross-refs to Master PRD §X and System Architecture §X updated; onboarding read list, Registry pointers refreshed; v1.3 changelog row added. No sprint plan changes (Heros launches greenfield in us-east-1 from day one; no af-south → us-east migration sprint).
+`Telecheck_Engineering_Handoff_Build_Guide_v1_2.md` → `Telecheck_Engineering_Handoff_Build_Guide_v1_3.md`. Region pair updated throughout (8 body refs + ADR refs); parent-document header bumped (Master PRD v1.9 / System Architecture v1.2 / ADR Addendum 026 added); body cross-refs to Master PRD §X and System Architecture §X updated; onboarding read list, Registry pointers refreshed; v1.3 changelog row added. No sprint plan changes (**Telecheck-US (Heros Health DBA) launches greenfield in us-east-1** from day one; no af-south → us-east migration sprint). *(Sprint-plan tenant phrasing updated 2026-05-02 per Codex Round-11 Scope 4 MEDIUM-1 sweep follow-on — was previously `Heros launches greenfield`, using bare `Heros` as a tenant identifier in violation of the C3 brand-structure rule.)*
 
 ---
 

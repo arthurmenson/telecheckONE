@@ -69,7 +69,7 @@ An RPM/CCM program is a structured, subscription-based chronic care pathway with
 
 ### 4.2 Launch programs
 
-At Ghana launch, RPM/CCM activates with a focused set of programs. The specific programs are determined by protocol library scope (Master PRD §23 Q1), but the architecture supports any chronic condition. Indicative launch programs:
+At launch (Telecheck-Ghana via Heros Health Ghana DBA pilot in Ghana, plus future emerging markets per ADR-024 country-driven configuration), RPM/CCM activates with a focused set of programs. The specific programs are determined by protocol library scope (Master PRD §23 Q1), but the architecture supports any chronic condition. Indicative launch programs:
 
 **Diabetes Management**
 - Monitored metrics: blood glucose (fasting and post-prandial), HbA1c (quarterly lab), weight, blood pressure
@@ -541,8 +541,70 @@ Device readings are subject to plausibility checks (same as manual entry). Impla
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 7)
+
+**Cycle C2 — Emerging-markets framing reframe.** §4.2 launch-programs lead-in reframed in place from "At Ghana launch" to "At launch (Telecheck-Ghana via Heros Health Ghana DBA pilot in Ghana, plus future emerging markets per ADR-024 country-driven configuration)" to make explicit that the launch posture is country-driven configuration scaling beyond a single market. Concrete pilot citations elsewhere in this slice (Ghana DPA, FDA Ghana, MDC, Pharmacy Council references) are preserved as-is — they reference the actual Telecheck-Ghana pilot. Other §17-style references to "Ghana launch" in §4.2 (manual-entry primary method), §6 pricing, and §11 connected-device framing remain valid as pilot-specific operational facts.
+
+**Cross-references (v1.10):** ADR-024 (CCR country-driven configuration), Master PRD v1.10 §10.5 (Program catalog architecture), Master PRD v1.10 §17 (brand-structure rules — Telecheck-Ghana operating-tenant identifier).
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 7 (Cycle C2).
+
+### Row 77 — RPM/CCM as research data feed potential under ADR-028 Posture A (Cycle C5)
+
+**Note:** RPM/CCM produces longitudinal chronic disease data — the highest-value research data source for ADR-028 Posture A. Per ADR-028 v0.5 Decision §6, the RPM/CCM data domain intersects with the closed-enum `research_permitted_data_domains.chronic_disease_longitudinal` (one of the four permitted Posture A domains alongside `ncd_surveillance | pharmacovigilance_signal | population_health_aggregate`).
+
+**Scope boundary — export pipeline ownership.** Any export of RPM/CCM data into a Posture A research data flow is governed by the **research export pipeline** (a separate platform component, not by the RPM/CCM slice directly). The RPM/CCM slice is the upstream data producer; export decisions, k-anonymity enforcement, audit governance, and DSA matching are owned by the research export pipeline downstream.
+
+**Preconditions for any RPM/CCM data inclusion in a `ResearchDataExport`** *(canonical 5-condition I-029 gate enumerated 2026-05-02 per Codex Round-10 Scope 2 HIGH-2 finding; was previously listing only 3 of the 5 I-029 conditions — added permitted-domain snapshot equality and consent-cohort hash equality at completion-time as explicit canonical conditions)*:
+
+**Canonical I-029 5-condition reject-unless gate (per INVARIANTS v5.2 I-029; mirrored exactly here — local additions are explicitly additive and labeled as RPM/CCM-specific):**
+
+1. **`dsa_status_at_export = active`.** A signed `DataSharingAgreement` (per TYPES v5.2) MUST exist for the patient's `country_of_care`, with the partner organization and permitted domains aligned with `research_permitted_data_domains.chronic_disease_longitudinal`. Non-active DSAs (expired, suspended, retired) reject. → `invalidation_reason = dsa_inactive`.
+2. **`k_threshold_actual >= k_min_required`.** The export MUST satisfy I-029 — k-anonymity ≥ CCR `research_export_k_anonymity_minimum` for the patient's `country_of_care`. Below-threshold cohorts are rejected at export time. → `invalidation_reason = k_anonymity_violation`.
+3. **`permitted_data_domains_at_export` matches the `research.export_initiated` snapshot.** Permitted-domain drift between initiation and completion (CCR change mid-export) rejects. → `invalidation_reason = permitted_domain_drift`.
+4. **`consent_cohort_snapshot_hash_completed = consent_cohort_snapshot_hash_initiated`.** Cohort changed mid-export by any mechanism rejects. → `invalidation_reason = consent_cohort_change`.
+5. **Every contributing patient has active `ResearchConsent` at completion-time evaluation.** Each contributing patient's `ResearchConsent` MUST satisfy `consent_type = research_data_use`, `granted_at` non-null, `revoked_at` null at completion-time. Covers BOTH mid-export revocation events AND pre-existing stale/invalid consent records. Asymmetric retraction acknowledgement is recorded at grant time per Consent & Delegated Access Slice §16. → `invalidation_reason = consent_revocation_mid_export`.
+
+**RPM/CCM-specific additive preconditions** (additional to the canonical 5-condition gate above):
+
+6. **CCR `research_data_partnership_active = active`.** Markets in `inactive` or `consent_only` state MUST NOT export RPM/CCM data. (Stage 2 activation gate per MARKET_LAUNCH v5.1.)
+7. **Authorized signers.** Export MUST be signed off by members of `research_export_authorized_signers` per CCR_RUNTIME v5.2 (multi-party approval; ADR-028 v0.4 quad sign-off + Country Launch Director).
+8. **Audit envelope.** Export emits AUDIT_EVENTS v5.2 §5 research events (audit class `high_pii` per I-031). Failed exports emit `research.export_completed(status=invalidated)` paired with `signal_enforcement_trigger` Category B per I-003.
+
+**I-030 zero-impact restatement.** The presence or absence of a patient's `ResearchConsent` MUST NOT affect any RPM/CCM clinical pathway — alert thresholds, escalation logic, care plan structure, milestone tracking, subscription billing, or connected-device support. RPM/CCM operates identically for consenting and non-consenting patients; only downstream export inclusion differs.
+
+**Cross-references (Row 77):** ADR-028 v0.5 (Research data partnership Posture A — Release 2 goal — §6 permitted-domains list); Master PRD v1.10 §15.2; INVARIANTS v5.2 I-029 (research export gates), I-030 (consent-zero-impact on care delivery), I-031 (high_pii audit class); CCR_RUNTIME v5.2 research block; TYPES v5.2 (`DataSharingAgreement`, `ResearchConsent`, `ResearchDataExport`, `CohortDefinition`); AUDIT_EVENTS v5.2 §5 (research events); MARKET_LAUNCH v5.1 (11-condition activation gate); Consent & Delegated Access Slice §16; Market Rollout Cockpit Slice (Market Pack research block).
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 77 (Cycle C5).
+
+### Row 87 — RPM/CCM as a Program in the Master PRD §10.5 catalog (Cycle C6)
+
+**Slice scope update.** Per Master PRD v1.10 §10.5 program catalog architecture, RPM/CCM is a **Program** at the platform level — i.e., a `ProgramCatalogEntry` per TYPES v5.2 — not a market-specific slice. Per-market activation is via `ProgramMarketPolicy` (Layer 2 of the §10.5 four-layer model), which binds the `ProgramCatalogEntry` to a specific operating tenant and carries per-market eligibility, formulary references, regulatory module, pricing, and CCR pack reference.
+
+**Initial market activation.** Initial market activation of the RPM/CCM `ProgramCatalogEntry` is via Telecheck-Ghana via Heros Health Ghana DBA (chronic care anchor) — `tenant_identifier = Telecheck-Ghana`, `consumer_dba = Heros Health Ghana` per Master PRD v1.10 §17 brand-structure rules. The RPM/CCM `ProgramMarketPolicy` for Telecheck-Ghana is the first activation; subsequent markets activate via additional `ProgramMarketPolicy` instances under the same platform-level `ProgramCatalogEntry`.
+
+**Four-layer model anchoring (informative — see Master PRD §10.5 for canonical):**
+
+| Layer | RPM/CCM mapping |
+|---|---|
+| **Layer 1 — Program (`ProgramCatalogEntry`)** | RPM/CCM at platform level — clinical category, alert types (six per §3 of this slice), care plan structure, monitoring surface specifications. Market-agnostic. |
+| **Layer 2 — `ProgramMarketPolicy`** | Per-market activation: Telecheck-Ghana (first activation) carries Ghana-specific alert thresholds where they differ from defaults, Ghana formulary references, Ghana regulatory module bindings, Ghana pricing, Ghana CCR pack reference. |
+| **Layer 3 — Forms Engine instantiation (Pattern A)** | Per-market RPM/CCM intake and care-plan form versions are immutable Pattern A artifacts under the operating tenant. |
+| **Layer 4 — CCR Runtime resolution** | At runtime, `country_of_care` resolves to the Ghana CCR pack which selects the Telecheck-Ghana `ProgramMarketPolicy` and form versions. |
+
+**Forward portability.** Future RPM/CCM market activations (e.g., a Telecheck-US chronic care program under Heros Health DBA) reuse the platform-level `ProgramCatalogEntry` and add a new `ProgramMarketPolicy` per the porting workflow documented in Forms/Intake Engine Slice §25.4 — no fork at Layer 1.
+
+**Indicative launch programs preserved.** The indicative launch programs documented in §4.2 of this slice (diabetes, hypertension, GLP-1 monitoring) are sub-categories under the RPM/CCM `ProgramCatalogEntry` — they are clinical configuration of the same program, not separate `ProgramCatalogEntry` rows. (Note: GLP-1 weight management as authored in the Forms/Intake Engine Slice §9.1 is a separate `ProgramCatalogEntry` per the worked porting example in `Telecheck_Program_Porting_Checklist_GLP1_v1_0.md` — the GLP-1 *monitoring* sub-category in this slice is the chronic-care monitoring layer for patients on GLP-1 therapy, distinct from the GLP-1 weight management intake program.)
+
+**Cross-references (Row 87):** Master PRD v1.10 §10.5 (canonical — program catalog architecture, four-layer model); Master PRD v1.10 §17 (brand-structure rules); TYPES v5.2 (`ProgramCatalogEntry`, `ProgramMarketPolicy`); ADR-024 (CCR country-driven configuration); Forms/Intake Engine Slice §25.4 (Program porting workflow); Market Rollout Cockpit Slice Row 86 (Master PRD §10.5 cross-reference).
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 87 (Cycle C6).
+
+---
+
 ## Document control
 
 - **v1.0** — Initial RPM/CCM slice PRD. Defines program model with indicative launch programs (diabetes, hypertension, GLP-1 monitoring), five data collection methods (manual, connected device, lab, AI-assisted, clinician), six alert types with severity-based escalation and alert fatigue prevention, care plan structure with milestones, clinician monitoring surface with patient panel and program-level views, monthly subscription billing model, connected-device support with manual entry fallback, and integration with Labs, Refill, Interaction Engine, AI Clinical Assistant, and Adverse Event Reporting slices. Derived from Master PRD v1.6 §10 Pillar 4.
+- **v1.10 cycle additions (2026-05-02 — v1.10.1 hygiene cycle physical merge of Phase5 delta Rows 7, 77, 87):** Row 7 (Cycle C2) — emerging-markets framing reframe in §4.2 launch-programs lead-in. Row 77 (Cycle C5) — RPM/CCM as research data feed potential under ADR-028 Posture A; export pipeline ownership boundary clarified; preconditions enumerated (DSA, 5th-tier consent, k-anonymity ≥ k_min, CCR active state, authorized signers, audit envelope); I-030 zero-impact restated. Row 87 (Cycle C6) — RPM/CCM canonicalized as a `ProgramCatalogEntry` per Master PRD v1.10 §10.5 four-layer program catalog architecture; Telecheck-Ghana via Heros Health Ghana DBA is the initial market activation via `ProgramMarketPolicy`; forward portability via porting workflow per Forms/Intake Engine Slice §25.4. Body unchanged at v1.0 baseline.
 - **Next review:** after launch program selection is confirmed (Q1); after subscription billing vendor is selected (§23 Q6); after connected-device compatibility list is established for Ghana.
 - **Change discipline:** changes to alert thresholds, escalation logic, subscription billing model, care plan structure, or connected-device requirements require explicit owner sign-off and must be validated against the Refill Slice (lab-gated eligibility) and the Medication Interaction Engine Slice (drug-lab integration).

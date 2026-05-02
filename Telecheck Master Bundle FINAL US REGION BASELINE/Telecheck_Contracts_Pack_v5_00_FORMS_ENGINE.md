@@ -1,6 +1,6 @@
 # 00 · Forms Engine
 
-**Status:** canonical · **Version:** 5.1 · **Owner:** product lead + clinical safety officer · **Consumers:** intake authoring, provider review, operator tooling
+**Status:** canonical · **Version:** 5.2 · **Owner:** product lead + clinical safety officer · **Consumers:** intake authoring, provider review, operator tooling
 
 This document defines the four-layer architecture of the Forms Engine, the intake lifecycle, provider feedback model, and patient visibility rules. Per I-006, form layers have separate permissions. Per I-013, published versions are immutable.
 
@@ -105,7 +105,32 @@ The four-layer separation rule (Template, Deployment, Submission, Snapshot) is p
 
 ---
 
+## Research consent integration (added v5.2 per ADR-028)
+
+When a Forms Engine intake or care-touch flow includes the 5th consent tier (research data-use), the consent block is rendered per the L1 (presentation) layer for the active country (CCR `default_locale`) and tracked per the L4 (approval governance) layer. The L4 approval governance for forms containing research consent blocks MUST verify that:
+
+1. The active CCR `research_data_partnership_active` ≠ `inactive` for the form's `country_of_care` (else the consent block MUST NOT render — patients are not asked to consent when the partnership is inactive in their country).
+2. The `research_consent_text_version` rendered matches the approved text version per CCR `research_ethics_review_body.approval_reference_id` and `approval_validity_to >= now`.
+3. Per I-030, **no Forms Engine layer (L1 presentation, L2 branching, L3 eligibility, L4 approval) may produce care-touching behavior that depends on `research_consent_status`**. Static analysis at form-version-publish time MUST reject all of:
+   - L2 BranchingLogic rules whose path selection depends on `research_consent_status` (no care-flow branching on research consent)
+   - L3 Eligibility rules whose outcome depends on `research_consent_status` (no eligibility gating on research consent)
+   - L4 ApprovalGovernance rules whose pathway selection depends on `research_consent_status` (no approval-pathway differentiation on research consent)
+   - L1 PresentationContent variation conditioned on `research_consent_status` for any non-consent-block surface (consent block itself is rendered from CCR `research_data_partnership_active` state per condition 1 above; all other patient-facing copy MUST NOT vary by consent status)
+   - Intake-flow gating (skipping or inserting flow steps) conditioned on `research_consent_status`
+   - Surface visibility (showing or hiding any non-consent surface) conditioned on `research_consent_status`
+
+   The single permitted dependency is rendering the research-consent block itself from CCR state per condition 1 above (and re-rendering on consent grant/revoke). Form-version-publish-time static analysis is the Forms-Engine-side enforcement of I-030; runtime CCR validation provides the cross-check.
+
+---
+
+## Cross-reference to Master PRD §10.5 (added v5.2)
+
+**Pattern A and four-layer architecture cross-reference.** Master PRD v1.10 §10.5 is the canonical source for the platform-level program catalog architecture. It explicitly references this contract's four-layer Forms Engine model (L1 presentation, L2 branching, L3 eligibility, L4 approval) and Pattern A versioning rule (every market gets its own immutable form version even when the underlying clinical structure is byte-identical — the price of regulatory provenance). FORMS_ENGINE v5.1 four-layer model and Pattern A are preserved without modification; §10.5 documents how they compose with the platform-level Program entity (per ProgramCatalogEntry type, TYPES v5.2) + ProgramMarketPolicy (per MARKET_LAUNCH v5.1) + CCR Runtime resolution (CCR_RUNTIME v5.2) to produce per-tenant, per-country form deployments.
+
+---
+
 ## Document control
 
 - **v5.0** — Initial Forms Engine contract.
 - **v5.1** — Adds Tenant scoping section per ADR-023. All four (now six) form artifact layers tenant-scoped. Threading remediation per Adversarial Counsel Review v1.0 finding CRITICAL-01. Existing four-layer architecture, form versioning, intake lifecycle, provider feedback model, and v5 medication reconciliation addition preserved without modification.
+- **v5.2 (2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact `Phase3_Group3_Contracts_v1_10_Edits_2026-05-01.md` §FORMS_ENGINE)** — Adds Research consent integration section per ADR-028: L1 rendering gate based on CCR `research_data_partnership_active != inactive`; L4 approval governance verification of `research_consent_text_version` against CCR `research_ethics_review_body.approval_reference_id`; static analysis at form-version-publish time rejects 6 categories of dependency on `research_consent_status` (L2 BranchingLogic, L3 Eligibility, L4 ApprovalGovernance, L1 PresentationContent variation excluding the consent block itself, intake-flow gating, surface visibility) per I-030 enforcement. Adds Cross-reference to Master PRD §10.5 program catalog architecture (Pattern A immutable per-market form versions; four-layer architecture composes with Program entity + ProgramMarketPolicy + CCR Runtime to produce per-tenant per-country form deployments). Per ADR-028 + Master PRD v1.10 §10.5 + §15.2/§15.3 + INVARIANTS v5.2 I-030. Existing four-layer architecture, Pattern A versioning, form versioning, intake lifecycle, provider feedback model, medication reconciliation addition, and §Tenant scoping preserved without modification. v5.2 is purely additive.

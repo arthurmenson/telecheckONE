@@ -12,10 +12,10 @@
 
 v1.1 reflects the multi-tenancy decision (ADR-023):
 
-1. **Two role hierarchies introduced:** Platform Admin (Telecheck operating the platform) and Tenant Admin / Tenant Operator (per-tenant operators like Heros team and Telecheck-Ghana team).
+1. **Two role hierarchies introduced:** Platform Admin (Telecheck operating the platform) and Tenant Admin / Tenant Operator (per-tenant operators — e.g., the Telecheck-US tenant operator team trading as Heros Health DBA, and the Telecheck-Ghana tenant operator team trading as Heros Health Ghana DBA). **Updated 2026-05-02 per Codex Scope 4 HIGH-2 finding to use operating-tenant + consumer-DBA framing throughout role-hierarchy normative text.**
 2. **Every existing role from v1.0 is implicitly tenant-scoped** — a clinician, a patient, a delegate exists within one tenant. Cross-tenant access is never permitted (per ADR-023).
 3. **New role: Platform Admin** with cross-tenant aggregate visibility but no per-tenant PHI access.
-4. **New role: Tenant Owner** — per-tenant superuser; the Heros operator who manages the Heros tenant in totality.
+4. **New role: Tenant Owner** — per-tenant superuser; e.g., the Telecheck-US tenant owner (Heros Health DBA scope) who manages the Telecheck-US tenant in totality, or the Telecheck-Ghana tenant owner (Heros Health Ghana DBA scope) who manages the Telecheck-Ghana tenant in totality.
 5. **Tenant-scoped permissions enforced at three layers** — application middleware, database RLS, per-tenant KMS encryption keys.
 6. **Special handling of platform admin operations** that target a specific tenant (audited, requires `X-Tenant-Id` header, tenant admin notified).
 
@@ -39,7 +39,7 @@ Platform admins authenticate without a `tenant_id`. Their operations on a specif
 
 ### 1.2 Tenant role hierarchy
 
-These roles operate within a single tenant. The Heros operator team has these roles within the Heros tenant. The Telecheck-Ghana operator team has these roles within the Telecheck-Ghana tenant.
+These roles operate within a single tenant. The Telecheck-US tenant operator team (trading patient-facing as Heros Health DBA) holds these roles within the Telecheck-US tenant. The Telecheck-Ghana tenant operator team (trading patient-facing as Heros Health Ghana DBA) holds these roles within the Telecheck-Ghana tenant.
 
 | Role | Scope | Sees this tenant's PHI | Can configure this tenant | Can manage other roles in this tenant |
 |---|---|---|---|---|
@@ -151,9 +151,9 @@ Break-glass is not normal-operation access. Routine platform-admin work uses agg
 
 Both have full access to their tenant. The distinction:
 
-- **Tenant Owner** — can add or remove other Tenant Owners. The "root" tenant role. Typically 1-2 people per tenant (e.g., the Heros founder and the Heros COO). Cannot be removed except by Platform Admin via documented process (e.g., business-relationship dispute resolution).
+- **Tenant Owner** — can add or remove other Tenant Owners. The "root" tenant role. Typically 1-2 people per tenant (e.g., the Telecheck-US tenant founder and COO operating the Heros Health DBA scope; or the Telecheck-Ghana tenant founder and COO operating the Heros Health Ghana DBA scope). Cannot be removed except by Platform Admin via documented process (e.g., business-relationship dispute resolution). **Patch 2026-05-02 per Codex Round-2 Scope 4 HIGH-1 finding — operating-tenant + DBA framing applied throughout.**
 
-- **Tenant Admin** — full access to the tenant, but cannot add or remove Tenant Owners. Can add/remove other Tenant Admins, Operators, Marketing, etc. Multiple Tenant Admins typical (e.g., the Heros operations team).
+- **Tenant Admin** — full access to the tenant, but cannot add or remove Tenant Owners. Can add/remove other Tenant Admins, Operators, Marketing, etc. Multiple Tenant Admins typical (e.g., the Telecheck-US tenant operations team operating the Heros Health DBA scope).
 
 This allows a tenant to have multiple admins for operational coverage without making every admin able to lock the others out.
 
@@ -162,8 +162,8 @@ This allows a tenant to have multiple admins for operational coverage without ma
 ## 6. Clinician role within multi-tenant context
 
 Clinicians are tenant-scoped. The same physician (in the real world) can be:
-- A clinician in the Telecheck-Ghana tenant (employed by Telecheck Ghana panel)
-- A clinician in the Heros tenant (contracted via OpenLoop or Telecheck PLLC)
+- A clinician in the Telecheck-Ghana tenant (Heros Health Ghana DBA scope; employed by Telecheck-Ghana Ltd. clinician panel)
+- A clinician in the Telecheck-US tenant (Heros Health DBA scope; contracted via OpenLoop or Telecheck PLLC)
 
 These are separate Clinician records in the platform — different tenant-scoped accounts, different patient panels, different audit trails. The platform does not federate clinician identity across tenants.
 
@@ -173,7 +173,7 @@ This matches the legal reality: the physician's relationship is with the tenant'
 
 ## 7. Patient role within multi-tenant context
 
-A patient is tenant-scoped. The same person (in the real world) using both Heros and Telecheck-Ghana would have two separate Patient/Account records — different tenant_ids, different account_ids, different patient profiles, different clinical histories.
+A patient is tenant-scoped. The same person (in the real world) using both the Telecheck-US tenant (Heros Health DBA consumer surface) and the Telecheck-Ghana tenant (Heros Health Ghana DBA consumer surface) would have two separate Patient/Account records — different tenant_ids, different account_ids, different patient profiles, different clinical histories.
 
 Cross-tenant patient identity (federated identity) is explicitly out of scope per ADR-023. This is consistent with the Rimo / Healthie pattern.
 
@@ -208,9 +208,41 @@ For an engineering team that has v1.0 RBAC partially in place:
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §RBAC rows 29, 73)
+
+### Tenant scoping examples — C3 brand-structure refresh (Row 29)
+
+All Tenant Admin role examples in this matrix that referenced `Heros tenant admin` are rewritten to `Telecheck-US tenant admin (Heros Health DBA scope)`. The role description's scope clarification distinguishes operating-tenant identifier (`Telecheck-US`) from the patient-facing consumer DBA (`Heros Health`). Same pattern applies to `Telecheck-Ghana tenant admin (Heros Health Ghana DBA scope)`.
+
+### Research data roles (Row 73 — NEW per ADR-028)
+
+Three new roles added to the **Tenant Admin hierarchy** (with Platform Admin oversight per existing dual-hierarchy rules):
+
+| Role | Hierarchy | Permissions | Bound by |
+|---|---|---|---|
+| `Research Data Steward` | Tenant Admin | Define cohorts (`POST /research/cohort-definitions`); manage DSA lifecycle (excluding activation, which requires quad sign-off); initiate exports (`POST /research/exports/initiate`); read DSA + cohort audit chain at high_pii sensitivity. | I-029 (export gate) + I-031 (audit retention) audit obligations; tenant-scoped per I-023. Cannot single-handedly activate a DSA — activation is quad sign-off (Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead per ADR-028 v0.4) + REC concurrence per `research_ethics_review_body.per_dsa_review_required`. |
+| `Research Ethics Committee Member` | External oversight (read-only, scoped) | Read research export audit chain (high_pii sensitivity); read consent text history (per CCR `research_ethics_review_body.approval_reference_id`); read DSA details. **Cannot modify state**; cannot initiate exports; cannot define cohorts. | Read-only oversight role; access logged per I-031 audit envelope. Per-DSA scope per `research_ethics_review_body.per_dsa_review_required`. |
+| `External Research Partner` | External (highly scoped) | Receive delivered exports per signed DSA; read own DSA details. **Cannot access patient-level data**; cannot navigate to other partners' DSAs; cannot modify cohort definitions; cannot retrieve audit chain. | Strictly partner-scoped per signed DSA; per-DSA isolation enforced at API layer + data layer. No cross-DSA access. |
+
+**Activation gate signers** for the `consent_only → active` CCR transition (per MARKET_LAUNCH v5.1 Research data partnership activation gate):
+- Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead (quad sign-off per ADR-028 v0.4)
+- REC concurrence per `research_ethics_review_body.per_dsa_review_required`
+- Country Launch Director (per MARKET_LAUNCH v5.1 — separate from quad sign-off; per-country launch authority)
+
+**Activation gate signers** for the marketing posture activation (per MARKET_LAUNCH v5.1 Marketing posture activation gate):
+- Marketing copy governance lead + Clinical Safety Officer + Regulatory Affairs Lead (triple sign-off per ADR-027 v0.5/v0.6)
+- Country Launch Director
+
+### Role count post-v1.10
+
+Total roles post-v1.10: **(v1.1 baseline roles) + 3 research roles**. Marketing copy governance lead is a workstream-discipline designation (not a new RBAC role; uses existing Marketing role with the governance-lead designation artifact ID per CCR `marketing_governance_lead_designation_artifact_id`).
+
+---
+
 ## Document control
 
 - **v1.1** — Two role hierarchies introduced (Platform Admin + Tenant). Platform Admin operations on specific tenants are audited and notify tenant admins. Tenant Owner / Tenant Admin distinction. Per-resource permissions matrix updated for multi-tenancy. Break-glass procedure documented. Migration notes from v1.0 included.
+- **v1.1 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §RBAC rows 29, 73)** — Additive content under "v1.10 cycle additions" section above. Tenant Admin role examples reframed to operating-tenant naming with consumer-DBA qualifier (`Telecheck-US tenant admin (Heros Health DBA scope)`, `Telecheck-Ghana tenant admin (Heros Health Ghana DBA scope)`) per C3 brand structure. 3 new research roles added per ADR-028: Research Data Steward (define cohorts, manage DSA lifecycle excluding activation, initiate exports — bound by I-029 / I-031); Research Ethics Committee Member (external oversight, read-only, scoped to per-DSA); External Research Partner (highly scoped, receives delivered exports per signed DSA only). Activation gate signers documented for marketing posture (ADR-027 v0.5/v0.6 triple sign-off + Country Launch Director per MARKET_LAUNCH v5.1) and research data partnership (ADR-028 v0.4 quad sign-off + REC concurrence + Country Launch Director per MARKET_LAUNCH v5.1). Per ADR-027 + ADR-028 + INVARIANTS v5.2 + AUDIT_EVENTS v5.2 + MARKET_LAUNCH v5.1. Existing v1.1 roles and break-glass procedure preserved without modification. No version-number bump (entry-level refresh).
 - **v1.0** — Initial RBAC matrix (single-tenant assumption); superseded.
 - **Next review:** after engineering implements the platform-admin / tenant-admin separation and runs a security review against the matrix.
 - **Change discipline:** changes to roles, permissions, or break-glass procedure require Engineering Lead + Privacy Officer + Product Lead sign-off.

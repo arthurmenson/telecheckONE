@@ -9,7 +9,7 @@
 
 ## What Telecheck is (30-second version)
 
-Telecheck is an AI-powered telehealth, pharmacy, and health intelligence platform. It unifies telemedicine, pharmacy fulfillment, lab interpretation, remote patient monitoring, AI clinical assistance, and patient community into one connected system. Ghana is the anchor market. The architecture is global.
+Telecheck is an AI-powered telehealth, pharmacy, and health intelligence platform. It unifies telemedicine, pharmacy fulfillment, lab interpretation, remote patient monitoring, AI clinical assistance, and patient community into one connected system. Telecheck-Ghana is the pilot market within emerging markets, operated under the Heros Health Ghana consumer DBA. The architecture is global.
 
 **One-line:** Assess → Treat → Monitor → Guide — one platform, one patient journey.
 
@@ -39,17 +39,23 @@ Investor Pitch Deck (Ghana), Nigeria Investor Pitch, Investor One Pager
 
 ---
 
-## The 4 things that matter most
+## The 5 things that matter most
 
-Before diving into any document, understand these four decisions — they are the architectural spine of the entire platform:
+Before diving into any document, understand these five decisions — they are the architectural spine of the entire platform:
 
 1. **Protocolized autonomy, not open-ended autonomy** (ADR-005). The AI and protocols can only act within named, versioned, bounded scopes with named human accountability and mandatory review cadence. There is no "AI decides" pathway.
 
-2. **Immutable platform floor** (Contracts Pack, 22 FLOOR contracts). No configuration, admin action, or market-specific customization can relax safety below the floor. Crisis detection, audit logging, and emergency escalation are always on.
+2. **Immutable platform floor** (Contracts Pack, 22+ FLOOR contracts; v1.10 cycle adds I-029/030/031 for research data discipline — total 25). No configuration, admin action, or market-specific customization can relax safety below the floor. Crisis detection, audit logging, and emergency escalation are always on.
 
-3. **Two-mode AI architecture** (ADR-002). Mode 1 (conversational assistant for patients, governed by guardrail templates) and Mode 2 (protocol execution agent for structured clinical preparation, governed by clinical protocols). Different safety profiles, different governance, different audit.
+3. **Two-mode AI architecture, reframed as workload taxonomy** (ADR-002 superseded by ADR-029 at v1.10). Mode 1 / Mode 2 are operator-facing terms for two `ai_workload_type` values (`conversational_assistant` and `protocol_execution`). Workload taxonomy reserves additional types for future agentic workloads behind not-yet-active ADRs (030–034). I-012 reject-unless three-clause rule is preserved at v1.0 active levels.
 
 4. **Market Rollout Cockpit** (Market Rollout Cockpit Slice PRD). Every market is governed by a versioned Market Pack. Feature availability is deterministic, not probabilistic. Emergency Safe Mode reverts all configurable behavior to strictest defaults within 60 seconds.
+
+5. **Brand structure + program catalog architecture (v1.10 cycle additions):**
+   - **Brand structure (C3 / Master PRD §17):** `Telecheck` is the platform / B2B brand only — never consumer-facing. `Heros Health` is the global consumer DBA, country-instanced via subdomains (`heroshealth.com`, `ghana.heroshealth.com`). Operating tenants follow `Telecheck-{country}` naming (e.g., `Telecheck-US`, `Telecheck-Ghana`); these identifiers are internal/B2B only.
+   - **Program catalog architecture (C6 / Master PRD §10.5):** Programs (e.g., GLP-1 weight management, RPM/CCM, AE Reporting) are platform-level catalog entries. Per-market activation is governed by `ProgramMarketPolicy`. Forms Engine four-layer model (Pattern A immutable per-market form versions) instantiates the program in each market. CCR runtime resolves operational config per `country_of_care`.
+   - **Country-conditional DTC marketing posture (C4 / ADR-027):** Molecule-level marketing is gated by CCR `marketing.molecule_level_marketing_permitted`. US: `prohibited` permanent. Ghana: `pending_evidence` pending regulatory engagement. Triple sign-off + audit trail required for any molecule-level surface.
+   - **Research data partnership Posture A (C5 / ADR-028):** Release 2 capability — parent-level WHO/UN partnerships, 5th-tier optional consent, REC-overseen, k-anonymity-floored aggregate exports under signed DSA. Behavior-changing post-market protocols (Posture B) remain absolute non-goal.
 
 ---
 
@@ -249,5 +255,6 @@ Tag each item with the document name and section number. This makes feedback act
 
 ## Document control
 
+- **v1.0 cycle additions — 2026-05-02 (per v1.10.1 hygiene cycle physical merge of Phase5 delta Group 5E, Rows 5 + 14 + 24 + 79 + 89):** "What Telecheck is" reframed: "Ghana is the anchor market" → "Telecheck-Ghana is the pilot market within emerging markets, operated under the Heros Health Ghana consumer DBA" (C2 + C3). "The 4 things that matter most" expanded to "The 5 things that matter most" — added (5) Brand structure + program catalog architecture orientation block bundling C3 brand-structure cascade, C6 program catalog architecture, C4 country-conditional marketing posture, C5 research data partnership Posture A. Item (3) "Two-mode AI architecture" updated to reference workload taxonomy reframing per ADR-029 (Mode 1 / Mode 2 reframed as `conversational_assistant` / `protocol_execution` `ai_workload_type` values; I-012 preserved). Item (2) FLOOR-contract count updated from 22 to 25 to reflect new I-029/030/031 research data invariants. Body content otherwise preserved at v1.0 baseline.
 - **v1.0 (refreshed 2026-04-26, US Region Migration Cycle U-003)** — Stale-pointer refresh only. Updated canonical version pointers throughout: Master PRD v1.6 → v1.9, System Architecture v1.0 → v1.2, RBAC v1.0 → v1.1, CDM v1.0 → v1.2, Registry v2.3 → v2.9, Refill Slice v1.0 → Pharmacy + Refill Slice v2.1; ADR Set reference now includes Addenda 016–019, 020–025 (with ADR-025 superseded), and 026; "all 17 Slice PRDs" generalized to "all launch slice PRDs" (current count differs from v1.0 era). No semantic content changes; all reading orders, reviewer-type segmentations, time estimates, and §23 launch-blocker analysis preserved unchanged. This is a corrective metadata refresh consistent with the v1.0 brief's structure.
 - **v1.0** — Initial Reviewer Brief. Reading orders for 5 reviewer types (clinical, regulatory, security, engineering, investor) plus full adversarial review. §23 launch blocker status. Known gaps. Document layer map.

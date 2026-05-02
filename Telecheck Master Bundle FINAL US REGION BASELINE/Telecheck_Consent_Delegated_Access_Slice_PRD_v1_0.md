@@ -475,8 +475,47 @@ In emerging-market contexts, a delegate may have limited digital literacy or int
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 60)
+
+### 16. Research data-use consent (5th tier) — per ADR-028 + Master PRD §15.2 (Row 60 — Cycle C5)
+
+**Position relative to existing six consent types (§5).** Research data-use consent is a fifth *tier* of presentation atop the existing data-use consent type (§5.3) — it is recorded as a separately-revocable `ConsentRecord` with `consent_type = research_data_use` (per CDM v1.2 / TYPES v5.2 `ResearchConsent`). It does NOT alter the six consent types defined in §5.
+
+**Presentation gate.** The 5th tier is presented at intake and at care-touchpoint moments only when CCR `research_data_partnership_active ∈ {consent_only, active}` for the patient's `country_of_care`. When CCR is `inactive`, the 5th tier is NOT presented and no `ResearchConsent` record exists for the patient.
+
+**Consent text sourcing.** Consent text is per CCR `research_ethics_review_body.approval_reference_id` (per CCR_RUNTIME v5.2 research block) and version-pinned per Master PRD v1.10 §15.2 patient-facing text rules. The pinned version is recorded on the `ConsentRecord` per existing five-attribute schema (§7.1).
+
+**Optionality and care-impact prohibition (I-030).** Research data-use consent is optional, separately revocable, and MUST NOT impact care delivery — neither the presence nor the absence of a research consent grant alters any clinical pathway, eligibility, prioritization, or treatment recommendation. This is enforced by Forms Engine static analysis at form-version-publish time (six dependency categories rejected per FORMS_ENGINE v5.2 I-030 enforcement; see Forms/Intake Engine Slice §25.2 / Row 61) and at runtime by GOVERNANCE_CONTROLS v5.2 §7.
+
+**Asymmetric retraction acknowledgement.** At grant time, the patient explicitly acknowledges that aggregate research data already shared (e.g., included in a prior `ResearchDataExport`) cannot be retracted retroactively — only future inclusion is stopped on revocation. The acknowledgement is captured as a structured attestation on the `ResearchConsent` record (not free text).
+
+**Audit.** Grant and revocation events emit AUDIT_EVENTS v5.2 §5 `research.consent_granted` and `research.consent_revoked` at **`audit_sensitivity_level = standard`** (NOT `high_pii`) — *patch 2026-05-02 per Codex Round-11 Scope 2 MEDIUM-1 finding aligning with AUDIT_EVENTS v5.2 §5 audit-sensitivity reconciliation note: high_pii is reserved for research export events (`research.export_initiated`, `research.export_completed`) where actual de-identified longitudinal data leaves the platform; consent state itself is not high-PII (it records that a patient gave/revoked permission for a defined scope; patient identity is already tenant-scope-protected per I-023)*. I-031 applies to research export events specifically. Audit payload records the `country_of_care`, `research_ethics_review_body.approval_reference_id`, pinned consent-text version, and the asymmetric-retraction acknowledgement.
+
+**Cross-references (v1.10):** ADR-028 v0.5 (Research data partnership Posture A — Release 2 goal); Master PRD v1.10 §15.2 (research data governance); INVARIANTS v5.2 I-029 (research export gates), I-030 (consent-zero-impact on care delivery), I-031 (high_pii audit class); AUDIT_EVENTS v5.2 §5 (research events); CCR_RUNTIME v5.2 research block (`research_data_partnership_active`, `research_ethics_review_body`, `research_permitted_data_domains`); TYPES v5.2 (`ResearchConsent`, `DataSharingAgreement`, `ResearchEthicsReviewBody`); FORMS_ENGINE v5.2 (research consent integration); Forms/Intake Engine Slice §25.2 (research_data_use_consent_block field type); Market Rollout Cockpit Slice §X (Market Pack research block).
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 60 (Cycle C5).
+
+### 17. Row 102 verification marker — per Cycle C7 / D5 batch (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 102)
+
+Row 102 is a verification-only row in the Phase 5 delta (Cycle C7 — AI workload taxonomy + autonomy levels). It confirms that ADR-028 5th-tier research consent additions to this slice are covered upstream and now physically present in this file.
+
+**Verification statement.** Row 102 verified: ADR-028 5th-tier consent additions are covered in §16 above (added per Row 60 / v1.10 cycle). The 5th tier (`consent_type = research_data_use`) is presented as a separately-revocable `ConsentRecord` gated on CCR `research_data_partnership_active`, with I-030 enforcing zero impact on care delivery.
+
+**Cross-references (v1.10):**
+- ADR-028 v0.5 — Research Data Partnership Posture A (Accepted at v1.10 promotion 2026-05-01)
+- Master PRD v1.10 §15.2 — research data governance / consent surface
+- INVARIANTS v5.2 §I-029 / §I-030 / §I-031 — research export gates / consent-zero-impact on care / high_pii audit classification
+- §16 of this slice — substantive 5th-tier body added via Row 60 (sibling D4 batch)
+- ADR-029 — workload taxonomy (the C7 cycle this verification row belongs to; no direct edit obligation on this slice from C7 itself)
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 102 (Cycle C7).
+
+---
+
 ## Document control
 
 - **v1.0** — Initial Consent & Delegated Access slice PRD. Defines the account model, six consent types with five-attribute records, progressive consent presentation, delegation primitive with scoped permissions and relationship-typed defaults, sensitive-category rules, revocation semantics with in-flight workflow handling, platform floor compliance, and edge cases including minor-to-adult transition and incapacity. Derived from Master PRD v1.6 §15 and Flagged Items Resolution v1.0.
+- **v1.10 cycle addition (2026-05-02 — v1.10.1 hygiene cycle physical merge of Phase5 delta Row 60):** Added §16 Research data-use consent (5th tier) per ADR-028 + Master PRD v1.10 §15.2. Five-attribute consent records and the six consent types in §5 are preserved unchanged; the 5th tier is recorded as a `ConsentRecord` with `consent_type = research_data_use` and gated on CCR `research_data_partnership_active`. I-030 enforces zero impact on care delivery; I-029 governs downstream export pipeline; I-031 governs audit classification.
+- **v1.10 cycle addition (2026-05-02 — v1.10.1 hygiene cycle physical merge of Phase5 delta Row 102):** Added §17 Row 102 verification marker per Cycle C7 / D5 batch. Verifies that ADR-028 5th-tier research consent additions are covered in §16 (added per Row 60). No body edits beyond the §17 marker; verification-only row.
 - **Next review:** after Forms/Intake Engine slice defines the progressive consent presentation flows; after Ghana-specific minor consent thresholds are resolved with legal and clinical review (Q1); after healthcare proxy documentation verification process is defined (Q2).
 - **Change discipline:** changes to consent types, delegation scopes, sensitive-category rules, revocation semantics, or platform floor compliance rules require explicit owner sign-off and must be reflected in the Master PRD §15 if they alter the platform model. Changes to delegation defaults require validation against emerging-market family structure research.

@@ -1,6 +1,6 @@
 # 00 · Audit Events
 
-**Status:** canonical · **Version:** 5.1 · **Owner:** engineering lead + compliance officer · **Consumers:** all services, compliance, clinical safety, patient-access
+**Status:** canonical · **Version:** 5.2 · **Owner:** engineering lead + compliance officer · **Consumers:** all services, compliance, clinical safety, patient-access
 
 This document defines the audit event schema, complete action catalog, safety classification matrix, hash chain integrity model, and patient self-access rules. Per I-003, audit records are immutable and append-only. No exceptions.
 
@@ -15,17 +15,35 @@ Every audit event contains:
   "audit_id":          "aud_<ULID>",
   "timestamp":         "<ISO 8601 with timezone>",
   "tenant_id":         "tnt_<ULID>",
-  "actor_type":        "patient | clinician | pharmacist | operator | delegate | protocol_engine | ai_mode_1 | ai_mode_2 | system | platform_admin",
+  "actor_type":        "patient | clinician | pharmacist | operator | delegate | protocol_engine | ai_workload | ai_mode_1 | ai_mode_2 | system | platform_admin",
   "actor_id":          "<authenticated identity ULID>",
   "actor_tenant_id":   "tnt_<ULID> | null (null only for platform_admin actors)",
   "target_patient_id": "<patient this action affects>",
   "delegate_context":  { "delegate_id": "...", "scope": "..." } | null,
   "action":            "<action from the catalog below>",
   "category":          "A | B | C",
+  "audit_sensitivity_level": "standard | high_pii",     // active values; reserved levels added with ADR amendment (added v5.2 per I-031)
   "resource_type":     "<aggregate type>",
   "resource_id":       "<aggregate ID>",
   "detail":            { <action-specific payload> },
   "engine_versions":   { "interaction_engine": "...", "herb_drug_engine": "...", "ai_model": "...", "protocol": "...", "guardrail_template": "...", "knowledge_base": "..." } | null,
+  // Workload-taxonomy fields (added v5.2 per ADR-029 / WORKLOAD_TAXONOMY contract).
+  // Full enum lists active + reserved values; reserved values are runtime-rejected per source contract until activation audit event recorded.
+  // Active at v1.0: conversational_assistant, protocol_execution. Reserved: autonomous_agent, multi_agent_supervisor, tool_using_agent.
+  // Sentinel `rejected_invalid_attempt` (v5.2 patch 2026-05-02 per Codex Round-5 Scope 1 MEDIUM) is VALID ONLY in the audit envelope of `*.execution_rejected` events
+  //   (`prescribing.execution_rejected`, `refill.execution_rejected`, `medication_order.execution_rejected`); runtime validation MUST reject the sentinel everywhere else
+  //   (any successful AIExecution record, any non-rejection action audit). Per AUDIT_EVENTS v5.2 §I-012 closure rule + execution_rejected exception.
+  "ai_workload_type":  "conversational_assistant | protocol_execution | autonomous_agent | multi_agent_supervisor | tool_using_agent | rejected_invalid_attempt (only on *.execution_rejected events) | n/a (only on I-012 clinician-only approval audit records where no AI workload was upstream — patch 2026-05-02 per Codex Round-6 Scope 1 MEDIUM-1) | null",
+  // Active at v1.0: advisory, suggestion, action_with_confirm. Reserved: action_with_audit_only, fully_autonomous. Sentinel rejected_invalid_attempt — same carve-out as above. n/a — same I-012 clinician-only carve-out as above.
+  "autonomy_level":    "advisory | suggestion | action_with_confirm | action_with_audit_only | fully_autonomous | rejected_invalid_attempt (only on *.execution_rejected events) | n/a (only on I-012 clinician-only approval audit records where no AI workload was upstream) | null",
+  // Reserved nullable agentic-context fields (added v5.2; populate only when corresponding capability activates per ADR-030/031/032/033/034).
+  "agent_id":          "<ULID> | null",
+  "agent_version":     "<semver> | null",
+  "tool_call_id":      "<ULID> | null",
+  "memory_read_set_id":  "<ULID> | null",
+  "memory_write_set_id": "<ULID> | null",
+  "supervising_policy_id": "<ULID> | null",
+  "knowledge_source_versions": [ { "knowledge_base_id": "...", "version": "..." } ] | null,
   "signals":           [ { "signal_id": "...", "severity": "...", "source_engine": "...", "check_class": "..." } ] | null,
   "override":          { "signal_id": "...", "rationale": "...", "clinician_id": "..." } | null,
   "linked_events":     [ "<domain_event_id>" ],
@@ -40,6 +58,42 @@ Every audit event contains:
   }
 }
 ```
+
+**Workload-taxonomy nullability + sensitivity rules (added v5.2 per ADR-029 + I-031):**
+
+- `audit_sensitivity_level` is required on every record. Default value `standard`. Records emitted by the research data export pipeline (events listed below in the `research.export_*` family) carry `audit_sensitivity_level = high_pii` per I-031.
+- `ai_workload_type` and `autonomy_level` are **required** for new v1.10 AI events where `actor_type = ai_workload`. They are nullable in two cases only: (a) legacy events backfilled from before v1.10 promotion; (b) non-AI events (where `actor_type ≠ ai_workload`).
+- **I-012 closure rule (added v5.2 patch 2026-05-02 per Codex Scope 1 HIGH-1 finding; authoritative I-012 action-class set declared 2026-05-02 per Codex Round-9 Scope 1 HIGH-1 finding):** For any audit record whose action class is governed by I-012, the fields `ai_workload_type` and `autonomy_level` are **required regardless of `actor_type`**. The **authoritative I-012 action-class set** (this contract is the single source of truth; WORKLOAD_TAXONOMY, AUTONOMY_LEVELS, STATE_MACHINES, and TYPES MUST point here, not redeclare) consists of: `prescribing.initiated`, `prescribing.approved`, `prescribing.declined`, `prescribing.modified`, `refill.approved`, `refill.declined`, `protocol_authorized_prescribing`, `protocol_authorized_refill_renewal`, `protocol_authorized_dispensing_release`, `prescribing.execution_rejected`, `refill.execution_rejected`, `medication_order.execution_rejected`, AND any future medication_request / refill / medication-order action class explicitly added to this list by an I-012-amending ADR. The previous nullability carve-out for non-AI actors does NOT apply to any item in this set. The legacy `protocol_engine` actor_type, when emitting any I-012 action-class record, MUST be mapped at emission time to `actor_type = ai_workload, ai_workload_type = protocol_execution` (this is the canonical mapping per AI_LAYERING v5.2 §10.2). Clinician-only approval/confirmation records in this set (where no AI workload was upstream) populate the envelope fields per the §clinician-only carve-out using the `n/a` sentinel from WORKLOAD_TAXONOMY + AUTONOMY_LEVELS enums. Schema-driven implementations that retain `protocol_engine` as the literal actor_type for any I-012 action-class record are non-compliant. This closure prevents an I-012 prescription/refill from passing schema validation with null workload/autonomy fields, defeating the §13.7 three-clause evidence requirement.
+- **Exception for `*.execution_rejected` events (added v5.2 patch 2026-05-02 per Codex Round-3 Scope 1 MEDIUM-1 finding):** The I-012 closure rule above applies to *successful* execution audit records. For the rejection-audit-event family (`prescribing.execution_rejected`, `refill.execution_rejected`, `medication_order.execution_rejected`), the envelope-level `ai_workload_type` and `autonomy_level` are populated from the **attempted** values in the rejection payload (`attempted_ai_workload_type` and `attempted_autonomy_level`). Specifically: at emit time the validator sets envelope `ai_workload_type = payload.attempted_ai_workload_type` and envelope `autonomy_level = payload.attempted_autonomy_level`; if either attempted value is null/unknown/reserved, the envelope value MUST be set to the literal sentinel string `"rejected_invalid_attempt"` (a reserved enum value added to both WORKLOAD_TAXONOMY and AUTONOMY_LEVELS schema enums for this purpose). This carve-out is necessary because a rejection event captures invalid/null/reserved attempts by definition; without the carve-out, a schema-driven validator applying the I-012 closure rule literally would reject the rejection-audit event itself, recreating the bare-suppression audit gap that the Round-2 MEDIUM-1 patch was designed to close. Mirror in STATE_MACHINES v1.1 ProtocolAuthorizedAction §10.4 and AUTONOMY_LEVELS contract.
+- Reserved agentic-context fields (`agent_id`, `agent_version`, `tool_call_id`, `memory_read_set_id`, `memory_write_set_id`, `supervising_policy_id`, `knowledge_source_versions[]`) are nullable across all events. They populate only when the corresponding capability activates (per ADR-030/031/032/033/034 as applicable).
+- Schema additive only — no audit migration required; legacy records receive `null` for these fields.
+
+**Enum coverage rule (added v5.2):** The schema enum lists the full set of values defined in the source-of-truth contract (WORKLOAD_TAXONOMY for `ai_workload_type`; AUTONOMY_LEVELS for `autonomy_level`), including reserved values. Values being present in the schema does NOT activate them — runtime validation per the source contract rejects reserved values unless their activation prerequisites are recorded in the audit chain (ADR + activation audit event two-condition AND). This avoids cross-contract enum drift while preserving the runtime gate.
+
+**Actor type addition (added v5.2):** New `actor_type = ai_workload` is the canonical actor type for AI events going forward. Aliases `ai_mode_1` and `ai_mode_2` are preserved for backward-compat (Mode 1 ≡ `actor_type = ai_workload, ai_workload_type = conversational_assistant`; Mode 2 ≡ `actor_type = ai_workload, ai_workload_type = protocol_execution`). New v1.10+ emitters MUST use `actor_type = ai_workload`. Audit retrieval queries that filter by AI workload SHOULD use `ai_workload_type` rather than the actor_type aliases.
+
+**I-012 preservation rule — audit-side enforcement (added v5.2; mirrors Master PRD §13.7 v0.3 normative wording):** The audit envelope MUST support the §13.7 reject-unless three-clause rule. For action records governed by I-012 (prescription, refill, medication-order), the state machine integration MUST emit an audit record only when ALL three of the following are present in the audit chain for that `action_id`:
+
+1. The action's `autonomy_level` field equals `action_with_confirm` (string equality; not membership in a set).
+2. An explicit clinician confirmation event (`prescribing.approved` or equivalent) exists in the immutable audit chain prior to the `*.executed` transition, scoped to the same `action_id`.
+3. The confirming actor's `actor_id` resolves to a role authorized to sign for the action class under RBAC v1.1 / I-012.
+
+If any of the three conditions is unmet, the state machine rejects the `executed` transition. **No success `*.executed` audit record is emitted.** Reserved autonomy levels (`action_with_audit_only`, `fully_autonomous`) and null/unknown/absent values are explicitly rejected by this rule. Reserved levels can reach `executed` for I-012 actions ONLY when **both** (a) a successor ADR (ADR-030 or later) explicitly supersedes I-012 for the action class in scope, AND (b) an activation audit event recording the supersession is present in the immutable audit chain. ADR approval alone is never sufficient. Future enum values not yet authorized by an ADR-029 successor default to **rejected**.
+
+**Reject-unless rejection audit event (added v5.2 patch 2026-05-02 per Codex Scope 1 MEDIUM-1 finding — closes the bare-suppression audit gap):** When a state machine rejects an I-012 `*.executed` transition under the three-clause rule above, the platform MUST emit an immutable Category A audit event of type `<action_class>.execution_rejected` (e.g., `prescribing.execution_rejected`, `refill.execution_rejected`, `medication_order.execution_rejected`) capturing the attempted action context. **Bare suppression — no audit record at all on rejection — is forbidden per I-003**, mirroring the failed-export discipline used in §5 research events.
+
+Required payload fields on the rejection event:
+- `action_id` — the same ULID that the rejected `*.executed` would have carried.
+- `action_class` — the I-012 action class (`prescribing`, `refill`, `medication_order`).
+- `attempted_actor_id`, `attempted_actor_type`, `attempted_ai_workload_type`, `attempted_autonomy_level` — the actor and workload/autonomy fields the requester proposed (may be the reserved/forbidden values that triggered rejection).
+- `violated_clauses` — array of one or more of `autonomy_level_string_equality`, `audit_chain_confirmation_event_missing`, `confirming_actor_rbac_unauthorized`, `reserved_level_without_activation_audit_event`. Captures which clause(s) of the §13.7 three-clause rule were unsatisfied.
+- `confirmation_event_state` — present-with-defect / absent / present-but-mismatched-action_id / present-but-mismatched-actor.
+- `rbac_role_check_result` — `authorized | unauthorized | role_not_found`.
+- `audit_sensitivity_level` — `standard` (the rejection itself is not high_pii unless the action class is high_pii independently).
+
+Like all Category A records, rejection events are tenant-scoped per `tenant_id`, immutable per I-016, hash-chained per I-003, and retained per the standard audit retention policy. They surface to monitoring (reserved-transition probing alarms; integration-bug detection; safety-case validation evidence) and feed incident review per GOVERNANCE_CONTROLS v5.1 §3.
+
+**Source of truth:** Master PRD §13.7 (single normative source of truth for I-012 + autonomy-level interaction). This audit-side rule mirrors the §13.7 normative wording exactly, including the two-condition AND for reserved-level activation.
 
 **Tenant-scope rules (added v5.1):**
 - `tenant_id` is the tenant whose data the action affects. Required on every audit record. Null only for platform-scope actions that have no tenant target (e.g., a Platform Admin creating a new tenant — that audit record has `tenant_id` set to the new tenant being created).
@@ -69,15 +123,18 @@ Every audit event contains:
 
 | Action | Actor types | Detail payload |
 |---|---|---|
-| `prescribing.initiated` | clinician, ai_mode_2 | medication, patient, program_id |
-| `prescribing.approved` | clinician | medication_request_id, medication, dosing, approval_pathway, interaction_signals[], overrides[] |
-| `prescribing.declined` | clinician | medication_request_id, reason_code, reason_text, recommended_action |
-| `prescribing.modified` | clinician | medication_request_id, original_dose, modified_dose, modification_reason |
-| `refill.approved` | clinician, protocol_engine | refill_id, approval_pathway, clinician_id or protocol_version, interaction_signals[], overrides[] |
-| `refill.declined` | clinician, protocol_engine | refill_id, declined_by, reason_code, reason_text |
-| `protocol_authorized_prescribing` | protocol_engine | medication_request_id, protocol_version, accountable_clinician_id, engine_versions, all_signals[], gate_check_results |
-| `protocol_authorized_refill_renewal` | protocol_engine | refill_id, protocol_version, accountable_clinician_id, engine_versions, all_signals[], gate_check_results |
-| `protocol_authorized_dispensing_release` | protocol_engine | pharmacy_order_id, protocol_version, accountable_clinician_id |
+| `prescribing.initiated` | clinician, **ai_workload (ai_workload_type=protocol_execution)** [v1.10+]; legacy alias `ai_mode_2` permitted only for pre-v1.10 backfill records | medication, patient, program_id, **autonomy_level (required for I-012 actions per §I-012 closure rule)**, ai_workload_type |
+| `prescribing.approved` | clinician (human signer per I-012 three-clause rule) | medication_request_id, medication, dosing, approval_pathway, interaction_signals[], overrides[], **ai_workload_type, autonomy_level (required for all I-012-scoped approvals per §I-012 closure rule — patch 2026-05-02 per Codex Round-6 Scope 1 MEDIUM-1; for clinician-only approvals where the upstream AI workload was `protocol_execution` at `action_with_confirm`, the envelope inherits the action_id's preceding workload/autonomy values; for purely human-driven approvals with no AI involvement, the fields are populated as `ai_workload_type = "n/a"` and `autonomy_level = "n/a"` — this prevents schema-driven implementations from omitting the fields and recreating the protocol_engine bypass)** |
+| `prescribing.declined` | clinician | medication_request_id, reason_code, reason_text, recommended_action, ai_workload_type, autonomy_level |
+| `prescribing.modified` | clinician | medication_request_id, original_dose, modified_dose, modification_reason, ai_workload_type, autonomy_level |
+| `refill.approved` | clinician, **ai_workload (ai_workload_type=protocol_execution)** [v1.10+]; legacy alias `protocol_engine` permitted only for pre-v1.10 backfill records | refill_id, approval_pathway, clinician_id or protocol_version, interaction_signals[], overrides[], **autonomy_level (required for I-012 actions per §I-012 closure rule)**, ai_workload_type, supervising_policy_id |
+| `refill.declined` | clinician, **ai_workload (ai_workload_type=protocol_execution)** [v1.10+]; legacy alias `protocol_engine` permitted only for pre-v1.10 backfill records | refill_id, declined_by, reason_code, reason_text, autonomy_level, ai_workload_type |
+| `protocol_authorized_prescribing` | **ai_workload (ai_workload_type=protocol_execution)** [v1.10+]; legacy alias `protocol_engine` permitted only for pre-v1.10 backfill records | medication_request_id, protocol_version, accountable_clinician_id, engine_versions, all_signals[], gate_check_results, **autonomy_level (required for I-012 actions per §I-012 closure rule)**, ai_workload_type, supervising_policy_id |
+| `protocol_authorized_refill_renewal` | **ai_workload (ai_workload_type=protocol_execution)** [v1.10+]; legacy alias `protocol_engine` permitted only for pre-v1.10 backfill records | refill_id, protocol_version, accountable_clinician_id, engine_versions, all_signals[], gate_check_results, **autonomy_level (required for I-012 actions per §I-012 closure rule)**, ai_workload_type, supervising_policy_id |
+| `protocol_authorized_dispensing_release` | **ai_workload (ai_workload_type=protocol_execution)** [v1.10+]; legacy alias `protocol_engine` permitted only for pre-v1.10 backfill records | pharmacy_order_id, protocol_version, accountable_clinician_id, autonomy_level, ai_workload_type |
+| `prescribing.execution_rejected` (added v5.2 patch 2026-05-02) | system (state machine validator) | action_id, action_class=prescribing, attempted_actor_id, attempted_actor_type, attempted_ai_workload_type, attempted_autonomy_level, violated_clauses[], confirmation_event_state, rbac_role_check_result, audit_sensitivity_level=standard. Per §I-012 reject-unless rejection-audit-event rule. |
+| `refill.execution_rejected` (added v5.2 patch 2026-05-02) | system (state machine validator) | action_id, action_class=refill, attempted_actor_id, attempted_actor_type, attempted_ai_workload_type, attempted_autonomy_level, violated_clauses[], confirmation_event_state, rbac_role_check_result, audit_sensitivity_level=standard. Per §I-012 reject-unless rejection-audit-event rule. |
+| `medication_order.execution_rejected` (added v5.2 patch 2026-05-02) | system (state machine validator) | action_id, action_class=medication_order, attempted_actor_id, attempted_actor_type, attempted_ai_workload_type, attempted_autonomy_level, violated_clauses[], confirmation_event_state, rbac_role_check_result, audit_sensitivity_level=standard. Per §I-012 reject-unless rejection-audit-event rule. |
 | `interaction_signal_override` | clinician | signal_id, severity, check_class, rationale_text, engine_version |
 | `herb_drug_signal_override` | clinician | signal_id, severity, evidence_quality, rationale_text, engine_version |
 | `dispensing_release` | pharmacist | pharmacy_order_id, stock_unit, batch_number, release_decision, new_signals_since_approval, fake_med_status |
@@ -120,6 +177,52 @@ Every audit event contains:
 | `incident_opened` | operator | incident_id, severity, affected_services[], patient_impact_estimate |
 | `incident_resolved` | operator | incident_id, resolution_detail, root_cause, preventive_actions[] |
 | `signal_enforcement_trigger` | system | signal_type, threshold_exceeded, enforcement_action_taken |
+
+#### Research events (added v5.2 per ADR-028)
+
+| Action | Actor types | Detail payload | audit_sensitivity_level |
+|---|---|---|---|
+| `research.consent_granted` | patient | consent_id, consent_type ("research_data_use"), scope, version_presented, consent_text_version | standard |
+| `research.consent_revoked` | patient | consent_id, consent_type ("research_data_use"), scope, revocation_reason, revocation_effective_at, asymmetric_retraction_acknowledgment | standard |
+
+**Audit sensitivity reconciliation (added v5.2 patch 2026-05-02 per Codex Round-10 Scope 3 MEDIUM-1 finding):** Research consent grant/revoke events (`research.consent_granted`, `research.consent_revoked`) carry `audit_sensitivity_level = standard`, NOT `high_pii`. Rationale: consent state itself is not high-PII (it records that a patient gave/revoked permission for a defined scope; the patient identity is already tenant-scope-protected per I-023). The high-PII audit class per I-031 is reserved for **research export events** (`research.export_initiated`, `research.export_completed`) where actual de-identified longitudinal data leaves the platform — that is the data-leakage-risk surface, not the consent record. Access controls: research consent records are tenant-scoped per I-023 + retrievable by the patient (per their own consent records) + Privacy Officer + Research Data Steward (within tenant scope) + Research Ethics Committee Member (read-only oversight, scoped per `per_dsa_review_required`). The Consent slice and any cross-references stating `standard` for these events are correct; previous wording suggesting `high_pii` for consent events was an error.
+| `research.dsa_activated` | privacy_officer + approver (dual-control per I-015) | dsa_id, dsa_version, partner_id, partner_name, dsa_validity_from, dsa_validity_to, permitted_data_domains[], k_min_required, ethics_review_body_reference | standard |
+| `research.cohort_defined` | operator | cohort_definition_id, cohort_version, dsa_id, dsa_version, inclusion_criteria_artifact_id, exclusion_criteria_artifact_id, requested_data_domains[], k_threshold_target | standard |
+| `research.export_initiated` | system, operator | cohort_definition_id, cohort_version, dsa_id, dsa_version, dsa_status_at_export (`active`), permitted_data_domains_at_export[], requester_id, requester_role, requester_partner_id, requested_field_set, k_min_required, k_threshold_target, consent_cohort_snapshot_hash (SHA-256), export_started_at, status (`initiated`) | **high_pii** (per I-031) |
+| `research.export_completed` | system | cohort_definition_id, cohort_version, dsa_id, dsa_version, dsa_status_at_export (`active` if delivery succeeded; `expired`/`suspended`/`retired` if invalidation triggered per I-029), permitted_data_domains_at_export[] (snapshot at completion), requester_id, requester_role, requester_partner_id, exported_field_set, k_threshold_actual, k_min_required, suppressed_cell_count, export_completed_at, export_artifact_hash (null if invalidated), retention_class, consent_cohort_snapshot_hash_initiated, consent_cohort_snapshot_hash_completed (null if invalidation aborted before completion-time check), status (`completed` or `invalidated`), invalidation_reason (null if `status=completed`; one of `dsa_inactive`, `k_anonymity_violation`, `permitted_domain_drift`, `consent_cohort_change`, `consent_revocation_mid_export`) — **shared canonical enum with TYPES.ResearchDataExport.invalidation_reason; the two contracts MUST stay aligned (patch 2026-05-02 per Codex Round-2 Scope 2 HIGH-1 finding closes prior enum drift)** | **high_pii** (per I-031) |
+
+**I-029 binding for `research.export_completed` (per I-029 + GOVERNANCE_CONTROLS v5.2 incident discipline; updated v5.2 patch 2026-05-02 per Codex Round-3 Scope 2 HIGH finding to enumerate all 5 OpenAPI/state-machine completion conditions):** Per I-029, the **domain-side delivery** (`research_export.delivered` event + actual export artifact leaving the platform) MUST be rejected if **any of the 5 OpenAPI v0.2 / STATE_MACHINES v1.1 ResearchExportRequest completion conditions** is unmet:
+
+1. `dsa_status_at_export ≠ active` (DSA expired, suspended, or retired during the export window) → `invalidation_reason = dsa_inactive`.
+2. `k_threshold_actual < k_min_required` (k-anonymity floor violation) → `invalidation_reason = k_anonymity_violation`.
+3. `permitted_data_domains_at_export` differs from the `research.export_initiated` snapshot (CCR drift mid-export) → `invalidation_reason = permitted_domain_drift`.
+4. `consent_cohort_snapshot_hash_completed ≠ consent_cohort_snapshot_hash_initiated` (cohort changed mid-export) → `invalidation_reason = consent_cohort_change`.
+5. **Per-patient active-consent failure: any contributing patient's `ResearchConsent` is not active at completion-time evaluation** (`consent_type = research_data_use`, `granted_at` non-null, `revoked_at` null all required; mid-export revocation events AND pre-existing stale/invalid consent records both fail this gate) → `invalidation_reason = consent_revocation_mid_export`.
+6. **Per-export grant artifact invalidation (added v5.2 patch 2026-05-02 per Codex Round-12 Scope 3 HIGH-1 finding):** the per-export grant artifact (PolicyAuthorization or named-equivalent per CCR_RUNTIME v5.2 + Cockpit research block) MUST exist, MUST be unexpired at completion-time, MUST match the export by ID/hash binding, AND MUST still attest the same multi-party signer chain (ADR-028 v0.4 quad + REC concurrence per `per_dsa_review_required`). Grant expiry, revocation, or signer-chain-attestation invalidation between initiation and completion fails this condition → `invalidation_reason = grant_artifact_invalidated`.
+
+The `invalidation_reason` enum is canonical and shared exactly with TYPES.ResearchDataExport.invalidation_reason and STATE_MACHINES v1.1 ResearchExportRequest reject-unless rule. A schema-driven implementation that consumes any of these three contracts to derive completion behavior MUST observe the same 5-condition gate; a "fallthrough other" bucket is forbidden.
+
+However, the **audit-side completion-attempt** (`research.export_completed` event in the immutable audit chain) is governed by a different rule — bare suppression of the audit record is forbidden per I-003 (audit gap = audit defect).
+
+The two-event audit pattern for failed exports (**MAY → MUST 2026-05-02 per Codex Round-5 Scope 2 HIGH finding** — the prior MAY framing left a permission ambiguity that conflicted with the bare-suppression-forbidden discipline; both events are now mandatory whenever delivery is rejected):
+
+1. `research.export_completed` **MUST** emit with `status = invalidated`, the violated state recorded in payload (e.g., `dsa_status_at_export = expired`, `k_threshold_actual` showing the violation, etc.), `invalidation_reason` populated to one of the canonical 5-value enum (`dsa_inactive | k_anonymity_violation | permitted_domain_drift | consent_cohort_change | consent_revocation_mid_export | grant_artifact_invalidated`), and `export_artifact_hash = null` (no artifact was delivered).
+2. Concurrent `signal_enforcement_trigger` Category B audit (per existing v5.1 catalog) **MUST** be emitted to capture the enforcement action: artifact destruction, partner notification per DSA terms, engineering review trigger.
+
+This pattern preserves I-003 (audit completeness) while enforcing I-029 (delivery rejection). The `status` field on the export events is the authoritative discriminator: `completed` = delivery succeeded; `invalidated` = delivery rejected, audit captured. Mirror the MUST language in STATE_MACHINES v1.1 ResearchExportRequest reject-unless block and the prohibited-pattern note below.
+
+**I-030 binding (audit-side cross-check):** Audit retrieval surfaces that filter records by `research_consent_status` MUST NOT influence any care-delivery surface response. This is enforced upstream at the application layer per I-030; audit retrieval itself is read-only and serves cohort definition and reconciliation only.
+
+**Research export tenant-scope rule (added v5.2):** Research data export events (the `research.export_*` family above) carry `tenant_id` of the **operating tenant** where consent was collected (e.g., Telecheck-Ghana for Heros Health Ghana DBA patients), even though the research partnership is anchored at the Telecheck parent / platform level per Master PRD §15.3. The DSA reference (`dsa_id`) on the event identifies the parent-level partnership; the tenant scope identifies the data origin. This dual identification supports the §15.3 partnership-level governance model without losing tenant-scoped accountability per I-027. Cohort definitions and de-identified cohort outputs that span multiple tenants emit one audit record per contributing tenant (not a single multi-tenant record), each scoped to that tenant's contribution.
+
+#### Marketing events (added v5.2 per ADR-027)
+
+| Action | Actor types | Detail payload | audit_sensitivity_level |
+|---|---|---|---|
+| `marketing.surface_rendered` | system | tenant_id, country_of_care, surface_id, surface_type, ccr_marketing_policy_version_id, marketing_copy_version_id, governance_review_reference_id (the §13.2 Governance review process artifact ID for this copy version), governance_review_reviewer_ids[], governance_review_approval_timestamp, governance_review_approval_validity_until (per `marketing_governance_review_cadence_months` per §13.2), rendered_claim_classes[], patient_id (per tenant-isolation), session_id | standard |
+| `marketing.surface_drift` | system | tenant_id, country_of_care, surface_id, ccr_marketing_policy_version_id, expected_marketing_copy_version_id, observed_marketing_copy_version_id, drift_type (`copy_version` / `policy_version` / `approval_lapsed`), suspension_action_taken | standard |
+
+**Auto-suspension binding (per Master PRD §13.2):** A `marketing.surface_drift` event MUST be accompanied by an immediate platform action that suspends the affected surface. The surface is re-enabled only after a fresh re-review under the §13.2 Governance review process. The suspension itself is audited as a Category B governance event (`signal_enforcement_trigger` with appropriate `enforcement_action_taken` payload).
 
 ### Category C — Operational and engagement actions
 
@@ -249,10 +352,15 @@ Records past retention are archived, not deleted. Archived records are retrievab
 - **Omitting `tenant_id` from audit records (added v5.1).** Every record carries `tenant_id`. A null `tenant_id` is reserved for platform-level meta-events with no tenant target; almost every operational audit has a tenant target. I-027.
 - **Differentiating cross-tenant access from same-tenant access only via `actor_tenant_id` comparison (added v5.1).** Cross-tenant access requires the `break_glass` block to be populated with reason, time bound, and Privacy Officer review status. The comparison alone is not the audit; the break-glass session is. I-024.
 - **Returning audit records to a Tenant Admin that span multiple tenants (added v5.1).** Tenant Admin retrieval is filtered to their authorized tenant scope at the query layer, not just the UI layer. I-023.
+- **Emitting an AI audit event with null `ai_workload_type` or `autonomy_level` (added v5.2).** New v1.10+ AI events require both fields populated per WORKLOAD_TAXONOMY §1 nullability rule. Null is reserved for legacy backfill and non-AI events only.
+- **Confusing `audit_sensitivity_level` with the safety-classification matrix Categories A/B/C (added v5.2).** They are orthogonal: `audit_sensitivity_level` governs retention/access/query treatment within a category; the A/B/C category governs which retention rule applies. An export event is Category B (governance) AND `audit_sensitivity_level = high_pii` (elevated treatment within Category B).
+- **Using the `ai_mode_1` / `ai_mode_2` actor type aliases in new v1.10+ code (added v5.2).** Use `actor_type = ai_workload` with `ai_workload_type` set. Aliases are deprecated for new code (preserved for existing records per I-003).
+- **Bare suppression of failed `research.export_completed` (added v5.2; MAY → MUST 2026-05-02 per Codex Round-5 Scope 2 HIGH).** Per I-029 + I-003 audit-completeness, failed exports **MUST** emit `research.export_completed` with `status = invalidated` and `invalidation_reason` populated to one of the canonical 5-value enum, **MUST** be paired with concurrent `signal_enforcement_trigger` Category B audit. Silent invalidation is forbidden; the prior MAY framing is superseded.
 
 ---
 
 ## Document control
 
+- **v5.2 (2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact)** — Adds workload-taxonomy envelope fields (`ai_workload_type`, `autonomy_level`) per ADR-029; reserved nullable agentic-context fields (`agent_id`, `agent_version`, `tool_call_id`, `memory_read_set_id`, `memory_write_set_id`, `supervising_policy_id`, `knowledge_source_versions[]`); `audit_sensitivity_level` field with `standard` / `high_pii` enum (`high_pii` for research exports per I-031); new `actor_type = ai_workload` (with `ai_mode_1` / `ai_mode_2` preserved as backward-compat aliases); 6 new research events (`research.consent_granted`, `research.consent_revoked`, `research.dsa_activated`, `research.cohort_defined`, `research.export_initiated`, `research.export_completed`) — the `export_*` family at `audit_sensitivity_level = high_pii` per I-031, carrying `status` enum (`completed | invalidated`) + `invalidation_reason` for failed-completion audit per I-003; 2 new marketing events (`marketing.surface_rendered`, `marketing.surface_drift`) per ADR-027; research-export tenant-scope rule (operating-tenant ID, parent-level DSA reference); I-012 preservation rule mirroring Master PRD §13.7 v0.3 reject-unless three-clause normative wording. Per ADR-027, ADR-028, ADR-029. No existing fields modified or removed; v5.2 is purely additive. Substantive content originally documented in `Telecheck_v1_10_PRD_Update/Phase3_AUDIT_EVENTS_v1_10_Edits_2026-05-01.md`; physical merge applied 2026-05-02 per v1.10.1 hygiene cycle.
 - **v5.0** — Initial Audit Events contract.
 - **v5.1** — Adds `tenant_id` and `actor_tenant_id` and optional `break_glass` block to the audit envelope per ADR-023 multi-tenancy. Adds tenant-scope rules for retrieval. Adds Anti-patterns specific to multi-tenancy. Adds Platform Admin actor type. Threading remediation per Adversarial Counsel Review v1.0 finding CRITICAL-01. Existing record schema fields preserved; envelope is purely additive.

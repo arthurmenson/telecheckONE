@@ -829,12 +829,51 @@ CREATE TABLE audit_events (
   -- Payload (the change itself)
   payload         JSONB NOT NULL,
   
+  -- Workload-taxonomy fields (added v1.10 cycle per ADR-029 / AUDIT_EVENTS v5.2 envelope schema; patch 2026-05-02 per Codex Round-11 Scope 1 HIGH-1 finding to make CDM able to store the I-012 evidence required by AUDIT_EVENTS)
+  audit_sensitivity_level VARCHAR(16) NOT NULL DEFAULT 'standard',  -- 'standard' | 'high_pii' (per I-031 — high_pii reserved for research export events; consent grant/revoke at standard per AUDIT_EVENTS v5.2 §5)
+  ai_workload_type        VARCHAR(40),                              -- 'conversational_assistant' | 'protocol_execution' | 'autonomous_agent' (reserved) | 'multi_agent_supervisor' (reserved) | 'tool_using_agent' (reserved) | 'rejected_invalid_attempt' (sentinel; only on *.execution_rejected events) | 'n/a' (sentinel; only on I-012 clinician-only approvals) | NULL (legacy/non-AI events). Required for I-012 action-class records regardless of actor_type per AUDIT_EVENTS v5.2 §I-012 closure rule.
+  autonomy_level          VARCHAR(40),                              -- 'advisory' | 'suggestion' | 'action_with_confirm' | 'action_with_audit_only' (reserved) | 'fully_autonomous' (reserved) | 'rejected_invalid_attempt' (sentinel) | 'n/a' (sentinel) | NULL (legacy/non-AI events). Same I-012 closure constraint as above.
+  
+  -- Reserved nullable agentic-context fields (added v1.10 cycle; populate only when corresponding capability activates per ADR-030/031/032/033/034)
+  agent_id                  VARCHAR(26),
+  agent_version             VARCHAR(40),
+  tool_call_id              VARCHAR(26),
+  memory_read_set_id        VARCHAR(26),
+  memory_write_set_id       VARCHAR(26),
+  supervising_policy_id     VARCHAR(26),
+  knowledge_source_versions JSONB,                                  -- ["source:version", ...] | NULL
+  
   -- Hash chain for immutability per ADR-013
   prev_hash       VARCHAR(64) NOT NULL,              -- SHA-256 of previous record's hash
   record_hash     VARCHAR(64) NOT NULL,              -- SHA-256 of this record's content
   
   -- IMMUTABLE: no UPDATE, no DELETE permitted
-  CONSTRAINT audit_no_modification CHECK (true)      -- enforced via trigger
+  CONSTRAINT audit_no_modification CHECK (true),     -- enforced via trigger
+  
+  -- Schema version field (added v1.10 cycle per Codex Round-12 Scope 2 HIGH cutover-safety patch 2026-05-02)
+  -- Discriminates pre-v1.10 backfill rows (where AUDIT_EVENTS v5.2 §nullability rule explicitly permits null
+  -- ai_workload_type/autonomy_level on legacy events) from v1.10+ rows where I-012 closure rule applies.
+  schema_version  VARCHAR(8) NOT NULL DEFAULT 'v1.10',  -- 'v1.0' | 'v1.10' | future. Pre-v1.10 backfill rows MUST be loaded with schema_version = 'v1.0' to bypass the I-012 CHECK below; v1.10+ writes default to 'v1.10' and ARE subject to the CHECK.
+  
+  -- I-012 closure rule constraint (per AUDIT_EVENTS v5.2 §I-012 closure rule; cutover-safe gate per Codex Round-12 Scope 2 HIGH 2026-05-02):
+  -- For I-012 action-class records emitted at v1.10+, ai_workload_type AND autonomy_level MUST be non-null regardless of actor_type.
+  -- Pre-v1.10 backfill rows (schema_version = 'v1.0') are exempt — AUDIT_EVENTS v5.2 explicitly states legacy nullability is permitted
+  -- for backfill. Per I-003 audit immutability, historical audit rows MUST NOT be retroactively updated to fabricate workload evidence;
+  -- if an old action needs workload-evidence overlay for any reason, emit a NEW audit record (compensating event) at v1.10 schema_version
+  -- with the workload evidence, never UPDATE the historical row.
+  -- Action-class set per AUDIT_EVENTS v5.2 (single source of truth):
+  --   prescribing.{initiated, approved, declined, modified, execution_rejected},
+  --   refill.{approved, declined, execution_rejected},
+  --   protocol_authorized_{prescribing, refill_renewal, dispensing_release},
+  --   medication_order.execution_rejected.
+  CONSTRAINT audit_i012_workload_evidence_required CHECK (
+    schema_version != 'v1.10'  -- legacy rows exempt
+    OR action NOT IN ('prescribing.initiated', 'prescribing.approved', 'prescribing.declined', 'prescribing.modified',
+                   'prescribing.execution_rejected', 'refill.approved', 'refill.declined', 'refill.execution_rejected',
+                   'protocol_authorized_prescribing', 'protocol_authorized_refill_renewal',
+                   'protocol_authorized_dispensing_release', 'medication_order.execution_rejected')
+    OR (ai_workload_type IS NOT NULL AND autonomy_level IS NOT NULL)
+  )
 );
 
 -- Block UPDATE and DELETE
@@ -902,7 +941,7 @@ Plus new in v1.1 within Pharmacy & Fulfillment: Subscription, SubscriptionEvent 
 For an engineering team that has any v1.0-based schema in flight:
 
 1. Create the 6 new tenant-management tables (Tenant, TenantBrand, CountryProfile, CCRConfig, AdapterConfig, TenantUser).
-2. Insert seed records for the 2 launch tenants (Telecheck-Ghana, Heros) and the 2 country profiles (US, GH).
+2. Insert seed records for the 2 launch operating tenants (`Telecheck-US` with `consumer_dba = 'Heros Health'` and `legal_entity = 'Telecheck Health LLC'`; `Telecheck-Ghana` with `consumer_dba = 'Heros Health Ghana'` and `legal_entity = 'Telecheck-Ghana Ltd.'`) and the 2 country profiles (US, GH). *(Updated 2026-05-02 per Codex Round-7 Scope 4 HIGH-1 finding — the prior "Telecheck-Ghana, Heros" pairing used the bare `Heros` consumer-brand string as a tenant identifier in violation of the C3 brand-structure rule per Master PRD v1.10 §17 + Glossary v5.2. Operating-tenant identifiers are `Telecheck-{country}`; `consumer_dba` carries the Heros Health DBA per CDM v1.2 v1.10 cycle additions §Tenant entity refresh.)*
 3. For every existing tenant-scoped table, add `tenant_id VARCHAR(26)` column.
 4. Backfill existing data with the appropriate `tenant_id` (typically all existing data belongs to one tenant — easy backfill).
 5. Set the column NOT NULL after backfill.
@@ -939,9 +978,104 @@ Engineering must verify these in CI before merge.
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §CDM)
+
+### Tenant entity — C3 brand-structure refresh (Row 27)
+
+The `tenant` entity gains three columns to reflect the operating-tenant / consumer-DBA / legal-entity tri-distinction per Master PRD v1.10 §17 + Glossary v5.2 §Brand and tenant terms. The `tenant.id` naming convention follows `Telecheck-{country}` (e.g., `Telecheck-US`, `Telecheck-Ghana`).
+
+*(Migration block rewritten 2026-05-02 per Codex Round-8 Scope 4 HIGH-1 finding to (a) target the canonical `tenants` plural table name per §4.1 DDL, (b) add columns with safe defaults so the ALTER is executable on a non-empty table, (c) populate every NOT NULL column the canonical DDL requires, (d) provide a staged backfill strategy for existing rows. Was previously executable only against an empty `tenant` (singular) table that doesn't exist in the canonical DDL.)*
+
+```sql
+-- Stage 1: Add new columns with NULL default (executable on existing tenants table per §4.1 DDL)
+ALTER TABLE tenants
+  ADD COLUMN consumer_dba          VARCHAR(200),  -- e.g., 'Heros Health' (US), 'Heros Health Ghana' (GH)
+  ADD COLUMN legal_entity          VARCHAR(200),  -- e.g., 'Telecheck Health LLC', 'Telecheck-Ghana Ltd.'
+  ADD COLUMN consumer_subdomain    VARCHAR(255);  -- e.g., 'heroshealth.com', 'ghana.heroshealth.com'
+
+-- Stage 2: Backfill any pre-existing rows. For greenfield deployments (no prior tenants), this is a no-op.
+-- For deployments with pre-v1.10 rows, the platform admin populates per their tenant inventory.
+-- (Pattern: UPDATE tenants SET consumer_dba = 'X', legal_entity = 'Y', consumer_subdomain = 'Z' WHERE id = 'tenant-id';)
+
+-- Stage 3: Set NOT NULL after backfill
+ALTER TABLE tenants
+  ALTER COLUMN consumer_dba       SET NOT NULL,
+  ALTER COLUMN legal_entity       SET NOT NULL,
+  ALTER COLUMN consumer_subdomain SET NOT NULL;
+
+-- Day-1 tenant rows (greenfield insert; populates ALL NOT NULL columns per the canonical §4.1 DDL:
+-- id, country, status, display_name, created_by; plus the new v1.10 columns).
+INSERT INTO tenants (id, country, status, display_name, created_by, consumer_dba, legal_entity, consumer_subdomain) VALUES
+  ('Telecheck-US',    'US', 'active', 'Heros Health',       '<platform-admin-tnu-id>', 'Heros Health',       'Telecheck Health LLC', 'heroshealth.com'),
+  ('Telecheck-Ghana', 'GH', 'active', 'Heros Health Ghana', '<platform-admin-tnu-id>', 'Heros Health Ghana', 'Telecheck-Ghana Ltd.', 'ghana.heroshealth.com');
+```
+
+Migration discipline: any v1.x slice PRD example or test fixture using `Heros-Health` as a tenant ID is rewritten to `Telecheck-US`. The patient-facing brand surface (Heros Health) is sourced from `tenant.consumer_dba`, never from `tenant.id`.
+
+### Research data entities (Row 70 — NEW per ADR-028)
+
+Six new tenant-scoped research entities. All carry `tenant_id` per I-023; export carries `country_of_care` on the export record itself per AUDIT_EVENTS v5.2 §4 + TYPES v5.2.
+
+| Entity | Type prefix | Notes |
+|---|---|---|
+| `ResearchConsent` | `con_` (5th-tier `consent_type = research_data_use`) | Specialized ConsentRecord variant. Asymmetric retraction acknowledged at grant time. Per I-030, MUST NOT cascade to care-delivery surfaces. |
+| `CohortDefinition` | `chd_` | Per TYPES v5.2 — versioned, audited, scoped to active DSA permitted_data_domains subset. |
+| `DataSharingAgreement` | `dsa_` | Per TYPES v5.2 — partner organization, validity window, k_min_required, ethics review body reference, cross-border transfer mechanism. |
+| `ResearchEthicsReviewBody` | `reb_` | Per TYPES v5.2 — REC/IRB designation per CCR `research_ethics_review_body` structured object. |
+| `ResearchPartner` | `rpt_` | Lightweight; identifies external research partner organization. |
+| `ResearchDataExport` | `rex_` | Per TYPES v5.2 — carries `tenant_id` + `country_of_care` on the export record itself. Status enum `initiated | completed | invalidated`. |
+
+All export operations emit at `audit_sensitivity_level = high_pii` per I-031. RLS policies: tenant-scoped read/write; cross-tenant access only via break-glass per RBAC v1.1.
+
+### AI workload entities (Row 98 — NEW per ADR-029)
+
+#### `AIExecution` entity (normative; fully implemented at v1.0)
+
+Unifies current Mode 1 invocations and Mode 2 cases under the workload taxonomy. Discriminator: `ai_workload_type`.
+
+```
+{
+  "ai_execution_id":             "aie_<ULID>",
+  "tenant_id":                   "tnt_<ULID>",
+  "patient_id":                  "pat_<ULID>" | null,
+  "ai_workload_type":            "conversational_assistant | protocol_execution | autonomous_agent (reserved) | multi_agent_supervisor (reserved) | tool_using_agent (reserved)",
+  "autonomy_level":              "advisory | suggestion | action_with_confirm | action_with_audit_only (reserved) | fully_autonomous (reserved)",
+  "tool_access":                 [ "<tool slug>" ] | null,
+  "memory_scope":                "session | patient_episode | program_history | <reserved>",
+  "governance_class":            "floor_safety | protocol_authorized | <reserved>",
+  "knowledge_source_versions":   [ "<source:version>" ] | null,
+  "agent_id":                    "<reserved; null at v1.0>",
+  "agent_version":               "<reserved; null at v1.0>",
+  "supervising_policy_id":       "<reserved; null at v1.0>",
+  "ai_model_version":            "<version>",
+  "started_at":                  "<ISO 8601>",
+  "completed_at":                "<ISO 8601>",
+  "outcome":                     "success | partial | failed | escalated"
+}
+```
+
+Active workload types at v1.0: `conversational_assistant`, `protocol_execution`. Reserved (require successor ADR + activation audit event two-condition AND): `autonomous_agent`, `multi_agent_supervisor`, `tool_using_agent`. Per ADR-029 + AI_LAYERING v5.2 §10 + Master PRD §13.7.
+
+#### Reserved-future entities (non-normative reserved names at v1.0)
+
+Schemas defined when their authorizing ADRs activate (per ADR-029 Decision §6). At v1.0, these are reserved type-name placeholders only — no tables, no schemas, no runtime validation:
+
+- `Agent` (ADR-030)
+- `AgentRun` (ADR-030)
+- `Tool` (ADR-031)
+- `ToolCall` (ADR-031)
+- `AgentMemory` (ADR-032)
+- `KnowledgeSource` (ADR-034)
+- `PolicyAuthorization` (ADR-030 — placeholder skeleton in TYPES v5.2 + GOVERNANCE_CONTROLS v5.2 §8)
+
+Total entity count post-v1.10: **41 (v1.2 baseline) + 6 (research) + 1 (AIExecution) = 48 active entities + 7 reserved-future names**.
+
+---
+
 ## Document control
 
 - **v1.2** — Adds 8 ecom entities introduced by Pharmacy + Refill v2.1 and Admin Backend v1.1 slice PRDs: Subscription, SubscriptionEvent, ProductCatalog, Cart, CartItem, DiscountCode, DiscountCodeRedemption, AffiliateAccount, AffiliateConversion. New §4-bis (§4.7 through §4.15) carries full SQL DDL with tenant_id, RLS policies, indexes, constraints, and invariants for each. Total entity count: 41 (6 tenant-management + 27 inherited + 8 ecom). Pattern C remediation per Adversarial Counsel Review v1.0 finding CRITICAL-02 — schemas previously living in slice PRDs are now in canonical engineering spec; slice PRDs reference these by section number. Existing v1.1 content (tenant management entities, tenant scoping rules, audit envelope, encryption mapping) preserved without modification.
+- **v1.2 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §CDM rows 27, 70, 98)** — Additive content under "v1.10 cycle additions" section above. Tenant entity gains `consumer_dba`, `legal_entity`, `consumer_subdomain` columns (C3 brand-structure). 6 new research data entities (ResearchConsent, CohortDefinition, DataSharingAgreement, ResearchEthicsReviewBody, ResearchPartner, ResearchDataExport — all tenant-scoped per I-023; export carries country_of_care + audit at high_pii per I-031). 1 new AIExecution entity (normative, fully implemented at v1.0; unifies Mode 1 + Mode 2 under workload taxonomy with `ai_workload_type` discriminator + 5 orthogonal properties). 7 reserved-future entity names (Agent, AgentRun, Tool, ToolCall, AgentMemory, KnowledgeSource, PolicyAuthorization — non-normative at v1.0; activated under ADRs 030–034). Total entity count post-v1.10: **48 active + 7 reserved-future**. Per ADR-028 + ADR-029 + Master PRD v1.10 §10.5/§13.7/§15.3 + INVARIANTS v5.2 + TYPES v5.2 + AUDIT_EVENTS v5.2. Existing v1.2 entity schemas preserved without modification; v1.10 additions are purely additive. No version-number bump (entry-level refresh consistent with the engineering-spec discipline; CDM remains v1.2 in headers and references).
 - **v1.1** — Multi-tenancy applied to all entities per ADR-023. Six new tenant-management entities added. Audit envelope updated to require tenant_id. RLS policies specified for every tenant-scoped table. Encryption-at-rest mapping updated for per-tenant KMS keys per ADR-024. Total entity count: 33 (27 inherited + 6 new).
 - **v1.0** — Initial canonical (single-tenant assumption); superseded.
 - **Next review:** after engineering applies the migration; after the first non-trivial cross-tenant query bug is detected and resolved (or never detected, which is the goal).

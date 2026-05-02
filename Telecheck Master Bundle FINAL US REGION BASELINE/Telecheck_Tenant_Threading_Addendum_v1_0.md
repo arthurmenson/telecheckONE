@@ -98,7 +98,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 
 **Monitoring data:**
 - RPMReading entity is tenant-scoped per CDM v1.2 §3.8. Patient readings in Tenant A are not visible in Tenant B even if the same human has readings in both.
-- Device pairing is tenant-scoped (a Bluetooth glucometer paired in Telecheck-Ghana doesn't appear in Heros).
+- Device pairing is tenant-scoped (a Bluetooth glucometer paired in Telecheck-Ghana doesn't appear in Telecheck-US).
 
 **Alerting:**
 - Critical alerts (per RPM Alert state machine in State Machines v1.1 §7) escalate to the tenant's clinician on-call roster, not platform-wide.
@@ -110,7 +110,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 ### 3.5 Community Platform Slice PRD v1.0
 
 **Communities at launch:**
-- Communities are scoped to a single tenant at launch. A patient in Telecheck-Ghana sees only Telecheck-Ghana communities; same for Heros.
+- Communities are scoped to a single tenant at launch. A patient in Telecheck-Ghana sees only Telecheck-Ghana communities; same for Telecheck-US.
 - Cross-tenant communities (e.g., a "GLP-1 patients across all tenants" community) are deferred to Phase 2 — not in launch scope.
 
 **Moderation:**
@@ -118,7 +118,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 - Crisis detection per I-019 applies platform-wide; crisis-detected content escalates to the tenant's clinical safety contact and (in extreme cases) Platform AI Safety per RBAC v1.1.
 
 **Identity in community:**
-- Patient display names, avatars, and posting history are tenant-scoped. The same human's Telecheck-Ghana persona and Heros persona are independent (per ADR-023 — same person across tenants = separate accounts).
+- Patient display names, avatars, and posting history are tenant-scoped. The same human's Telecheck-Ghana persona (Heros Health Ghana DBA surface) and Telecheck-US persona (Heros Health DBA surface) are independent (per ADR-023 — same person across tenants = separate accounts).
 
 ### 3.6 Adverse Event Reporting Slice PRD v1.0
 
@@ -128,7 +128,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 - Cross-tenant AE pattern detection (a defect appearing in multiple tenants — e.g., a GLP-1 product showing the same side effect across tenants) is performed at platform level by Platform Clinical Governance per GOVERNANCE_CONTROLS v5.1 §6.3.
 
 **External reporting:**
-- FDA MedWatch (US) reporting is per-tenant — Heros reports its AEs; if a future US tenant exists it reports its own.
+- FDA MedWatch (US) reporting is per-tenant — Telecheck-US reports its AEs; if a future US tenant exists it reports its own.
 - Ghana FDA reporting (where applicable) is per-tenant for Telecheck-Ghana.
 - Platform Clinical Governance may aggregate cross-tenant AE patterns for internal safety review without disclosing tenant-specific data externally.
 
@@ -165,7 +165,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 - Knowledge base content (herbal medicine entries and drug interactions) is platform-scoped at launch. Tenant Clinical Lead may submit additions/corrections via governance workflow per GOVERNANCE_CONTROLS.
 
 **Tenant relevance:**
-- The Telecheck-Ghana tenant relies heavily on this engine due to the prevalence of herbal medicine reporting in the Ghana intake flow. Heros (US) tenant uses it less actively but the engine is available.
+- The Telecheck-Ghana tenant relies heavily on this engine due to the prevalence of herbal medicine reporting in the Ghana intake flow. Telecheck-US tenant uses it less actively but the engine is available.
 
 **Audit:**
 - Herb-drug signal evaluations carry tenant_id; the patient context is always tenant-scoped.
@@ -198,11 +198,11 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 
 **Tools tenant scoping:**
 - All acquisition / engagement tools (referral programs, marketing campaigns, onboarding tour customizations) are tenant-scoped.
-- A campaign authored by Heros marketing is not visible in Telecheck-Ghana and vice versa.
+- A campaign authored by Telecheck-US marketing (Heros Health DBA consumer-surface scope) is not visible in Telecheck-Ghana and vice versa.
 - Per-tenant marketing analytics dashboards per Admin Backend v1.1 §5.6.
 
 **Affiliate program:**
-- Affiliate accounts and conversions are tenant-scoped per CDM v1.2 §4.14-§4.15. Heros operates its own affiliate program; Telecheck-Ghana operates its own (manual reconciliation at launch).
+- Affiliate accounts and conversions are tenant-scoped per CDM v1.2 §4.14-§4.15. Telecheck-US (Heros Health DBA scope) operates its own affiliate program; Telecheck-Ghana (Heros Health Ghana DBA scope) operates its own (manual reconciliation at launch).
 
 **Cross-tenant marketing:**
 - The Telecheck platform itself (as marketed for tenant onboarding) is not addressed in this slice — that is platform-level Sales/BD function.
@@ -275,9 +275,39 @@ Future remediation cycles may bump individual v1.0 documents to v1.1 incorporati
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §Tenant_Threading row 31)
+
+### Tenant ID examples sweep — C3 brand-structure refresh (Row 31)
+
+All §3.X slice addenda using `Heros-Health` as the US tenant ID example are renamed to `Telecheck-US`. Where consumer-brand context is relevant (patient-facing surfaces, marketing copy, notification sender display name), the parenthetical qualifier "Heros Health DBA" is appended.
+
+**Before / after pattern (applies wherever `Heros-Health` appeared as a tenant ID example in v1.0 §3.X content):**
+
+| Before | After |
+|---|---|
+| `tenant_id: Heros-Health` | `tenant_id: Telecheck-US` |
+| "the Heros tenant" | "the Telecheck-US tenant (Heros Health DBA)" |
+| "Heros admin selects..." | "Telecheck-US tenant admin (Heros Health DBA scope) selects..." |
+| `https://heros-health.example.com/...` | `https://heroshealth.com/...` (consumer subdomain per `tenant.consumer_subdomain`) |
+| sender_display_name: "Heros" | sender_display_name: "Heros Health" (consumer DBA, sourced from `tenant.consumer_dba`, never from `tenant.id`) |
+
+The same sweep applies symmetrically to Telecheck-Ghana: bare `Heros-Ghana` or `Telecheck Ghana` references in §3.X addenda are normalized to operating tenant `Telecheck-Ghana` with consumer DBA `Heros Health Ghana` where consumer-brand context applies.
+
+**Cross-references:**
+- Master PRD v1.10 §17 (canonical brand-vs-identifier rule)
+- Glossary v5.2 §Brand and tenant terms
+- CDM v1.2 v1.10 cycle additions §Tenant entity (consumer_dba, legal_entity, consumer_subdomain columns)
+- RBAC v1.1 v1.10 cycle additions §Tenant scoping examples (Row 29)
+- MARKET_LAUNCH v5.1 §Cross-reference to Master PRD §10.5 (program catalog architecture)
+
+This sweep is **mechanical** (find-and-replace pattern with optional DBA qualifier where consumer-brand context applies). No semantic change to the tenant-threading model itself; only the example values change. The §3.X subsection structure and per-slice threading content remain valid.
+
+---
+
 ## Document control
 
 - **v1.0 (refreshed 2026-04-26 per ADR-026, US Region Migration Cycle U-003)** — Added single Phase 2 media-routing note in §3.3 Sync Video Consult Slice Per-country adapter notes: optional LiveKit edge node in af-south-1 or eu-west-1 for Ghana media RTT reduction while data plane remains us-east-1. Explicitly Phase 2; not launch scope. No other §3.X content modified; no broader topology change. No version bump (single additive note within an existing subsection; consistent with this addendum's per-section additive structure).
 - **v1.0** — NEW addendum produced as remediation for Adversarial Counsel Review v1.0 finding CRITICAL-05. Threads multi-tenancy and country-driven configuration through 14 unchanged v1.0 slice PRDs and IA documents. Authoritative at the same tier as the documents it extends. May be superseded section-by-section as individual documents are bumped to v1.1 in future cycles.
+- **v1.0 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §Tenant_Threading row 31)** — Additive content under "v1.10 cycle additions" section above. Mechanical tenant-ID examples sweep per C3 brand structure: all `Heros-Health` US tenant ID examples → `Telecheck-US` with `Heros Health` DBA qualifier where consumer-brand context applies; symmetric refresh for Telecheck-Ghana / Heros Health Ghana. Sender display names sourced from `tenant.consumer_dba` per CDM v1.2 v1.10 cycle additions, never from `tenant.id`. No semantic change to tenant-threading model; example values only. Per Master PRD v1.10 §17 + Glossary v5.2 §Brand and tenant terms + CDM v1.2 v1.10 cycle additions + RBAC v1.1 v1.10 cycle additions. No version-number bump (entry-level refresh; addendum remains at v1.0).
 - **Next review:** after the first individual v1.0 → v1.1 slice PRD bump completes, to verify the addendum's content was correctly absorbed and the §3.X subsection can be marked superseded.
 - **Change discipline:** per-document additions to this addendum require Engineering Lead + Tenant Clinical Lead sign-off where the addition affects clinical workflow.

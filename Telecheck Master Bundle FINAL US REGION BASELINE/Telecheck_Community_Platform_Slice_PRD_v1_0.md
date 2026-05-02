@@ -451,6 +451,16 @@ The moderation standard for safety-critical misinformation: would following this
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Row 10)
+
+**Cycle C2 — Emerging-markets framing reframe.** The launch posture is reframed conceptually as an **emerging-market pilot in Ghana via Telecheck-Ghana** — the architecture (group model, three-layer moderation, crisis detection, moderation staffing) is country-agnostic and CCR-driven per ADR-024; only the launch instance is Ghana. The §4.2 group identifiers and §6.3 moderation-staffing references retain their Ghana-specific naming because they are operational facts about the actual community at the Telecheck-Ghana pilot (Heros Health Ghana DBA community groups), not architectural constraints. Future emerging-market instances will configure their own launch groups and moderation staffing through the Market Rollout Cockpit.
+
+**Cross-references (v1.10):** ADR-024 (CCR country-driven configuration), Master PRD v1.10 §17 (brand-structure rules — Telecheck-Ghana operating-tenant identifier), Market Rollout Cockpit Slice (per-market group activation).
+
+**Source delta:** `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Row 10 (Cycle C2).
+
+---
+
 ## Document control
 
 - **v1.0** — Initial Community Platform slice PRD. Defines group structure (3 launch groups for Ghana), content model (7 content types with moderation levels), three-layer moderation architecture (automated screening, human moderation, crisis detection), moderation staffing (2+1 for Ghana launch) with SLAs, expert session formats, community-to-clinical-care bridges, special moderation guidance for medication sharing, mental health, traditional medicine, and body image content, and platform floor compliance. Derived from Master PRD v1.6 §10 Pillar 6 and §13.3.

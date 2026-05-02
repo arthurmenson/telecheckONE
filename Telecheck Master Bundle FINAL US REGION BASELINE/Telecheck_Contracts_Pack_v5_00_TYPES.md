@@ -1,6 +1,6 @@
 # 00 · Type Definitions
 
-**Status:** canonical · **Version:** 5.1 · **Owner:** engineering lead · **Consumers:** all services consuming CCR, Forms Engine, Market Launch; all schema authors
+**Status:** canonical · **Version:** 5.2 · **Owner:** engineering lead · **Consumers:** all services consuming CCR, Forms Engine, Market Launch; all schema authors
 
 This document defines the complex types referenced by other contracts. It is operative for **shape only** — it does not define policy. Policy lives in the contracts that reference these types.
 
@@ -54,7 +54,7 @@ Notes: `evidence_quality` is present only for herb-drug signals. Medication engi
   "consent_id":    "con_<ULID>",
   "tenant_id":     "tnt_<ULID>",
   "patient_id":    "pat_<ULID>",
-  "consent_type":  "platform | care | data_use | episode | delegation | jurisdictional",
+  "consent_type":  "platform | care | data_use | episode | delegation | jurisdictional | research_data_use",
   "scope":         "<what is consented to>",
   "program_id":    "<program>" | null,
   "version":       "<consent version presented>",
@@ -202,6 +202,14 @@ All entity IDs use ULID format with a type prefix:
 - `dsc_` — discount code (added v5.1)
 - `aff_` — affiliate account (added v5.1)
 - `afc_` — affiliate conversion (added v5.1)
+- `mkc_` — marketing copy (added v5.2)
+- `mge_` — marketing copy governance evidence (added v5.2)
+- `dsa_` — data sharing agreement (added v5.2)
+- `reb_` — research ethics review body (added v5.2)
+- `chd_` — cohort definition (added v5.2)
+- `rex_` — research data export (added v5.2)
+- `pau_` — policy authorization (added v5.2)
+- `prg_` — program catalog entry (added v5.2)
 
 ---
 
@@ -256,7 +264,248 @@ Required to be populated in any audit record where `actor_tenant_id != target_te
 
 ---
 
+## Marketing types (added v5.2)
+
+### MarketingCopy
+```
+{
+  "marketing_copy_id":             "mkc_<ULID>",
+  "tenant_id":                     "tnt_<ULID>",
+  "country_of_care":               "<ISO 3166-1 alpha-2>",
+  "version":                       "<semver>",
+  "surface_type":                  "landing | email | banner | educational | testimonial | social",
+  "classification":                "molecule_level | program_level",
+  "molecule_references":           [ { "code": "<RxNorm or equivalent>", "name": "<display>" } ] | null,
+  "program_references":            [ "<program_id>" ] | null,
+  "rendered_claim_classes":        [ "<claim taxonomy class>" ],
+  "governance_review_reference_id": "<governance review artifact ULID>" | null,
+  "approved_at":                   "<ISO 8601>" | null,
+  "approval_validity_until":       "<ISO 8601>" | null,
+  "review_cadence_months":         6 | 12,
+  "status":                        "draft | under_review | approved | suspended | retired",
+  "created_at":                    "<ISO 8601>",
+  "updated_at":                    "<ISO 8601>"
+}
+```
+
+Notes: `classification = molecule_level` requires `molecule_references` populated AND a non-null `governance_review_reference_id` AND `status = approved` before any `marketing.surface_rendered` event may emit per I-013-class published-content-version-immutability discipline. Drift between rendered surface and `marketing_copy_version_id` triggers `marketing.surface_drift` and auto-suspension.
+
+### MarketingCopyGovernanceEvidence
+```
+{
+  "evidence_id":                              "mge_<ULID>",
+  "tenant_id":                                "tnt_<ULID>",
+  "country_of_care":                          "<ISO 3166-1 alpha-2>",
+  "regulatory_jurisdiction":                  "<jurisdiction code>",
+  "regulatory_authority":                     "<regulatory body>",
+  "regulatory_interpretation_artifact_id":    "<artifact ULID>",
+  "interpretation_date":                      "<ISO 8601>",
+  "scope":                                    "<scope of permitted molecule-level marketing>",
+  "prohibited_claim_classes":                 [ "<claim taxonomy class>" ],
+  "governance_lead_designation_artifact_id":  "<artifact ULID>",
+  "ethics_review_concurrence_artifact_id":    "<artifact ULID>" | null
+}
+```
+
+Required when CCR `molecule_level_marketing_permitted = permitted` per CCR_RUNTIME v5.2 marketing block / Master PRD §13.2.
+
+---
+
+## Research data types (added v5.2)
+
+### ResearchConsent (added v5.2 patch 2026-05-02 per Codex Scope 2 MEDIUM finding — explicit subtype of ConsentRecord)
+
+```
+{
+  "consent_id":                              "con_<ULID>",
+  "tenant_id":                               "tnt_<ULID>",
+  "patient_id":                              "pat_<ULID>",
+  "consent_type":                            "research_data_use",
+  "scope":                                   "<scope description per CCR research_ethics_review_body.approval_scope>",
+  "version_presented":                       "<consent text version per CCR research_ethics_review_body.approval_reference_id>",
+  "asymmetric_retraction_acknowledgment":    true,
+  "granted_at":                              "<ISO 8601>",
+  "revoked_at":                              "<ISO 8601> | null",
+  "revocation_reason":                       "<text>" | null,
+  "revocation_effective_at":                 "<ISO 8601>" | null,
+  "evidence":                                { "method": "tap | signature | verbal", "timestamp": "..." }
+}
+```
+
+A specialization of ConsentRecord with `consent_type = research_data_use` (added to the canonical ConsentRecord enum above per the same patch). Required fields beyond ConsentRecord: `scope`, `version_presented`, `asymmetric_retraction_acknowledgment` (must be `true` at grant time per Master PRD §15.2 — patient explicitly acknowledged that aggregate data already shared cannot be retracted). `revoked_at` and revocation companion fields populate on revoke; the entity is immutable per consent immutability discipline (a new grant after revoke creates a new ResearchConsent entity with a fresh `consent_id`). Per I-030, no care-delivery state machine MAY consume ResearchConsent state events. Per I-029, the export pipeline gates on per-patient `granted_at` non-null AND `revoked_at` null at completion-time evaluation.
+
+### DataSharingAgreement
+```
+{
+  "dsa_id":                          "dsa_<ULID>",
+  "version":                         "<semver>",
+  "partner_id":                      "<partner ULID>",
+  "partner_name":                    "<display>",
+  "tenant_scope":                    [ "tnt_<ULID>" ],
+  "permitted_data_domains":          [ "chronic_disease_longitudinal | ncd_surveillance | pharmacovigilance_signal | population_health_aggregate" ],
+  "k_min_required":                  11,
+  "ethics_review_body_reference":    "<ResearchEthicsReviewBody ID>",
+  "cross_border_transfer_mechanism": "<DSA-specific mechanism>",
+  "validity_from":                   "<ISO 8601>",
+  "validity_to":                     "<ISO 8601>",
+  "status":                          "draft | active | suspended | expired | retired",
+  "approval_chain":                  [ { "role": "...", "actor_id": "...", "approved_at": "..." } ],
+  "created_at":                      "<ISO 8601>",
+  "updated_at":                      "<ISO 8601>"
+}
+```
+
+### ResearchEthicsReviewBody
+```
+{
+  "review_body_id":            "reb_<ULID>",
+  "name":                      "<body name>",
+  "jurisdiction":              "<ISO 3166-1 alpha-2>",
+  "approval_reference_id":     "<external reference>",
+  "approval_validity_from":    "<ISO 8601>",
+  "approval_validity_to":      "<ISO 8601>",
+  "approval_scope":            "<scope description>",
+  "per_dsa_review_required":   true | false
+}
+```
+
+### CohortDefinition
+```
+{
+  "cohort_definition_id":      "chd_<ULID>",
+  "tenant_id":                 "tnt_<ULID>",
+  "version":                   "<semver>",
+  "dsa_id":                    "<DSA ULID>",
+  "dsa_version":               "<semver>",
+  "inclusion_criteria_artifact_id": "<artifact ULID>",
+  "exclusion_criteria_artifact_id": "<artifact ULID>",
+  "requested_data_domains":    [ "<closed enum value>" ],
+  "k_threshold_target":        11,
+  "consent_cohort_snapshot_hash": "<SHA-256>",
+  "status":                    "draft | approved | exporting | completed | invalidated",
+  "created_at":                "<ISO 8601>"
+}
+```
+
+### ResearchDataExport
+```
+{
+  "export_id":                          "rex_<ULID>",
+  "tenant_id":                          "tnt_<ULID>",
+  "country_of_care":                    "<ISO 3166-1 alpha-2>",
+  "cohort_definition_id":               "<CohortDefinition ULID>",
+  "cohort_version":                     "<semver>",
+  "dsa_id":                             "<DSA ULID>",
+  "dsa_version":                        "<semver>",
+  "dsa_status_at_export":               "active | expired | suspended | retired",
+  "permitted_data_domains_at_export":   [ "<closed enum value>" ],
+  "requester_id":                       "<requester ULID>",
+  "requester_role":                     "<role>",
+  "requester_partner_id":               "<partner ULID>",
+  "exported_field_set":                 [ "<field schema fragment>" ],
+  "k_min_required":                     11,
+  "k_threshold_actual":                 "<integer; >= k_min_required for status=completed; may be < k_min_required when status=invalidated>",
+  "suppressed_cell_count":              "<integer>",
+  "consent_cohort_snapshot_hash_initiated": "<SHA-256; recorded at research.export_initiated>",
+  "consent_cohort_snapshot_hash_completed": "<SHA-256; recorded at completion-time check; null when status=invalidated due to early abort>",
+  "export_artifact_hash":               "<SHA-256> | null (null when status=invalidated; non-null when status=completed)",
+  "grant_artifact_id":                  "<pau_<ULID> for PolicyAuthorization OR named-equivalent grant artifact ID per CCR_RUNTIME v5.2 research_export_authorized_signers attestation evidence-locker; required at status=initiated; re-validated at status=completed per OpenAPI 6-condition gate; added v5.2 patch 2026-05-02 per Codex Round-12 Scope 3 HIGH-2 finding>",
+  "grant_artifact_type":                "policy_authorization | signers_attestation | <future grant types>",
+  "grant_artifact_validity_to":         "<ISO 8601; grant expiry timestamp; export MUST reject delivery if grant_artifact_validity_to < completion-time>",
+  "grant_signer_chain_attestation_hash":"<SHA-256 hash of the multi-party signer chain attested at initiation; re-validated at completion to ensure no signer was rescinded>",
+  "grant_validation_at_initiated_at":   "<ISO 8601; grant validation timestamp at initiation>",
+  "grant_validation_at_completed_at":   "<ISO 8601; grant re-validation timestamp at completion> | null (null when status=invalidated due to early abort before completion-time check)",
+  "invalidation_reason":                "dsa_inactive | k_anonymity_violation | permitted_domain_drift | consent_cohort_change | consent_revocation_mid_export | grant_artifact_invalidated" | null,  // Patch 2026-05-02 per Codex Round-2 Scope 2 HIGH-1 finding: this enum is the canonical shared enum mirrored in AUDIT_EVENTS v5.2 §5 research.export_completed payload. The two contracts MUST stay aligned. No separate "other" bucket is permitted — all 5 conditions of the OpenAPI export-complete gate map deterministically to one of the 5 values.
+  "retention_class":                    "<retention class identifier>",
+  "started_at":                         "<ISO 8601>",
+  "completed_at":                       "<ISO 8601>",
+  "status":                             "initiated | completed | invalidated"
+}
+```
+
+**Patch 2026-05-02 per Codex Scope 2 HIGH-2 finding (closes the audit-vs-type contradiction):** The type now models BOTH success and invalidation states coherently. `dsa_status_at_export` accepts the full DSA-status enum (success requires `active`; invalidation captures the actual at-completion-time state). `export_artifact_hash` is nullable (null on invalidation since no artifact is delivered; non-null on success). `consent_cohort_snapshot_hash` is split into `_initiated` and `_completed` variants so the completion-time consent-snapshot match (per OpenAPI v0.2 v1.10 cycle additions /research/exports/{export_id}/complete gate) can be expressed structurally — the two hashes match for `status=completed`; they differ (or `_completed` is null) for `status=invalidated`. `invalidation_reason` is required when `status=invalidated` and null when `status=completed`.
+
+Notes: `tenant_id` and `country_of_care` are required on the export record itself (not only inherited via cohort) so audit-side I-029 / I-031 enforcement can validate tenant scope without dereferencing cohort. **Per I-029 (5-condition gate; expanded 2026-05-02 per Codex Round-7 Scope 2 HIGH-1 finding to include all 5 conditions in the `status=completed` note — was missing condition 3 permitted-domain drift), `research.export_completed` MAY emit with `status=completed` only when ALL 5 conditions hold: (1) `dsa_status_at_export = active`; (2) `k_threshold_actual >= k_min_required`; (3) `permitted_data_domains_at_export` matches the `research.export_initiated` snapshot (no CCR drift mid-export); (4) `consent_cohort_snapshot_hash_completed = consent_cohort_snapshot_hash_initiated`; (5) every contributing patient has active `ResearchConsent` at completion-time evaluation.** Per I-029 + I-003 + AUDIT_EVENTS v5.2 §5 + GOVERNANCE_CONTROLS v5.2 §7.2 audit-path discipline, failed exports MUST emit `research.export_completed` with `status=invalidated` and `invalidation_reason` populated to the canonical 5-value enum (`dsa_inactive | k_anonymity_violation | permitted_domain_drift | consent_cohort_change | consent_revocation_mid_export`), paired with `signal_enforcement_trigger` Category B. Bare suppression is forbidden.
+
+---
+
+## AI workload types (added v5.2)
+
+### AIWorkloadType (operative shape; full enum + activation policy in WORKLOAD_TAXONOMY contract)
+```typescript
+type AIWorkloadType =
+  | "conversational_assistant"
+  | "protocol_execution"
+  | "autonomous_agent"
+  | "multi_agent_supervisor"
+  | "tool_using_agent"
+  | "rejected_invalid_attempt"
+  | "n/a";
+```
+
+Active at v1.0: `conversational_assistant`, `protocol_execution`. Reserved (require successor ADR + activation audit event): `autonomous_agent`, `multi_agent_supervisor`, `tool_using_agent`. **Sentinels (added v5.2 patches 2026-05-02):** `rejected_invalid_attempt` — reserved exclusively for envelope-level value on `*.execution_rejected` audit events when the rejection captures a null/unknown/reserved attempted_ai_workload_type; never emitted by AI workloads themselves (per Codex Round-4 Scope 1 MEDIUM-1). `n/a` — reserved exclusively for envelope-level value on I-012 clinician-only approval audit records where no AI workload was upstream; invalid for AIExecution / successful AI workload records (per Codex Round-7 Scope 1 HIGH-1). Per ADR-029 + AUDIT_EVENTS v5.2 §I-012 closure rule and clinician-only carve-out.
+
+### AutonomyLevel (operative shape; full enum + activation policy in AUTONOMY_LEVELS contract)
+```typescript
+type AutonomyLevel =
+  | "advisory"
+  | "suggestion"
+  | "action_with_confirm"
+  | "action_with_audit_only"
+  | "fully_autonomous"
+  | "rejected_invalid_attempt"
+  | "n/a";
+```
+
+Active at v1.0: `advisory`, `suggestion`, `action_with_confirm`. Reserved (require successor ADR + activation audit event per ADR-030): `action_with_audit_only`, `fully_autonomous`. **Sentinels (added v5.2 patches 2026-05-02):** `rejected_invalid_attempt` — reserved exclusively for envelope-level value on `*.execution_rejected` audit events when the rejection captures a null/unknown/reserved attempted_autonomy_level; never used by an actual AI workload's execution (per Codex Round-4 Scope 1 MEDIUM-1). `n/a` — reserved exclusively for envelope-level value on I-012 clinician-only approval audit records where no AI workload was upstream; invalid for AIExecution / successful AI workload records (per Codex Round-7 Scope 1 HIGH-1). I-012 reject-unless three-clause rule binds prescription / refill / medication-order actions to `action_with_confirm` ceiling per Master PRD §13.7.
+
+### PolicyAuthorization (placeholder skeleton; activates under ADR-030 + GOVERNANCE_CONTROLS framework)
+```
+{
+  "policy_authorization_id":   "pau_<ULID>",
+  "ai_workload_type":          "<AIWorkloadType>",
+  "action_type":               "<action enum>",
+  "tenant_id":                 "tnt_<ULID>",
+  "market":                    "<ISO 3166-1 alpha-2>",
+  "protocol_id":               "<protocol ULID>",
+  "autonomy_level":            "<AutonomyLevel>",
+  "approval_chain":            [ { "role": "...", "actor_id": "...", "approved_at": "..." } ],
+  "effective_from":            "<ISO 8601>",
+  "expires":                   "<ISO 8601>",
+  "evidence_locker_ref":       "<artifact reference>",
+  "rollback_trigger":          "<rollback trigger description>",
+  "status":                    "draft | active | suspended | retired"
+}
+```
+
+Required for AutonomyLevel ∈ {`action_with_audit_only`, `fully_autonomous`}; NOT required at v1.0 for active autonomy levels (`advisory`, `suggestion`, `action_with_confirm`) per AUTONOMY_LEVELS §1.
+
+---
+
+## Program catalog types (added v5.2 per Master PRD §10.5)
+
+### ProgramCatalogEntry
+```
+{
+  "program_id":                  "prg_<ULID>",
+  "program_name":                "<display>",
+  "category":                    "<weight_management | ed | rpm | mental_health | dermatology | ...>",
+  "clinical_template_artifact_id": "<artifact ULID>",
+  "default_forms_engine_layers": { "presentation": "...", "branching": "...", "eligibility": "...", "approval": "..." },
+  "default_protocol_id":         "<protocol ULID>",
+  "default_guardrail_template_id": "<template ULID>",
+  "intended_market_classes":     [ "<market class>" ],
+  "status":                      "active | retired",
+  "version":                     "<semver>"
+}
+```
+
+Platform-defined per Master PRD §10.5; instantiated per tenant via ProgramMarketPolicy. The four-layer Forms Engine (presentation / branching / eligibility / approval) defaults provide the program-as-template baseline; tenant instances override via Pattern A composition.
+
+---
+
 ## Document control
 
 - **v5.0** — Initial Type Definitions contract.
 - **v5.1** — Adds `tenant_id` to MedicationRequest, ConsentRecord, DelegateAccess, Mode2Evaluation type schemas. Adds Tenancy types section: TenantId, TenantContext, CrossTenantAccessContext. Adds 14 new ID prefixes for tenant management and ecom entities. Threading remediation per Adversarial Counsel Review v1.0 finding CRITICAL-01 (and Pattern A coverage). Existing types preserved without modification.
+- **v5.2 (2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact `Phase3_Group2_Contracts_v1_10_Edits_2026-05-01.md` §TYPES)** — Adds Marketing types (MarketingCopy, MarketingCopyGovernanceEvidence); Research data types (DataSharingAgreement, ResearchEthicsReviewBody, CohortDefinition, ResearchDataExport with `tenant_id` + `country_of_care` on the export record itself); AI workload types (AIWorkloadType + AutonomyLevel TypeScript enums + PolicyAuthorization placeholder skeleton); Program catalog types (ProgramCatalogEntry per Master PRD §10.5). Adds 8 new ID prefixes (`mkc_`, `mge_`, `dsa_`, `reb_`, `chd_`, `rex_`, `pau_`, `prg_`). Per ADR-027 (country-conditional DTC marketing posture), ADR-028 (research data partnership Posture A), ADR-029 (AI workload taxonomy + autonomy levels), Master PRD v1.10 §10.5 + §13.2 + §13.7 + §15.3. v5.2 is purely additive — existing v5.1 types preserved without modification.

@@ -3,8 +3,10 @@
 **Version:** 1.0 (with 2026-04-26 supersession marker on ADR-025)
 **Status:** Canonical for ADR-020 through ADR-024. **ADR-025 superseded by ADR-026** (2026-04-26).
 **Owner:** Engineering Lead
-**Parent documents:** ADR Set v1.0, ADR Addendum 016–019, Master Platform PRD v1.9, System Architecture v1.2
-**Companion documents:** ADR Addendum 026 (supersedes ADR-025), Operational Readiness To-Do v1.4, Engineering Handoff & Build Guide v1.2
+**Parent documents:** ADR Set v1.0, ADR Addendum 016–019, Master Platform PRD v1.10, System Architecture v1.2
+**Companion documents:** ADR Addendum 026 (supersedes ADR-025), Operational Readiness To-Do v1.5, Engineering Handoff & Build Guide v1.3
+
+> **C3 brand-structure note (added 2026-05-02 per Codex Round-9 Scope 4 HIGH-1 + Round-12 Scope 4 HIGH-1 findings — bilateral with Registry v2.10 §3 row 10):** This addendum was authored 2026-04-25 before the v1.10 cycle's C3 brand-structure cleanup. **Any prose in ADR-020 through ADR-024 that uses bare `Heros` as a tenant or operator identifier (e.g., in ADR-023 multi-tenancy Model A discussion of launch tenants, or ADR-024 country-driven config examples) is superseded in interpretation by Master PRD v1.10 §17 brand-structure rule + Glossary v5.2 §Brand and tenant terms.** Operating-tenant identifiers are `Telecheck-{country}` (Telecheck-US, Telecheck-Ghana); `Heros Health` and `Heros Health Ghana` are consumer DBAs sourced from `tenant.consumer_dba`, not `tenant.id`. Implementations MUST NOT model a `Heros` tenant or `Heros operator` from these older ADR addendum surfaces; CDM v1.2 v1.10 cycle additions §Tenant entity refresh + §9 migration sequence give the canonical seed. The substantive architectural decisions (ADR-020 LLM provider, ADR-021 LiveKit, ADR-022 native-first stack, ADR-023 multi-tenancy Model A, ADR-024 country-driven config) are NOT affected by this supersession-in-interpretation; only the tenant/operator identifier vocabulary in any examples or prose is. Any future re-issue of this addendum will physically rewrite the prose.
 
 ---
 

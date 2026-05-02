@@ -59,6 +59,30 @@ This slice defines:
 | **Herb–Drug Interaction Engine** | Mode 1 references herb–drug signals when patients ask about herbal medicines. Same signal model as medication engine. |
 | **Protocol engine** | Mode 2 operates as a protocol execution agent. The protocol engine evaluates eligibility, checks, and gate criteria. |
 
+### 3.1 Workload taxonomy mapping (added v1.10 cycle)
+
+Per ADR-029 (AI Workload Taxonomy + Autonomy Levels) — Accepted at v1.10 promotion 2026-05-01 — Mode 1 and Mode 2 are reframed as the two **active workload types** in the platform's workload taxonomy. The mapping is normative for code, schema, audit, and configuration references; the operator-facing and patient-facing labels "Mode 1" / "Mode 2" remain in product UI and slice prose.
+
+| Slice prose / UI label | Canonical workload taxonomy value (code / schema / audit / config) |
+|---|---|
+| Mode 1 — Conversational Assistant (§4.1) | `conversational_assistant` |
+| Mode 2 — Protocol Execution Agent (§4.2) | `protocol_execution` |
+
+**Code-vs-UI rule (normative):**
+- All discriminator fields, enum values, audit-event payloads, schema columns (e.g. `AIExecution.ai_workload_type`), CCR keys, and runtime configuration MUST use the canonical workload-type strings `conversational_assistant` and `protocol_execution`.
+- All operator-facing copy, patient-facing copy, dashboard labels, and slice/PRD prose MAY continue to use "Mode 1 / Mode 2" — these labels are stable product nomenclature and are not being deprecated at v1.10.
+
+**Reserved (non-active at v1.0):** `autonomous_agent`, `multi_agent_supervisor`, `tool_using_agent` are reserved workload-type names; `action_with_audit_only` and `fully_autonomous` are reserved autonomy levels. Activation of any reserved value requires a successor ADR (deferred ADRs 030–034) plus an activation audit event per ADR-029 §6 (two-condition AND).
+
+**Cross-references:**
+- Master PRD v1.10 §13.7 — single normative source of truth for I-012 + autonomy-level interaction
+- `Telecheck_Contracts_Pack_v5_00_WORKLOAD_TAXONOMY.md` v5.2 — discriminator enum + four orthogonal workload properties
+- `Telecheck_Contracts_Pack_v5_00_AUTONOMY_LEVELS.md` v5.2 — autonomy-level enum + reserve/activation rules
+- `Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md` v5.2 §10 — supersession scope statement; ADR-002 + ADR-005 preservation rules; I-012 reject-unless three-clause normative wording
+- ADR-029 — workload taxonomy decision; prospectively supersedes ADR-002 (ADR-005 + I-012 explicitly preserved at v1.0 active levels)
+
+Inline note for §4.1 / §4.2: where this slice references Mode 1 / Mode 2 in code, schema, audit, or config contexts (notably §13 audit fields and §17 dependencies on `ai_workload_type` discriminator), engineers MUST use the workload-type values above; the slice prose retains "Mode 1 / Mode 2" intentionally.
+
 ---
 
 ## 4. Two modes — architectural distinction
@@ -449,6 +473,30 @@ Every Mode 2 execution is logged with:
 
 Audit records are retained per v5 Contracts Pack retention rules. Mode 2 audit records are retained at least as long as any other clinical decision audit (they are clinical decision support artifacts). Mode 1 conversation logs are retained per data-use consent and jurisdictional requirements.
 
+### 13.4 I-012 preservation rule (added v1.10 cycle, mirrors Master PRD §13.7 v0.3)
+
+This slice's audit and routing logic MUST honor the I-012 reject-unless three-clause rule for any executed-state transitions on I-012-class actions (prescription, refill, medication-order). The single normative source of truth is Master PRD v1.10 §13.7; the wording below is mirrored verbatim for slice-side state-machine reference. Per Contracts Pack v5.2 INVARIANTS §I-012, an `executed` transition MUST be rejected UNLESS **all three** of the following hold:
+
+1. **String equality:** `autonomy_level == action_with_confirm` (exact string equality; reserved levels `action_with_audit_only` and `fully_autonomous` are NOT permitted at v1.0 and remain rejected absent successor-ADR activation per ADR-029 §6).
+2. **Audit-chain confirmation event:** an explicit clinician confirmation event exists in the immutable audit chain, scoped to the specific `action_id` of the transition (no inference, no aggregate confirmation, no batch confirmation).
+3. **Confirming actor authorization:** the confirming actor holds an RBAC v1.1 / I-012 authorized clinical role (per RBAC Permissions Matrix v1.1).
+
+**Slice-side application:** Mode 2 (`protocol_execution`) is the only workload type in this slice that produces recommendations leading to I-012-class executed transitions. Mode 2's physician decision surface (§6.3) and audit fields (§13.2) are the slice-side enforcement point for the three-clause rule:
+- Mode 2 NEVER directly executes I-012 actions; physician approval is the binding clinical decision (clause 2 satisfied via the physician approval audit event scoped to the case `action_id`).
+- The physician's RBAC role is verified as I-012-authorized at approval time (clause 3).
+- `autonomy_level == action_with_confirm` is the only autonomy level in scope for Mode 2 at v1.0 (clause 1).
+
+Mode 1 (`conversational_assistant`) does NOT execute clinical actions (§4.1 "What it does not do"); it MAY only initiate workflows that subsequently route through I-012-gated execution paths owned by other slices (Refill, Medication Interaction & Validation Engine, etc.). I-012 enforcement for those workflows lives in the owning slice's state machine validation; Mode 1 has no slice-side reject-unless obligation beyond preserving the workflow handoff context (`action_id` association so downstream audit chains can satisfy clause 2).
+
+**Cross-references:**
+- Master PRD v1.10 §13.7 — single normative source of truth (this section mirrors but does not redefine)
+- `Telecheck_Contracts_Pack_v5_00_INVARIANTS.md` v5.2 §I-012 — invariant text
+- `Telecheck_Contracts_Pack_v5_00_WORKLOAD_TAXONOMY.md` v5.2 — workload-type discriminator
+- `Telecheck_Contracts_Pack_v5_00_AUTONOMY_LEVELS.md` v5.2 — autonomy-level enum + activation rules
+- `Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md` v5.2 §10 — Future workload expansion + supersession scope; ADR-002 + ADR-005 preservation; I-012 three-clause normative wording
+- State Machines v1.1 `ProtocolAuthorizedAction` (added v1.10 cycle per Row 97) — only `human_confirmed` path executable at v1.0; reserved transitions documented as non-normative future sketches
+- ADR-029 — workload taxonomy decision; ADR-005 + I-012 explicitly preserved at v1.0 active levels
+
 ---
 
 ## 14. Error and exception handling
@@ -559,8 +607,20 @@ Crisis detection operates identically in both modes and is platform-floor behavi
 
 ---
 
+## v1.10 cycle additions (added 2026-05-02 per v1.10.1 hygiene cycle physical merge of Phase5 delta Rows 101/102/103)
+
+This section is a summary index for v1.10 cycle additive edits to this slice. The substantive in-place edits live in the affected sections; this index points to them.
+
+- **Row 101 — §3.1 Workload taxonomy mapping (in-place addition).** New §3.1 subsection introduces the ADR-029 workload-taxonomy mapping for this slice: Mode 1 ↔ `conversational_assistant`, Mode 2 ↔ `protocol_execution`. Establishes the code/schema/audit/config-vs-UI rule (canonical workload-type strings used in all code/schema/audit/config; "Mode 1 / Mode 2" UI/operator labels preserved). Cross-references Master PRD §13.7, WORKLOAD_TAXONOMY contract v5.2, AUTONOMY_LEVELS contract v5.2, AI_LAYERING contract v5.2 §10, and ADR-029.
+- **Row 103 — §13.4 I-012 preservation rule (in-place addition).** New §13.4 subsection mirrors the Master PRD §13.7 v0.3 reject-unless three-clause rule (string equality `autonomy_level == action_with_confirm`; immutable audit-chain clinician confirmation event scoped to `action_id`; confirming actor RBAC v1.1 / I-012 authorized role) and applies it to slice-side state-machine references. Mode 2 enforcement point is the physician decision surface (§6.3 + §13.2 audit). Mode 1 has no direct I-012-class execution authority; downstream workflow-owning slices enforce. Cross-references INVARIANTS v5.2 §I-012, WORKLOAD_TAXONOMY/AUTONOMY_LEVELS/AI_LAYERING contracts v5.2, State Machines v1.1 `ProtocolAuthorizedAction`, ADR-029.
+
+**Cycle traceability:** Phase 5 delta artifact `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` § "Cycle C7 — AI workload taxonomy + autonomy levels". Engineers consulting this slice for v1.10 cycle changes should read both the canonical body (§3.1, §13.4) and the corresponding delta artifact.
+
+---
+
 ## Document control
 
 - **v1.0** — Initial AI Clinical Assistant slice PRD, defining the two-mode framework (Mode 1 conversational assistant under §13.2, Mode 2 protocol execution agent under §13.1), four launch guardrail templates, two launch Mode 2 pathways, platform floor compliance, interaction with other platform services, delegate context, crisis detection, clinician and operator surfaces, and audit model. Derived from Master PRD v1.6 §10 Pillar 2 and the Flagged Items Resolution v1.0.
+- **v1.0 + v1.10 cycle additions (2026-05-02)** — Body remains at v1.0 baseline; additive in-place edits at §3.1 (workload-taxonomy mapping per Row 101) and §13.4 (I-012 preservation rule per Row 103). No content of pre-existing sections has been deleted or rewritten; "Mode 1 / Mode 2" prose preserved throughout per code-vs-UI rule. See "v1.10 cycle additions" section above for index. Authoritative cycle-delta source: `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md`.
 - **Next review:** after guardrail template content (§23 Q2) is resolved; after GLP-1 and ED intake form designs are finalized (Forms/Intake Engine dependency); after Herb–Drug Interaction Engine Slice PRD v1.0 is cross-validated against Mode 1 signal presentation rules.
 - **Change discipline:** changes to the two-mode boundary, guardrail template structure, Mode 2 gate rules, platform floor compliance, crisis detection triggers, or auto-approve activation criteria require explicit owner sign-off and must be reflected back into the Master PRD if they alter the platform model.

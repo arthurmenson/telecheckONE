@@ -1,15 +1,41 @@
 # Telecheck — Project Upload Manifest v2
 
-**Version:** 2 (mechanically generated from filesystem inventory in Cycle U-004; regenerated in Round 3 after F-U004-R2-01/02/03 fixes applied to control-plane docs)
-**Generated:** 2026-04-27 (Round 3 regeneration; filesystem unchanged from Round 2 — 75 files; only in-place content edits to Boot Sequence, Validation Report, Release Notes, Promotion Ledger)
+**Version:** 2 (mechanically rebuilt from filesystem inventory in v1.10 PRD Update Cycle Phase 6 promotion ceremony 2026-05-01; previously regenerated in Cycle U-004 Round 3)
+**Generated:** 2026-05-01 (v1.10 promotion ceremony Step 9 rebuild; filesystem post-merge contains 12 newly authored files + 75 baseline files = 87 markdown files)
 **Bundle:** `Telecheck_Master_Bundle_FINAL_US_REGION_BASELINE.zip`
-**Workstream:** Telecheck — Single-Region US Primary Baseline Finalization (cycle-ID prefix retains "US Region Migration" for audit-trail continuity; current-state framing is "baseline finalization")
-**Cycle:** U-004 Round 3 (final cycle of workstream; in-flight at time of this regeneration)
-**Final file count:** 75 markdown files (mechanically counted from `ls *.md | wc -l`)
-**Source bundle:** `Telecheck_Master_Bundle_U003_R2_FOR_CODEX_REVIEW.zip` (md5 `09c9941fd3360806e5a47407dcc5c42f`; U-003 Codex-verified PASS)
+**Workstream:** Telecheck — v1.10 PRD Update Cycle Phase 6 promotion ceremony (cycle-ID prefix retains "US Region Migration" for audit-trail continuity from earlier U-cycles; bundle-name "FINAL US REGION BASELINE" preserved)
+**Cycle:** v1.10 PRD Update — Phase 6 (Operations housekeeping + v1.10 promotion ceremony per Evans's "authorized" instruction 2026-05-01)
+**Final file count:** **87 markdown files** (mechanically counted: `ls *.md | wc -l` = 87 post-merge; 75 baseline + 12 newly authored = 87; 2 files demoted to Superseded but preserved at existing paths per copy + supersede convention)
+**Source bundle:** `Telecheck_Master_Bundle_FINAL_US_REGION_BASELINE.zip` (post-Cycle-U-004 baseline)
 **Format:** Markdown
-**Generation method:** This manifest is generated mechanically from `os.listdir('.')` filtered to `.md` files, then sorted alphabetically. It is not hand-edited prose. Per workstream methodology learning #2 (manifests must be rebuilt from filesystem, not hand-edited), this manifest reflects filesystem reality at bundle-build time. Drift between this manifest and the bundle filesystem is a defect.
-**Filename note:** Contracts Pack files retain legacy `v5_00` filename pattern; document headers declare v5.1 as canonical. Headers govern; filenames are stable for cross-reference continuity.
+**Generation method:** This manifest is rebuilt mechanically from filesystem listing at v1.10 promotion completion (Step 9 of Phase 6 ceremony plan). It is not hand-edited prose. Per workstream methodology learning #2 (manifests must be rebuilt from filesystem, not hand-edited), this manifest reflects filesystem reality at bundle-build time. Drift between this manifest and the bundle filesystem is a defect.
+**Filename note:** Contracts Pack files retain legacy `v5_00` filename pattern; document headers declare **v5.2** as canonical for the **11 amended/new files** in v1.10 cycle (9 amended in Phase 3: INVARIANTS, AUDIT_EVENTS, DOMAIN_EVENTS, CCR_RUNTIME, GLOSSARY, TYPES, AI_LAYERING, FORMS_ENGINE, GOVERNANCE_CONTROLS + 2 NEW: WORKLOAD_TAXONOMY, AUTONOMY_LEVELS); ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1; MARKET_LAUNCH v5.0 → v5.1. Headers govern; filenames are stable for cross-reference continuity.
+
+---
+
+## v1.10 cycle file inventory delta (added 2026-05-01)
+
+**12 newly authored files at v1.10 promotion (75 baseline + 12 new = 87 total):**
+
+1. `Telecheck_Master_Platform_PRD_v1_10.md` — canonical Master PRD (v1.9 demoted to Superseded; preserved at existing path)
+2. `Telecheck_ADR_027_Country_Conditional_DTC_Marketing.md` — Accepted; triple sign-off
+3. `Telecheck_ADR_028_Research_Data_Partnership_Posture_A.md` — Accepted; quad sign-off
+4. `Telecheck_ADR_029_AI_Workload_Taxonomy.md` — Accepted; quad sign-off
+5. `Telecheck_Contracts_Pack_v5_00_WORKLOAD_TAXONOMY.md` — NEW v5.2 contract per ADR-029
+6. `Telecheck_Contracts_Pack_v5_00_AUTONOMY_LEVELS.md` — NEW v5.2 contract per ADR-029
+7. `Telecheck_Design_Implementation_Contract_v1_1.md` — Canonical for development; supersedes v1.0 PROVISIONAL per Evans Option B 2026-04-28 fold-in
+8. `Telecheck_Program_Porting_Checklist_GLP1_v1_0.md` — worked example per Master PRD §10.5
+9. `Telecheck_Country_Regulatory_Contracts.md` — placeholder per ADR-027 Tier 2
+10. `Telecheck_Pharmacy_Council_Guidance.md` — placeholder per ADR-027 Tier 2
+11. `Telecheck_DSA_Template.md` — placeholder per ADR-028
+12. `Telecheck_REC_IRB_Engagement.md` — placeholder per ADR-028
+
+**1 file renamed (Phase 6 Step 7b):**
+- `Telecheck_Artifact_Registry_v2_9.md` → `Telecheck_Artifact_Registry_v2_10.md`
+
+**2 files demoted to Superseded (preserved at existing paths per copy + supersede convention §3.5; ADI §4 records supersession):**
+- `Telecheck_Master_Platform_PRD_v1_9.md` — superseded by v1.10
+- `Telecheck_Design_Implementation_Contract_v1_0.md` — PROVISIONAL superseded by v1.1 Canonical for development
 
 ---
 
@@ -21,7 +47,8 @@
 | Source bundle md5 | `09c9941fd3360806e5a47407dcc5c42f` |
 | Cycle producing this manifest | U-004 Round 3 |
 | Generation timestamp | 2026-04-27 (Round 3 regeneration) |
-| Total files | 75 |
+| Total files (post-v1.10 promotion 2026-05-01) | 87 |
+| Total files (pre-v1.10 baseline / U-004 final) | 75 |
 | New files added in U-004 | 3 (this manifest, release notes, validation report) |
 | Files renamed in U-004 Round 2 | 2 (`..._US_REGION_MIGRATION.md` → `..._US_REGION_BASELINE.md` for both validation report and release notes) |
 | Files renamed in U-004 Round 3 | 0 |
@@ -52,7 +79,8 @@
 | 15 | `Telecheck_Adversarial_Counsel_Review_Sessions_1_to_3.md` | canonical |
 | 16 | `Telecheck_Adversarial_Counsel_Review_Sessions_1_to_3_Post_Remediation.md` | canonical |
 | 17 | `Telecheck_Adverse_Event_Reporting_Slice_PRD_v1_0.md` | canonical |
-| 18 | `Telecheck_Artifact_Registry_v2_9.md` | canonical |
+| 18 | `Telecheck_Artifact_Registry_v2_10.md` | canonical (renamed from v2_9 in v1.10 cycle Phase 6 Step 7b) |
+| 18a | `Telecheck_Artifact_Registry_v2_9.md` | superseded 2026-05-01 (renamed to v2_10; old filename does not appear in filesystem post-rename — listed here for audit-trail continuity only) |
 | 19 | `Telecheck_Async_Consult_Slice_PRD_v1_0.md` | canonical |
 | 20 | `Telecheck_Canonical_Data_Model_v1_2.md` | canonical |
 | 21 | `Telecheck_Clinician_Portal_IA_v1_0.md` | canonical |
@@ -74,7 +102,8 @@
 | 37 | `Telecheck_Contracts_Pack_v5_00_TYPES.md` | canonical |
 | 38 | `Telecheck_Contracts_Pack_v5_README.md` | canonical |
 | 39 | `Telecheck_Contracts_Pack_v5_Update_Spec.md` | canonical |
-| 40 | `Telecheck_Design_Implementation_Contract_v1_0.md` | canonical |
+| 40 | `Telecheck_Design_Implementation_Contract_v1_0.md` | superseded 2026-05-01 (PROVISIONAL → Canonical for development per Evans Option B 2026-04-28 fold-in into v1.10 cycle as Phase 5.6 / F49); preserved at existing path per copy + supersede convention |
+| 40a | `Telecheck_Design_Implementation_Contract_v1_1.md` | canonical (NEW v1.10 promotion 2026-05-01; Patient mock v7 binding visual reference) |
 | 41 | `Telecheck_Design_System_v1_1.md` | canonical |
 | 42 | `Telecheck_Engineering_Handoff_Build_Guide_v1_3.md` | canonical |
 | 43 | `Telecheck_Fake_Medication_Detection_Slice_PRD_v1_0.md` | canonical |
@@ -88,7 +117,8 @@
 | 51 | `Telecheck_Investor_One_Pager.md` | canonical |
 | 52 | `Telecheck_Labs_Document_Interpretation_Slice_PRD_v1_0.md` | canonical |
 | 53 | `Telecheck_Market_Rollout_Cockpit_Slice_PRD_v1_0.md` | canonical |
-| 54 | `Telecheck_Master_Platform_PRD_v1_9.md` | canonical |
+| 54 | `Telecheck_Master_Platform_PRD_v1_9.md` | superseded 2026-05-01 (v1.9 → v1.10 in v1.10 PRD Update Cycle Phase 6 promotion ceremony); preserved at existing path per copy + supersede convention |
+| 54a | `Telecheck_Master_Platform_PRD_v1_10.md` | canonical (NEW v1.10 promotion 2026-05-01; supersedes v1.9) |
 | 55 | `Telecheck_Medication_Interaction_Engine_Slice_PRD_v1_0.md` | canonical |
 | 56 | `Telecheck_Messaging_Inbox_Spec_v1_0.md` | canonical |
 | 57 | `Telecheck_Notification_Spec_v1_1.md` | canonical |
@@ -110,6 +140,18 @@
 | 73 | `Telecheck_System_Architecture_v1_2.md` | canonical |
 | 74 | `Telecheck_Tenant_Threading_Addendum_v1_0.md` | canonical |
 | 75 | `Telecheck_Unified_Admin_Sidebar_v1_0.md` | canonical |
+| 76 | `Telecheck_ADR_027_Country_Conditional_DTC_Marketing.md` | canonical (NEW v1.10 promotion 2026-05-01; Accepted) |
+| 77 | `Telecheck_ADR_028_Research_Data_Partnership_Posture_A.md` | canonical (NEW v1.10 promotion 2026-05-01; Accepted) |
+| 78 | `Telecheck_ADR_029_AI_Workload_Taxonomy.md` | canonical (NEW v1.10 promotion 2026-05-01; Accepted) |
+| 79 | `Telecheck_Contracts_Pack_v5_00_WORKLOAD_TAXONOMY.md` | canonical (NEW v1.10 promotion 2026-05-01; v5.2) |
+| 80 | `Telecheck_Contracts_Pack_v5_00_AUTONOMY_LEVELS.md` | canonical (NEW v1.10 promotion 2026-05-01; v5.2) |
+| 81 | `Telecheck_Program_Porting_Checklist_GLP1_v1_0.md` | canonical (NEW v1.10 promotion 2026-05-01; worked example per Master PRD §10.5) |
+| 82 | `Telecheck_Country_Regulatory_Contracts.md` | canonical (NEW v1.10 promotion 2026-05-01; placeholder per ADR-027 Tier 2) |
+| 83 | `Telecheck_Pharmacy_Council_Guidance.md` | canonical (NEW v1.10 promotion 2026-05-01; placeholder per ADR-027 Tier 2) |
+| 84 | `Telecheck_DSA_Template.md` | canonical (NEW v1.10 promotion 2026-05-01; placeholder per ADR-028) |
+| 85 | `Telecheck_REC_IRB_Engagement.md` | canonical (NEW v1.10 promotion 2026-05-01; placeholder per ADR-028) |
+
+(Note: rows 76-85 add **10 newly authored canonical files** at v1.10 promotion (3 ADRs + 2 contracts + Program Porting Checklist + 4 country regulatory placeholders = 10). Row 40a (DIC v1.1) and row 54a (Master PRD v1.10) add 2 more newly authored canonical files alongside their predecessors' supersession entries. **Total newly authored at v1.10 promotion = 12** (10 in rows 76-85 + 2 in rows 40a/54a). Row 18a is a rename audit-trail entry (Telecheck_Artifact_Registry_v2_9.md → v2_10.md) — not a separate file. Filesystem-rebuilt count: 87 markdown files post-promotion = 75 baseline + 12 newly authored.)
 
 ---
 
@@ -117,7 +159,7 @@
 
 | Category | Count |
 |---|---|
-| Master PRD | 1 |
+| Master PRD (v1.9 Superseded preserved + v1.10 canonical at v1.10 promotion 2026-05-01) | 2 |
 | Registry | 1 |
 | Active Document Index | 1 |
 | Reviewer Brief | 1 |
@@ -126,19 +168,19 @@
 | Validation Report | 1 |
 | Promotion Ledger | 1 |
 | Boot / Tooling | 1 |
-| Architecture decisions (ADR Set + 3 Addenda) | 4 |
+| Architecture decisions (ADR Set + 3 Addenda + 3 NEW v1.10 ADRs: 027, 028, 029) | 7 |
 | System Architecture | 1 |
 | Canonical Data Model | 1 |
 | State Machines | 1 |
 | OpenAPI | 1 |
 | RBAC Permissions Matrix | 1 |
-| Contracts Pack (modular, v5.1 with legacy v5_00 filenames) | 15 |
+| Contracts Pack (modular, v5.2 governs 11 files [9 amended + 2 NEW: WORKLOAD_TAXONOMY, AUTONOMY_LEVELS] / v5.1 governs 3 preserved [ERROR_MODEL, IDEMPOTENCY, SOURCE_OF_TRUTH] + 1 newly bumped [MARKET_LAUNCH v5.0 → v5.1] + README; legacy v5_00 filenames) | 17 |
 | Engineering Handoff & Build Guide | 1 |
 | Operational Readiness Tracker | 1 |
 | Tenant Threading Addendum | 1 |
 | Unified Admin Sidebar | 1 |
 | Design System | 1 |
-| Design Implementation Contract | 1 |
+| Design Implementation Contract (v1.0 PROVISIONAL preserved Superseded + v1.1 NEW canonical at v1.10 promotion) | 2 |
 | Information Architecture (Patient + Clinician + Admin Operator) | 3 |
 | Notification Spec | 1 |
 | Payment & Billing Spec | 1 |
@@ -154,7 +196,9 @@
 | Flagged Items Resolution | 1 |
 | Future Scope | 1 |
 | Adversarial Counsel Reviews | 2 |
-| **Total** | **75** |
+| Country regulatory placeholders (NEW v1.10: Country_Regulatory_Contracts, Pharmacy_Council_Guidance, DSA_Template, REC_IRB_Engagement) | 4 |
+| Program Porting Checklist (NEW v1.10) | 1 |
+| **Total** | **87** (filesystem-rebuilt at v1.10 promotion 2026-05-01 Phase 6 Step 9) |
 
 ---
 
@@ -162,27 +206,35 @@
 
 | Artifact | Canonical version |
 |---|---|
-| Master Platform PRD | v1.9 |
-| Artifact Registry | v2.9 |
-| Active Document Index | v1.0 (refreshed 2026-04-26 for U-002; bundle reference finalized 2026-04-27 in U-004; supersession table corrected in U-004 Round 2) |
-| Reviewer Brief | v1.0 (refreshed 2026-04-26 for U-003; Ghana Launch Playbook pointer corrected in U-004 Round 2) |
-| Boot Sequence | (no version; refreshed 2026-04-27 in U-003 for ADR-026; EHBG version-name pointer corrected in U-004 Round 2; EHBG and Master PRD filename-notation pointers on lines 15-16 corrected in U-004 Round 3) |
+| Master Platform PRD | **v1.10** (v1.10 PRD Update Cycle promoted 2026-05-01; v1.9 Superseded preserved) |
+| Artifact Registry | **v2.10** (v1.10 PRD Update Cycle promoted 2026-05-01; v2.9 renamed at Phase 6 Step 7b) |
+| Active Document Index | v1.0 (refreshed 2026-05-01 for v1.10 PRD Update Cycle Phase 6 ceremony; previously refreshed 2026-04-26 for U-002 and 2026-04-27 in U-004) |
+| Reviewer Brief | v1.0 (refreshed 2026-04-26 for U-003; v1.10 cycle propagation per `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` §Group 5E) |
+| Boot Sequence | (no version; refreshed 2026-05-01 for v1.10 cycle Phase 6 ceremony — §3 canonical versions / §1 brand-structure note / §7 DIC v1.1 rewrite / §9 conflict-resolution rows; previously refreshed 2026-04-27 in U-003) |
 | ADR Set | v1.0 |
 | ADR Addendum 016–019 | v1.0 |
 | ADR Addendum 020–025 | v1.0 (with ADR-025 superseded by ADR-026 on 2026-04-26) |
 | ADR Addendum 026 | v1.0 (NEW; ratifies single-region us-east-1 primary, us-west-2 cold DR; supersedes ADR-025) |
-| System Architecture | v1.2 |
-| Canonical Data Model | v1.2 |
-| State Machines | v1.1 |
-| OpenAPI | v0.2 |
-| RBAC Permissions Matrix | v1.1 |
-| Contracts Pack | v5.1 (modular; 13 files at v5.1 + MARKET_LAUNCH at v5.0 + Update_Spec) |
-| Engineering Handoff & Build Guide | v1.3 |
-| Operational Readiness Tracker | v1.5 |
-| Tenant Threading Addendum | v1.0 (refreshed 2026-04-26 for U-003) |
+| **ADR-027 Country-Conditional DTC Marketing Posture** | **Accepted (NEW v1.10 promotion 2026-05-01; triple sign-off)** |
+| **ADR-028 Research Data Partnership Posture A** | **Accepted (NEW v1.10 promotion 2026-05-01; quad sign-off)** |
+| **ADR-029 AI Workload Taxonomy** | **Accepted (NEW v1.10 promotion 2026-05-01; quad sign-off)** |
+| System Architecture | v1.2 (v1.10 cycle adds research data module per `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` §Group 5B delta artifact) |
+| Canonical Data Model | v1.2 (v1.10 cycle adds research entities + AIExecution per Phase 5 group 5B) |
+| State Machines | v1.1 (v1.10 cycle adds research state machines + ProtocolAuthorizedAction lifecycle per Phase 5 group 5B) |
+| OpenAPI | v0.2 (v1.10 cycle adds research endpoints with `audit_sensitivity_level=high_pii` per I-031 per Phase 5 group 5B) |
+| RBAC Permissions Matrix | v1.1 (v1.10 cycle adds 3 research roles per Phase 5 group 5B) |
+| Contracts Pack | **v5.2** governs **11 files** (9 amended Phase 3: INVARIANTS, AUDIT_EVENTS, DOMAIN_EVENTS, CCR_RUNTIME, GLOSSARY, TYPES, AI_LAYERING, FORMS_ENGINE, GOVERNANCE_CONTROLS + 2 NEW: WORKLOAD_TAXONOMY, AUTONOMY_LEVELS); ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1; MARKET_LAUNCH v5.0 → v5.1. Substantive body edits per `Phase3_*_v1_10_Edits_2026-05-01.md` delta artifacts. |
+| Engineering Handoff & Build Guide | v1.3 (v1.10 cycle adds tenant-naming convention + Master PRD §10.5 architectural anchor per Phase 5 group 5E) |
+| Operational Readiness Tracker | v1.5 (v1.10 cycle adds 3 marketing OR items per ADR-027 + 5 research OR items per ADR-028 per Phase 5 group 5D) |
+| Tenant Threading Addendum | v1.0 (refreshed 2026-04-26 for U-003; v1.10 cycle sweep `Heros-Health` → `Telecheck-US` per Phase 5 group 5B) |
 | Unified Admin Sidebar | v1.0 |
-| Design System | v1.1 |
-| Design Implementation Contract | v1.0 (PROVISIONAL pending design file delivery) |
+| Design System | v1.1 (v1.10 cycle adds Heros consumer-brand identity tokens per Phase 5 group 5C) |
+| Design Implementation Contract | **v1.1 Canonical for development** (Phase 6 promotion 2026-05-01 per Evans Option B 2026-04-28 fold-in into v1.10 cycle as Phase 5.6 / F49; v1.0 PROVISIONAL Superseded preserved) |
+| **Program Porting Checklist (GLP-1 worked example)** | **v1.0 (NEW v1.10 promotion 2026-05-01; Telecheck-US Heros Health DBA GLP-1 → Telecheck-Ghana Heros Health Ghana DBA GLP-1)** |
+| **Country Regulatory Contracts** | **v1.0 placeholder (NEW v1.10 promotion; per ADR-027 Tier 2)** |
+| **Pharmacy Council Guidance** | **v1.0 placeholder (NEW v1.10 promotion; per ADR-027 Tier 2)** |
+| **Data Sharing Agreement Template** | **v1.0 placeholder (NEW v1.10 promotion; per ADR-028; legal-reviewed pre-launch per Master PRD §24 row 13)** |
+| **REC / IRB Engagement** | **v1.0 placeholder (NEW v1.10 promotion; per ADR-028)** |
 | Patient App IA | v1.0 |
 | Clinician Portal IA | v1.0 |
 | Admin Operator IA | v1.1 |
