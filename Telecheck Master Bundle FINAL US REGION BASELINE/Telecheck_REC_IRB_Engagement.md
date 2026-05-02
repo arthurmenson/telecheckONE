@@ -27,17 +27,33 @@ REC/IRB partnership is an **external oversight body** that reviews and approves 
 
 **Status at v1.10 launch:** Pending pre-launch decision per Master PRD §24 row 11 (REC partnership designation — Ghana). Owner: Privacy Officer + Telecheck-Ghana team.
 
-**Required for activation to CCR `research_data_partnership_active = active`:**
+**Required for activation to CCR `research_data_partnership_active = consent_only` (Stage 1):**
 
-Populate CCR `research_ethics_review_body` structured object (per CCR_RUNTIME v5.2 research block):
+*(Section split into Stage 1 and Stage 2 duties 2026-05-02 per Codex Round-8 Scope 3 HIGH-2 finding aligning with the Round-7 patch that introduced explicit Stage 1 + Stage 2 gates at MARKET_LAUNCH v5.1. Was previously stating REC body population only as a `consent_only → active` concern (Stage 2); now correctly identified as an `inactive → consent_only` precondition (Stage 1) per the canonical 6-condition Stage 1 gate. The 7 sub-fields below are required for Stage 1; Stage 2 adds REC concurrence per `per_dsa_review_required` and per-DSA review where applicable.)*
+
+Populate CCR `research_ethics_review_body` structured object (all 7 sub-fields required at Stage 1 — per CCR_RUNTIME v5.2 research block + runtime validator rule strengthened 2026-05-02):
 
 - `name`: TBD (GHS REC or Noguchi Memorial Institute IRB selected)
 - `jurisdiction`: GH
-- `approval_reference_id`: TBD (ethics body's approval reference for the partnership)
+- `approval_reference_id`: TBD (ethics body's approval reference for the partnership; binds to the consent text version pin per CCR_RUNTIME v5.2)
 - `approval_validity_from`: TBD
-- `approval_validity_to`: TBD
+- `approval_validity_to`: TBD (must be `>= now` at any future Stage 1 activation review)
 - `approval_scope`: TBD (scope of ethical approval; what types of research data flows are sanctioned)
-- `per_dsa_review_required`: TBD (whether each DSA requires separate REC/IRB review)
+- `per_dsa_review_required`: TBD (whether each DSA requires separate REC/IRB review — drives Stage 2 REC concurrence requirement)
+
+When all 7 sub-fields are populated AND ethics-reviewed consent text version pin is in place AND audit emission paths are operational AND Forms Engine I-030 static validation passes AND CCR runtime validator is live AND Country Launch Director sign-off is recorded → the country can transition from `inactive` to `consent_only` per MARKET_LAUNCH v5.1 Stage 1 6-condition gate.
+
+**Required for activation to CCR `research_data_partnership_active = active` (Stage 2):**
+
+Stage 1 is a precondition. Stage 2 additionally requires:
+
+- Signed `DataSharingAgreement` (per TYPES v5.2)
+- `research_export_authorized_signers` roster populated
+- `research_export_k_anonymity_minimum` configured (≥ k_min_default = 11)
+- ADR-028 v0.4 quad sign-off (Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead)
+- REC concurrence per `research_ethics_review_body.per_dsa_review_required` when applicable (per-DSA review)
+- Country Launch Director per-country activation authority
+- The full 11-condition MARKET_LAUNCH v5.1 Stage 2 research data partnership activation gate (which inherits the 6 Stage 1 conditions as preconditions)
 
 ### Future markets
 
@@ -51,14 +67,29 @@ Each future market REC/IRB partnership is added when the corresponding country's
 
 ---
 
-## Activation gate (per ADR-028 v1.0 + Phase 3 group-3 MARKET_LAUNCH research activation gate)
+## Activation gates (two-stage, per MARKET_LAUNCH v5.1 Stage 1 + Stage 2; updated 2026-05-02 per Codex Round-8 Scope 3 HIGH-2 finding)
 
-The `consent_only` → `active` transition for any country requires:
+### Stage 1: `inactive → consent_only` activation gate (6 conditions)
 
-1. CCR `research_ethics_review_body` populated with all required sub-fields above
-2. `approval_validity_to >= now` at activation time
-3. REC concurrence per `per_dsa_review_required` if applicable
-4. `research.dsa_activated` audit event emitted upon DSA activation (Category B per AUDIT_EVENTS v5.2 §5)
+The default state at v1.0 launch is `inactive`. The `inactive → consent_only` transition requires:
+
+1. CCR `research_ethics_review_body` populated with all 7 required sub-fields above (REC partnership designated)
+2. Ethics-reviewed consent text version pin in place at the platform consent module (per `approval_reference_id`)
+3. `research.consent_granted` and `research.consent_revoked` audit emission paths operational
+4. Forms Engine static analysis at form-version-publish time rejects all 6 categories of dependency on `research_consent_status` per FORMS_ENGINE v5.2 I-030 enforcement, for every form in the country
+5. CCR runtime validator (rejects `consent_only` transitions when any of the 7 `research_ethics_review_body` sub-fields is null) deployed and live
+6. Country Launch Director sign-off for the per-country `inactive → consent_only` transition
+
+### Stage 2: `consent_only → active` activation gate (per ADR-028 v1.0 + MARKET_LAUNCH v5.1 Stage 2 11-condition gate)
+
+Stage 1 is a precondition (the 6 Stage 1 conditions remain valid). Stage 2 additionally requires:
+
+1. `approval_validity_to >= now` at activation time (re-checked at Stage 2)
+2. REC concurrence per `per_dsa_review_required` if applicable (per-DSA review)
+3. `research.dsa_activated` audit event emitted upon DSA activation (Category B per AUDIT_EVENTS v5.2 §5)
+4. ADR-028 v0.4 quad sign-off (Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead)
+5. Country Launch Director per-country activation authority
+6. The remaining MARKET_LAUNCH v5.1 Stage 2 11-condition gate elements (DSA active + permitted-domain subset + k_min hierarchy + 5th consent tier deployment verified + de-identification engine readiness + audit pipeline at high_pii)
 
 ---
 

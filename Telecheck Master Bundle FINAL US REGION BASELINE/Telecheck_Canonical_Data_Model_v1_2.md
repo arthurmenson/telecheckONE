@@ -945,16 +945,30 @@ Engineering must verify these in CI before merge.
 
 The `tenant` entity gains three columns to reflect the operating-tenant / consumer-DBA / legal-entity tri-distinction per Master PRD v1.10 §17 + Glossary v5.2 §Brand and tenant terms. The `tenant.id` naming convention follows `Telecheck-{country}` (e.g., `Telecheck-US`, `Telecheck-Ghana`).
 
-```sql
-ALTER TABLE tenant
-  ADD COLUMN consumer_dba          TEXT NOT NULL,  -- e.g., 'Heros Health' (US), 'Heros Health Ghana' (GH)
-  ADD COLUMN legal_entity          TEXT NOT NULL,  -- e.g., 'Telecheck Health LLC', 'Telecheck-Ghana Ltd.'
-  ADD COLUMN consumer_subdomain    TEXT NOT NULL;  -- e.g., 'heroshealth.com', 'ghana.heroshealth.com'
+*(Migration block rewritten 2026-05-02 per Codex Round-8 Scope 4 HIGH-1 finding to (a) target the canonical `tenants` plural table name per §4.1 DDL, (b) add columns with safe defaults so the ALTER is executable on a non-empty table, (c) populate every NOT NULL column the canonical DDL requires, (d) provide a staged backfill strategy for existing rows. Was previously executable only against an empty `tenant` (singular) table that doesn't exist in the canonical DDL.)*
 
--- Day-1 tenant rows
-INSERT INTO tenant (id, country, consumer_dba, legal_entity, consumer_subdomain) VALUES
-  ('Telecheck-US',     'US', 'Heros Health',       'Telecheck Health LLC', 'heroshealth.com'),
-  ('Telecheck-Ghana',  'GH', 'Heros Health Ghana', 'Telecheck-Ghana Ltd.', 'ghana.heroshealth.com');
+```sql
+-- Stage 1: Add new columns with NULL default (executable on existing tenants table per §4.1 DDL)
+ALTER TABLE tenants
+  ADD COLUMN consumer_dba          VARCHAR(200),  -- e.g., 'Heros Health' (US), 'Heros Health Ghana' (GH)
+  ADD COLUMN legal_entity          VARCHAR(200),  -- e.g., 'Telecheck Health LLC', 'Telecheck-Ghana Ltd.'
+  ADD COLUMN consumer_subdomain    VARCHAR(255);  -- e.g., 'heroshealth.com', 'ghana.heroshealth.com'
+
+-- Stage 2: Backfill any pre-existing rows. For greenfield deployments (no prior tenants), this is a no-op.
+-- For deployments with pre-v1.10 rows, the platform admin populates per their tenant inventory.
+-- (Pattern: UPDATE tenants SET consumer_dba = 'X', legal_entity = 'Y', consumer_subdomain = 'Z' WHERE id = 'tenant-id';)
+
+-- Stage 3: Set NOT NULL after backfill
+ALTER TABLE tenants
+  ALTER COLUMN consumer_dba       SET NOT NULL,
+  ALTER COLUMN legal_entity       SET NOT NULL,
+  ALTER COLUMN consumer_subdomain SET NOT NULL;
+
+-- Day-1 tenant rows (greenfield insert; populates ALL NOT NULL columns per the canonical §4.1 DDL:
+-- id, country, status, display_name, created_by; plus the new v1.10 columns).
+INSERT INTO tenants (id, country, status, display_name, created_by, consumer_dba, legal_entity, consumer_subdomain) VALUES
+  ('Telecheck-US',    'US', 'active', 'Heros Health',       '<platform-admin-tnu-id>', 'Heros Health',       'Telecheck Health LLC', 'heroshealth.com'),
+  ('Telecheck-Ghana', 'GH', 'active', 'Heros Health Ghana', '<platform-admin-tnu-id>', 'Heros Health Ghana', 'Telecheck-Ghana Ltd.', 'ghana.heroshealth.com');
 ```
 
 Migration discipline: any v1.x slice PRD example or test fixture using `Heros-Health` as a tenant ID is rewritten to `Telecheck-US`. The patient-facing brand surface (Heros Health) is sourced from `tenant.consumer_dba`, never from `tenant.id`.

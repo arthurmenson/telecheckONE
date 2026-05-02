@@ -662,7 +662,7 @@ PENDING ──authorize──▶ AUTHORIZED ──capture──▶ CAPTURED ─�
 **Entity:** Subscription
 **Source:** Pharmacy + Refill Slice PRD v2.X §8 (governs); Canonical Data Model v1.2 §4.7 (schema); ADR-008 (bridge supply on consent revocation); RBAC v1.1 (clinician override authority)
 
-The subscription state machine governs the lifecycle of an auto-renewing prescription subscription — the core mechanic of US DTC tenants like Heros (and any future tenant offering subscription products). It is tenant-scoped per ADR-023; per-tenant state-transition counts are independent.
+The subscription state machine governs the lifecycle of an auto-renewing prescription subscription — the core mechanic of US DTC operating tenants (e.g., **Telecheck-US, trading patient-facing as the Heros Health DBA**) and any future tenant offering subscription products. *(Updated 2026-05-02 per Codex Round-8 Scope 4 MEDIUM-1 finding — was previously stated as `like Heros`, using bare `Heros` as a tenant identifier in violation of the C3 brand-structure rule per Master PRD v1.10 §17.)* It is tenant-scoped per ADR-023; per-tenant state-transition counts are independent.
 
 ```
                                   ┌─────────────────────────────────────────────┐
