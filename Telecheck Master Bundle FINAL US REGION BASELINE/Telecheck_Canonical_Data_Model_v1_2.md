@@ -829,12 +829,41 @@ CREATE TABLE audit_events (
   -- Payload (the change itself)
   payload         JSONB NOT NULL,
   
+  -- Workload-taxonomy fields (added v1.10 cycle per ADR-029 / AUDIT_EVENTS v5.2 envelope schema; patch 2026-05-02 per Codex Round-11 Scope 1 HIGH-1 finding to make CDM able to store the I-012 evidence required by AUDIT_EVENTS)
+  audit_sensitivity_level VARCHAR(16) NOT NULL DEFAULT 'standard',  -- 'standard' | 'high_pii' (per I-031 — high_pii reserved for research export events; consent grant/revoke at standard per AUDIT_EVENTS v5.2 §5)
+  ai_workload_type        VARCHAR(40),                              -- 'conversational_assistant' | 'protocol_execution' | 'autonomous_agent' (reserved) | 'multi_agent_supervisor' (reserved) | 'tool_using_agent' (reserved) | 'rejected_invalid_attempt' (sentinel; only on *.execution_rejected events) | 'n/a' (sentinel; only on I-012 clinician-only approvals) | NULL (legacy/non-AI events). Required for I-012 action-class records regardless of actor_type per AUDIT_EVENTS v5.2 §I-012 closure rule.
+  autonomy_level          VARCHAR(40),                              -- 'advisory' | 'suggestion' | 'action_with_confirm' | 'action_with_audit_only' (reserved) | 'fully_autonomous' (reserved) | 'rejected_invalid_attempt' (sentinel) | 'n/a' (sentinel) | NULL (legacy/non-AI events). Same I-012 closure constraint as above.
+  
+  -- Reserved nullable agentic-context fields (added v1.10 cycle; populate only when corresponding capability activates per ADR-030/031/032/033/034)
+  agent_id                  VARCHAR(26),
+  agent_version             VARCHAR(40),
+  tool_call_id              VARCHAR(26),
+  memory_read_set_id        VARCHAR(26),
+  memory_write_set_id       VARCHAR(26),
+  supervising_policy_id     VARCHAR(26),
+  knowledge_source_versions JSONB,                                  -- ["source:version", ...] | NULL
+  
   -- Hash chain for immutability per ADR-013
   prev_hash       VARCHAR(64) NOT NULL,              -- SHA-256 of previous record's hash
   record_hash     VARCHAR(64) NOT NULL,              -- SHA-256 of this record's content
   
   -- IMMUTABLE: no UPDATE, no DELETE permitted
-  CONSTRAINT audit_no_modification CHECK (true)      -- enforced via trigger
+  CONSTRAINT audit_no_modification CHECK (true),     -- enforced via trigger
+  
+  -- I-012 closure rule constraint (per AUDIT_EVENTS v5.2 §I-012 closure rule):
+  -- For I-012 action-class records, ai_workload_type AND autonomy_level MUST be non-null regardless of actor_type.
+  -- Action-class set per AUDIT_EVENTS v5.2 (single source of truth):
+  --   prescribing.{initiated, approved, declined, modified, execution_rejected},
+  --   refill.{approved, declined, execution_rejected},
+  --   protocol_authorized_{prescribing, refill_renewal, dispensing_release},
+  --   medication_order.execution_rejected.
+  CONSTRAINT audit_i012_workload_evidence_required CHECK (
+    action NOT IN ('prescribing.initiated', 'prescribing.approved', 'prescribing.declined', 'prescribing.modified',
+                   'prescribing.execution_rejected', 'refill.approved', 'refill.declined', 'refill.execution_rejected',
+                   'protocol_authorized_prescribing', 'protocol_authorized_refill_renewal',
+                   'protocol_authorized_dispensing_release', 'medication_order.execution_rejected')
+    OR (ai_workload_type IS NOT NULL AND autonomy_level IS NOT NULL)
+  )
 );
 
 -- Block UPDATE and DELETE
