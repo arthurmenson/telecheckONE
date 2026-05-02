@@ -30,9 +30,12 @@ Every audit event contains:
   // Workload-taxonomy fields (added v5.2 per ADR-029 / WORKLOAD_TAXONOMY contract).
   // Full enum lists active + reserved values; reserved values are runtime-rejected per source contract until activation audit event recorded.
   // Active at v1.0: conversational_assistant, protocol_execution. Reserved: autonomous_agent, multi_agent_supervisor, tool_using_agent.
-  "ai_workload_type":  "conversational_assistant | protocol_execution | autonomous_agent | multi_agent_supervisor | tool_using_agent | null",
-  // Active at v1.0: advisory, suggestion, action_with_confirm. Reserved: action_with_audit_only, fully_autonomous.
-  "autonomy_level":    "advisory | suggestion | action_with_confirm | action_with_audit_only | fully_autonomous | null",
+  // Sentinel `rejected_invalid_attempt` (v5.2 patch 2026-05-02 per Codex Round-5 Scope 1 MEDIUM) is VALID ONLY in the audit envelope of `*.execution_rejected` events
+  //   (`prescribing.execution_rejected`, `refill.execution_rejected`, `medication_order.execution_rejected`); runtime validation MUST reject the sentinel everywhere else
+  //   (any successful AIExecution record, any non-rejection action audit). Per AUDIT_EVENTS v5.2 §I-012 closure rule + execution_rejected exception.
+  "ai_workload_type":  "conversational_assistant | protocol_execution | autonomous_agent | multi_agent_supervisor | tool_using_agent | rejected_invalid_attempt (only on *.execution_rejected events) | null",
+  // Active at v1.0: advisory, suggestion, action_with_confirm. Reserved: action_with_audit_only, fully_autonomous. Sentinel rejected_invalid_attempt — same carve-out as above.
+  "autonomy_level":    "advisory | suggestion | action_with_confirm | action_with_audit_only | fully_autonomous | rejected_invalid_attempt (only on *.execution_rejected events) | null",
   // Reserved nullable agentic-context fields (added v5.2; populate only when corresponding capability activates per ADR-030/031/032/033/034).
   "agent_id":          "<ULID> | null",
   "agent_version":     "<semver> | null",
@@ -198,12 +201,12 @@ The `invalidation_reason` enum is canonical and shared exactly with TYPES.Resear
 
 However, the **audit-side completion-attempt** (`research.export_completed` event in the immutable audit chain) is governed by a different rule — bare suppression of the audit record is forbidden per I-003 (audit gap = audit defect).
 
-The two-event audit pattern for failed exports:
+The two-event audit pattern for failed exports (**MAY → MUST 2026-05-02 per Codex Round-5 Scope 2 HIGH finding** — the prior MAY framing left a permission ambiguity that conflicted with the bare-suppression-forbidden discipline; both events are now mandatory whenever delivery is rejected):
 
-1. `research.export_completed` MAY emit with `status = invalidated`, the violated state recorded in payload (e.g., `dsa_status_at_export = expired`, `k_threshold_actual` showing the violation, etc.), `invalidation_reason` populated, and `export_artifact_hash = null` (no artifact was delivered).
-2. Concurrent `signal_enforcement_trigger` Category B audit (per existing v5.1 catalog) captures the enforcement action: artifact destruction, partner notification per DSA terms, engineering review trigger.
+1. `research.export_completed` **MUST** emit with `status = invalidated`, the violated state recorded in payload (e.g., `dsa_status_at_export = expired`, `k_threshold_actual` showing the violation, etc.), `invalidation_reason` populated to one of the canonical 5-value enum (`dsa_inactive | k_anonymity_violation | permitted_domain_drift | consent_cohort_change | consent_revocation_mid_export`), and `export_artifact_hash = null` (no artifact was delivered).
+2. Concurrent `signal_enforcement_trigger` Category B audit (per existing v5.1 catalog) **MUST** be emitted to capture the enforcement action: artifact destruction, partner notification per DSA terms, engineering review trigger.
 
-This pattern preserves I-003 (audit completeness) while enforcing I-029 (delivery rejection). The `status` field on the export events is the authoritative discriminator: `completed` = delivery succeeded; `invalidated` = delivery rejected, audit captured.
+This pattern preserves I-003 (audit completeness) while enforcing I-029 (delivery rejection). The `status` field on the export events is the authoritative discriminator: `completed` = delivery succeeded; `invalidated` = delivery rejected, audit captured. Mirror the MUST language in STATE_MACHINES v1.1 ResearchExportRequest reject-unless block and the prohibited-pattern note below.
 
 **I-030 binding (audit-side cross-check):** Audit retrieval surfaces that filter records by `research_consent_status` MUST NOT influence any care-delivery surface response. This is enforced upstream at the application layer per I-030; audit retrieval itself is read-only and serves cohort definition and reconciliation only.
 
@@ -349,7 +352,7 @@ Records past retention are archived, not deleted. Archived records are retrievab
 - **Emitting an AI audit event with null `ai_workload_type` or `autonomy_level` (added v5.2).** New v1.10+ AI events require both fields populated per WORKLOAD_TAXONOMY §1 nullability rule. Null is reserved for legacy backfill and non-AI events only.
 - **Confusing `audit_sensitivity_level` with the safety-classification matrix Categories A/B/C (added v5.2).** They are orthogonal: `audit_sensitivity_level` governs retention/access/query treatment within a category; the A/B/C category governs which retention rule applies. An export event is Category B (governance) AND `audit_sensitivity_level = high_pii` (elevated treatment within Category B).
 - **Using the `ai_mode_1` / `ai_mode_2` actor type aliases in new v1.10+ code (added v5.2).** Use `actor_type = ai_workload` with `ai_workload_type` set. Aliases are deprecated for new code (preserved for existing records per I-003).
-- **Bare suppression of failed `research.export_completed` (added v5.2).** Per I-029 + I-003 audit-completeness, failed exports MAY emit `research.export_completed` with `status = invalidated` plus concurrent `signal_enforcement_trigger`. Silent invalidation is forbidden.
+- **Bare suppression of failed `research.export_completed` (added v5.2; MAY → MUST 2026-05-02 per Codex Round-5 Scope 2 HIGH).** Per I-029 + I-003 audit-completeness, failed exports **MUST** emit `research.export_completed` with `status = invalidated` and `invalidation_reason` populated to one of the canonical 5-value enum, **MUST** be paired with concurrent `signal_enforcement_trigger` Category B audit. Silent invalidation is forbidden; the prior MAY framing is superseded.
 
 ---
 

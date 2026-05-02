@@ -666,10 +666,10 @@ Create `CLAUDE.md` at the repo root. Keep it under 200 lines. The version below 
 # Telecheck — Project Context for Claude Code
 
 ## What this is
-Telecheck is a multi-tenant AI-powered telehealth platform. At launch, two tenants are active:
-- Heros Health (US, greenfield)
-- Telecheck-Ghana (Ghana, chronic-care anchor)
-Architecture is global. See /docs/spec/Telecheck_Master_Platform_PRD_v1_8.md for full context.
+Telecheck is a multi-tenant AI-powered telehealth platform. *(Operating-tenant + DBA framing rewritten 2026-05-02 per Codex Round-5 Scope 4 HIGH-2 finding to align with C3 brand-structure rule per Master PRD v1.10 §17 + Glossary v5.2 — was previously `Heros Health (US, greenfield)` using the consumer DBA as a tenant identifier.)* At launch, two operating tenants are active:
+- **Telecheck-US** (operating tenant, US, greenfield; operated by Telecheck Health LLC; trading patient-facing as **Heros Health** consumer DBA at heroshealth.com)
+- **Telecheck-Ghana** (operating tenant, Ghana, chronic-care anchor; operated by Telecheck-Ghana Ltd.; trading patient-facing as **Heros Health Ghana** consumer DBA at ghana.heroshealth.com)
+Architecture is global. Code, schema, audit, and config use operating-tenant identifiers (`Telecheck-{country}`); patient-facing surfaces source the consumer DBA via `tenant.consumer_dba`, never from `tenant.id`. See /docs/spec/Telecheck_Master_Platform_PRD_v1_10.md for full context.
 
 ## How to find authoritative answers
 - WHAT to build: /docs/spec/Telecheck_Master_Platform_PRD_v1_8.md
