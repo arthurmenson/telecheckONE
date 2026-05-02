@@ -88,7 +88,7 @@ Cross-tenant context (when a Platform Admin is in break-glass viewing a specific
 
 ### 3.3 Empty-state behavior
 
-A Tenant Admin in a tenant that has no patients yet (e.g., Heros at greenfield day 1) sees the sidebar with empty-state guidance per section: "Subscriptions — no subscriptions yet. Once your first patient signs up, they appear here." This is honest-status rendering per Master PRD v1.9 §17.
+A Tenant Admin in a tenant that has no patients yet (e.g., **Telecheck-US** operating-tenant — trading patient-facing as the Heros Health DBA — at greenfield day 1) sees the sidebar with empty-state guidance per section: "Subscriptions — no subscriptions yet. Once your first patient signs up, they appear here." This is honest-status rendering per Master PRD v1.10 §17. Per C3 brand structure, `tenant.id = "Telecheck-US"` is the canonical operating-tenant identifier; the consumer DBA (`Heros Health`) is sourced from `tenant.consumer_dba` for patient-facing surfaces and is never rendered as the tenant identifier in admin contexts.
 
 ---
 
@@ -101,7 +101,7 @@ Each sidebar section maps to canonical content authored elsewhere. This document
 | Dashboard | Admin Backend v1.X §4.1 (per-role dashboards) |
 | Tenants | Admin Backend v1.X §4.2 + Tenant Configuration module per System Architecture v1.2 §13 |
 | Markets | Market Rollout Cockpit Slice PRD v1.0 |
-| Programs | Master PRD v1.9 §3 (capability list) + Admin Backend §5.4 (per-tenant program enablement) |
+| Programs | Master PRD v1.10 §3 (capability list) + §10.5 (program catalog architecture) + Admin Backend §5.4 (per-tenant program enablement) |
 | Protocols | Admin Configuration Surfaces v1.0 (governance) + Protocol Library Ghana v1.0 (Ghana content) |
 | Subscriptions | Admin Backend v1.X §5.2 + Pharmacy + Refill v2.X §8 (state machine) |
 | Patients | Admin Backend v1.X §5.3 + Patient App IA v1.0 (data model) |
@@ -174,10 +174,10 @@ A single human may hold roles in both hierarchies (rare but supported); the side
 - Admin Operator IA v1.1 — screen content authority
 - Admin Configuration Surfaces Slice PRD v1.0 — governance content authority
 - Admin Backend Slice PRD v1.X — workflow content authority
-- Master PRD v1.9 — product context
+- Master PRD v1.10 — product context
 - Tenant Threading Addendum v1.0 §3.13 (Patient App IA) — patient-side tenant context comparison
 - Design System v1.X — token system for sidebar visual rendering
-- DIC v1.0 (PROVISIONAL) — design–engineering contract
+- DIC v1.1 (Canonical for development; supersedes v1.0 PROVISIONAL per v1.10 promotion 2026-05-01) — design–engineering contract
 
 ---
 
