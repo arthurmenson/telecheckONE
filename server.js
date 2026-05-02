@@ -25,10 +25,16 @@ const MIME = {
 };
 
 function safeJoin(root, reqPath){
-  const decoded = decodeURIComponent(reqPath.split("?")[0]);
-  const resolved = path.normalize(path.join(root, decoded));
-  if (!resolved.startsWith(root)) return null; // path traversal guard
-  return resolved;
+  let decoded;
+  try { decoded = decodeURIComponent(reqPath.split("?")[0]); } catch { return null; }
+  if (decoded.includes("\0")) return null;
+  // Strip leading slashes/backslashes so resolve doesn't treat it as absolute.
+  const clean = decoded.replace(/^[\\/]+/, "");
+  const resolved = path.resolve(root, clean);
+  const rel = path.relative(root, resolved);
+  // rel must be empty (root itself) or a relative path that does not climb out.
+  if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) return resolved;
+  return null;
 }
 
 const PROGRESS_FILE = path.join(ROOT, "progress.json");
@@ -40,6 +46,49 @@ function readBody(req){
     req.on("end", () => resolve(data));
     req.on("error", reject);
   });
+}
+
+function validateProgress(p){
+  const errs = [];
+  if (!p || typeof p !== "object") return ["payload must be an object"];
+  if (!Array.isArray(p.states) || p.states.length === 0) errs.push("states[] required");
+  if (!Array.isArray(p.areas))  errs.push("areas[] required");
+  if (errs.length) return errs;
+  const stateIds = new Set();
+  for (const [i, s] of p.states.entries()) {
+    if (!s || typeof s.id !== "string" || typeof s.label !== "string" || typeof s.color !== "string")
+      errs.push(`states[${i}] must have id/label/color strings`);
+    else if (stateIds.has(s.id)) errs.push(`duplicate state id "${s.id}"`);
+    else stateIds.add(s.id);
+  }
+  const seenIds = new Set();
+  const allowedFields = new Set(["id","name","category","status","progress","owner","notes","docs"]);
+  for (const [i, a] of p.areas.entries()) {
+    if (!a || typeof a !== "object") { errs.push(`areas[${i}] must be object`); continue; }
+    for (const k of Object.keys(a)) if (!allowedFields.has(k)) errs.push(`areas[${i}] has unknown field "${k}"`);
+    if (typeof a.id !== "string" || !a.id) errs.push(`areas[${i}].id required`);
+    else if (seenIds.has(a.id)) errs.push(`duplicate area id "${a.id}"`);
+    else seenIds.add(a.id);
+    if (typeof a.name !== "string") errs.push(`areas[${i}].name must be string`);
+    if (typeof a.category !== "string") errs.push(`areas[${i}].category must be string`);
+    if (typeof a.status !== "string" || !stateIds.has(a.status)) errs.push(`areas[${i}].status "${a.status}" not in states[]`);
+    if (typeof a.progress !== "number" || !Number.isFinite(a.progress)) errs.push(`areas[${i}].progress must be number`);
+    if (a.owner != null && typeof a.owner !== "string") errs.push(`areas[${i}].owner must be string`);
+    if (a.notes != null && typeof a.notes !== "string") errs.push(`areas[${i}].notes must be string`);
+    if (a.docs != null && (!Array.isArray(a.docs) || a.docs.some(d => typeof d !== "string"))) errs.push(`areas[${i}].docs must be string[]`);
+    // clamp progress in place
+    if (typeof a.progress === "number") a.progress = Math.max(0, Math.min(100, Math.round(a.progress)));
+  }
+  return errs;
+}
+
+function atomicWriteJson(file, obj){
+  const tmp = file + ".tmp." + process.pid + "." + Date.now();
+  const data = JSON.stringify(obj, null, 2) + "\n";
+  fs.writeFileSync(tmp, data, { encoding: "utf8", mode: 0o644 });
+  // Backup current file (best-effort) before swap.
+  try { if (fs.existsSync(file)) fs.copyFileSync(file, file + ".bak"); } catch {}
+  fs.renameSync(tmp, file);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -58,12 +107,18 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "PUT") {
       try {
         const body = await readBody(req);
-        const parsed = JSON.parse(body); // validate
-        if (!parsed || !Array.isArray(parsed.areas)) throw new Error("missing areas[]");
+        let parsed;
+        try { parsed = JSON.parse(body); } catch { throw new Error("invalid JSON"); }
+        const errs = validateProgress(parsed);
+        if (errs.length) {
+          res.writeHead(422, { "Content-Type": "application/json; charset=utf-8" });
+          return res.end(JSON.stringify({ ok: false, errors: errs }));
+        }
+        parsed.schema = parsed.schema || 1;
         parsed.updated = new Date().toISOString().slice(0,10);
-        fs.writeFileSync(PROGRESS_FILE, JSON.stringify(parsed, null, 2) + "\n", "utf8");
+        atomicWriteJson(PROGRESS_FILE, parsed);
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ ok: true, updated: parsed.updated }));
+        res.end(JSON.stringify({ ok: true, updated: parsed.updated, areas: parsed.areas.length }));
         const ts = new Date().toISOString().slice(11,19);
         console.log(`[${ts}] 200 PUT /api/progress (${parsed.areas.length} areas)`);
       } catch (e) {

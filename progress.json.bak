@@ -1,0 +1,444 @@
+{
+  "schema": 1,
+  "updated": "2026-05-02",
+  "states": [
+    {
+      "id": "not-started",
+      "label": "Not started",
+      "color": "#5a6478"
+    },
+    {
+      "id": "spec-draft",
+      "label": "Spec drafting",
+      "color": "#8b95a7"
+    },
+    {
+      "id": "spec-final",
+      "label": "Spec finalized",
+      "color": "#6aa9ff"
+    },
+    {
+      "id": "in-dev",
+      "label": "In development",
+      "color": "#ffb454"
+    },
+    {
+      "id": "in-review",
+      "label": "In review / QA",
+      "color": "#c084fc"
+    },
+    {
+      "id": "shipped",
+      "label": "Shipped",
+      "color": "#9ee37d"
+    },
+    {
+      "id": "blocked",
+      "label": "Blocked",
+      "color": "#ff6b6b"
+    }
+  ],
+  "areas": [
+    {
+      "id": "slice-ai-clinical",
+      "name": "AI Clinical Assistant",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 15,
+      "owner": "",
+      "notes": "Mode 1 + Mode 2 architecture per ADR-002.",
+      "docs": [
+        "Telecheck_AI_Clinical_Assistant_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-acquisition",
+      "name": "Acquisition & Engagement",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 10,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Acquisition_Engagement_Tools_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-admin-backend",
+      "name": "Admin Backend",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 20,
+      "owner": "",
+      "notes": "v1.1 promoted.",
+      "docs": [
+        "Telecheck_Admin_Backend_Slice_PRD_v1_1.md"
+      ]
+    },
+    {
+      "id": "slice-admin-config",
+      "name": "Admin Configuration Surfaces",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 10,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Admin_Configuration_Surfaces_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-adverse-events",
+      "name": "Adverse Event Reporting",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 5,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Adverse_Event_Reporting_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-async-consult",
+      "name": "Async Consult",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 10,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Async_Consult_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-community",
+      "name": "Community Platform",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 5,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Community_Platform_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-consent",
+      "name": "Consent & Delegated Access",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 10,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Consent_Delegated_Access_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-fake-meds",
+      "name": "Fake Medication Detection",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 5,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Fake_Medication_Detection_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-forms",
+      "name": "Forms / Intake Engine",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 25,
+      "owner": "",
+      "notes": "v2.1 — engine contract finalized.",
+      "docs": [
+        "Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md",
+        "Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md"
+      ]
+    },
+    {
+      "id": "slice-herb-drug",
+      "name": "Herb–Drug Interaction Engine",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 5,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Herb_Drug_Interaction_Engine_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-labs",
+      "name": "Labs & Document Interpretation",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 5,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Labs_Document_Interpretation_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-market-rollout",
+      "name": "Market Rollout Cockpit",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 5,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Market_Rollout_Cockpit_Slice_PRD_v1_0.md",
+        "Telecheck_Contracts_Pack_v5_00_MARKET_LAUNCH.md"
+      ]
+    },
+    {
+      "id": "slice-med-interaction",
+      "name": "Medication Interaction Engine",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 5,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Medication_Interaction_Engine_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-pharmacy",
+      "name": "Pharmacy + Refill",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 20,
+      "owner": "",
+      "notes": "v2.1 promoted.",
+      "docs": [
+        "Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md"
+      ]
+    },
+    {
+      "id": "slice-rpm-ccm",
+      "name": "RPM / CCM",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 10,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_RPM_CCM_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "slice-sync-video",
+      "name": "Sync Video Consult",
+      "category": "Slice PRD",
+      "status": "spec-final",
+      "progress": 15,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Sync_Video_Consult_Slice_PRD_v1_0.md"
+      ]
+    },
+    {
+      "id": "spec-cdm",
+      "name": "Canonical Data Model",
+      "category": "Engineering Spec",
+      "status": "spec-final",
+      "progress": 30,
+      "owner": "",
+      "notes": "v1.2 — 41 entities.",
+      "docs": [
+        "Telecheck_Canonical_Data_Model_v1_2.md"
+      ]
+    },
+    {
+      "id": "spec-openapi",
+      "name": "OpenAPI Surface",
+      "category": "Engineering Spec",
+      "status": "spec-final",
+      "progress": 25,
+      "owner": "",
+      "notes": "v0.2 — 178 endpoints.",
+      "docs": [
+        "Telecheck_OpenAPI_v0_2.md"
+      ]
+    },
+    {
+      "id": "spec-state-machines",
+      "name": "State Machines",
+      "category": "Engineering Spec",
+      "status": "spec-final",
+      "progress": 30,
+      "owner": "",
+      "notes": "v1.1 — 13 machines.",
+      "docs": [
+        "Telecheck_State_Machines_v1_1.md"
+      ]
+    },
+    {
+      "id": "spec-architecture",
+      "name": "System Architecture",
+      "category": "Engineering Spec",
+      "status": "spec-final",
+      "progress": 30,
+      "owner": "",
+      "notes": "v1.2 — modular monolith, 15 modules.",
+      "docs": [
+        "Telecheck_System_Architecture_v1_2.md"
+      ]
+    },
+    {
+      "id": "spec-rbac",
+      "name": "RBAC Permissions Matrix",
+      "category": "Engineering Spec",
+      "status": "spec-final",
+      "progress": 25,
+      "owner": "",
+      "notes": "v1.1.",
+      "docs": [
+        "Telecheck_RBAC_Permissions_Matrix_v1_1.md"
+      ]
+    },
+    {
+      "id": "spec-identity",
+      "name": "Identity & Authentication",
+      "category": "Engineering Spec",
+      "status": "spec-final",
+      "progress": 20,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Identity_Authentication_Spec_v1_0.md"
+      ]
+    },
+    {
+      "id": "spec-notification",
+      "name": "Notification",
+      "category": "Engineering Spec",
+      "status": "spec-final",
+      "progress": 20,
+      "owner": "",
+      "notes": "v1.1.",
+      "docs": [
+        "Telecheck_Notification_Spec_v1_1.md"
+      ]
+    },
+    {
+      "id": "spec-messaging",
+      "name": "Messaging Inbox",
+      "category": "Engineering Spec",
+      "status": "spec-final",
+      "progress": 15,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Messaging_Inbox_Spec_v1_0.md"
+      ]
+    },
+    {
+      "id": "spec-payment",
+      "name": "Payment & Billing",
+      "category": "Engineering Spec",
+      "status": "spec-final",
+      "progress": 15,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Payment_Billing_Spec_v1_0.md"
+      ]
+    },
+    {
+      "id": "ux-design-system",
+      "name": "Design System",
+      "category": "Experience",
+      "status": "spec-final",
+      "progress": 25,
+      "owner": "",
+      "notes": "v1.1.",
+      "docs": [
+        "Telecheck_Design_System_v1_1.md"
+      ]
+    },
+    {
+      "id": "ux-dic",
+      "name": "Design Implementation Contract",
+      "category": "Experience",
+      "status": "spec-draft",
+      "progress": 10,
+      "owner": "",
+      "notes": "PROVISIONAL until design files arrive.",
+      "docs": [
+        "Telecheck_Design_Implementation_Contract_v1_0.md"
+      ]
+    },
+    {
+      "id": "ux-patient-app",
+      "name": "Patient App IA",
+      "category": "Experience",
+      "status": "spec-final",
+      "progress": 20,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Patient_App_IA_v1_0.md"
+      ]
+    },
+    {
+      "id": "ux-clinician",
+      "name": "Clinician Portal IA",
+      "category": "Experience",
+      "status": "spec-final",
+      "progress": 20,
+      "owner": "",
+      "notes": "",
+      "docs": [
+        "Telecheck_Clinician_Portal_IA_v1_0.md"
+      ]
+    },
+    {
+      "id": "ux-admin-ia",
+      "name": "Admin Operator IA",
+      "category": "Experience",
+      "status": "spec-final",
+      "progress": 20,
+      "owner": "",
+      "notes": "v1.1.",
+      "docs": [
+        "Telecheck_Admin_Operator_IA_v1_1.md",
+        "Telecheck_Unified_Admin_Sidebar_v1_0.md"
+      ]
+    },
+    {
+      "id": "ops-ghana",
+      "name": "Ghana Launch Playbook",
+      "category": "Operations",
+      "status": "spec-final",
+      "progress": 30,
+      "owner": "",
+      "notes": "v1.2.",
+      "docs": [
+        "Telecheck_Ghana_Launch_Playbook_v1_2.md",
+        "Telecheck_Protocol_Library_Ghana_v1_0.md"
+      ]
+    },
+    {
+      "id": "ops-readiness",
+      "name": "Operational Readiness",
+      "category": "Operations",
+      "status": "in-dev",
+      "progress": 35,
+      "owner": "",
+      "notes": "v1.5 tracker — actively updated.",
+      "docs": [
+        "Telecheck_Operational_Readiness_Todo_v1_5.md",
+        "Telecheck_Consolidated_Launch_Tracker_v1_0.md"
+      ]
+    }
+  ]
+}
