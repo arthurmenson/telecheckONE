@@ -45,7 +45,8 @@ type AutonomyLevel =
   | "action_with_confirm"           // active at v1.0
   | "action_with_audit_only"        // RESERVED — requires ADR-030 + PolicyAuthorization framework
   | "fully_autonomous"              // RESERVED — requires ADR-030 + I-012 successor invariant + multi-party clinical safety case
-  | "rejected_invalid_attempt";     // SENTINEL — added v5.2 patch 2026-05-02 per Codex Round-4 Scope 1 MEDIUM-1 finding. Reserved exclusively for use as the envelope-level value on `*.execution_rejected` audit events when the rejection captures a null/unknown/reserved attempted_autonomy_level. Never used by an actual AI workload's execution; never appears as a state-machine target. Per AUDIT_EVENTS v5.2 §I-012-closure-rule exception for execution_rejected events.
+  | "rejected_invalid_attempt"      // SENTINEL — added v5.2 patch 2026-05-02 per Codex Round-4 Scope 1 MEDIUM-1 finding. Reserved exclusively for use as the envelope-level value on `*.execution_rejected` audit events when the rejection captures a null/unknown/reserved attempted_autonomy_level. Never used by an actual AI workload's execution; never appears as a state-machine target. Per AUDIT_EVENTS v5.2 §I-012-closure-rule exception for execution_rejected events.
+  | "n/a";                           // SENTINEL — added v5.2 patch 2026-05-02 per Codex Round-7 Scope 1 HIGH-1 finding. Reserved exclusively for use as the envelope-level value on I-012 clinician-only approval audit records where no AI workload was upstream. Invalid for AIExecution / successful AI workload records. Per AUDIT_EVENTS v5.2 §I-012 closure rule clinician-only carve-out.
 ```
 
 ## 2 · Active levels (v1.0)

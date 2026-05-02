@@ -438,7 +438,20 @@ The Market Pack abstraction (§4.1) is extended in v1.10 to include a **research
 - New markets ship with `research_data_partnership_active = inactive` and the 7 research keys unset (or set to inactive sentinel). Forms Engine `research_data_use_consent_block` does not render; no audit events emit.
 - Markets that have completed REC engagement but have not activated the export pipeline ship with `research_data_partnership_active = consent_only`, with `research_ethics_review_body.approval_reference_id` and `research_consent_text_version_pin` populated. Other 5 keys remain unset until DSA is signed and pipeline activates.
 
-**Cockpit dependency checks (§4 / §5).** Market Pack activation review for `consent_only → active` transition requires evidence of: signed `DataSharingAgreement`, REC approval reference for consent text, populated `research_export_authorized_signers` roster, configured `research_export_k_anonymity_minimum`, MARKET_LAUNCH v5.1 11-condition research data partnership activation gate evidence, and dual-control sign-off per I-015. The cockpit dependency checker treats the 11-condition gate as an automated-where-possible check (per existing §5 dependency-checking model). The activation review for `inactive → consent_only` requires only REC approval reference + consent text version pin (no DSA required at this stage).
+**Cockpit dependency checks (§4 / §5; both transitions strengthened 2026-05-02 per Codex Round-7 Scope 3 HIGH-1 finding to enumerate the full per-stage gate from MARKET_LAUNCH v5.1 — was previously stating only "REC approval reference + consent text version pin" for Stage 1, which omitted 4 of 6 mandatory conditions).**
+
+Market Pack activation review for `inactive → consent_only` transition (Stage 1) requires evidence of ALL 6 conditions per MARKET_LAUNCH v5.1 Stage 1 gate:
+
+1. CCR `research_ethics_review_body` is fully populated (`name`, `jurisdiction`, `approval_reference_id`, `approval_validity_from`, `approval_validity_to`, `approval_scope`, `per_dsa_review_required` all non-null) and `approval_validity_to >= now`.
+2. Ethics-reviewed consent text version pin is in place at the platform consent module (per CCR `research_ethics_review_body.approval_reference_id`).
+3. `research.consent_granted` and `research.consent_revoked` audit emission paths are operational and hash-chained per I-003/I-016/I-027.
+4. Forms Engine static analysis at form-version-publish time has been re-run post-activation-readiness and rejects all 6 categories of dependency on `research_consent_status` per FORMS_ENGINE v5.2 I-030 enforcement, for every form in the country.
+5. CCR runtime validator that rejects `consent_only` transitions when `research_ethics_review_body` is null is deployed and live.
+6. Country Launch Director sign-off for the per-country `inactive → consent_only` transition.
+
+Market Pack activation review for `consent_only → active` transition (Stage 2) requires evidence of: signed `DataSharingAgreement`, REC approval reference for consent text, populated `research_export_authorized_signers` roster, configured `research_export_k_anonymity_minimum`, MARKET_LAUNCH v5.1 Stage 2 11-condition research data partnership activation gate evidence (the full gate including the 6 Stage 1 conditions inherited as preconditions), and dual-control sign-off per I-015 + ADR-028 v0.4 quad sign-off (Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead) + Country Launch Director per-country authority.
+
+The cockpit dependency checker treats both gates (Stage 1 + Stage 2) as automated-where-possible checks per existing §5 dependency-checking model. **Both transitions are gated; neither is auto-pass.**
 
 **Cross-references (Row 76):** ADR-028 v0.5 (Research data partnership Posture A — Release 2 goal); Master PRD v1.10 §15.2; CCR_RUNTIME v5.2 research block; INVARIANTS v5.2 I-029 (research export gates), I-030 (consent-zero-impact on care delivery), I-031 (high_pii audit class); MARKET_LAUNCH v5.1 (11-condition activation gate); TYPES v5.2 (`DataSharingAgreement`, `ResearchEthicsReviewBody`, `ResearchDataExport`, `CohortDefinition`); Forms/Intake Engine Slice §25.3 (`research_data_use_consent_block` field type); Consent & Delegated Access Slice §16 (5th-tier consent).
 

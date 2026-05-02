@@ -902,7 +902,7 @@ Plus new in v1.1 within Pharmacy & Fulfillment: Subscription, SubscriptionEvent 
 For an engineering team that has any v1.0-based schema in flight:
 
 1. Create the 6 new tenant-management tables (Tenant, TenantBrand, CountryProfile, CCRConfig, AdapterConfig, TenantUser).
-2. Insert seed records for the 2 launch tenants (Telecheck-Ghana, Heros) and the 2 country profiles (US, GH).
+2. Insert seed records for the 2 launch operating tenants (`Telecheck-US` with `consumer_dba = 'Heros Health'` and `legal_entity = 'Telecheck Health LLC'`; `Telecheck-Ghana` with `consumer_dba = 'Heros Health Ghana'` and `legal_entity = 'Telecheck-Ghana Ltd.'`) and the 2 country profiles (US, GH). *(Updated 2026-05-02 per Codex Round-7 Scope 4 HIGH-1 finding — the prior "Telecheck-Ghana, Heros" pairing used the bare `Heros` consumer-brand string as a tenant identifier in violation of the C3 brand-structure rule per Master PRD v1.10 §17 + Glossary v5.2. Operating-tenant identifiers are `Telecheck-{country}`; `consumer_dba` carries the Heros Health DBA per CDM v1.2 v1.10 cycle additions §Tenant entity refresh.)*
 3. For every existing tenant-scoped table, add `tenant_id VARCHAR(26)` column.
 4. Backfill existing data with the appropriate `tenant_id` (typically all existing data belongs to one tenant — easy backfill).
 5. Set the column NOT NULL after backfill.

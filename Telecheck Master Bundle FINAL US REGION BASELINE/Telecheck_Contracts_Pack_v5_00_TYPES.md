@@ -419,7 +419,7 @@ A specialization of ConsentRecord with `consent_type = research_data_use` (added
 
 **Patch 2026-05-02 per Codex Scope 2 HIGH-2 finding (closes the audit-vs-type contradiction):** The type now models BOTH success and invalidation states coherently. `dsa_status_at_export` accepts the full DSA-status enum (success requires `active`; invalidation captures the actual at-completion-time state). `export_artifact_hash` is nullable (null on invalidation since no artifact is delivered; non-null on success). `consent_cohort_snapshot_hash` is split into `_initiated` and `_completed` variants so the completion-time consent-snapshot match (per OpenAPI v0.2 v1.10 cycle additions /research/exports/{export_id}/complete gate) can be expressed structurally — the two hashes match for `status=completed`; they differ (or `_completed` is null) for `status=invalidated`. `invalidation_reason` is required when `status=invalidated` and null when `status=completed`.
 
-Notes: `tenant_id` and `country_of_care` are required on the export record itself (not only inherited via cohort) so audit-side I-029 / I-031 enforcement can validate tenant scope without dereferencing cohort. Per I-029, `research.export_completed` MAY emit with `status=completed` only when `dsa_status_at_export = active` AND `k_threshold_actual >= k_min_required` AND consent snapshot match AND active per-patient consent. Per I-029 + I-003 + AUDIT_EVENTS v5.2 §5 + GOVERNANCE_CONTROLS v5.2 §7.2 audit-path discipline, failed exports MUST emit `research.export_completed` with `status=invalidated` and `invalidation_reason` populated (paired with `signal_enforcement_trigger` Category B). Bare suppression is forbidden.
+Notes: `tenant_id` and `country_of_care` are required on the export record itself (not only inherited via cohort) so audit-side I-029 / I-031 enforcement can validate tenant scope without dereferencing cohort. **Per I-029 (5-condition gate; expanded 2026-05-02 per Codex Round-7 Scope 2 HIGH-1 finding to include all 5 conditions in the `status=completed` note — was missing condition 3 permitted-domain drift), `research.export_completed` MAY emit with `status=completed` only when ALL 5 conditions hold: (1) `dsa_status_at_export = active`; (2) `k_threshold_actual >= k_min_required`; (3) `permitted_data_domains_at_export` matches the `research.export_initiated` snapshot (no CCR drift mid-export); (4) `consent_cohort_snapshot_hash_completed = consent_cohort_snapshot_hash_initiated`; (5) every contributing patient has active `ResearchConsent` at completion-time evaluation.** Per I-029 + I-003 + AUDIT_EVENTS v5.2 §5 + GOVERNANCE_CONTROLS v5.2 §7.2 audit-path discipline, failed exports MUST emit `research.export_completed` with `status=invalidated` and `invalidation_reason` populated to the canonical 5-value enum (`dsa_inactive | k_anonymity_violation | permitted_domain_drift | consent_cohort_change | consent_revocation_mid_export`), paired with `signal_enforcement_trigger` Category B. Bare suppression is forbidden.
 
 ---
 
@@ -433,10 +433,11 @@ type AIWorkloadType =
   | "autonomous_agent"
   | "multi_agent_supervisor"
   | "tool_using_agent"
-  | "rejected_invalid_attempt";
+  | "rejected_invalid_attempt"
+  | "n/a";
 ```
 
-Active at v1.0: `conversational_assistant`, `protocol_execution`. Reserved (require successor ADR + activation audit event): `autonomous_agent`, `multi_agent_supervisor`, `tool_using_agent`. **Sentinel (added v5.2 patch 2026-05-02 per Codex Round-4 Scope 1 MEDIUM-1):** `rejected_invalid_attempt` — reserved exclusively for envelope-level value on `*.execution_rejected` audit events when the rejection captures a null/unknown/reserved attempted_ai_workload_type; never emitted by AI workloads themselves. Per ADR-029 + AUDIT_EVENTS v5.2 §I-012-closure-rule exception.
+Active at v1.0: `conversational_assistant`, `protocol_execution`. Reserved (require successor ADR + activation audit event): `autonomous_agent`, `multi_agent_supervisor`, `tool_using_agent`. **Sentinels (added v5.2 patches 2026-05-02):** `rejected_invalid_attempt` — reserved exclusively for envelope-level value on `*.execution_rejected` audit events when the rejection captures a null/unknown/reserved attempted_ai_workload_type; never emitted by AI workloads themselves (per Codex Round-4 Scope 1 MEDIUM-1). `n/a` — reserved exclusively for envelope-level value on I-012 clinician-only approval audit records where no AI workload was upstream; invalid for AIExecution / successful AI workload records (per Codex Round-7 Scope 1 HIGH-1). Per ADR-029 + AUDIT_EVENTS v5.2 §I-012 closure rule and clinician-only carve-out.
 
 ### AutonomyLevel (operative shape; full enum + activation policy in AUTONOMY_LEVELS contract)
 ```typescript
@@ -446,10 +447,11 @@ type AutonomyLevel =
   | "action_with_confirm"
   | "action_with_audit_only"
   | "fully_autonomous"
-  | "rejected_invalid_attempt";
+  | "rejected_invalid_attempt"
+  | "n/a";
 ```
 
-Active at v1.0: `advisory`, `suggestion`, `action_with_confirm`. Reserved (require successor ADR + activation audit event per ADR-030): `action_with_audit_only`, `fully_autonomous`. **Sentinel (added v5.2 patch 2026-05-02 per Codex Round-4 Scope 1 MEDIUM-1):** `rejected_invalid_attempt` — reserved exclusively for envelope-level value on `*.execution_rejected` audit events when the rejection captures a null/unknown/reserved attempted_autonomy_level; never used by an actual AI workload's execution. I-012 reject-unless three-clause rule binds prescription / refill / medication-order actions to `action_with_confirm` ceiling per Master PRD §13.7.
+Active at v1.0: `advisory`, `suggestion`, `action_with_confirm`. Reserved (require successor ADR + activation audit event per ADR-030): `action_with_audit_only`, `fully_autonomous`. **Sentinels (added v5.2 patches 2026-05-02):** `rejected_invalid_attempt` — reserved exclusively for envelope-level value on `*.execution_rejected` audit events when the rejection captures a null/unknown/reserved attempted_autonomy_level; never used by an actual AI workload's execution (per Codex Round-4 Scope 1 MEDIUM-1). `n/a` — reserved exclusively for envelope-level value on I-012 clinician-only approval audit records where no AI workload was upstream; invalid for AIExecution / successful AI workload records (per Codex Round-7 Scope 1 HIGH-1). I-012 reject-unless three-clause rule binds prescription / refill / medication-order actions to `action_with_confirm` ceiling per Master PRD §13.7.
 
 ### PolicyAuthorization (placeholder skeleton; activates under ADR-030 + GOVERNANCE_CONTROLS framework)
 ```

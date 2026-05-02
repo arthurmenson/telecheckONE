@@ -510,7 +510,7 @@ Templates have a canonical JSON schema published in the Telecheck developer docs
 
 ### 15.4 Use cases
 
-- **Tenant migration from another platform** (Hims/Ro/Rimo style): structures defined elsewhere can be imported. Engineering may provide one-time conversion tooling for the Heros migration specifically.
+- **Tenant migration from another platform** (Hims/Ro/Rimo style): structures defined elsewhere can be imported as a generic future-tenant capability. **Out of v1.0 launch scope** *(updated 2026-05-02 per Codex Round-7 Scope 4 MEDIUM-3 finding — was previously stated as "Engineering may provide one-time conversion tooling for the Heros migration specifically", which both used bare `Heros` as a tenant identifier (C3 brand-structure violation per Master PRD v1.10 §17) AND resurrected a removed migration scope item per the HIGH-12 greenfield decision: Telecheck-US operating tenant launches greenfield with no Rimo migration). Any future tenant migration capability requires a fresh approved migration plan + ADR review; it is NOT pre-authorized for the Telecheck-US (Heros Health DBA) launch.*
 - **Backup**: tenants can export templates for backup before risky changes
 - **External clinical review**: tenants can share JSON templates with clinical reviewers external to the platform
 - **Cross-environment promotion** (post-launch): export from staging, import to production
