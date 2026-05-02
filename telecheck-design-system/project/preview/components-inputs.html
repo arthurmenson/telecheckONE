@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Inputs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_card.css">
+<style>
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.lbl { font-size: 12px; font-weight: 600; color: var(--fg-2); }
+.input { font-family: var(--font-sans); font-size: 14px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 6px; background: #fff; color: var(--fg-1); }
+.input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 25%, transparent); }
+.input-focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 25%, transparent); }
+.input-error { border-color: var(--danger); }
+.help { font-size: 11px; color: var(--fg-3); }
+.err { font-size: 11px; color: var(--danger); }
+.sel { position: relative; }
+.sel::after { content: "▾"; position: absolute; right: 12px; top: 10px; color: var(--fg-3); pointer-events:none; font-size:10px;}
+</style></head>
+<body><div class="card"><div class="grid">
+  <div class="field"><div class="lbl">Patient name</div><input class="input" value="Ama K. Owusu"/><div class="help">As it appears on national ID.</div></div>
+  <div class="field"><div class="lbl">Phone (focused)</div><input class="input input-focus" value="+233 24 123 4567"/><div class="help">Used for identity verification.</div></div>
+  <div class="field"><div class="lbl">Dose (error)</div><input class="input input-error" value="2000 mg"/><div class="err">Exceeds maximum daily dose for metformin.</div></div>
+  <div class="field sel"><div class="lbl">Program</div><select class="input"><option>Diabetes — Type 2</option></select></div>
+</div></div></body></html>

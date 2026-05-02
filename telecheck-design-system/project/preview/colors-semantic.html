@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Semantic colors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_card.css">
+<style>
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.card-sem { display: flex; flex-direction: column; gap: 6px; }
+.bar { height: 56px; border-radius: 8px; display: flex; align-items: center; padding: 0 12px; color: #fff; font-weight: 600; font-size: 13px; }
+.bar-soft { height: 22px; border-radius: 4px; margin-top: 2px; }
+.name { font-size: 13px; font-weight: 600; color: var(--fg-1); }
+.hex { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); }
+.use { font-size: 11px; color: var(--fg-3); line-height: 1.4; margin-top: 2px; }
+</style></head>
+<body><div class="card"><div class="grid">
+  <div class="card-sem"><div class="bar" style="background:#2a8a4a">Success</div><div class="bar-soft" style="background:#e8f4ec"></div><div class="hex">#2A8A4A / #E8F4EC</div><div class="use">Approved, delivered, confirmed.</div></div>
+  <div class="card-sem"><div class="bar" style="background:#c28320">Warning</div><div class="bar-soft" style="background:#fbf1de"></div><div class="hex">#C28320 / #FBF1DE</div><div class="use">Monitor, review, caution — non-blocking interaction signals.</div></div>
+  <div class="card-sem"><div class="bar" style="background:#c8402f">Danger</div><div class="bar-soft" style="background:#fbebe9"></div><div class="hex">#C8402F / #FBEBE9</div><div class="use">Severe interaction, contraindication, emergency, blocking.</div></div>
+  <div class="card-sem"><div class="bar" style="background:#2b6cb0">Info</div><div class="bar-soft" style="background:#e7eff8"></div><div class="hex">#2B6CB0 / #E7EFF8</div><div class="use">Neutral information, system events, audit notes.</div></div>
+</div></div></body></html>

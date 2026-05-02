@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Iconography</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_card.css">
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+.row { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+.ic { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; }
+.ic svg { width: 24px; height: 24px; color: var(--fg-1); stroke-width: 1.5; }
+.nm { font-size: 10px; color: var(--fg-3); }
+.hd { font-size: 11px; color: var(--fg-3); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; font-weight: 600; }
+.sep { height: 1px; background: var(--border-subtle); margin: 14px 0; }
+.spark { width: 24px; height: 24px; color: var(--iris-500); }
+</style></head>
+<body><div class="card">
+<div class="hd">System icons — Lucide (1.5 stroke, round joins)</div>
+<div class="row">
+  <div class="ic"><i data-lucide="pill"></i><span class="nm">pill</span></div>
+  <div class="ic"><i data-lucide="stethoscope"></i><span class="nm">stethoscope</span></div>
+  <div class="ic"><i data-lucide="flask-conical"></i><span class="nm">labs</span></div>
+  <div class="ic"><i data-lucide="activity"></i><span class="nm">activity</span></div>
+  <div class="ic"><i data-lucide="heart-pulse"></i><span class="nm">rpm</span></div>
+  <div class="ic"><i data-lucide="calendar"></i><span class="nm">calendar</span></div>
+  <div class="ic"><i data-lucide="message-circle"></i><span class="nm">consult</span></div>
+  <div class="ic"><i data-lucide="shield-check"></i><span class="nm">consent</span></div>
+  <div class="ic"><i data-lucide="users"></i><span class="nm">delegate</span></div>
+  <div class="ic"><i data-lucide="file-text"></i><span class="nm">record</span></div>
+</div>
+<div class="sep"></div>
+<div class="hd">Brand · Telecheck AI spark (Iris, custom)</div>
+<div class="row">
+  <div class="ic"><svg class="spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 L15 10 L22 12 L15 14 L13 21 L11 14 L4 12 L11 10 Z"/><circle cx="19.5" cy="5.5" r="1.1" fill="currentColor" stroke="none"/></svg><span class="nm">ai-spark</span></div>
+</div>
+<script>window.addEventListener('load',()=>lucide.createIcons());</script>
+</div></body></html>

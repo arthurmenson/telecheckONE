@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><title>AI vs human</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_card.css">
+<style>
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.col-h { padding: 14px; background: #fff; border-radius: 10px; border: 1px solid var(--border-subtle); }
+.col-a { padding: 14px; background: var(--iris-50); border-radius: 10px; border-left: 3px solid var(--iris-500); }
+.kicker { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.kicker-h { color: var(--fg-3); }
+.kicker-a { color: var(--iris-700); }
+.title { font-size: 14px; font-weight: 600; color: var(--fg-1); margin-bottom: 4px; }
+.body { font-size: 13px; color: var(--fg-2); line-height: 1.45; }
+.spark { width: 13px; height: 13px; }
+.av { width: 22px; height: 22px; border-radius: 50%; background: var(--gold-100); color: var(--gold-700); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; margin-right: 4px; vertical-align: middle; }
+.rule { margin-top: 12px; font-size: 11px; color: var(--fg-3); line-height: 1.5; }
+</style></head>
+<body><div class="card">
+<div class="cols">
+  <div class="col-h"><div class="kicker kicker-h"><span class="av">AM</span>Dr. A. Mensah · clinician</div><div class="title">Continue metformin 500 mg BID</div><div class="body">Reviewed labs, eGFR stable. Continue current dose and re-check K⁺ in 4 weeks.</div></div>
+  <div class="col-a"><div class="kicker kicker-a"><svg class="spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 L15 10 L22 12 L15 14 L13 21 L11 14 L4 12 L11 10 Z"/></svg>Telecheck AI · suggestion</div><div class="title">Consider earlier K⁺ re-check (2 weeks)</div><div class="body">K⁺ trend is rising (3.9 → 4.4 → 5.1). Earlier check may catch a deviation. Clinician to accept or override.</div></div>
+</div>
+<div class="rule"><strong>Three-cue rule (§12, §16):</strong> Iris accent + <code>ai-spark</code> glyph + explicit "Telecheck AI" label. Never color alone.</div>
+</div></body></html>

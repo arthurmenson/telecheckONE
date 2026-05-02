@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Telecheck — Patient Mock</title>
+<link rel="stylesheet" href="Patient interactive mock.css"/>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="Patient interactive mock.jsx"></script>
+<script type="text/babel" src="Patient interactive mock - screens 1.jsx"></script>
+<script type="text/babel" src="Patient interactive mock - screens 2.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "language": "Twi",
+  "delegate": "me",
+  "emergency_strip": false,
+  "show_tweaks": false
+}/*EDITMODE-END*/;
+
+function App() {
+  const [screen, setScreen] = useState(() => localStorage.getItem("pt-screen") || "home");
+  const [consultStep, setConsultStep] = useState(0);
+  const [sheet, setSheet] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const [tweaks, setTweaks] = useState(TWEAKS);
+  const [editMode, setEditMode] = useState(TWEAKS.show_tweaks);
+
+  useEffect(() => { localStorage.setItem("pt-screen", screen); }, [screen]);
+
+  // Edit-mode protocol
+  useEffect(() => {
+    const onMsg = (e) => {
+      if (e.data?.type === "__activate_edit_mode") setEditMode(true);
+      if (e.data?.type === "__deactivate_edit_mode") setEditMode(false);
+    };
+    window.addEventListener("message", onMsg);
+    window.parent.postMessage({ type: "__edit_mode_available" }, "*");
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
+  const setT = (k, v) => {
+    const next = { ...tweaks, [k]: v };
+    setTweaks(next);
+    window.parent.postMessage({ type: "__edit_mode_set_keys", edits: { [k]: v } }, "*");
+  };
+
+  const nav = (s) => {
+    if (s === "consult-start") { setConsultStep(0); setScreen("consult"); }
+    else setScreen(s);
+  };
+
+  const toast = (t) => {
+    const id = Date.now() + Math.random();
+    setToasts(x => [...x, { id, t }]);
+    setTimeout(() => setToasts(x => x.filter(y => y.id !== id)), 2400);
+  };
+
+  const screens = {
+    home:         <Home nav={nav} toast={toast} openSheet={setSheet} delegate={tweaks.delegate}/>,
+    refill:       <Refill nav={nav} toast={toast}/>,
+    consult:      <Consult nav={nav} step={consultStep} setStep={setConsultStep} toast={toast}/>,
+    booking:      <Booking nav={nav} toast={toast}/>,
+    glucose:      <Glucose nav={nav}/>,
+    labs:         <Labs nav={nav} openSheet={setSheet}/>,
+    meds:         <Meds nav={nav} toast={toast}/>,
+    care:         <Care nav={nav}/>,
+    chat:         <Chat nav={nav} toast={toast}/>,
+    "scan-start": <ScanStart nav={nav}/>,
+    "scan-result":<ScanResult nav={nav} toast={toast}/>,
+    rpm:          <RPM nav={nav} toast={toast}/>,
+    health:       <Health nav={nav}/>,
+  };
+
+  return (
+    <div className="page">
+      <div className="hdr-title">Telecheck — Patient app</div>
+      <div className="hdr-sub">Clickable prototype. Tap cards, AI actions and the bottom tabs to move around. The floating <b>+</b> starts a consult.</div>
+
+      <div className="device">
+        <div className="island"/>
+        <div className="screen">
+          {tweaks.emergency_strip && (
+            <div className="em-strip" style={{ position: "absolute", top: 50, left: 0, right: 0, zIndex: 70 }} onClick={() => toast("Dialing 112…")}>
+              <div className="ic"><Ic n="sos" s={16} c="#fff"/></div>
+              <div style={{ flex: 1 }}>Emergency · tap to call 112 or share location with Dr. Mensah</div>
+              <Ic n="chev" s={16} c="#fff"/>
+            </div>
+          )}
+
+          {screens[screen] || screens.home}
+
+          {sheet === "account" && <AccountSheet onClose={() => setSheet(null)} onPick={(d) => { setT("delegate", d); setSheet(null); toast(d === "k" ? "Switched to Kofi" : "Switched to Ama"); }}/>}
+          {sheet === "interaction" && <InteractionSheet onClose={() => setSheet(null)}/>}
+          {sheet === "lab-detail" && <LabSheet onClose={() => setSheet(null)}/>}
+
+          {toasts.map(t => <div key={t.id} className="toast">{t.t}</div>)}
+
+          <div className="home-ind"/>
+        </div>
+      </div>
+
+      <div className="hdr-sub" style={{ marginTop: 4, fontSize: 12 }}>
+        Jump to: {Object.keys(screens).map(k => (
+          <span key={k} onClick={() => nav(k === "consult" ? "consult-start" : k)} style={{ cursor: "pointer", color: screen === k ? "#7dd3c0" : "#9aa5a0", marginRight: 10, textDecoration: "underline", textUnderlineOffset: 3 }}>{k}</span>
+        ))}
+      </div>
+
+      {editMode && (
+        <div className="tweaks on">
+          <h4>Tweaks</h4>
+          <div className="tw-row"><span>Delegate</span>
+            <div className="tw-opts">
+              {[["me","Me (Ama)"],["k","Kofi (dad)"]].map(([v, l]) => (
+                <button key={v} className={`tw-opt ${tweaks.delegate === v ? "on" : ""}`} onClick={() => setT("delegate", v)}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div className="tw-row"><span>Emergency banner</span>
+            <div className="tw-opts">
+              <button className={`tw-opt ${!tweaks.emergency_strip ? "on" : ""}`} onClick={() => setT("emergency_strip", false)}>Off</button>
+              <button className={`tw-opt ${tweaks.emergency_strip ? "on" : ""}`} onClick={() => setT("emergency_strip", true)}>On</button>
+            </div>
+          </div>
+          <div className="tw-row"><span>Language</span>
+            <div className="tw-opts">
+              {["English","Twi","Ga"].map(l => (
+                <button key={l} className={`tw-opt ${tweaks.language === l ? "on" : ""}`} onClick={() => setT("language", l)}>{l}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Sheets ──────────────────────────────────────
+function AccountSheet({ onClose, onPick }) {
+  return (
+    <>
+      <div className="scrim" onClick={onClose}/>
+      <div className="sheet">
+        <div className="sheet-handle"/>
+        <div className="sheet-t">Who are you caring for?</div>
+        <div className="sheet-s">You can switch between your own profile and family members under your care.</div>
+        <div className="sheet-body">
+          <div className="acct on" onClick={() => onPick("me")}>
+            <div className="acct-av me">AM</div>
+            <div><div className="n">Ama Mensah · you</div><div className="r">Diabetes program · 3 meds</div></div>
+            <div className="acct-dot"/>
+          </div>
+          <div className="acct" onClick={() => onPick("k")}>
+            <div className="acct-av k">KO</div>
+            <div><div className="n">Kofi Mensah · dad</div><div className="r">Caregiver access · hypertension</div></div>
+          </div>
+          <div className="acct" onClick={() => alert("Invite flow")}>
+            <div className="acct-av e" style={{ background: "var(--n-100)", color: "var(--fg-3)" }}>+</div>
+            <div><div className="n">Add a family member</div><div className="r">Invite them by phone number</div></div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function InteractionSheet({ onClose }) {
+  return (
+    <>
+      <div className="scrim" onClick={onClose}/>
+      <div className="sheet">
+        <div className="sheet-handle"/>
+        <div className="sheet-t">Ibuprofen + lisinopril</div>
+        <div className="sheet-s">Why Telecheck AI flagged this combination.</div>
+        <div className="sheet-body" style={{ padding: "0 20px 20px" }}>
+          <div style={{ fontSize: 13, color: "var(--fg-2)", lineHeight: 1.55, marginBottom: 12 }}>
+            NSAIDs like ibuprofen can blunt the blood-pressure lowering effect of lisinopril and, with long use, affect kidney function. Your kidney function (eGFR 94) is normal but worth protecting.
+          </div>
+          <div style={{ background: "var(--teal-50)", borderRadius: 12, padding: 14, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--teal-700)", letterSpacing: "0.08em" }}>SUGGESTED ALTERNATIVE</div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>Paracetamol 500 mg</div>
+            <div style={{ fontSize: 12, color: "var(--fg-2)", marginTop: 3 }}>Safe with your current regimen · GHS 8 · in stock at Mobipharm Osu</div>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--fg-3)", fontStyle: "italic", marginTop: 10 }}>Sources: BNF 2026 · your pharmacy basket · eGFR 14 Apr</div>
+          <button className="cta" style={{ width: "100%", margin: "16px 0 0" }} onClick={onClose}>Swap to paracetamol</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function LabSheet({ onClose }) {
+  return (
+    <>
+      <div className="scrim" onClick={onClose}/>
+      <div className="sheet">
+        <div className="sheet-handle"/>
+        <div className="sheet-t">HbA1c — 14 Apr 2026</div>
+        <div className="sheet-s">Sampled 08:10 · Mobilabs Osu · reported 14:22</div>
+        <div className="sheet-body" style={{ padding: "0 20px 24px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+            <div style={{ background: "var(--n-50)", padding: 12, borderRadius: 12 }}>
+              <div style={{ fontSize: 10.5, color: "var(--fg-3)", fontWeight: 700, textTransform: "uppercase" }}>Your result</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: "var(--warning-700)", marginTop: 4 }}>7.8%</div>
+            </div>
+            <div style={{ background: "var(--n-50)", padding: 12, borderRadius: 12 }}>
+              <div style={{ fontSize: 10.5, color: "var(--fg-3)", fontWeight: 700, textTransform: "uppercase" }}>Target</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: "var(--success-700)", marginTop: 4 }}>≤ 7.0%</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 13, color: "var(--fg-2)", lineHeight: 1.55 }}>
+            HbA1c is your average glucose over roughly 3 months. Your result is slightly above target, consistent with recent readings.
+          </div>
+          <button className="cta" style={{ width: "100%", margin: "18px 0 0" }} onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

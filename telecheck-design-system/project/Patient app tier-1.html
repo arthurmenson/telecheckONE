@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Telecheck · Patient app (tier-1)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="colors_and_type.css"/>
+<link rel="stylesheet" href="Patient app tier-1.css?v=2"/>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<div class="tweaks" id="tweaks-panel">
+  <h4>Tweaks</h4>
+  <div class="tw-row"><span class="lbl">AI density</span>
+    <div class="tw-opts" data-key="ai">
+      <button class="tw-opt" data-v="subtle">Subtle</button>
+      <button class="tw-opt on" data-v="default">Default</button>
+      <button class="tw-opt" data-v="forward">Forward</button>
+    </div>
+  </div>
+  <div class="tw-row"><span class="lbl">Delegate mode</span>
+    <div class="tw-opts" data-key="delegate">
+      <button class="tw-opt on" data-v="off">Off</button>
+      <button class="tw-opt" data-v="on">On</button>
+    </div>
+  </div>
+  <div class="tw-row"><span class="lbl">Accent</span>
+    <div class="tw-opts" data-key="accent">
+      <button class="tw-opt on" data-v="teal">Teal</button>
+      <button class="tw-opt" data-v="iris">Iris</button>
+      <button class="tw-opt" data-v="gold">Gold</button>
+    </div>
+  </div>
+  <div class="tw-row"><span class="lbl">Emergency banner</span>
+    <div class="tw-opts" data-key="em">
+      <button class="tw-opt on" data-v="off">Off</button>
+      <button class="tw-opt" data-v="on">On</button>
+    </div>
+  </div>
+</div>
+
+<script type="text/babel" src="Patient app tier-1.components.jsx"></script>
+<script type="text/babel" src="Patient app tier-1.screens.jsx"></script>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "aiDensity": "default",
+  "delegateMode": false,
+  "accent": "teal",
+  "emergencyBanner": false
+}/*EDITMODE-END*/;
+
+function Device({ children, label }) {
+  return (
+    <div className="col">
+      <div className="device">
+        <div className="island"/>
+        <div className="home-ind"/>
+        <div className="device-screen">{children}</div>
+      </div>
+      <div className="cap">{label}</div>
+    </div>
+  );
+}
+
+function Prototype() {
+  // Per-device state so they can run independently
+  const [mainScreen, setMainScreen] = useState(() => localStorage.getItem('tc-main') || 'home');
+  const [delegateOpen, setDelegateOpen] = useState(false);
+  const [delegateId, setDelegateId] = useState('me');
+  const [toast, setToast] = useState('');
+  const [tweaks, setTweaks] = useState(TWEAK_DEFAULTS);
+
+  useEffect(() => { localStorage.setItem('tc-main', mainScreen); }, [mainScreen]);
+
+  // Tweaks listener
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.data?.type === '__activate_edit_mode') document.getElementById('tweaks-panel').classList.add('on');
+      if (e.data?.type === '__deactivate_edit_mode') document.getElementById('tweaks-panel').classList.remove('on');
+    };
+    window.addEventListener('message', handler);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  // Tweaks DOM hook
+  useEffect(() => {
+    const panel = document.getElementById('tweaks-panel');
+    const onClick = (e) => {
+      const btn = e.target.closest('.tw-opt'); if (!btn) return;
+      const key = btn.parentElement.dataset.key;
+      const v = btn.dataset.v;
+      btn.parentElement.querySelectorAll('.tw-opt').forEach(b=>b.classList.remove('on'));
+      btn.classList.add('on');
+      const map = { ai:'aiDensity', delegate:'delegateMode', accent:'accent', em:'emergencyBanner' };
+      const field = map[key];
+      const value = (v==='on') ? true : (v==='off') ? false : v;
+      setTweaks(t => ({ ...t, [field]: value }));
+      window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [field]: value } }, '*');
+    };
+    panel.addEventListener('click', onClick);
+    return () => panel.removeEventListener('click', onClick);
+  }, []);
+
+  // Accent color override
+  useEffect(() => {
+    const root = document.documentElement;
+    const map = {
+      teal:   { p:'#0b7a6b', h:'#06625a', s:'#eaf5f2' },
+      iris:   { p:'#6e5bd6', h:'#5944b8', s:'#f0edfb' },
+      gold:   { p:'#c88a2b', h:'#a46f1f', s:'#faf2e3' },
+    };
+    const a = map[tweaks.accent] || map.teal;
+    root.style.setProperty('--primary', a.p);
+    root.style.setProperty('--primary-hover', a.h);
+    root.style.setProperty('--primary-soft', a.s);
+  }, [tweaks.accent]);
+
+  const flash = (m) => { setToast(m); setTimeout(()=>setToast(''), 2500); };
+
+  const handleMainNav = (s) => {
+    if (s === 'home') setMainScreen('home');
+    else if (s === 'meds') setMainScreen('meds');
+    else if (s === 'refill') setMainScreen('refill');
+    else if (s === 'consult') setMainScreen('consult');
+    else if (s === 'labs') setMainScreen('labs');
+    else if (s === 'rpm') setMainScreen('rpm');
+    else if (s === 'scan') setMainScreen('scan');
+    else flash('Not in this prototype');
+  };
+
+  const renderScreen = (screen, navHandler) => {
+    const delegateMode = tweaks.delegateMode;
+    switch (screen) {
+      case 'home':    return <Home onNav={navHandler} openDelegate={()=>setDelegateOpen(true)} delegateMode={delegateMode}/>;
+      case 'meds':    return <Meds onNav={navHandler}/>;
+      case 'refill':  return <Refill onNav={navHandler} onConfirm={()=>flash('Payment authorized — we\u2019ll notify you on dispatch')}/>;
+      case 'consult': return <Consult onNav={navHandler}/>;
+      case 'labs':    return <Labs onNav={navHandler}/>;
+      case 'rpm':     return <RPM onNav={navHandler}/>;
+      case 'scan':    return <Scan onNav={navHandler}/>;
+      default:        return <Home onNav={navHandler} openDelegate={()=>setDelegateOpen(true)} delegateMode={delegateMode}/>;
+    }
+  };
+
+  return (
+    <>
+      <div className="stage-title">Telecheck · Patient app</div>
+      <div className="stage-sub">Tier-1 hi-fi direction. Calm clinical. One decision per screen, AI is task-bound and sourced, emergency paths always outrank chrome. Tap anywhere — left device is the main driver; the others show sibling flows.</div>
+
+      <div className="stage">
+        <div className="group-label">Main flow — tap through</div>
+        <div className="row">
+          <Device label="Driver · tap to navigate">
+            {renderScreen(mainScreen, handleMainNav)}
+            {delegateOpen && <DelegateSheet active={delegateId}
+              onPick={(id)=>{ setDelegateId(id); setTweaks(t=>({...t, delegateMode: id!=='me'})); setDelegateOpen(false); flash(id==='me'?'Switched to your account':'Switched — you\u2019re acting for ' + (id==='kojo'?'Kojo Asare':'Esi Asare')); }}
+              onClose={()=>setDelegateOpen(false)}/>}
+            {toast && <div className="toast" key={toast}>{toast}</div>}
+          </Device>
+        </div>
+
+        <div className="group-label">Sibling flows (static previews)</div>
+        <div className="row">
+          <Device label="Refill · in review"><Refill onNav={()=>{}} onConfirm={()=>{}}/></Device>
+          <Device label="Lab result + AI interpretation"><Labs onNav={()=>{}}/></Device>
+          <Device label="Async consult intake"><Consult onNav={()=>{}}/></Device>
+        </div>
+
+        <div className="row">
+          <Device label="RPM weekly check-in"><RPM onNav={()=>{}}/></Device>
+          <Device label="Food scan · result"><Scan onNav={()=>{}}/></Device>
+          <Device label="Medications list"><Meds onNav={()=>{}}/></Device>
+        </div>
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Prototype/>);
+</script>
+</body>
+</html>

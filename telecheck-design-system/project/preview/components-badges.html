@@ -1,0 +1,38 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Badges</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_card.css">
+<style>
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 7px 0; }
+.label { font-size: 11px; color: var(--fg-3); width: 100px; font-weight:500; letter-spacing:0.04em; text-transform:uppercase; }
+.badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 9999px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; }
+.b-success { background: var(--success-50); color: var(--success-700); }
+.b-warn { background: var(--warning-50); color: var(--warning-700); }
+.b-danger { background: var(--danger-50); color: var(--danger-700); }
+.b-info { background: var(--info-50); color: var(--info-700); }
+.b-neutral { background: var(--n-100); color: var(--fg-2); }
+.b-ai { background: var(--iris-50); color: var(--iris-700); }
+.b-caps { font-size: 10px; padding: 3px 7px; letter-spacing: 0.08em; text-transform: uppercase; }
+</style></head>
+<body><div class="card">
+<div class="row"><div class="label">Status</div>
+  <span class="badge b-success"><span class="dot" style="background:var(--success)"></span>Approved</span>
+  <span class="badge b-warn"><span class="dot" style="background:var(--warning)"></span>Under review</span>
+  <span class="badge b-danger"><span class="dot" style="background:var(--danger)"></span>Blocked</span>
+  <span class="badge b-info"><span class="dot" style="background:var(--info)"></span>In transit</span>
+  <span class="badge b-neutral">Draft</span>
+</div>
+<div class="row"><div class="label">Severity</div>
+  <span class="badge b-danger b-caps">Severe</span>
+  <span class="badge b-warn b-caps">Moderate</span>
+  <span class="badge b-info b-caps">Monitor</span>
+  <span class="badge b-neutral b-caps">OTC</span>
+  <span class="badge b-neutral b-caps">Rx</span>
+</div>
+<div class="row"><div class="label">AI · Delegate</div>
+  <span class="badge b-ai b-caps">Telecheck AI</span>
+  <span class="badge" style="background:var(--gold-50); color:var(--gold-700)">Acting for Kojo</span>
+  <span class="badge b-neutral">Clinician-authored</span>
+</div>
+</div></body></html>

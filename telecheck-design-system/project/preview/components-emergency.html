@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Emergency banner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_card.css">
+<style>
+.em { background: var(--danger); color: #fff; border-radius: 12px; padding: 16px 20px; display: flex; gap: 16px; align-items: flex-start; box-shadow: var(--e-3); }
+.em-icon { width: 36px; height: 36px; border-radius: 9999px; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.em svg { width: 20px; height: 20px; stroke: #fff; }
+.em-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.em-body { font-size: 13px; line-height: 1.45; opacity: 0.95; }
+.em-actions { margin-top: 12px; display: flex; gap: 8px; }
+.em-cta { background: #fff; color: var(--danger-700); border: 0; padding: 8px 14px; border-radius: 6px; font-weight: 700; font-size: 13px; cursor: pointer; }
+.em-alt { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.5); padding: 8px 14px; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; }
+.note { margin-top: 14px; font-size: 11px; color: var(--fg-3); }
+</style></head>
+<body><div class="card">
+<div class="em">
+  <div class="em-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+  <div style="flex:1"><div class="em-title">If this is an emergency, call now</div><div class="em-body">Symptoms like chest pain, stroke signs, or severe allergic reaction need immediate care. Telecheck cannot replace emergency services.</div>
+  <div class="em-actions"><button class="em-cta">Call 112 (Ghana)</button><button class="em-alt">Not an emergency</button></div>
+  </div>
+</div>
+<div class="note">Opaque, never translucent. Outranks all other chrome (§13).</div>
+</div></body></html>

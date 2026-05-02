@@ -1,0 +1,37 @@
+/* Card container baseline for preview/ cards
+   Cards are rendered standalone; 700x<height>. No titles inside — the asset
+   name renders outside the card. Keep cards minimal and specimen-focused. */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg-1);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+.card {
+  box-sizing: border-box;
+  width: 700px;
+  padding: 24px 28px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.card-flush {
+  box-sizing: border-box;
+  width: 700px;
+  padding: 0;
+  background: var(--surface-1);
+  overflow: hidden;
+}
+.row { display: flex; }
+.col { display: flex; flex-direction: column; }
+.gap-1 { gap: 4px; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; } .gap-5 { gap: 20px; } .gap-6 { gap: 24px; }
+.wrap { flex-wrap: wrap; }
+.ai-center { align-items: center; }
+.jc-between { justify-content: space-between; }
+.mono { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); }
+.label { font-size: 11px; font-weight: 500; color: var(--fg-3); letter-spacing: 0.04em; text-transform: uppercase; }

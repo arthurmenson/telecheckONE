@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Telecheck — Patient App (Lite)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Tokens ── */
+:root {
+  --n-0:#fff;--n-25:#fbfcfb;--n-50:#f5f7f6;--n-100:#eceeec;--n-200:#dde2e0;
+  --n-300:#c6cdc9;--n-400:#9aa5a0;--n-500:#6f7a75;--n-700:#3a413e;--n-800:#242b28;
+  --teal-50:#eaf5f2;--teal-100:#cfe8e2;--teal-200:#9dd2c6;
+  --teal-400:#23947e;--teal-500:#0b7a6b;--teal-600:#06625a;--teal-700:#054c47;
+  --gold-50:#faf2e3;--gold-100:#f3e1bc;--gold-400:#c88a2b;--gold-500:#a46f1f;--gold-700:#5c3f11;
+  --iris-50:#f0edfb;--iris-200:#c3baef;--iris-500:#6e5bd6;--iris-600:#5944b8;--iris-700:#433390;
+  --success-50:#e8f4ec;--success-500:#2a8a4a;--success-700:#1e6135;
+  --warning-50:#fbf1de;--warning-500:#c28320;--warning-700:#8a5c14;
+  --danger-50:#fbebe9;--danger-500:#c8402f;--danger-700:#8e2a1e;
+  --info-50:#e7eff8;--info-500:#2b6cb0;--info-700:#1f4e80;
+  --bg:var(--n-25);--surface-1:#fff;
+  --fg-1:#131817;--fg-2:#3a413e;--fg-3:#6f7a75;--fg-4:#9aa5a0;
+  --border-subtle:rgba(0,0,0,.06);--border-strong:rgba(0,0,0,.14);
+  --primary:var(--teal-500);
+  --font-sans:'Manrope',system-ui,sans-serif;
+}
+
+/* ── Reset ── */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:#0b1110;font-family:var(--font-sans);color:var(--fg-1)}
+a{text-decoration:none;color:inherit}
+
+/* ── Stage ── */
+.page{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:28px 20px 60px;gap:20px}
+.hdr-title{color:#f5f7f6;font-weight:700;font-size:22px;letter-spacing:-0.01em}
+.hdr-sub{color:#9aa5a0;font-size:13px;text-align:center;max-width:600px;line-height:1.5}
+.device{width:402px;height:840px;border-radius:48px;background:#000;padding:9px;box-shadow:0 40px 80px rgba(0,0,0,.4),0 0 0 1px #1a1f1e;position:relative;flex-shrink:0}
+.island{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:120px;height:34px;background:#000;border-radius:22px;z-index:100}
+.home-ind{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:100px;background:rgba(0,0,0,.25);z-index:100;pointer-events:none}
+.screen{width:100%;height:100%;border-radius:40px;overflow:hidden;background:var(--bg);position:relative}
+
+/* ── Screen panels (CSS :target navigation) ── */
+.panel{display:none;flex-direction:column;height:100%;position:absolute;inset:0;background:var(--bg);overflow:hidden}
+.panel:target{display:flex}
+html:not(:has(:target)) #home{display:flex}
+
+/* ── Status bar ── */
+.sb{height:50px;padding:16px 30px 0;display:flex;justify-content:space-between;align-items:center;font-size:13.5px;font-weight:600;color:var(--fg-1);flex-shrink:0;position:relative;z-index:20}
+.sb .r{display:flex;gap:5px;align-items:center}
+
+/* ── Top bar ── */
+.topbar{display:flex;align-items:center;gap:8px;padding:6px 14px 10px;background:linear-gradient(180deg,rgba(255,255,255,.9),rgba(255,255,255,0));flex-shrink:0;position:relative;z-index:10}
+.tb-brand{flex:1;display:flex;align-items:center;gap:7px}
+.tb-wm{font-size:16px;font-weight:700;letter-spacing:-0.03em;color:var(--fg-1)}
+.tb-ic{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.85);border:1px solid rgba(0,0,0,.04);display:flex;align-items:center;justify-content:center;color:var(--fg-1);flex-shrink:0;backdrop-filter:blur(10px)}
+.tb-ic.em{background:var(--danger-500);color:#fff;border-color:transparent}
+.tb-av{width:30px;height:30px;border-radius:50%;background:var(--teal-500);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;border:2px solid rgba(255,255,255,.9)}
+.tb-badge{position:absolute;top:2px;right:2px;min-width:14px;height:14px;border-radius:8px;background:var(--danger-500);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px;border:1.5px solid #fff}
+
+/* ── Scroll area ── */
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.content{padding:12px 16px;display:flex;flex-direction:column;gap:12px}
+
+/* ── Hero ── */
+.v2-hero{padding:0 18px 16px;background:radial-gradient(circle at 100% 0%,color-mix(in oklab,var(--teal-200) 55%,transparent),transparent 55%),radial-gradient(circle at 0% 100%,color-mix(in oklab,var(--gold-100) 70%,transparent),transparent 50%),linear-gradient(170deg,var(--teal-50),var(--n-25));border-bottom:1px solid var(--border-subtle)}
+.v2-hero .sub-lbl{font-size:11px;font-weight:700;color:var(--teal-700);text-transform:uppercase;letter-spacing:.1em}
+.v2-hero h1{font-size:28px;font-weight:700;letter-spacing:-0.02em;line-height:1.12;margin:2px 0 4px}
+.hero-sum{font-size:13px;color:var(--fg-2)}
+.hero-cta{margin-top:14px;padding:12px 14px;border-radius:14px;background:var(--surface-1);border:1px solid var(--border-subtle);display:flex;align-items:center;gap:12px}
+.hc-k{font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--danger-700);display:flex;align-items:center;gap:5px}
+.hc-dot{width:6px;height:6px;border-radius:50%;background:var(--danger-500);animation:pulse 1.2s infinite}
+.hc-t{font-size:13.5px;font-weight:600;margin-top:4px;letter-spacing:-0.005em}
+.hc-s{font-size:11.5px;color:var(--fg-3);margin-top:2px}
+.hc-btn{background:var(--teal-500);color:#fff;border:0;padding:8px 16px;border-radius:9999px;font-weight:600;font-size:12.5px;font-family:inherit;flex-shrink:0;white-space:nowrap}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Section headers ── */
+.section-h{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;font-weight:700;color:var(--fg-3);text-transform:uppercase;letter-spacing:.08em;padding:0 2px}
+.section-link{font-size:11.5px;color:var(--primary);font-weight:600;text-transform:none;letter-spacing:0}
+
+/* ── Glance grid ── */
+.glance-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.gl-tile{padding:13px 12px;background:var(--surface-1);border-radius:14px;border:1px solid var(--border-subtle);display:flex;align-items:center;gap:10px}
+.ring-wrap{width:56px;height:56px;flex-shrink:0;position:relative}
+.ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg);display:block}
+.ring-inner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.ring-val{font-size:14px;font-weight:700;letter-spacing:-0.02em;color:var(--fg-1)}
+.ring-unit{font-size:8px;font-weight:500;color:var(--fg-3);margin-top:1px}
+.ring-meta{flex:1;min-width:0}
+.ring-label{font-size:12px;font-weight:600;color:var(--fg-1);line-height:1.1}
+.ring-delta{font-size:10.5px;font-weight:700;margin-top:3px}
+.ring-delta.warn{color:var(--warning-500)}
+.ring-delta.bad{color:var(--danger-500)}
+.ring-delta.ok{color:var(--success-500)}
+.ring-delta.info{color:var(--info-500)}
+.ring-target{font-size:9.5px;color:var(--fg-3);margin-top:1px}
+
+/* ── AI brief ── */
+.aib{border-radius:14px;padding:14px 16px;background:var(--surface-1);border:1px solid var(--border-subtle);border-left:2px solid var(--iris-500)}
+.aib-k{font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--iris-700);display:flex;align-items:center;gap:5px}
+.aib-t{font-size:14px;font-weight:600;line-height:1.35;margin-top:6px;letter-spacing:-0.005em}
+.aib-b{font-size:12px;color:var(--fg-2);line-height:1.5;margin-top:4px}
+.aib-a{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn-p{background:var(--iris-500);color:#fff;border:0;padding:8px 12px;border-radius:8px;font-weight:600;font-size:12px;font-family:inherit;cursor:pointer}
+.btn-s{background:var(--n-50);color:var(--fg-1);border:1px solid var(--border-strong);padding:8px 12px;border-radius:8px;font-weight:600;font-size:12px;font-family:inherit}
+.btn-teal{background:var(--teal-500);color:#fff;border:0;padding:8px 12px;border-radius:8px;font-weight:600;font-size:12px;font-family:inherit}
+
+/* ── Today tasks ── */
+.today-grid{display:grid;gap:8px}
+.td{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface-1);border-radius:14px;border:1px solid var(--border-subtle)}
+.td-ic{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.td-ic.teal{background:var(--teal-50);color:var(--teal-700)}
+.td-ic.iris{background:var(--iris-50);color:var(--iris-700)}
+.td-ic.gold{background:var(--gold-50);color:var(--gold-700)}
+.td-t{font-size:13.5px;font-weight:600;line-height:1.2}
+.td-s{font-size:11.5px;color:var(--fg-3);margin-top:2px}
+.td-badge{font-size:10px;font-weight:700;color:var(--fg-3);letter-spacing:.06em;text-transform:uppercase;flex-shrink:0;margin-left:auto}
+.td-badge.due{color:var(--warning-700)}
+
+/* ── Program card ── */
+.prog{padding:16px;border-radius:16px;background:var(--surface-1);border:1px solid var(--border-subtle)}
+.prog-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.prog-t{font-size:14.5px;font-weight:700;letter-spacing:-0.005em}
+.prog-s{font-size:11.5px;color:var(--fg-3);margin-top:2px}
+.prog-wk{font-size:10.5px;font-weight:700;color:var(--teal-700);letter-spacing:.08em;background:var(--teal-50);padding:3px 8px;border-radius:9999px;white-space:nowrap}
+.prog-bar{height:6px;background:var(--n-100);border-radius:3px;margin-top:12px;overflow:hidden}
+.prog-bar-f{height:100%;background:var(--teal-500);border-radius:3px}
+.prog-ms-row{display:flex;gap:6px;margin-top:10px}
+.prog-ms{flex:1;padding:6px 4px;border-radius:6px;background:var(--n-50);text-align:center;color:var(--fg-3);font-weight:600;font-size:10.5px}
+.prog-ms.done{background:var(--success-50);color:var(--success-700)}
+.prog-ms.now{background:var(--teal-500);color:#fff}
+
+/* ── Home footer ── */
+.home-foot{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.hf{padding:14px;border-radius:14px;background:var(--surface-1);border:1px solid var(--border-subtle)}
+.hf-k{font-size:10px;font-weight:700;color:var(--fg-3);letter-spacing:.1em;text-transform:uppercase}
+.hf-t{font-size:13.5px;font-weight:700;margin-top:6px;letter-spacing:-0.005em}
+.hf-s{font-size:11px;color:var(--fg-3);margin-top:2px}
+
+/* ── List rows ── */
+.lc{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface-1);border-radius:14px;border:1px solid var(--border-subtle)}
+.lc-ic{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:12px}
+.lc-ic.teal{background:var(--teal-50);color:var(--teal-700)}
+.lc-ic.iris{background:var(--iris-50);color:var(--iris-700)}
+.lc-ic.gold{background:var(--gold-50);color:var(--gold-700)}
+.lc-ic.info{background:var(--info-50);color:var(--info-700)}
+.lc-ic.warn{background:var(--warning-50);color:var(--warning-700)}
+.lc-ic.success{background:var(--success-50);color:var(--success-700)}
+.lc-ic.danger{background:var(--danger-50);color:var(--danger-700)}
+.lc-ic.ai{background:var(--iris-500);color:#fff}
+.lc-body{flex:1;min-width:0}
+.lc-t{font-size:13.5px;font-weight:600;line-height:1.2}
+.lc-s{font-size:11.5px;color:var(--fg-3);margin-top:2px}
+.lc-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.chev{color:var(--fg-4)}
+
+/* ── Pills ── */
+.pill{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:9999px;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.pill.ok{background:var(--success-50);color:var(--success-700)}
+.pill.warn{background:var(--warning-50);color:var(--warning-700)}
+.pill.new{background:var(--teal-50);color:var(--teal-700)}
+.pill.iris{background:var(--iris-50);color:var(--iris-700)}
+.pill.info{background:var(--info-50);color:var(--info-700)}
+.pill.danger{background:var(--danger-50);color:var(--danger-700)}
+
+/* ── Inbox items ── */
+.inbox-item{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:var(--surface-1);border-radius:14px;border:1px solid var(--border-subtle)}
+.inbox-item.unread{background:color-mix(in oklab,var(--teal-50) 40%,white)}
+.inbox-av{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;font-size:11px;color:#fff}
+.inbox-body{flex:1;min-width:0}
+.inbox-from{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.inbox-preview{font-size:11.5px;color:var(--fg-3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inbox-time{font-size:10.5px;color:var(--fg-4);flex-shrink:0}
+
+/* ── Rx / Pharmacy cards ── */
+.rx-card{padding:14px 16px;background:var(--surface-1);border-radius:14px;border:1px solid var(--border-subtle)}
+.rx-name{font-size:14px;font-weight:700;letter-spacing:-0.005em}
+.rx-sub{font-size:11.5px;color:var(--fg-3);margin-top:2px}
+.rx-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-subtle)}
+.rx-stat{font-size:11px;color:var(--fg-3)}
+.rx-stat b{color:var(--fg-1);font-weight:700}
+
+/* ── Labs ── */
+.lab-result{padding:14px 16px;background:var(--surface-1);border-radius:14px;border:1px solid var(--border-subtle)}
+.lab-result-head{display:flex;justify-content:space-between;align-items:flex-start}
+.lab-k{font-size:10px;font-weight:700;color:var(--fg-3);letter-spacing:.08em;text-transform:uppercase}
+.lab-val{font-size:26px;font-weight:700;letter-spacing:-0.02em;margin-top:4px;font-variant-numeric:tabular-nums}
+.lab-unit{font-size:11px;font-weight:500;color:var(--fg-3);margin-left:3px}
+.lab-range{font-size:11px;color:var(--fg-3);margin-top:4px}
+.lab-date{font-size:10px;color:var(--fg-4)}
+
+/* ── Me screen ── */
+.me-profile{padding:20px 16px;background:linear-gradient(160deg,var(--teal-50),var(--n-25));border-bottom:1px solid var(--border-subtle);display:flex;flex-direction:column;align-items:center;gap:8px}
+.me-av{width:72px;height:72px;border-radius:50%;background:var(--teal-500);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:24px;border:3px solid #fff;box-shadow:0 4px 14px rgba(11,122,107,.25)}
+.me-name{font-size:17px;font-weight:700;letter-spacing:-0.01em}
+.me-sub{font-size:12px;color:var(--fg-3)}
+
+/* ── Tab bar ── */
+.tabbar{position:absolute;bottom:0;left:0;right:0;height:84px;background:rgba(251,252,251,.92);backdrop-filter:blur(20px);border-top:1px solid var(--border-subtle);display:flex;padding:8px 4px 28px;z-index:50}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:10px;font-weight:600;color:var(--fg-4);text-decoration:none;position:relative;border-radius:12px;transition:color .15s}
+.tab svg{stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tab.active,.panel:target ~ .tabbar .tab.active{color:var(--teal-500)}
+
+/* Active tab highlighting via :target */
+#home:target ~ .tabbar .tab[href="#home"],
+html:not(:has(:target)) .tab[href="#home"],
+#care:target ~ .tabbar .tab[href="#care"],
+#pharmacy:target ~ .tabbar .tab[href="#pharmacy"],
+#labs:target ~ .tabbar .tab[href="#labs"],
+#me:target ~ .tabbar .tab[href="#me"]{color:var(--teal-500)}
+#home:target ~ .tabbar .tab[href="#home"] svg,
+html:not(:has(:target)) .tab[href="#home"] svg,
+#care:target ~ .tabbar .tab[href="#care"] svg,
+#pharmacy:target ~ .tabbar .tab[href="#pharmacy"] svg,
+#labs:target ~ .tabbar .tab[href="#labs"] svg,
+#me:target ~ .tabbar .tab[href="#me"] svg{stroke-width:2.2}
+
+.tab-badge{position:absolute;top:0px;right:16px;min-width:14px;height:14px;border-radius:8px;background:var(--danger-500);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px;border:1.5px solid rgba(251,252,251,.92)}
+
+/* ── Subtabs ── */
+.subtabs{display:flex;gap:6px;overflow-x:auto;padding:0 16px 10px;scrollbar-width:none;flex-shrink:0}
+.subtabs::-webkit-scrollbar{display:none}
+.subtab{padding:7px 13px;border-radius:9999px;font-size:12.5px;font-weight:600;color:var(--fg-3);background:var(--n-50);white-space:nowrap;text-decoration:none}
+.subtab.on{background:var(--fg-1);color:#fff}
+
+/* ── Big heading ── */
+.big-h{padding:12px 16px 6px}
+.big-h h1{font-size:26px;font-weight:700;letter-spacing:-0.02em}
+.big-h p{font-size:12px;color:var(--fg-3);margin-top:2px}
+
+/* ── Shared misc ── */
+.mt{margin-top:8px}
+.divider{height:1px;background:var(--border-subtle);margin:4px 0}
+
+/* ── Responsive — narrow screens ── */
+@media(max-width:440px){
+  .device{width:100vw;height:100svh;border-radius:0;padding:0}
+  .screen{border-radius:0}
+  .page{padding:0}
+  .hdr-title,.hdr-sub,.hdr-note{display:none}
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hdr-title">Telecheck — Patient app · lite</div>
+  <div class="hdr-sub">Static HTML · no JavaScript. Tap tabs to navigate between screens.</div>
+
+  <div class="device">
+    <div class="island"></div>
+    <div class="screen">
+
+      <!-- ══════════════ HOME ══════════════ -->
+      <div class="panel" id="home">
+        <!-- Status bar -->
+        <div class="sb">
+          <span>9:41</span>
+          <span class="r">
+            <svg width="18" height="10" viewBox="0 0 18 10" fill="currentColor"><rect x="0" y="6" width="3" height="4" rx=".5"/><rect x="5" y="4" width="3" height="6" rx=".5"/><rect x="10" y="2" width="3" height="8" rx=".5"/><rect x="15" y="0" width="3" height="10" rx=".5"/></svg>
+            <svg width="24" height="10" viewBox="0 0 24 10" fill="none"><rect x="1" y="1" width="18" height="8" rx="2" stroke="currentColor"/><rect x="2.5" y="2.5" width="14" height="5" rx="1" fill="currentColor"/><rect x="20" y="3.5" width="1.5" height="3" fill="currentColor"/></svg>
+          </span>
+        </div>
+        <!-- Top bar -->
+        <div class="topbar">
+          <div class="tb-brand">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#0b7a6b" stroke-width="1.6"/><path d="M6.5 12.5L9 12.5L10.3 9.5L12.8 15.5L14 12L17.5 12" stroke="#0b7a6b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="tb-wm">telecheck</span>
+          </div>
+          <div class="tb-ic" style="position:relative">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14V10a6 6 0 1 0-12 0v4a2 2 0 0 1-.6 1.6L4 17h5"/><path d="M9 17a3 3 0 0 0 6 0"/></svg>
+            <div class="tb-badge">3</div>
+          </div>
+          <div class="tb-ic em">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20z"/><path d="M12 10v5M12 18v.01"/></svg>
+          </div>
+          <div class="tb-av">AM</div>
+        </div>
+        <!-- Scroll -->
+        <div class="scroll">
+          <!-- Hero -->
+          <div class="v2-hero">
+            <div class="sub-lbl">Mon · 20 Apr</div>
+            <h1>Good morning, Ama</h1>
+            <div class="hero-sum">2 things today. You're on track.</div>
+            <div class="hero-cta">
+              <div style="flex:1;min-width:0">
+                <div class="hc-k"><span class="hc-dot"></span>LIVE IN 8 MIN</div>
+                <div class="hc-t">Dr. Mensah · video follow-up</div>
+                <div class="hc-s">HbA1c discussion · 10:30</div>
+              </div>
+              <button class="hc-btn">Join</button>
+            </div>
+          </div>
+          <div class="content">
+            <!-- Vitals glance -->
+            <div class="section-h"><span>At a glance</span></div>
+            <div class="glance-grid">
+              <!-- HbA1c -->
+              <div class="gl-tile">
+                <div class="ring-wrap">
+                  <svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="#c28320" stroke-opacity=".14" stroke-width="4"/><circle cx="28" cy="28" r="24" fill="none" stroke="#c28320" stroke-width="4" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="57.3"/></svg>
+                  <div class="ring-inner"><div class="ring-val">7.8</div><div class="ring-unit">%</div></div>
+                </div>
+                <div class="ring-meta">
+                  <div class="ring-label">HbA1c</div>
+                  <div class="ring-delta warn">+0.2 ▲</div>
+                  <div class="ring-target">Target ≤7.0</div>
+                </div>
+              </div>
+              <!-- Glucose -->
+              <div class="gl-tile">
+                <div class="ring-wrap">
+                  <svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="#d69339" stroke-opacity=".14" stroke-width="4"/><circle cx="28" cy="28" r="24" fill="none" stroke="#d69339" stroke-width="4" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="27.1"/></svg>
+                  <div class="ring-inner"><div class="ring-val" style="font-size:11px">132</div><div class="ring-unit">mg/dL</div></div>
+                </div>
+                <div class="ring-meta">
+                  <div class="ring-label">Fasting glucose</div>
+                  <div class="ring-delta bad">High</div>
+                  <div class="ring-target">Target 70–100</div>
+                </div>
+              </div>
+              <!-- eGFR -->
+              <div class="gl-tile">
+                <div class="ring-wrap">
+                  <svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="#2a8a4a" stroke-opacity=".14" stroke-width="4"/><circle cx="28" cy="28" r="24" fill="none" stroke="#2a8a4a" stroke-width="4" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="9.0"/></svg>
+                  <div class="ring-inner"><div class="ring-val">94</div><div class="ring-unit">mL/min</div></div>
+                </div>
+                <div class="ring-meta">
+                  <div class="ring-label">eGFR</div>
+                  <div class="ring-delta ok">Normal</div>
+                  <div class="ring-target">Target ≥60</div>
+                </div>
+              </div>
+              <!-- Haemoglobin -->
+              <div class="gl-tile">
+                <div class="ring-wrap">
+                  <svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="#2b6cb0" stroke-opacity=".14" stroke-width="4"/><circle cx="28" cy="28" r="24" fill="none" stroke="#2b6cb0" stroke-width="4" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="45.2"/></svg>
+                  <div class="ring-inner"><div class="ring-val" style="font-size:11px">11.2</div><div class="ring-unit">g/dL</div></div>
+                </div>
+                <div class="ring-meta">
+                  <div class="ring-label">Haemoglobin</div>
+                  <div class="ring-delta info">Low</div>
+                  <div class="ring-target">Target 12–16</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Brief -->
+            <div class="aib">
+              <div class="aib-k">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6e5bd6" stroke-width="2" stroke-linecap="round"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2 2M17 17l2 2M17 7l2-2M5 19l2-2"/></svg>
+                AI BRIEF · TELECHECK
+              </div>
+              <div class="aib-t">Your HbA1c ticked up to 7.8% — nudging, not alarming.</div>
+              <div class="aib-b">Three missed evening doses in March line up with the rise. A steady 19:00 reminder for 6 weeks should re-settle it.</div>
+              <div class="aib-a">
+                <a href="#care" class="btn-p" style="display:inline-block;border-radius:8px;font-size:12px;font-weight:600;font-family:inherit;padding:8px 12px;color:#fff">Open brief</a>
+                <span class="btn-s">Set reminder</span>
+              </div>
+            </div>
+
+            <!-- Today -->
+            <div class="section-h"><span>Today</span><a href="#care" class="section-link">All →</a></div>
+            <div class="today-grid">
+              <div class="td">
+                <div class="td-ic teal">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 3.5a5 5 0 0 1 7 7l-5 5a5 5 0 0 1-7-7z"/><path d="m7 8 7 7"/></svg>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div class="td-t">Evening metformin</div>
+                  <div class="td-s">19:00</div>
+                </div>
+                <div class="td-badge">in 9h</div>
+              </div>
+              <div class="td">
+                <div class="td-ic iris">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.5-9.3-9.2A5.1 5.1 0 0 1 7 4.1 5 5 0 0 1 12 7a5 5 0 0 1 5-2.9 5.1 5.1 0 0 1 4.3 6.7C19 15.5 12 20 12 20z"/></svg>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div class="td-t">Weekly check-in</div>
+                  <div class="td-s">3 questions · 90s</div>
+                </div>
+                <div class="td-badge due">DUE</div>
+              </div>
+            </div>
+
+            <!-- Program -->
+            <div class="section-h"><span>Your program</span><a href="#care" class="section-link">Details →</a></div>
+            <div class="prog">
+              <div class="prog-h">
+                <div>
+                  <div class="prog-t">Diabetes RPM · Dr. Mensah</div>
+                  <div class="prog-s">Adherence 92% · re-check in 6 weeks</div>
+                </div>
+                <div class="prog-wk">WEEK 12 / 26</div>
+              </div>
+              <div class="prog-bar"><div class="prog-bar-f" style="width:46%"></div></div>
+              <div class="prog-ms-row">
+                <div class="prog-ms done">Onboard</div>
+                <div class="prog-ms done">Stabilize</div>
+                <div class="prog-ms now">Re-check</div>
+                <div class="prog-ms">Graduate</div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="home-foot">
+              <div class="hf">
+                <div class="hf-k">Pharmacy</div>
+                <div class="hf-t">1 in review</div>
+                <div class="hf-s">Metformin · ETA 2h</div>
+              </div>
+              <div class="hf">
+                <div class="hf-k">Community</div>
+                <div class="hf-t">Thu · Q&amp;A</div>
+                <div class="hf-s">Type-2 · 18:00</div>
+              </div>
+            </div>
+            <div style="height:8px"></div>
+          </div>
+        </div>
+        <!-- Tab bar -->
+        <div class="tabbar">
+          <a class="tab" href="#home">
+            <svg width="22" height="22" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home
+          </a>
+          <a class="tab" href="#care">
+            <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 20s-7-4.5-9.3-9.2A5.1 5.1 0 0 1 7 4.1 5 5 0 0 1 12 7a5 5 0 0 1 5-2.9 5.1 5.1 0 0 1 4.3 6.7C19 15.5 12 20 12 20z"/></svg>Care
+            <div class="tab-badge">2</div>
+          </a>
+          <a class="tab" href="#pharmacy">
+            <svg width="22" height="22" viewBox="0 0 24 24"><path d="M8.5 3.5a5 5 0 0 1 7 7l-5 5a5 5 0 0 1-7-7z"/><path d="m7 8 7 7"/></svg>Pharmacy
+          </a>
+          <a class="tab" href="#labs">
+            <svg width="22" height="22" viewBox="0 0 24 24"><path d="M9 3v6L4 19a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3L15 9V3"/><path d="M9 3h6M7 14h10"/></svg>Labs
+          </a>
+          <a class="tab" href="#me">
+            <svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Me
+          </a>
+        </div>
+        <div class="home-ind"></div>
+      </div><!-- /home -->
+
+
+      <!-- ══════════════ CARE ══════════════ -->
+      <div class="panel" id="care">
+        <div class="sb"><span>9:41</span><span class="r"><svg width="18" height="10" viewBox="0 0 18 10" fill="currentColor"><rect x="0" y="6" width="3" height="4" rx=".5"/><rect x="5" y="4" width="3" height="6" rx=".5"/><rect x="10" y="2" width="3" height="8" rx=".5"/><rect x="15" y="0" width="3" height="10" rx=".5"/></svg><svg width="24" height="10" viewBox="0 0 24 10" fill="none"><rect x="1" y="1" width="18" height="8" rx="2" stroke="currentColor"/><rect x="2.5" y="2.5" width="14" height="5" rx="1" fill="currentColor"/><rect x="20" y="3.5" width="1.5" height="3" fill="currentColor"/></svg></span></div>
+        <div class="topbar">
+          <div class="tb-brand"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#0b7a6b" stroke-width="1.6"/><path d="M6.5 12.5L9 12.5L10.3 9.5L12.8 15.5L14 12L17.5 12" stroke="#0b7a6b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tb-wm">telecheck</span></div>
+          <div class="tb-ic" style="position:relative"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14V10a6 6 0 1 0-12 0v4a2 2 0 0 1-.6 1.6L4 17h5"/><path d="M9 17a3 3 0 0 0 6 0"/></svg><div class="tb-badge">3</div></div>
+          <div class="tb-ic em"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20z"/><path d="M12 10v5M12 18v.01"/></svg></div>
+          <div class="tb-av">AM</div>
+        </div>
+        <div class="big-h"><h1>Care</h1><p>Messages, visits, programs and your team</p></div>
+        <div class="subtabs">
+          <span class="subtab on">Inbox</span>
+          <span class="subtab">Visits</span>
+          <span class="subtab">Programs</span>
+          <span class="subtab">Track</span>
+          <span class="subtab">Team</span>
+        </div>
+        <div class="scroll">
+          <div class="content">
+            <!-- Inbox -->
+            <div class="inbox-item unread">
+              <div class="inbox-av" style="background:var(--iris-500)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2 2M17 17l2 2M17 7l2-2M5 19l2-2"/></svg></div>
+              <div class="inbox-body">
+                <div class="inbox-from">Telecheck AI <span class="pill new">NEW</span></div>
+                <div class="inbox-preview">Noticed your Thursday glucose pattern — want to discuss?</div>
+              </div>
+              <div class="inbox-time">09:08</div>
+            </div>
+            <div class="inbox-item unread">
+              <div class="inbox-av" style="background:var(--teal-500)">DM</div>
+              <div class="inbox-body">
+                <div class="inbox-from">Dr. A. Mensah <span class="pill new">NEW</span></div>
+                <div class="inbox-preview">Let's plan a 6-week re-check. Lab draw Thursday?</div>
+              </div>
+              <div class="inbox-time">09:12</div>
+            </div>
+            <div class="inbox-item">
+              <div class="inbox-av" style="background:var(--warning-500)">MP</div>
+              <div class="inbox-body">
+                <div class="inbox-from">Mobipharm Osu</div>
+                <div class="inbox-preview">Your metformin is being prepared. Dispatch ETA 11:30.</div>
+              </div>
+              <div class="inbox-time">09:31</div>
+            </div>
+            <div class="inbox-item">
+              <div class="inbox-av" style="background:var(--iris-600)">NA</div>
+              <div class="inbox-body">
+                <div class="inbox-from">Nurse Adjoa · coach</div>
+                <div class="inbox-preview">How are your evening readings this week?</div>
+              </div>
+              <div class="inbox-time">Yesterday</div>
+            </div>
+            <div class="inbox-item">
+              <div class="inbox-av" style="background:var(--info-500)">KO</div>
+              <div class="inbox-body">
+                <div class="inbox-from">Kojo (shared)</div>
+                <div class="inbox-preview">Shared: dad's BP log from Sunday.</div>
+              </div>
+              <div class="inbox-time">Sun</div>
+            </div>
+            <div class="inbox-item">
+              <div class="inbox-av" style="background:var(--gold-500)">TC</div>
+              <div class="inbox-body">
+                <div class="inbox-from">Telecheck support</div>
+                <div class="inbox-preview">New — Community events on your conditions.</div>
+              </div>
+              <div class="inbox-time">Mon</div>
+            </div>
+
+            <div class="section-h" style="margin-top:4px"><span>Next visit</span></div>
+            <div class="lc">
+              <div class="lc-ic teal"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg></div>
+              <div class="lc-body">
+                <div class="lc-t">Dr. Mensah — video follow-up</div>
+                <div class="lc-s">Today 10:30 · HbA1c · GHS 120</div>
+              </div>
+              <div class="lc-right"><span class="pill danger">LIVE IN 8M</span><span class="chev">›</span></div>
+            </div>
+            <div class="lc">
+              <div class="lc-ic gold"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>
+              <div class="lc-body">
+                <div class="lc-t">Home lab draw</div>
+                <div class="lc-s">Thursday 08:00 · HbA1c + kidney panel</div>
+              </div>
+              <div class="lc-right"><span class="chev">›</span></div>
+            </div>
+
+            <div class="section-h"><span>Active program</span></div>
+            <div class="prog">
+              <div class="prog-h">
+                <div><div class="prog-t">Diabetes RPM</div><div class="prog-s">Dr. Mensah · adherence 92%</div></div>
+                <div class="prog-wk">WEEK 12</div>
+              </div>
+              <div class="prog-bar"><div class="prog-bar-f" style="width:46%"></div></div>
+              <div class="prog-ms-row">
+                <div class="prog-ms done">Onboard</div>
+                <div class="prog-ms done">Stabilize</div>
+                <div class="prog-ms now">Re-check</div>
+                <div class="prog-ms">Graduate</div>
+              </div>
+            </div>
+            <div style="height:8px"></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <a class="tab" href="#home"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+          <a class="tab" href="#care"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 20s-7-4.5-9.3-9.2A5.1 5.1 0 0 1 7 4.1 5 5 0 0 1 12 7a5 5 0 0 1 5-2.9 5.1 5.1 0 0 1 4.3 6.7C19 15.5 12 20 12 20z"/></svg>Care<div class="tab-badge">2</div></a>
+          <a class="tab" href="#pharmacy"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M8.5 3.5a5 5 0 0 1 7 7l-5 5a5 5 0 0 1-7-7z"/><path d="m7 8 7 7"/></svg>Pharmacy</a>
+          <a class="tab" href="#labs"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M9 3v6L4 19a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3L15 9V3"/><path d="M9 3h6M7 14h10"/></svg>Labs</a>
+          <a class="tab" href="#me"><svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Me</a>
+        </div>
+        <div class="home-ind"></div>
+      </div><!-- /care -->
+
+
+      <!-- ══════════════ PHARMACY ══════════════ -->
+      <div class="panel" id="pharmacy">
+        <div class="sb"><span>9:41</span><span class="r"><svg width="18" height="10" viewBox="0 0 18 10" fill="currentColor"><rect x="0" y="6" width="3" height="4" rx=".5"/><rect x="5" y="4" width="3" height="6" rx=".5"/><rect x="10" y="2" width="3" height="8" rx=".5"/><rect x="15" y="0" width="3" height="10" rx=".5"/></svg><svg width="24" height="10" viewBox="0 0 24 10" fill="none"><rect x="1" y="1" width="18" height="8" rx="2" stroke="currentColor"/><rect x="2.5" y="2.5" width="14" height="5" rx="1" fill="currentColor"/><rect x="20" y="3.5" width="1.5" height="3" fill="currentColor"/></svg></span></div>
+        <div class="topbar">
+          <div class="tb-brand"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#0b7a6b" stroke-width="1.6"/><path d="M6.5 12.5L9 12.5L10.3 9.5L12.8 15.5L14 12L17.5 12" stroke="#0b7a6b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tb-wm">telecheck</span></div>
+          <div class="tb-ic" style="position:relative"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14V10a6 6 0 1 0-12 0v4a2 2 0 0 1-.6 1.6L4 17h5"/><path d="M9 17a3 3 0 0 0 6 0"/></svg><div class="tb-badge">3</div></div>
+          <div class="tb-ic em"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20z"/><path d="M12 10v5M12 18v.01"/></svg></div>
+          <div class="tb-av">AM</div>
+        </div>
+        <div class="big-h"><h1>Pharmacy</h1><p>Prescriptions, refills and programs</p></div>
+        <div class="subtabs">
+          <span class="subtab on">Rx</span>
+          <span class="subtab">Refills</span>
+          <span class="subtab">Programs</span>
+          <span class="subtab">Shop</span>
+          <span class="subtab">Safety</span>
+        </div>
+        <div class="scroll">
+          <div class="content">
+            <div class="section-h"><span>Current prescriptions</span></div>
+
+            <div class="rx-card">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                <div>
+                  <div class="rx-name">Metformin 500 mg</div>
+                  <div class="rx-sub">Twice daily · morning & evening · diabetes</div>
+                </div>
+                <span class="pill warn">REVIEW</span>
+              </div>
+              <div class="rx-row">
+                <div class="rx-stat">Dispatch: <b>ETA 11:30</b></div>
+                <div class="rx-stat">28 days supply</div>
+                <div class="rx-stat">Mobipharm Osu</div>
+              </div>
+            </div>
+
+            <div class="rx-card">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                <div>
+                  <div class="rx-name">Lisinopril 10 mg</div>
+                  <div class="rx-sub">Once daily · morning · hypertension</div>
+                </div>
+                <span class="pill ok">ACTIVE</span>
+              </div>
+              <div class="rx-row">
+                <div class="rx-stat">Next refill: <b>3 weeks</b></div>
+                <div class="rx-stat">30 days supply</div>
+                <div class="rx-stat">Auto-refill on</div>
+              </div>
+            </div>
+
+            <div class="rx-card">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                <div>
+                  <div class="rx-name">Paracetamol 1000 mg</div>
+                  <div class="rx-sub">As needed · max 4×/day · pain</div>
+                </div>
+                <span class="pill info">PRN</span>
+              </div>
+              <div class="rx-row">
+                <div class="rx-stat">In stock: <b>14 tabs</b></div>
+                <div class="rx-stat">OTC · no refill needed</div>
+              </div>
+            </div>
+
+            <div class="section-h"><span>AI safety check</span></div>
+            <div class="aib" style="border-left-color:var(--success-500)">
+              <div class="aib-k" style="color:var(--success-700)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 8.5 8 9 4.5-.5 8-4 8-9V6z"/></svg>
+                SAFETY · NO INTERACTIONS FLAGGED
+              </div>
+              <div class="aib-t">Your 3 active medications are compatible.</div>
+              <div class="aib-b">Metformin + Lisinopril — no known interaction. Paracetamol is safe at recommended dose. Reviewed 20 Apr 2026.</div>
+            </div>
+
+            <div class="section-h"><span>Programs</span></div>
+            <div class="lc">
+              <div class="lc-ic iris">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2 2M17 17l2 2M17 7l2-2M5 19l2-2"/></svg>
+              </div>
+              <div class="lc-body">
+                <div class="lc-t">GLP-1 metabolic program</div>
+                <div class="lc-s">Weight & HbA1c · clinician-led · GHS 280/mo</div>
+              </div>
+              <div class="lc-right"><span class="pill iris">INVITE</span><span class="chev">›</span></div>
+            </div>
+            <div class="lc">
+              <div class="lc-ic teal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 3.5a5 5 0 0 1 7 7l-5 5a5 5 0 0 1-7-7z"/><path d="m7 8 7 7"/></svg>
+              </div>
+              <div class="lc-body">
+                <div class="lc-t">Medication adherence coach</div>
+                <div class="lc-s">GHS 40/mo · with Nurse Adjoa</div>
+              </div>
+              <div class="lc-right"><span class="chev">›</span></div>
+            </div>
+            <div style="height:8px"></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <a class="tab" href="#home"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+          <a class="tab" href="#care"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 20s-7-4.5-9.3-9.2A5.1 5.1 0 0 1 7 4.1 5 5 0 0 1 12 7a5 5 0 0 1 5-2.9 5.1 5.1 0 0 1 4.3 6.7C19 15.5 12 20 12 20z"/></svg>Care<div class="tab-badge">2</div></a>
+          <a class="tab" href="#pharmacy"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M8.5 3.5a5 5 0 0 1 7 7l-5 5a5 5 0 0 1-7-7z"/><path d="m7 8 7 7"/></svg>Pharmacy</a>
+          <a class="tab" href="#labs"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M9 3v6L4 19a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3L15 9V3"/><path d="M9 3h6M7 14h10"/></svg>Labs</a>
+          <a class="tab" href="#me"><svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Me</a>
+        </div>
+        <div class="home-ind"></div>
+      </div><!-- /pharmacy -->
+
+
+      <!-- ══════════════ LABS ══════════════ -->
+      <div class="panel" id="labs">
+        <div class="sb"><span>9:41</span><span class="r"><svg width="18" height="10" viewBox="0 0 18 10" fill="currentColor"><rect x="0" y="6" width="3" height="4" rx=".5"/><rect x="5" y="4" width="3" height="6" rx=".5"/><rect x="10" y="2" width="3" height="8" rx=".5"/><rect x="15" y="0" width="3" height="10" rx=".5"/></svg><svg width="24" height="10" viewBox="0 0 24 10" fill="none"><rect x="1" y="1" width="18" height="8" rx="2" stroke="currentColor"/><rect x="2.5" y="2.5" width="14" height="5" rx="1" fill="currentColor"/><rect x="20" y="3.5" width="1.5" height="3" fill="currentColor"/></svg></span></div>
+        <div class="topbar">
+          <div class="tb-brand"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#0b7a6b" stroke-width="1.6"/><path d="M6.5 12.5L9 12.5L10.3 9.5L12.8 15.5L14 12L17.5 12" stroke="#0b7a6b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tb-wm">telecheck</span></div>
+          <div class="tb-ic" style="position:relative"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14V10a6 6 0 1 0-12 0v4a2 2 0 0 1-.6 1.6L4 17h5"/><path d="M9 17a3 3 0 0 0 6 0"/></svg><div class="tb-badge">3</div></div>
+          <div class="tb-ic em"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 21h20z"/><path d="M12 10v5M12 18v.01"/></svg></div>
+          <div class="tb-av">AM</div>
+        </div>
+        <div class="big-h"><h1>Labs</h1><p>Results, trends and uploads</p></div>
+        <div class="subtabs">
+          <span class="subtab on">Results</span>
+          <span class="subtab">Trends</span>
+          <span class="subtab">Upload</span>
+        </div>
+        <div class="scroll">
+          <div class="content">
+            <div class="section-h"><span>Latest draw · 4 Apr 2026</span></div>
+
+            <div class="lab-result">
+              <div class="lab-result-head">
+                <div><div class="lab-k">HbA1c</div><div><span class="lab-val" style="color:#c28320">7.8</span><span class="lab-unit">%</span></div></div>
+                <span class="pill warn">ABOVE TARGET</span>
+              </div>
+              <div class="lab-range">Target ≤7.0% · prev 7.6% (Jan)</div>
+              <div class="lab-date">4 Apr 2026 · Dr. Mensah lab</div>
+            </div>
+
+            <div class="lab-result">
+              <div class="lab-result-head">
+                <div><div class="lab-k">Fasting glucose</div><div><span class="lab-val" style="color:#c28320">132</span><span class="lab-unit">mg/dL</span></div></div>
+                <span class="pill danger">HIGH</span>
+              </div>
+              <div class="lab-range">Target 70–100 mg/dL · prev 138 (Jan)</div>
+              <div class="lab-date">4 Apr 2026</div>
+            </div>
+
+            <div class="lab-result">
+              <div class="lab-result-head">
+                <div><div class="lab-k">eGFR</div><div><span class="lab-val" style="color:#2a8a4a">94</span><span class="lab-unit">mL/min</span></div></div>
+                <span class="pill ok">NORMAL</span>
+              </div>
+              <div class="lab-range">Target ≥60 mL/min · stable</div>
+              <div class="lab-date">4 Apr 2026</div>
+            </div>
+
+            <div class="lab-result">
+              <div class="lab-result-head">
+                <div><div class="lab-k">Haemoglobin</div><div><span class="lab-val" style="color:#2b6cb0">11.2</span><span class="lab-unit">g/dL</span></div></div>
+                <span class="pill info">LOW</span>
+              </div>
+              <div class="lab-range">Target 12–16 g/dL · prev 11.0 (Jan)</div>
+              <div class="lab-date">4 Apr 2026</div>
+            </div>
+
+            <div class="section-h"><span>Lipid panel · 4 Apr</span></div>
+            <div class="lab-result">
+              <div class="lab-result-head">
+                <div><div class="lab-k">LDL cholesterol</div><div><span class="lab-val" style="color:#c28320;font-size:22px">142</span><span class="lab-unit">mg/dL</span></div></div>
+                <span class="pill warn">ABOVE TARGET</span>
+              </div>
+              <div class="lab-range">Target &lt;100 mg/dL</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="lab-result">
+                <div class="lab-k">Total cholesterol</div>
+                <div><span class="lab-val" style="font-size:20px;color:#c28320">220</span><span class="lab-unit">mg/dL</span></div>
+                <div class="lab-range" style="font-size:10px">Target &lt;200</div>
+              </div>
+              <div class="lab-result">
+                <div class="lab-k">HDL</div>
+                <div><span class="lab-val" style="font-size:20px;color:#2a8a4a">48</span><span class="lab-unit">mg/dL</span></div>
+                <div class="lab-range" style="font-size:10px">Target &gt;40 ✓</div>
+              </div>
+            </div>
+
+            <div class="section-h"><span>Next draw</span></div>
+            <div class="lc">
+              <div class="lc-ic gold"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>
+              <div class="lc-body">
+                <div class="lc-t">Home lab draw</div>
+                <div class="lc-s">Thursday 08:00 · HbA1c + kidney panel</div>
+              </div>
+              <div class="lc-right"><span class="chev">›</span></div>
+            </div>
+            <div style="height:8px"></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <a class="tab" href="#home"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+          <a class="tab" href="#care"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 20s-7-4.5-9.3-9.2A5.1 5.1 0 0 1 7 4.1 5 5 0 0 1 12 7a5 5 0 0 1 5-2.9 5.1 5.1 0 0 1 4.3 6.7C19 15.5 12 20 12 20z"/></svg>Care<div class="tab-badge">2</div></a>
+          <a class="tab" href="#pharmacy"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M8.5 3.5a5 5 0 0 1 7 7l-5 5a5 5 0 0 1-7-7z"/><path d="m7 8 7 7"/></svg>Pharmacy</a>
+          <a class="tab" href="#labs"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M9 3v6L4 19a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3L15 9V3"/><path d="M9 3h6M7 14h10"/></svg>Labs</a>
+          <a class="tab" href="#me"><svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Me</a>
+        </div>
+        <div class="home-ind"></div>
+      </div><!-- /labs -->
+
+
+      <!-- ══════════════ ME ══════════════ -->
+      <div class="panel" id="me">
+        <div class="sb"><span>9:41</span><span class="r"><svg width="18" height="10" viewBox="0 0 18 10" fill="currentColor"><rect x="0" y="6" width="3" height="4" rx=".5"/><rect x="5" y="4" width="3" height="6" rx=".5"/><rect x="10" y="2" width="3" height="8" rx=".5"/><rect x="15" y="0" width="3" height="10" rx=".5"/></svg><svg width="24" height="10" viewBox="0 0 24 10" fill="none"><rect x="1" y="1" width="18" height="8" rx="2" stroke="currentColor"/><rect x="2.5" y="2.5" width="14" height="5" rx="1" fill="currentColor"/><rect x="20" y="3.5" width="1.5" height="3" fill="currentColor"/></svg></span></div>
+        <div class="scroll">
+          <div class="me-profile" style="padding-top:56px">
+            <div class="me-av">AM</div>
+            <div class="me-name">Ama Mensah</div>
+            <div class="me-sub">ama.mensah@telecheck.gh · ID TC-00142</div>
+          </div>
+          <div class="content">
+            <div class="section-h"><span>Health profile</span></div>
+            <div class="lc">
+              <div class="lc-ic teal"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.5-9.3-9.2A5.1 5.1 0 0 1 7 4.1 5 5 0 0 1 12 7a5 5 0 0 1 5-2.9 5.1 5.1 0 0 1 4.3 6.7C19 15.5 12 20 12 20z"/></svg></div>
+              <div class="lc-body">
+                <div class="lc-t">Conditions</div>
+                <div class="lc-s">Type 2 diabetes · hypertension risk</div>
+              </div>
+              <div class="lc-right"><span class="chev">›</span></div>
+            </div>
+            <div class="lc">
+              <div class="lc-ic gold"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 3.5a5 5 0 0 1 7 7l-5 5a5 5 0 0 1-7-7z"/><path d="m7 8 7 7"/></svg></div>
+              <div class="lc-body">
+                <div class="lc-t">Medications</div>
+                <div class="lc-s">Metformin · Lisinopril · Paracetamol</div>
+              </div>
+              <div class="lc-right"><span class="chev">›</span></div>
+            </div>
+            <div class="lc">
+              <div class="lc-ic info"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6L4 19a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3L15 9V3"/><path d="M9 3h6M7 14h10"/></svg></div>
+              <div class="lc-body">
+                <div class="lc-t">Lab history</div>
+                <div class="lc-s">12 results · last draw 4 Apr</div>
+              </div>
+              <div class="lc-right"><span class="chev">›</span></div>
+            </div>
+
+            <div class="section-h"><span>Family & delegates</span></div>
+            <div style="display:grid;gap:8px">
+              <div class="lc">
+                <div class="lc-ic" style="background:var(--gold-50);color:var(--gold-700);font-weight:700">KO</div>
+                <div class="lc-body">
+                  <div class="lc-t">Kofi Mensah <span class="pill info">DAD</span></div>
+                  <div class="lc-s">Delegate · labs & pharmacy visible</div>
+                </div>
+                <div class="lc-right"><span class="pill ok">ACTIVE</span><span class="chev">›</span></div>
+              </div>
+              <div class="lc">
+                <div class="lc-ic" style="background:var(--iris-50);color:var(--iris-700);font-weight:700">AB</div>
+                <div class="lc-body">
+                  <div class="lc-t">Abena Mensah <span class="pill info">DAUGHTER</span></div>
+                  <div class="lc-s">Read-only · home screen only · age 8</div>
+                </div>
+                <div class="lc-right"><span class="pill ok">ACTIVE</span><span class="chev">›</span></div>
+              </div>
+            </div>
+
+            <div class="section-h"><span>Privacy & data</span></div>
+            <div class="lc">
+              <div class="lc-ic success"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 8.5 8 9 4.5-.5 8-4 8-9V6z"/></svg></div>
+              <div class="lc-body">
+                <div class="lc-t">Data access & consent</div>
+                <div class="lc-s">Ghana NDPR · 3 active scopes</div>
+              </div>
+              <div class="lc-right"><span class="chev">›</span></div>
+            </div>
+            <div class="lc">
+              <div class="lc-ic warn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg></div>
+              <div class="lc-body">
+                <div class="lc-t">Audit log</div>
+                <div class="lc-s">47 accesses · last 30 days</div>
+              </div>
+              <div class="lc-right"><span class="chev">›</span></div>
+            </div>
+
+            <div class="section-h"><span>Account</span></div>
+            <div class="lc">
+              <div class="lc-ic" style="background:var(--n-50);color:var(--fg-3)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></div>
+              <div class="lc-body"><div class="lc-t">Settings & preferences</div><div class="lc-s">Language · notifications · theme</div></div>
+              <div class="lc-right"><span class="chev">›</span></div>
+            </div>
+            <div class="lc">
+              <div class="lc-ic" style="background:var(--n-50);color:var(--fg-3)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 1 1 5.8 1c0 2-3 2-3 4M12 17h.01"/></svg></div>
+              <div class="lc-body"><div class="lc-t">Help & support</div><div class="lc-s">FAQs · contact · telehealth guide</div></div>
+              <div class="lc-right"><span class="chev">›</span></div>
+            </div>
+            <div style="height:8px"></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <a class="tab" href="#home"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+          <a class="tab" href="#care"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 20s-7-4.5-9.3-9.2A5.1 5.1 0 0 1 7 4.1 5 5 0 0 1 12 7a5 5 0 0 1 5-2.9 5.1 5.1 0 0 1 4.3 6.7C19 15.5 12 20 12 20z"/></svg>Care<div class="tab-badge">2</div></a>
+          <a class="tab" href="#pharmacy"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M8.5 3.5a5 5 0 0 1 7 7l-5 5a5 5 0 0 1-7-7z"/><path d="m7 8 7 7"/></svg>Pharmacy</a>
+          <a class="tab" href="#labs"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M9 3v6L4 19a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3L15 9V3"/><path d="M9 3h6M7 14h10"/></svg>Labs</a>
+          <a class="tab" href="#me"><svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Me</a>
+        </div>
+        <div class="home-ind"></div>
+      </div><!-- /me -->
+
+    </div><!-- /screen -->
+  </div><!-- /device -->
+
+  <div class="hdr-sub" style="font-size:11.5px;opacity:.6">Pure HTML + CSS · no JavaScript · navigate with tab bar anchors</div>
+</div>
+
+<template id="__bundler_thumbnail" data-bg-color="#0b1110">
+  <svg viewBox="0 0 120 200" xmlns="http://www.w3.org/2000/svg">
+    <rect width="120" height="200" fill="#0b1110"/>
+    <rect x="20" y="10" width="80" height="140" rx="12" fill="#1a2e28"/>
+    <rect x="48" y="6" width="24" height="6" rx="3" fill="#0b1110"/>
+    <circle cx="60" cy="52" r="18" fill="none" stroke="#0b7a6b" stroke-width="2"/>
+    <path d="M50 52 L55 52 L57.5 46 L62.5 58 L65 52 L70 52" stroke="#0b7a6b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <rect x="28" y="80" width="64" height="8" rx="3" fill="#0b7a6b" opacity=".7"/>
+    <rect x="28" y="96" width="44" height="5" rx="2" fill="#223d35"/>
+    <rect x="28" y="108" width="64" height="22" rx="6" fill="#223d35"/>
+    <rect x="28" y="136" width="30" height="22" rx="6" fill="#223d35"/>
+    <rect x="62" y="136" width="30" height="22" rx="6" fill="#223d35"/>
+    <rect x="20" y="158" width="80" height="24" rx="8" fill="#1a2e28"/>
+    <rect x="26" y="165" width="12" height="10" rx="5" fill="#0b7a6b"/>
+    <rect x="42" y="165" width="12" height="10" rx="5" fill="#2a3d38"/>
+    <rect x="58" y="165" width="12" height="10" rx="5" fill="#2a3d38"/>
+    <rect x="74" y="165" width="12" height="10" rx="5" fill="#2a3d38"/>
+    <rect x="90" y="165" width="12" height="10" rx="5" fill="#2a3d38"/>
+  </svg>
+</template>
+</body>
+</html>

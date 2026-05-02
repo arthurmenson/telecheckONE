@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Telecheck — Patient Mock v2 · Print</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="Patient interactive mock v2.css"/>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<style>
+  /* ── Screen layout ── */
+  body { margin: 0; background: #f0f2f1; display: flex; flex-direction: column; align-items: center; min-height: 100vh; font-family: 'Space Grotesk', sans-serif; }
+
+  .print-wrap { display: flex; flex-direction: column; align-items: center; padding: 32px 24px; gap: 32px; }
+
+  .print-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: #8a9490; text-transform: uppercase; margin-bottom: -20px; }
+  .print-screen-name { font-size: 18px; font-weight: 700; color: #1e2421; margin-bottom: 4px; }
+  .print-subtitle { font-size: 12px; color: #6b7c77; margin-bottom: 28px; text-align: center; }
+
+  .screen-grid { display: grid; grid-template-columns: repeat(auto-fill, 375px); gap: 32px; justify-content: center; padding: 0 24px 48px; }
+
+  .print-card { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .print-card-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #6b7c77; text-transform: uppercase; }
+
+  /* Each phone frame sized for print */
+  .phone-wrap {
+    width: 375px;
+    height: 720px;
+    border-radius: 44px;
+    background: #111;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.28), 0 0 0 2px #333;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .phone-wrap .island {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 34px; background: #111; border-radius: 20px; z-index: 100;
+  }
+  .phone-wrap .screen {
+    position: absolute; inset: 0; background: var(--bg);
+    overflow: hidden; border-radius: 44px;
+  }
+
+  /* ── Print styles ── */
+  @media print {
+    @page { size: A4 portrait; margin: 1.2cm 1cm; }
+
+    body { background: #fff; }
+    .no-print { display: none !important; }
+
+    .screen-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      padding: 0;
+    }
+
+    .phone-wrap {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 375 / 720;
+      border-radius: 24px;
+      box-shadow: 0 0 0 1.5px #999;
+    }
+    .phone-wrap .island { display: none; }
+    .phone-wrap .screen { border-radius: 24px; }
+
+    .print-card { break-inside: avoid; }
+    .print-card-label { font-size: 9px; }
+
+    .print-subtitle { margin-bottom: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="print-wrap">
+  <div class="no-print" style="background:#1e2421;color:#9dd4c8;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:600;text-align:center;margin-bottom:8px;">
+    Navigate to any screen · then Cmd+P / Ctrl+P to print — or scroll to see all screens below
+  </div>
+  <div class="print-screen-name">Telecheck · Patient App v2</div>
+  <div class="print-subtitle">Interactive prototype — key screens overview</div>
+</div>
+
+<div class="screen-grid" id="grid"></div>
+
+<script type="text/babel" src="Patient interactive mock.jsx"></script>
+<script type="text/babel" src="Patient interactive mock - screens 1.jsx"></script>
+<script type="text/babel" src="Patient interactive mock - screens 2.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - care_detail.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - devices.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - home_care.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - pharmacy_programs.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - labs_me_detail.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - pharmacy_labs_me.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - consent_audit.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - flows.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+const SCREENS_TO_PRINT = [
+  { id: "home",       label: "Home" },
+  { id: "care",       label: "Care · Inbox",   sub: "Inbox" },
+  { id: "care-visits",label: "Care · Visits",   careSub: "Visits" },
+  { id: "care-track", label: "Care · Track",    careSub: "Track" },
+  { id: "pharmacy",   label: "Pharmacy · Rx",   phSub: "Rx" },
+  { id: "labs",       label: "Labs · Results" },
+  { id: "me",         label: "Me · Profile",    meSub: "Profile" },
+  { id: "me-r",       label: "Me · Records",    meSub: "Records", baseScreen: "me" },
+  { id: "ai-ws",      label: "AI Workspace" },
+  { id: "data-use",   label: "Data-use consent" },
+  { id: "audit",      label: "Access log" },
+  { id: "visit-prep", label: "Visit prep" },
+];
+
+function noop() {}
+
+function PrintFrame({ screenId, careSub, phSub, meSub, baseScreen, label }) {
+  const nv = (s) => {};
+  const toast = (t) => {};
+  const shared = {
+    nav: nv, toast,
+    delegate: "me",
+    openAccount: noop, openNotifs: noop, openEmergency: noop, openAI: noop,
+    openEpisodeConsent: noop, openEpisodeActive: noop, openDelegateSwitcher: noop,
+    episodeActive: false,
+  };
+
+  const actualScreen = baseScreen || screenId;
+
+  const renderScreen = () => {
+    const sub = careSub || "Inbox";
+    switch (actualScreen) {
+      case "home":       return <HomeV2 {...shared} openFAB={noop}/>;
+      case "care":       return <CareV2 {...shared} sub={careSub || "Inbox"} setSub={noop} trackSub="Today" setTrackSub={noop}/>;
+      case "pharmacy":   return <PharmacyV2 {...shared} sub={phSub || "Rx"} setSub={noop} enrolledPrograms={[]} protocolRefillsActive={false}/>;
+      case "labs":       return <LabsV2 {...shared} sub="Results" setSub={noop}/>;
+      case "me":         return <MeV2 {...shared} sub={meSub || "Profile"} setSub={noop}/>;
+      case "ai-ws":      return <AIWorkspace nav={nv} toast={toast} goBack={noop}/>;
+      case "visit-prep": return <VisitPrep nav={nv} toast={toast}/>;
+      case "data-use":   return <DataUseScreen nav={nv} toast={toast}/>;
+      case "audit":      return <AuditLogScreen nav={nv} toast={toast}/>;
+      default:           return <HomeV2 {...shared} openFAB={noop}/>;
+    }
+  };
+
+  return (
+    <div className="print-card">
+      <div className="print-card-label">{label}</div>
+      <div className="phone-wrap">
+        <div className="island"/>
+        <div className="screen">
+          {renderScreen()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrintGrid() {
+  const screens = [
+    { screenId: "home",      label: "Home" },
+    { screenId: "care",      label: "Care · Inbox",   careSub: "Inbox" },
+    { screenId: "care",      label: "Care · Visits",  careSub: "Visits" },
+    { screenId: "care",      label: "Care · Track",   careSub: "Track" },
+    { screenId: "pharmacy",  label: "Pharmacy · Rx",  phSub: "Rx" },
+    { screenId: "labs",      label: "Labs" },
+    { screenId: "me",        label: "Me · Profile",   meSub: "Profile" },
+    { screenId: "me",        label: "Me · Records",   meSub: "Records" },
+    { screenId: "ai-ws",     label: "AI Workspace" },
+    { screenId: "data-use",  label: "Data-use consent" },
+    { screenId: "audit",     label: "Access log" },
+    { screenId: "visit-prep",label: "Visit prep" },
+  ];
+
+  return (
+    <>
+      {screens.map((s, i) => <PrintFrame key={i} {...s}/>)}
+    </>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("grid"));
+root.render(<PrintGrid/>);
+
+// Auto-print after fonts + babel settle
+window.addEventListener("load", () => {
+  document.fonts.ready.then(() => {
+    setTimeout(() => window.print(), 1800);
+  });
+});
+</script>
+</body>
+</html>

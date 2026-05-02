@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Interaction signal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_card.css">
+<style>
+.sig { display: grid; grid-template-columns: 96px 1fr auto; gap: 16px; padding: 14px 16px; border: 1px solid var(--border-subtle); border-radius: 10px; align-items: start; }
+.sig + .sig { margin-top: 10px; }
+.sev { display:flex; flex-direction:column; align-items:flex-start; gap: 4px; }
+.sev-pill { font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
+.sev-sev { background: var(--danger-50); color: var(--danger-700); }
+.sev-mod { background: var(--warning-50); color: var(--warning-700); }
+.sev-mon { background: var(--info-50); color: var(--info-700); }
+.sev-kind { font-size: 10px; color: var(--fg-3); }
+.title { font-size: 14px; font-weight: 600; color: var(--fg-1); margin-bottom: 3px; }
+.desc { font-size: 13px; color: var(--fg-2); line-height: 1.45; }
+.mech { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); margin-top: 6px; }
+.action { font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px; border: 0; cursor: pointer; background: var(--surface-2); color: var(--fg-1); border: 1px solid var(--border-strong); white-space: nowrap; }
+</style></head>
+<body><div class="card">
+  <div class="sig">
+    <div class="sev"><span class="sev-pill sev-sev">Severe</span><span class="sev-kind">drug–lab</span></div>
+    <div><div class="title">Spironolactone with K⁺ 5.6 mmol/L</div><div class="desc">Risk of hyperkalemia. Hold and re-check potassium before refill.</div><div class="mech">source: UpToDate 2026-03 · eGFR 52</div></div>
+    <button class="action">Block · notify clinician</button>
+  </div>
+  <div class="sig">
+    <div class="sev"><span class="sev-pill sev-mod">Moderate</span><span class="sev-kind">drug–drug</span></div>
+    <div><div class="title">Metformin + contrast media (planned CT)</div><div class="desc">Hold metformin 48 h pre- and post-contrast if eGFR &lt; 60.</div><div class="mech">source: ACR 10.3 · mechanism: renal clearance</div></div>
+    <button class="action">Acknowledge</button>
+  </div>
+  <div class="sig">
+    <div class="sev"><span class="sev-pill sev-mon">Monitor</span><span class="sev-kind">drug–condition</span></div>
+    <div><div class="title">NSAID use with controlled hypertension</div><div class="desc">May elevate BP; monitor at next RPM check-in.</div><div class="mech">source: JNC 8 · ongoing monitor</div></div>
+    <button class="action">Acknowledge</button>
+  </div>
+</div></body></html>

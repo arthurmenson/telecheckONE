@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Telecheck — Patient v4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,300..500;1,9..144,300..500&display=swap"/>
+<link rel="stylesheet" href="Patient interactive mock v4.css?v=1"/>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="Patient interactive mock v4.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v4 - screens.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v4 - pharmacy.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "show_tweaks": false
+}/*EDITMODE-END*/;
+
+function AppV3() {
+  const [screen, setScreen] = useState(() => localStorage.getItem("pt-v4-screen") || "care");
+  const [toasts, setToasts] = useState([]);
+  const [tweaks, setTweaks] = useState(TWEAKS);
+  const [editMode, setEditMode] = useState(TWEAKS.show_tweaks);
+
+  useEffect(() => { localStorage.setItem("pt-v4-screen", screen); }, [screen]);
+
+  useEffect(() => {
+    const onMsg = (e) => {
+      if (e.data?.type === "__activate_edit_mode") setEditMode(true);
+      if (e.data?.type === "__deactivate_edit_mode") setEditMode(false);
+    };
+    window.addEventListener("message", onMsg);
+    window.parent.postMessage({ type: "__edit_mode_available" }, "*");
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
+  const setT = (k, v) => {
+    const next = { ...tweaks, [k]: v };
+    setTweaks(next);
+    window.parent.postMessage({ type: "__edit_mode_set_keys", edits: { [k]: v } }, "*");
+  };
+
+  const nav = (s) => setScreen(s);
+  const toast = (t) => {
+    const id = Date.now();
+    setToasts(x => [...x, { id, t }]);
+    setTimeout(() => setToasts(x => x.filter(y => y.id !== id)), 2200);
+  };
+
+  const screens = {
+    home: <HomeV3 nav={nav} toast={toast}/>,
+    care: <CareV3 nav={nav} toast={toast}/>,
+    labs: <LabsV3 nav={nav} toast={toast}/>,
+    pharmacy: <PharmacyV3 nav={nav} toast={toast}/>,
+    ai:   <AIV3   nav={nav} toast={toast}/>,
+    you:  <YouV3  nav={nav} toast={toast}/>,
+    visit:<VisitV3 nav={nav} toast={toast}/>,
+    // inner pages
+    "care-messages": <MessagesV3 nav={nav} toast={toast}/>,
+    "care-thread":   <ThreadV3 nav={nav} toast={toast}/>,
+    "care-team":     <TeamMemberV3 nav={nav} toast={toast}/>,
+    "labs-detail":   <LabDetailV3 nav={nav} toast={toast}/>,
+    "pharmacy-rx":   <RxDetailV3 nav={nav} toast={toast}/>,
+    "pharmacy-cart": <CartV3 nav={nav} toast={toast}/>,
+    "pharmacy-product": <ProductV3 nav={nav} toast={toast}/>,
+    "pharmacy-order":   <OrderDetailV3 nav={nav} toast={toast}/>,
+    "you-profile":   <ProfileV3 nav={nav} toast={toast}/>,
+    "you-meds":      <MedsListV3 nav={nav} toast={toast}/>,
+    "you-delegates": <DelegatesV3 nav={nav} toast={toast}/>,
+    "you-notifs":    <NotifsV3 nav={nav} toast={toast}/>,
+    "you-privacy":   <PrivacyV3 nav={nav} toast={toast}/>,
+    "you-settings":  <SettingsV3 nav={nav} toast={toast}/>,
+  };
+
+  return (
+    <>
+      <div className="page-hdr">
+        <h1>Telecheck · Patient v4</h1>
+        <p>Care tab re-organized around a <b>Current plan</b> + <b>Timeline / Care team</b> pattern. Other tabs unchanged from v3.</p>
+      </div>
+
+      <div className="frame-row">
+        <div>
+          <div className="phone" data-theme={tweaks.theme}>
+            <div className="island"/>
+            {screens[screen] || screens.home}
+            {toasts.map(t => (
+              <div key={t.id} style={{ position: "absolute", bottom: 100, left: "50%", transform: "translateX(-50%)", background: "#0a0a0a", color: "#fff", padding: "10px 16px", borderRadius: 9999, fontSize: 12.5, whiteSpace: "nowrap", zIndex: 80 }}>{t.t}</div>
+            ))}
+          </div>
+          <div className="frame-label">{tweaks.theme === "dark" ? "Dark" : "Light"} · {screen}</div>
+        </div>
+      </div>
+
+      <div className={`tweaks ${editMode ? "on" : ""}`}>
+        <h4>Tweaks</h4>
+        <div className="tw-row"><span>Theme</span>
+          <div className="tw-opts">
+            {["light","dark"].map(t => <button key={t} className={tweaks.theme === t ? "on" : ""} onClick={() => setT("theme", t)}>{t}</button>)}
+          </div>
+        </div>
+        <div className="tw-row"><span>Jump to</span>
+          <div className="tw-opts" style={{ flexWrap: "wrap", maxWidth: 200, justifyContent: "flex-end" }}>
+            {["home","care","labs","pharmacy","ai","you","visit"].map(s => <button key={s} className={screen === s ? "on" : ""} onClick={() => nav(s)}>{s}</button>)}
+          </div>
+        </div>
+        <div className="tw-row"><span>Inner</span>
+          <div className="tw-opts" style={{ flexWrap: "wrap", maxWidth: 200, justifyContent: "flex-end" }}>
+            {[
+              ["care-thread","thread"],
+              ["care-messages","msgs"],
+              ["labs-detail","lab"],
+              ["pharmacy-rx","rx"],
+              ["pharmacy-cart","cart"],
+              ["pharmacy-product","prod"],
+              ["pharmacy-order","order"],
+              ["you-profile","profile"],
+              ["you-meds","meds"],
+              ["you-delegates","deleg"],
+              ["you-notifs","notifs"],
+              ["you-privacy","privacy"],
+              ["you-settings","settings"],
+            ].map(([s,l]) => <button key={s} className={screen === s ? "on" : ""} onClick={() => nav(s)}>{l}</button>)}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<AppV3/>);
+</script>
+</body>
+</html>

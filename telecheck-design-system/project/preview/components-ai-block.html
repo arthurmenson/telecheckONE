@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"><title>AI content block</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_card.css">
+<style>
+.ai-block { background: var(--iris-50); border-radius: 12px; padding: 16px 18px 16px 18px; border-left: 3px solid var(--iris-500); position: relative; }
+.ai-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.spark { width: 16px; height: 16px; color: var(--iris-600); }
+.ai-label { font-size: 11px; font-weight: 700; color: var(--iris-700); letter-spacing: 0.08em; text-transform: uppercase; }
+.ai-kind { font-size: 11px; color: var(--iris-700); }
+.ai-title { font-size: 16px; font-weight: 600; color: var(--fg-1); margin-bottom: 4px; }
+.ai-body { font-size: 14px; color: var(--fg-2); line-height: 1.5; }
+.ai-source { margin-top: 10px; font-size: 12px; color: var(--iris-700); font-style: italic; }
+.ai-actions { display: flex; gap: 8px; margin-top: 12px; }
+.btn { font-family: var(--font-sans); font-weight: 600; font-size: 13px; padding: 7px 14px; border-radius: 6px; border: 0; cursor: pointer; }
+.btn-accept { background: var(--iris-500); color: #fff; }
+.btn-reject { background: transparent; color: var(--iris-700); border: 1px solid var(--iris-200); }
+.conf { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--iris-700); margin-left: auto; }
+.conf-track { width: 42px; height: 4px; background: var(--iris-100); border-radius: 2px; overflow: hidden; }
+.conf-fill { height: 100%; width: 72%; background: var(--iris-500); }
+</style></head>
+<body><div class="card">
+  <div class="ai-block">
+    <div class="ai-head">
+      <svg class="spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 L15 10 L22 12 L15 14 L13 21 L11 14 L4 12 L11 10 Z"/><circle cx="19.5" cy="5.5" r="1.1" fill="currentColor" stroke="none"/></svg>
+      <span class="ai-label">Telecheck AI</span>
+      <span class="ai-kind">· lab interpretation</span>
+      <span class="conf">Confidence<span class="conf-track"><span class="conf-fill"></span></span> Moderate</span>
+    </div>
+    <div class="ai-title">HbA1c 7.8% — slightly above target</div>
+    <div class="ai-body">Your HbA1c is 7.8%, above your target of 7.0%. Your clinician will review this before it reaches you.</div>
+    <div class="ai-source">Based on: labs from 14 Apr, your diabetes program, and last three readings.</div>
+    <div class="ai-actions"><button class="btn btn-accept">Accept &amp; send to patient</button><button class="btn btn-reject">Edit · override</button></div>
+  </div>
+</div></body></html>

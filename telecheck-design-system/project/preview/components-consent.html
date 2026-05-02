@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Consent chip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_card.css">
+<style>
+.list { display: flex; flex-direction: column; gap: 8px; }
+.item { display: grid; grid-template-columns: 140px 1fr auto; gap: 14px; padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: 8px; align-items: center; }
+.kind { font-size: 12px; font-weight: 700; color: var(--fg-1); display: flex; flex-direction: column; gap: 2px; }
+.sub { font-size: 11px; color: var(--fg-3); font-weight: 500; }
+.scope { font-size: 13px; color: var(--fg-2); }
+.mono { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); margin-top: 3px; }
+.state { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 9999px; }
+.state-active { background: var(--success-50); color: var(--success-700); }
+.state-revoked { background: var(--n-100); color: var(--fg-3); }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+</style></head>
+<body><div class="card">
+<div class="list">
+  <div class="item"><div class="kind">Platform<span class="sub">baseline</span></div><div class="scope">Terms v3.2 · identity verification<div class="mono">granted 02 Jan 2026 · in-app affirmation</div></div><span class="state state-active"><span class="dot"></span>Active</span></div>
+  <div class="item"><div class="kind">Care<span class="sub">clinical</span></div><div class="scope">Diabetes program · prescribing, monitoring<div class="mono">granted 18 Feb 2026 · signed form</div></div><span class="state state-active"><span class="dot"></span>Active</span></div>
+  <div class="item"><div class="kind">Delegation<span class="sub">adult-child</span></div><div class="scope">Kojo can view meds, request refills<div class="mono">granted 04 Mar · sensitive categories hidden</div></div><span class="state state-active"><span class="dot"></span>Active</span></div>
+  <div class="item"><div class="kind">Data-use<span class="sub">analytics</span></div><div class="scope">Anonymized analytics contribution<div class="mono">revoked 10 Apr 2026 · forward-looking</div></div><span class="state state-revoked"><span class="dot"></span>Revoked</span></div>
+</div>
+</div></body></html>

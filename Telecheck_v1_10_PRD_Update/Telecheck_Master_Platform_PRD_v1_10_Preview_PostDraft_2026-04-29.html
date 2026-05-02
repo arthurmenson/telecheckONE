@@ -1,0 +1,2018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telecheck — Master Platform PRD v1.10 · Preview (PostDraft additions 2026-04-29)</title>
+<!-- Static document: no external font CDN; system serif/sans fallbacks render in offline / sandboxed contexts.
+     Original draft used Fraunces (display), Source Serif 4 (text), Inter Tight (labels), JetBrains Mono (code).
+     Fonts will load if the user's OS has them installed; otherwise CSS font-family fallbacks apply. -->
+<style>
+  /* ============================================================
+     Telecheck Master PRD v1.10 (Preview — PostDraft additions 2026-04-29)
+     Tier-1 medical-publication aesthetic.
+     Cream paper. Classical serif. Deep oxblood accent. Hairlines.
+     Reference: NEJM, The Lancet, McKinsey Health Institute, Stripe Press.
+     ============================================================ */
+
+  :root {
+    /* Paper */
+    --paper:        #f6f3eb;
+    --paper-card:   #fcfaf3;
+    --paper-edge:   #ebe6d8;
+
+    /* Ink (warm grey scale, not stark black) */
+    --ink:          #1a1814;
+    --ink-strong:   #0f0e0b;
+    --ink-mid:      #524d43;
+    --ink-soft:     #7a7466;
+    --ink-faint:    #a8a193;
+
+    /* Hairline rules — warm taupe, never grey */
+    --rule:         #cdc7b6;
+    --rule-soft:    #e0dbcc;
+
+    /* Accent — deep oxblood (Lancet lineage). Single, surgical. */
+    --accent:       #7a1d2a;
+    --accent-deep:  #5e1620;
+    --accent-soft:  #b14b58;
+
+    /* Severity tones — deep, journal-appropriate, NOT bright */
+    --sev-low:      #4a5d3a;     /* mossy green */
+    --sev-med:      #94601f;     /* deep amber */
+    --sev-high:     #7a1d2a;     /* oxblood */
+    --sev-cat:      #5e1620;     /* deepest oxblood */
+
+    /* Type */
+    --display:  'Fraunces', 'Times New Roman', serif;
+    --serif:    'Source Serif 4', 'Source Serif Pro', Georgia, serif;
+    --sans:     'Inter Tight', system-ui, sans-serif;
+    --mono:     'JetBrains Mono', 'SF Mono', Consolas, monospace;
+
+    --measure:    66ch;
+    --sidebar-w:  260px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "kern", "liga", "onum";
+    overflow-x: hidden;
+  }
+
+  /* Subtle paper grain — barely there, just kills the flat-screen feel */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2' stitchTiles='stitch' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 0.4 0 0 0 0 0.36 0 0 0 0 0.28 0 0 0 0.07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.55;
+    z-index: 1;
+    mix-blend-mode: multiply;
+  }
+
+  /* ============================================================
+     Layout
+     ============================================================ */
+
+  .page {
+    position: relative;
+    z-index: 2;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 56px;
+  }
+
+  /* ============================================================
+     Cover — editorial masthead style
+     ============================================================ */
+
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 40px 0 56px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 18px;
+    border-bottom: 2px solid var(--ink);
+    font-family: var(--sans);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .masthead .right {
+    color: var(--accent);
+    font-family: var(--mono);
+    letter-spacing: 0.16em;
+    font-weight: 500;
+  }
+
+  .masthead-rule-thin {
+    height: 1px;
+    background: var(--ink);
+    margin-top: 4px;
+  }
+
+  .cover-body {
+    margin: auto 0;
+    max-width: 980px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .overline {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--accent);
+  }
+
+  .title {
+    font-family: var(--display);
+    font-size: clamp(56px, 9vw, 132px);
+    font-weight: 400;
+    line-height: 0.96;
+    letter-spacing: -0.025em;
+    color: var(--ink-strong);
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+  }
+
+  .title em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent);
+    font-variation-settings: "opsz" 144, "SOFT" 80;
+  }
+
+  .deck {
+    font-family: var(--display);
+    font-size: clamp(20px, 2.2vw, 26px);
+    font-weight: 400;
+    font-style: italic;
+    line-height: 1.4;
+    color: var(--ink-mid);
+    max-width: 720px;
+    font-variation-settings: "opsz" 36, "SOFT" 60;
+    margin-top: 8px;
+  }
+
+  .cover-meta {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 28px;
+    font-family: var(--sans);
+  }
+
+  .cover-meta dt {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+
+  .cover-meta dd {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .cover-meta dd.accent {
+    color: var(--accent);
+    font-family: var(--mono);
+  }
+
+  /* ============================================================
+     Two-column layout: TOC sidebar + main column
+     ============================================================ */
+
+  .body-grid {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    gap: 56px;
+    padding-top: 56px;
+  }
+
+  /* ============================================================
+     TOC — journal contents page
+     ============================================================ */
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 32px 0 64px 0;
+    border-right: 1px solid var(--rule);
+    padding-right: 24px;
+    margin-right: -24px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
+  }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--rule); }
+
+  .toc-label {
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--ink-strong);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--ink);
+    margin-bottom: 4px;
+  }
+
+  .toc {
+    list-style: none;
+  }
+
+  .toc li {
+    border-bottom: 1px solid var(--rule-soft);
+  }
+
+  .toc a {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 10px;
+    padding: 9px 0;
+    font-family: var(--serif);
+    font-size: 14px;
+    line-height: 1.35;
+    color: var(--ink-mid);
+    text-decoration: none;
+    transition: color 0.15s ease, padding-left 0.15s ease;
+    align-items: baseline;
+  }
+
+  .toc a:hover { color: var(--accent); }
+
+  .toc a.active {
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .toc a.active .toc-num {
+    color: var(--accent);
+  }
+
+  .toc-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+  }
+
+  /* ============================================================
+     Main column
+     ============================================================ */
+
+  .main {
+    min-width: 0;
+    padding: 0 0 96px 0;
+  }
+
+  .section {
+    padding: 56px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .section:first-of-type { padding-top: 24px; }
+  .section:last-of-type { border-bottom: none; }
+
+  /* Section number marker — small caps, deep oxblood, dignified */
+  .section-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+  }
+
+  .section-num {
+    color: var(--accent);
+    font-family: var(--mono);
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    font-size: 12px;
+  }
+
+  .section-meta .rule {
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  .section-meta .of {
+    color: var(--ink-soft);
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+  }
+
+  h2 {
+    font-family: var(--display);
+    font-size: clamp(34px, 4vw, 52px);
+    font-weight: 400;
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+    color: var(--ink-strong);
+    margin-bottom: 28px;
+    max-width: var(--measure);
+    font-variation-settings: "opsz" 60, "SOFT" 30;
+  }
+
+  h3 {
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: var(--ink-strong);
+    margin: 36px 0 14px;
+    max-width: var(--measure);
+    font-variation-settings: "opsz" 36, "SOFT" 30;
+  }
+
+  h4 {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink);
+    margin: 28px 0 10px;
+  }
+
+  p {
+    max-width: var(--measure);
+    margin-bottom: 16px;
+    color: var(--ink);
+    font-feature-settings: "kern", "liga", "onum";
+  }
+
+  /* Lead paragraph in §1 gets a true editorial drop cap */
+  .lead {
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--ink-strong);
+    margin-bottom: 28px;
+    max-width: var(--measure);
+    font-variation-settings: "opsz" 48, "SOFT" 40;
+  }
+
+  .lead::first-letter {
+    font-family: var(--display);
+    font-weight: 500;
+    font-style: normal;
+    float: left;
+    font-size: 5.6em;
+    line-height: 0.85;
+    margin: 0.04em 0.08em 0 0;
+    color: var(--accent);
+    font-variation-settings: "opsz" 144, "SOFT" 0;
+  }
+
+  /* Pull-quote — Lancet/NEJM style */
+  .pullquote {
+    border-left: 3px solid var(--accent);
+    padding: 6px 0 6px 24px;
+    margin: 32px 0;
+    max-width: var(--measure);
+    font-family: var(--display);
+    font-style: italic;
+    font-size: 22px;
+    line-height: 1.45;
+    color: var(--ink-strong);
+    font-variation-settings: "opsz" 60, "SOFT" 60;
+  }
+
+  ul, ol {
+    margin: 0 0 22px 0;
+    padding-left: 0;
+    list-style: none;
+    max-width: var(--measure);
+  }
+
+  li {
+    position: relative;
+    padding-left: 24px;
+    margin-bottom: 8px;
+    color: var(--ink);
+  }
+
+  ul li::before {
+    content: '';
+    position: absolute;
+    left: 4px; top: 12px;
+    width: 6px; height: 1px;
+    background: var(--ink-mid);
+  }
+
+  ol { counter-reset: olcount; }
+  ol li {
+    counter-increment: olcount;
+    padding-left: 32px;
+  }
+  ol li::before {
+    content: counter(olcount, decimal-leading-zero);
+    position: absolute;
+    left: 0; top: 2px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+  }
+
+  strong { font-weight: 600; color: var(--ink-strong); }
+  em { font-style: italic; }
+
+  code, .mono {
+    font-family: var(--mono);
+    font-size: 0.84em;
+    background: transparent;
+    color: var(--accent-deep);
+    padding: 0 2px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    white-space: nowrap;
+  }
+
+  /* ============================================================
+     Tables — print-journal style with hairline rules
+     ============================================================ */
+
+  .table-wrap {
+    margin: 24px 0 28px;
+    overflow-x: auto;
+    max-width: 100%;
+    border-top: 2px solid var(--ink);
+    border-bottom: 2px solid var(--ink);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    font-family: var(--serif);
+  }
+
+  table thead tr {
+    border-bottom: 1px solid var(--ink);
+  }
+
+  table th {
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink);
+    text-align: left;
+    padding: 11px 16px 9px;
+    white-space: nowrap;
+  }
+
+  table td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--rule-soft);
+    color: var(--ink);
+    line-height: 1.5;
+    vertical-align: top;
+  }
+
+  table tr:last-child td { border-bottom: none; }
+
+  table td .mono-inline {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent-deep);
+    font-weight: 500;
+  }
+
+  /* Compact tables */
+  .table-wrap.compact table { font-size: 13px; }
+  .table-wrap.compact table th, .table-wrap.compact table td { padding: 9px 14px; }
+
+  /* ============================================================
+     Editorial cards
+     ============================================================ */
+
+  .card {
+    background: var(--paper-card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 22px 26px;
+    margin: 28px 0;
+    max-width: var(--measure);
+  }
+
+  .card-label {
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  /* Pillar grid — dignified card grid */
+  .pillar-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0;
+    margin: 28px 0;
+    border-top: 1px solid var(--rule);
+    border-left: 1px solid var(--rule);
+  }
+
+  .pillar {
+    padding: 22px 24px 24px;
+    background: var(--paper-card);
+    border-right: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .pillar-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.16em;
+  }
+
+  .pillar-title {
+    font-family: var(--display);
+    font-size: 21px;
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--ink-strong);
+    font-variation-settings: "opsz" 36, "SOFT" 30;
+    letter-spacing: -0.01em;
+  }
+
+  .pillar-desc {
+    font-size: 14px;
+    color: var(--ink-mid);
+    line-height: 1.55;
+    font-family: var(--serif);
+  }
+
+  .pillar-config {
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--sans);
+    font-size: 11px;
+    color: var(--ink-soft);
+    line-height: 1.55;
+    letter-spacing: 0.01em;
+  }
+
+  /* Job-to-be-done belief stack — numbered editorial entries */
+  .belief-stack {
+    margin: 28px 0;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+  }
+
+  .belief {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 24px;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .belief:last-child { border-bottom: none; }
+
+  .belief-num {
+    font-family: var(--display);
+    font-size: 38px;
+    font-weight: 400;
+    line-height: 1;
+    color: var(--accent);
+    font-style: italic;
+    font-variation-settings: "opsz" 60, "SOFT" 80;
+    letter-spacing: -0.02em;
+  }
+
+  .belief-body h4 {
+    font-family: var(--display);
+    font-size: 19px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: -0.005em;
+    color: var(--ink-strong);
+    margin: 0 0 6px;
+    font-variation-settings: "opsz" 36, "SOFT" 30;
+  }
+
+  .belief-body p {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink-mid);
+    max-width: 60ch;
+    margin-bottom: 0;
+  }
+
+  /* Country profile dual layout */
+  .country-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 28px;
+    margin: 28px 0;
+  }
+
+  .country-card {
+    background: var(--paper-card);
+    border: 1px solid var(--rule);
+    padding: 24px 26px;
+  }
+
+  .country-flag {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--ink);
+    margin-bottom: 16px;
+  }
+
+  .country-code {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--paper);
+    background: var(--accent);
+    letter-spacing: 0.16em;
+    padding: 3px 7px;
+  }
+
+  .country-name {
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--ink-strong);
+    font-variation-settings: "opsz" 36, "SOFT" 30;
+    letter-spacing: -0.01em;
+  }
+
+  .country-tenant {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-left: auto;
+    font-family: var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-weight: 600;
+  }
+
+  .country-card dl {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 8px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .country-card dt {
+    font-family: var(--sans);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-soft);
+    padding-top: 3px;
+    font-weight: 600;
+  }
+
+  .country-card dd {
+    color: var(--ink);
+    font-family: var(--serif);
+  }
+
+  /* Severity tags — small caps, deep tones, no fills */
+  .tag {
+    display: inline-block;
+    font-family: var(--sans);
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    padding: 2px 7px;
+    border: 1px solid currentColor;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+
+  .tag.low  { color: var(--sev-low); }
+  .tag.med  { color: var(--sev-med); }
+  .tag.high { color: var(--sev-high); }
+  .tag.cat  { color: var(--paper); background: var(--sev-cat); border-color: var(--sev-cat); }
+
+  /* Footer */
+  footer {
+    padding: 56px 0 48px;
+    border-top: 2px solid var(--ink);
+    margin-top: 48px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 32px;
+    font-family: var(--sans);
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+
+  footer .col-label {
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+
+  footer .colophon {
+    font-family: var(--display);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--ink-mid);
+    line-height: 1.5;
+    font-variation-settings: "opsz" 36, "SOFT" 60;
+  }
+
+  footer .accent { color: var(--accent); }
+
+  /* Animations: only initial fade, no flourish */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .cover-body > * { animation: fadeUp 0.6s ease-out backwards; }
+  .cover-body > :nth-child(1) { animation-delay: 0s; }
+  .cover-body > :nth-child(2) { animation-delay: 0.08s; }
+  .cover-body > :nth-child(3) { animation-delay: 0.16s; }
+
+  /* ============================================================
+     Responsive
+     ============================================================ */
+
+  @media (max-width: 1100px) {
+    :root { --sidebar-w: 220px; }
+    .body-grid { gap: 40px; }
+    .page { padding: 0 40px; }
+  }
+
+  @media (max-width: 900px) {
+    .page { padding: 0 24px; }
+    .body-grid { grid-template-columns: 1fr; gap: 0; padding-top: 32px; }
+    .sidebar {
+      position: relative; top: 0; height: auto;
+      padding: 24px 0; margin-right: 0; padding-right: 0;
+      border-right: none; border-bottom: 1px solid var(--rule);
+    }
+    .main { padding: 0 0 64px; }
+    footer { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 600px) {
+    .page { padding: 0 20px; }
+    .title { font-size: 48px; }
+    h2 { font-size: 30px; }
+    table { font-size: 12px; }
+    table th, table td { padding: 8px 10px; }
+    .lead::first-letter { font-size: 4.4em; }
+  }
+
+  /* Print */
+  @media print {
+    body { background: white; }
+    body::before { display: none; }
+    .sidebar { display: none; }
+    .body-grid { grid-template-columns: 1fr; }
+    .section { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ============================================================
+       COVER — editorial masthead
+       ============================================================ -->
+  <header class="cover">
+    <div class="masthead">
+      <span>Telecheck Platform · Product Requirements Document</span>
+      <span class="right">Vol. 1 · No. 10 · <em>Preview · PostDraft additions 2026-04-29</em></span>
+    </div>
+    <div class="masthead-rule-thin"></div>
+
+    <div class="cover-body">
+      <span class="overline">Master Platform PRD</span>
+      <h1 class="title">Telecheck<br><em>multi-tenant DTC<br>telehealth.</em></h1>
+      <p class="deck">A platform that powers consumer-facing healthcare brands across countries — telemedicine, AI clinical support, pharmacy, labs, RPM, and the operating tools to run a DTC telehealth brand. Two tenants at launch. One immutable platform floor.</p>
+    </div>
+
+    <dl class="cover-meta">
+      <div><dt>Version</dt><dd class="accent">v1.10 · Preview</dd></div>
+      <div><dt>Status</dt><dd>Drafted target — pre-Phase-2; PostDraft additions in §27</dd></div>
+      <div><dt>Owner</dt><dd>Evans (Product Lead, v1.10 workstream lead)</dd></div>
+      <div><dt>Supersedes</dt><dd>v1.6 — v1.9</dd></div>
+      <div><dt>Format</dt><dd>Markdown</dd></div>
+      <div><dt>Companion</dt><dd>Artifact Registry v2.10 (target); Planning Freeze v1.3 (Phase-0-ready)</dd></div>
+    </dl>
+  </header>
+
+  <!-- ============================================================
+       BODY: TOC + main column
+       ============================================================ -->
+  <div class="body-grid">
+
+    <aside class="sidebar">
+      <div class="toc-label">Contents</div>
+      <ul class="toc">
+        <li><a href="#s1"><span class="toc-num">01</span><span>What Telecheck is</span></a></li>
+        <li><a href="#s2"><span class="toc-num">02</span><span>Tenants and tenant model</span></a></li>
+        <li><a href="#s3"><span class="toc-num">03</span><span>Capabilities and pillars</span></a></li>
+        <li><a href="#s4"><span class="toc-num">04</span><span>Country profiles</span></a></li>
+        <li><a href="#s5"><span class="toc-num">05</span><span>Scope at launch</span></a></li>
+        <li><a href="#s6"><span class="toc-num">06</span><span>Timeline</span></a></li>
+        <li><a href="#s7"><span class="toc-num">07</span><span>Operational principles</span></a></li>
+        <li><a href="#s8"><span class="toc-num">08</span><span>Jobs to be done</span></a></li>
+        <li><a href="#s9"><span class="toc-num">09</span><span>Tier-1 capabilities</span></a></li>
+        <li><a href="#s10"><span class="toc-num">10</span><span>Operating model</span></a></li>
+        <li><a href="#s11"><span class="toc-num">11</span><span>Architecture summary</span></a></li>
+        <li><a href="#s12"><span class="toc-num">12</span><span>Launch readiness</span></a></li>
+        <li><a href="#s13"><span class="toc-num">13</span><span>Special handling</span></a></li>
+        <li><a href="#s14"><span class="toc-num">14</span><span>Hard rules</span></a></li>
+        <li><a href="#s15"><span class="toc-num">15</span><span>Progressive consent</span></a></li>
+        <li><a href="#s16"><span class="toc-num">16</span><span>Notification posture</span></a></li>
+        <li><a href="#s17"><span class="toc-num">17</span><span>Honest status</span></a></li>
+        <li><a href="#s18"><span class="toc-num">18</span><span>Business model</span></a></li>
+        <li><a href="#s19"><span class="toc-num">19</span><span>Roadmap beyond launch</span></a></li>
+        <li><a href="#s20"><span class="toc-num">20</span><span>Success metrics</span></a></li>
+        <li><a href="#s21"><span class="toc-num">21</span><span>Non-goals</span></a></li>
+        <li><a href="#s22"><span class="toc-num">22</span><span>Dependencies &amp; constraints</span></a></li>
+        <li><a href="#s23"><span class="toc-num">23</span><span>Risks</span></a></li>
+        <li><a href="#s24"><span class="toc-num">24</span><span>Pre-launch decisions</span></a></li>
+        <li><a href="#s25"><span class="toc-num">25</span><span>Open questions</span></a></li>
+        <li><a href="#s26"><span class="toc-num">26</span><span>Feature PRD index</span></a></li>
+        <li><a href="#s27"><span class="toc-num">27</span><span><em>PostDraft additions (preview)</em></span></a></li>
+      </ul>
+    </aside>
+
+    <main class="main">
+
+      <!-- ====== §1 ====== -->
+      <section class="section" id="s1">
+        <div class="section-meta"><span class="section-num">§ 01</span><span class="rule"></span><span class="of">01 / 26</span></div>
+        <h2>What Telecheck is</h2>
+        <p class="lead">Telecheck is a multi-tenant DTC telehealth platform that powers consumer-facing healthcare brands. The platform provides telemedicine, AI clinical support, pharmacy fulfillment integration, lab interpretation, remote patient monitoring, medication interaction intelligence, patient community, and the operational and admin tooling to run a DTC telehealth brand.</p>
+
+        <p>Two consumer brands launch on the platform:</p>
+
+        <ul>
+          <li><strong>Telecheck-Ghana</strong> (operating tenant; Telecheck-Ghana Ltd. trading patient-facing as <strong>Heros Health Ghana</strong> at <code>ghana.heroshealth.com</code>) — the emerging-markets pilot. DTC telehealth anchored on chronic-disease care (hypertension, diabetes, cardiovascular, mental health). Validates the platform's emerging-markets architecture before expansion to additional African countries, where Telecheck will operate as <code>Telecheck-Nigeria</code>, <code>Telecheck-Kenya</code>, etc. — each a separately incorporated subsidiary, all surfacing the unified Heros Health consumer brand at country subdomains.</li>
+          <li><strong>Telecheck-US</strong> (operating tenant; Telecheck Health LLC trading patient-facing as <strong>Heros Health</strong> at <code>heroshealth.com</code>) — US-market DTC telehealth, focused on weight loss (GLP-1), ED, hair loss, skincare, and adjacent categories. Heros Health is the global consumer brand for Telecheck-operated DTC, country-instanced via subdomains. Launches greenfield within Telecheck.</li>
+        </ul>
+
+        <p>The platform is positioned to support additional brand tenants as the model proves out — Rimo / Healthie-class multi-tenant DTC telehealth infrastructure with Hims/Ro-class capability depth.</p>
+
+        <h3>One-line positioning</h3>
+        <div class="pullquote">Assess → Treat → Monitor → Guide. One platform. Multiple brands. Multiple countries. Hims/Ro-class capability with Rimo-class operating model.</div>
+
+        <h3>Strategic differentiation</h3>
+        <ul>
+          <li><strong>Protocolized autonomy</strong> (<code>ADR-005</code>). AI and protocols act only within named, versioned, bounded scopes with named human accountability. No "AI decides" pathways.</li>
+          <li><strong>Immutable platform floor.</strong> Crisis detection always-on, audit immutable, full attribution on every clinical AI action. Cannot be configured below the floor (per Contracts Pack <code>INVARIANTS</code>).</li>
+          <li><strong>Two-mode AI architecture</strong> (<code>ADR-002</code>). Mode 1 conversational and Mode 2 protocol execution have different safety profiles, governance, and audit.</li>
+          <li><strong>Country-driven multi-tenancy</strong> (<code>ADR-023</code>, <code>ADR-024</code>). One platform, two countries at launch, more later. Country drives regulatory module, payment processor, currency, formats, and integration adapters.</li>
+          <li><strong>Native-first stack</strong> (<code>ADR-022</code>). Self-hosted open-source for video, STT, analytics, BI, observability, search, chat. Managed providers only where compliance or quality dictate.</li>
+          <li><strong>Hims/Ro-class capability for US tenants</strong> at day 1: subscription mechanics, multi-product cart, conversion-optimized intake flows with educational interstitials, affiliate program, gold-standard admin backend.</li>
+          <li><strong>Herb–drug interaction engine.</strong> No major competitor has phytochemical-aware interaction checking. An emerging-markets differentiator (piloting in Ghana, where herbal co-medication is widespread and clinically significant).</li>
+          <li><strong>Two business lines, one platform.</strong> Telecheck operates two business lines on the platform. Line 1 — Telecheck operates DTC directly under the global <strong>Heros Health</strong> consumer brand, country-instanced via subdomains (heroshealth.com in the US, ghana.heroshealth.com, etc.). Each country has a separately incorporated Telecheck subsidiary (Telecheck Health LLC for US, Telecheck-Ghana Ltd. for GH, etc.) that operates its country instance as a tenant on the platform. Line 2 — Telecheck licenses the platform to genuinely-external third-party DTC operators in their own markets, who bring their own consumer brands and apps. WHO/UN and other multilateral partnerships are anchored at the Telecheck parent / platform level, not at the Heros consumer brand level.</li>
+        </ul>
+      </section>
+
+      <!-- ====== §2 ====== -->
+      <section class="section" id="s2">
+        <div class="section-meta"><span class="section-num">§ 02</span><span class="rule"></span><span class="of">02 / 26</span></div>
+        <h2>Tenants and tenant model</h2>
+        <p>Per <code>ADR-023</code>, Telecheck operates as a single deployment with logical tenant isolation. Each tenant is a brand operating in one country.</p>
+
+        <h3>Tenant attributes</h3>
+        <p>Every tenant has:</p>
+        <div class="table-wrap compact">
+          <table>
+            <thead><tr><th>Attribute</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="mono-inline">id</span></td><td>Unique tenant identifier</td></tr>
+              <tr><td><span class="mono-inline">country</span></td><td>ISO 3166-1 alpha-2 country code (drives regulatory and integration switches per ADR-024)</td></tr>
+              <tr><td><span class="mono-inline">brand</span></td><td>Display name, logo, colors, design tokens</td></tr>
+              <tr><td><span class="mono-inline">domain</span></td><td>Custom domain for patient-facing surfaces (e.g., heroshealth.com)</td></tr>
+              <tr><td><span class="mono-inline">status</span></td><td>active, suspended, draft</td></tr>
+              <tr><td><span class="mono-inline">product_catalog</span></td><td>Set of programs and products offered</td></tr>
+              <tr><td><span class="mono-inline">integration_config</span></td><td>Per-tenant adapter selections (clinician network, pharmacy, payment processor where country permits choice)</td></tr>
+              <tr><td><span class="mono-inline">pricing_config</span></td><td>Per-tenant pricing for products, subscriptions, programs</td></tr>
+              <tr><td><span class="mono-inline">legal_config</span></td><td>Terms of service URL, privacy policy URL, support contact info</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Tenants at launch</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Tenant</th><th>Country</th><th>Brand</th><th>Operator</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>Telecheck-Ghana</td><td><span class="mono-inline">GH</span></td><td>Heros Health Ghana <em>(consumer DBA; ghana.heroshealth.com)</em></td><td>Telecheck-Ghana Ltd.</td><td>Active at launch (greenfield)</td></tr>
+              <tr><td>Telecheck-US</td><td><span class="mono-inline">US</span></td><td>Heros Health <em>(consumer DBA; heroshealth.com)</em></td><td>Telecheck Health LLC</td><td>Active at launch (greenfield)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Tenant administration</h3>
+        <p>Two distinct admin role classes per <code>RBAC v1.1</code>:</p>
+        <ul>
+          <li><strong>Platform admin</strong> — Telecheck operator. Sees tenant list, platform health, cross-tenant aggregate metrics. Cannot see PHI within any tenant. Manages tenant lifecycle.</li>
+          <li><strong>Tenant admin</strong> — per-tenant operator. Sees only their tenant's data. Manages intake forms, product catalog, clinicians, pharmacy config, branding, pricing, dashboards. Heros operator is a tenant admin scoped to Heros. Telecheck-Ghana operator is a tenant admin scoped to Telecheck-Ghana.</li>
+        </ul>
+      </section>
+
+      <!-- ====== §3 ====== -->
+      <section class="section" id="s3">
+        <div class="section-meta"><span class="section-num">§ 03</span><span class="rule"></span><span class="of">03 / 26</span></div>
+        <h2>Capabilities and pillars</h2>
+        <p>Telecheck has six core capability pillars, each available to all tenants. Country-driven and tenant-driven configuration determines specifics.</p>
+
+        <div class="pillar-grid">
+          <div class="pillar">
+            <span class="pillar-num">PILLAR 01</span>
+            <h3 class="pillar-title">Telehealth care delivery</h3>
+            <p class="pillar-desc">Async consults, sync video consults, intake, follow-up.</p>
+            <div class="pillar-config">Per-tenant: form catalog · clinician network adapter · consult fees</div>
+          </div>
+          <div class="pillar">
+            <span class="pillar-num">PILLAR 02</span>
+            <h3 class="pillar-title">AI clinical support</h3>
+            <p class="pillar-desc">Mode 1 conversational, Mode 2 protocol execution, AI scribe.</p>
+            <div class="pillar-config">Per-tenant: guardrail templates · protocol library · scribe per consult type</div>
+          </div>
+          <div class="pillar">
+            <span class="pillar-num">PILLAR 03</span>
+            <h3 class="pillar-title">Pharmacy &amp; prescription commerce</h3>
+            <p class="pillar-desc">Refill, dispensing, fulfillment, delivery, subscriptions, multi-product cart.</p>
+            <div class="pillar-config">Per-tenant: pharmacy adapter · catalog · pricing · shipping rules</div>
+          </div>
+          <div class="pillar">
+            <span class="pillar-num">PILLAR 04</span>
+            <h3 class="pillar-title">Labs &amp; document interpretation</h3>
+            <p class="pillar-desc">OCR + AI interpretation + clinician review.</p>
+            <div class="pillar-config">Per-tenant: lab integration adapters · interpretation rules per program</div>
+          </div>
+          <div class="pillar">
+            <span class="pillar-num">PILLAR 05</span>
+            <h3 class="pillar-title">Pharmacy intelligence</h3>
+            <p class="pillar-desc">Medication interaction engine, herb–drug, fake-medication detection.</p>
+            <div class="pillar-config">Per-tenant: knowledge-base sources · advisory vs gating posture</div>
+          </div>
+          <div class="pillar">
+            <span class="pillar-num">PILLAR 06</span>
+            <h3 class="pillar-title">Community &amp; engagement</h3>
+            <p class="pillar-desc">Moderated patient groups (no AI as actor per <code>ADR-007</code>).</p>
+            <div class="pillar-config">Per-tenant: group catalog · moderation policy · language settings</div>
+          </div>
+        </div>
+
+        <p>Plus chronic care (<strong>RPM/CCM</strong>), monitoring &amp; engagement modules (food / fitness / pregnancy), and admin tooling.</p>
+      </section>
+
+      <!-- ====== §4 ====== -->
+      <section class="section" id="s4">
+        <div class="section-meta"><span class="section-num">§ 04</span><span class="rule"></span><span class="of">04 / 26</span></div>
+        <h2>Country profiles</h2>
+        <p>Per <code>ADR-024</code>, country drives runtime configuration. Two country profiles at launch.</p>
+
+        <div class="country-grid">
+          <div class="country-card">
+            <div class="country-flag">
+              <span class="country-code">US</span>
+              <span class="country-name">United States</span>
+              <span class="country-tenant">Heros Health</span>
+            </div>
+            <dl>
+              <dt>Regulatory</dt><dd>HIPAA + state telehealth + DEA + state pharmacy + FDA</dd>
+              <dt>Payment</dt><dd>Stripe · Card, Apple Pay, Google Pay</dd>
+              <dt>Currency</dt><dd>USD</dd>
+              <dt>Subscriptions</dt><dd>Stripe Billing</dd>
+              <dt>ID verification</dt><dd>Stripe Identity</dd>
+              <dt>Clinician adapters</dt><dd>Telecheck PLLC · OpenLoop · Wheel · Steady</dd>
+              <dt>Pharmacy adapters</dt><dd>Truepill · Honeybee · Capsule · Alto</dd>
+              <dt>SMS</dt><dd>Plivo / MessageBird</dd>
+              <dt>WhatsApp</dt><dd>Optional secondary</dd>
+              <dt>AE reporting</dt><dd>FDA MedWatch</dd>
+              <dt>Date format</dt><dd>MM/DD/YYYY</dd>
+              <dt>Phone format</dt><dd>+1 NXX-NXX-XXXX</dd>
+              <dt>Default locale</dt><dd>en-US</dd>
+              <dt>Emergency</dt><dd>911 · 988 (crisis)</dd>
+              <dt>Compliance</dt><dd>HIPAA + state telehealth + LegitScript + SOC 2 Type II target within 12 months</dd>
+            </dl>
+          </div>
+
+          <div class="country-card">
+            <div class="country-flag">
+              <span class="country-code">GH</span>
+              <span class="country-name">Ghana</span>
+              <span class="country-tenant">Heros Health Ghana</span>
+            </div>
+            <dl>
+              <dt>Regulatory</dt><dd>Ghana DPA + Ghana MDC + Pharmacy Council + FDA Ghana</dd>
+              <dt>Payment</dt><dd>Paystack · MTN MoMo, Vodafone Cash, AirtelTigo, card</dd>
+              <dt>Currency</dt><dd>GHS</dd>
+              <dt>Subscriptions</dt><dd>Paystack subscription + custom state machine</dd>
+              <dt>ID verification</dt><dd>Phone OTP only at launch</dd>
+              <dt>Clinician adapter</dt><dd>Telecheck Ghana panel (5+ clinicians)</dd>
+              <dt>Pharmacy adapters</dt><dd>Partner pharmacies in Ghana</dd>
+              <dt>SMS</dt><dd>Hubtel / mNotify</dd>
+              <dt>WhatsApp</dt><dd>Primary engagement channel</dd>
+              <dt>AE reporting</dt><dd>FDA Ghana / WHO VigiBase</dd>
+              <dt>Date format</dt><dd>DD/MM/YYYY</dd>
+              <dt>Phone format</dt><dd>+233 0XX XXX XXXX</dd>
+              <dt>Default locale</dt><dd>en-GH</dd>
+              <dt>Emergency</dt><dd>112 · Ghana Mental Health Authority hotline</dd>
+              <dt>Compliance</dt><dd>Ghana DPA + DPC registration + MDC + Pharmacy Council</dd>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== §5 ====== -->
+      <section class="section" id="s5">
+        <div class="section-meta"><span class="section-num">§ 05</span><span class="rule"></span><span class="of">05 / 26</span></div>
+        <h2>Scope at launch</h2>
+
+        <h3>Capabilities active at launch</h3>
+        <p>All 17 capability slices documented in the slice PRD set are launch scope. Within those, the following <strong>Tier-1 ecom upgrades</strong> are required at launch (versus the v1.6 scope which had these as basic):</p>
+        <ul>
+          <li><strong>Forms / Intake Engine v2.0</strong> (Tier-1 conversion-optimized; Hims/Ro-class)</li>
+          <li><strong>Pharmacy + Refill v2.1</strong> (subscription mechanics, multi-product cart, switching, pause/resume; Hims/Ro-class)</li>
+          <li><strong>Admin Backend v1.1</strong> (gold-standard ecom admin; Stripe/Paystack, inventory, pricing, discount codes, affiliate MVP, conversion dashboards; Hims/Ro-class)</li>
+        </ul>
+
+        <h3>Capabilities deferred</h3>
+        <ul>
+          <li><strong>Multilingual support</strong> beyond English. Per <code>ADR-018</code>. Carried into Future Scope: USSD + AI Bridge for Track B.</li>
+          <li><strong>USSD + voice access</strong> for feature-phone users. Track B post-launch.</li>
+          <li><strong>Owned pharmacy infrastructure</strong> for US tenants. Pharmacy partner integration only at launch.</li>
+          <li><strong>Productized tenant self-service onboarding.</strong> Manual onboarding only at launch.</li>
+          <li><strong>Heros migration tooling productization.</strong> Heros launches greenfield; productized migration tooling for future tenants is Phase 2.</li>
+          <li><strong>Affiliate program advanced features.</strong> MVP at launch; multi-tier commissions, custom dashboards, affiliate marketplace are Phase 2.</li>
+          <li><strong>Cross-mode AI data flow</strong> between Mode 1 and Mode 2. Open per AI Slice §15 Q6.</li>
+          <li><strong>AI Mode 2 auto-approve activation.</strong> Built but not enabled at launch; activation requires governance sign-off.</li>
+        </ul>
+
+        <div class="card">
+          <span class="card-label">Definition · what "launch" means</span>
+          <p>Launch is the first day either of the two day-1 tenants serves a real patient end-to-end through the platform. The two tenants do not need to launch on the same day; the platform must be operational for both before either serves first patients. Operational milestones per tenant follow the Cockpit's <strong>Pilot → Limited Launch → Full Launch</strong> progression.</p>
+        </div>
+      </section>
+
+      <!-- ====== §6 ====== -->
+      <section class="section" id="s6">
+        <div class="section-meta"><span class="section-num">§ 06</span><span class="rule"></span><span class="of">06 / 26</span></div>
+        <h2>Timeline</h2>
+        <p>Revised timeline reflecting Tier-1 ecom scope addition and multi-tenancy architecture.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Phase</th><th>Duration</th><th>Deliverables</th></tr></thead>
+            <tbody>
+              <tr><td>Foundation</td><td>4 weeks</td><td>Audit, Identity &amp; Auth (multi-tenant), Consent, Governance/CCR, Tenant Configuration module, event bus, OpenAPI scaffold, error model, idempotency layer, base RBAC</td></tr>
+              <tr><td>Care Delivery + Forms (Tier-1)</td><td>6 weeks</td><td>Forms/Intake Engine v2.0, Async Consult, Sync Video, Consult state machine</td></tr>
+              <tr><td>Pharmacy + Refill (Tier-1)</td><td>6 weeks</td><td>Pharmacy adapter framework, Refill v2.0 with subscriptions/cart/switching, Med Interaction Engine, Herb-Drug Engine, Fake-Med Detection</td></tr>
+              <tr><td>Labs + RPM</td><td>3 weeks</td><td>Labs/Document Interpretation, RPM/CCM, Adverse Event Reporting</td></tr>
+              <tr><td>AI Service</td><td>4 weeks <em>(parallel)</em></td><td>LLM provider abstraction, Mode 1, Mode 2, AI Scribe (LiveKit Agents), guardrail evaluation harness</td></tr>
+              <tr><td>Patient App</td><td>8 weeks <em>(overlap)</em></td><td>48 screens per Patient App IA; 20 critical-path first; per-tenant theming</td></tr>
+              <tr><td>Clinician Portal</td><td>6 weeks <em>(overlap)</em></td><td>34 screens per Clinician Portal IA; 12 critical-path first</td></tr>
+              <tr><td>Admin Backend (gold-standard)</td><td>6 weeks</td><td>Platform-admin + tenant-admin surfaces; Stripe/Paystack admin; inventory, pricing, discounts, affiliate MVP, conversion dashboards</td></tr>
+              <tr><td>Hardening + Launch readiness</td><td>4 weeks</td><td>Performance testing, security review, pen test, clinical safety case, launch dress rehearsals</td></tr>
+              <tr><td><strong>Total</strong></td><td><strong>22–26 weeks</strong></td><td>vs. v1.6's 16 weeks for the single-market scope</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>The 22–26 week range absorbs realistic uncertainty in: US compliance work for the LegitScript and state telehealth registration timelines, and the engineering team's velocity on Tier-1 ecom features they may not have built before.</p>
+      </section>
+
+      <!-- ====== §7 ====== -->
+      <section class="section" id="s7">
+        <div class="section-meta"><span class="section-num">§ 07</span><span class="rule"></span><span class="of">07 / 26</span></div>
+        <h2>Operational principles</h2>
+        <p>Platform-floor principles that don't change with multi-tenancy or scope expansion.</p>
+
+        <h3>7.1 · Honest status</h3>
+        <p>Patient never sees aspirational status. Refill state, consult state, lab state — all communicate truthfully what is happening, including "waiting for clinician review" as distinct from "your doctor has a question for you" as distinct from "waiting on your lab."</p>
+
+        <h3>7.2 · Delegate context always visible</h3>
+        <p>When a delegate is acting on behalf of a patient, every screen displays the delegate banner. Cannot be dismissed. Per Consent &amp; Delegated Access Slice.</p>
+
+        <h3>7.3 · Crisis detection always-on</h3>
+        <p>Per Platform Floor invariant <code>FLOOR-021</code>. Active in chat, voice (future), community, and any patient-facing AI surface. Per-tenant configuration cannot disable.</p>
+
+        <h3>7.4 · Audit immutability</h3>
+        <p>Per <code>ADR-013</code>. No <code>UPDATE</code>, no <code>DELETE</code> on audit table. Hash chain integrity. Per-tenant scoping but write semantics identical across tenants.</p>
+
+        <h3>7.5 · Tenant isolation</h3>
+        <p>Per <code>ADR-023</code>. Defense-in-depth via application-layer filtering, database row-level security, per-tenant encryption keys. <strong>A bug in any one layer cannot expose cross-tenant data.</strong></p>
+
+        <h3>7.6 · Country-driven configuration is centralized</h3>
+        <p>Per <code>ADR-024</code>. All country-specific behavior lives in the Country Configuration Runtime. Application code calls <code>ccr.get(tenant_id, key)</code> and receives the country-appropriate value. No country-specific code branches scattered through the codebase.</p>
+
+        <h3>7.7 · Tier-1 conversion discipline (US ecom)</h3>
+        <p>For the Heros tenant and any future US DTC tenant:</p>
+        <ul>
+          <li>Intake forms target conversion rate as a tracked metric (per slice PRD targets)</li>
+          <li>Abandonment recovery flows are built in</li>
+          <li>A/B testing of intake variants is supported</li>
+          <li>Educational interstitials and transition messages reduce friction</li>
+          <li>Subscription mechanics support pause/resume/switch per Hims/Ro/Hero patterns</li>
+          <li>Multi-product cart enables cross-sell within program</li>
+          <li>Affiliate attribution captured at signup</li>
+        </ul>
+
+        <h3>7.8 · Emerging-markets unit economics discipline</h3>
+        <p>For Telecheck-Ghana and any future emerging-market tenant:</p>
+        <ul>
+          <li>Per-unit fees from managed providers are explicit cost lines reviewed quarterly</li>
+          <li>Self-hosted open-source preferred per <code>ADR-022</code> unless unit economics improve materially</li>
+          <li>WhatsApp-primary, SMS-fallback per <code>ADR-010</code></li>
+          <li>Mobile-money payment as primary path</li>
+          <li>Unit economics model (<code>OR-109</code>) must show per-tenant profitability path</li>
+        </ul>
+
+        <h3>7.9 · Harm-reduction marketing posture for emerging markets</h3>
+        <p>Per <code>ADR-027</code>. The platform's marketing surface posture is country-conditional, governed by per-country policy in the Country Configuration Runtime.</p>
+        <p>In emerging markets where the regulatory posture permits it and the counterfactual to platform-mediated medication access is unmediated pharmacy purchase, the platform may operate molecule-level marketing surfaces — but only because the safety floor (medication interaction engine, herb-drug engine, fake-medication detection, clinician sign-off) gates fulfillment regardless of acquisition path. Marketing redirects existing demand into a safer channel; it does not create demand the safety infrastructure can't gate.</p>
+        <p>In the US, molecule-level marketing remains prohibited; Heros Health and any future US tenant operate program-level marketing surfaces under FDA DTC fair-balance rules and state telehealth advertising restrictions.</p>
+        <p>Marketing copy approval — for any market where molecule-level surfaces are permitted — follows the same governance review cadence as guardrail templates and clinical protocols (per §13.2). A marketing claim about a specific medication is functionally a clinical communication and is reviewed accordingly.</p>
+
+        <h3>7.10 · Research data accessibility for emerging-market chronic disease partnerships</h3>
+        <p>Per <code>ADR-028</code>. Telecheck operates as a research data partner (Posture A — population observatory) for WHO, UN agencies, and ethics-governed academic collaborators, with research scope anchored at the Telecheck parent / platform level rather than at the Heros consumer brand.</p>
+        <p>Patients consent to research data use at the operating-tenant level (via Heros Health surfaces, any country instance) under the fifth consent tier per §15. Consented, de-identified, audited longitudinal data flows through Telecheck-the-parent's governance for partnership use, gated by data-sharing agreements (DSAs) and Research Ethics Committee (REC) oversight.</p>
+        <p>Trial execution (Posture B) remains a non-goal per §21. Telecheck supplies data to research partners; it does not run interventional trials. The export pipeline is a Release 2 capability per §19; consent collection at fifth tier is launch-active so the consenting cohort accrues from day 1.</p>
+      </section>
+
+      <!-- ====== §8 ====== -->
+      <section class="section" id="s8">
+        <div class="section-meta"><span class="section-num">§ 08</span><span class="rule"></span><span class="of">08 / 26</span></div>
+        <h2>Jobs to be done</h2>
+        <p>Nine canonical jobs the platform exists to serve.</p>
+
+        <div class="belief-stack">
+          <div class="belief"><div class="belief-num">01</div><div class="belief-body"><h4>Enroll a patient into a program</h4><p>The patient (in any tenant) completes onboarding, then the program-specific intake. Per-tenant per-program. Tier-1 conversion-optimized for US tenants. Forms/Intake Engine handles structured collection, consent presentation, and AI Mode 2 input preparation.</p></div></div>
+          <div class="belief"><div class="belief-num">02</div><div class="belief-body"><h4>Refill a medication</h4><p>Identity, consent, eligibility, interaction engine, clinician review (or protocol-authorized), pharmacy fulfillment, delivery, payment, notifications, audit. For US tenants, refill is part of the subscription mechanic (auto-renewal, pause, switch). For emerging-market tenants, refill follows the slice PRD's standard flow with bridge-supply policy on consent revocation.</p></div></div>
+          <div class="belief"><div class="belief-num">03</div><div class="belief-body"><h4>Get an AI-assisted answer to a health question</h4><p>Mode 1 conversational. Per-tenant guardrail template configuration. Crisis detection always-on. English at launch.</p></div></div>
+          <div class="belief"><div class="belief-num">04</div><div class="belief-body"><h4>Consult a clinician (async or sync)</h4><p>Async (Tier-1 conversion-optimized intake) or sync video. AI scribe runs in sync video calls (LiveKit Agents). Async-to-sync conversion preserves all data per <code>ADR-012</code>.</p></div></div>
+          <div class="belief"><div class="belief-num">05</div><div class="belief-body"><h4>Track and manage a chronic condition</h4><p>RPM/CCM subscription. RPM data ingestion, alert engine, clinician follow-up.</p></div></div>
+          <div class="belief"><div class="belief-num">06</div><div class="belief-body"><h4>Get medication validated against my history</h4><p>Medication interaction engine: drug–drug, drug–condition, drug–lab, drug–allergy, polypharmacy. Per-tenant knowledge-base configuration. Herb–drug as emerging-markets differentiator.</p></div></div>
+          <div class="belief"><div class="belief-num">07</div><div class="belief-body"><h4>Get help with a community</h4><p>Community Slice (emerging-markets initially; piloting in Ghana). No AI in community per <code>ADR-007</code>. Moderation per tenant moderation policy.</p></div></div>
+          <div class="belief"><div class="belief-num">08</div><div class="belief-body"><h4>Verify a medication's authenticity</h4><p>Fake medication detection. Advisory at launch per <code>ADR-011</code>.</p></div></div>
+          <div class="belief"><div class="belief-num">09</div><div class="belief-body"><h4>Manage another person's care (delegate)</h4><p>Delegation per Consent &amp; Delegated Access Slice. Sensitive-category default-hidden per <code>ADR-009</code>.</p></div></div>
+        </div>
+      </section>
+
+      <!-- ====== §9 ====== -->
+      <section class="section" id="s9">
+        <div class="section-meta"><span class="section-num">§ 09</span><span class="rule"></span><span class="of">09 / 26</span></div>
+        <h2>Tier-1 capabilities — what ships at launch</h2>
+        <p>Capabilities that need explicit ratification given the Tier-1 ecom scope addition.</p>
+
+        <h3>9.1 · Forms / Intake Engine v2.0</h3>
+        <ul>
+          <li>Visual builder UI for tenant admins to construct intake forms without engineering</li>
+          <li>Conditional branching, validation rules, embedded consent presentation, embedded education</li>
+          <li><strong>Transition messages</strong> — copy that appears between question groups to manage cognitive load</li>
+          <li><strong>Educational interstitials</strong> — content panels (text, image, video) embedded in flow</li>
+          <li><strong>Save and resume</strong> — patient can leave and return mid-intake</li>
+          <li><strong>A/B testable</strong> — variant testing of question wording, ordering, presentation per PostHog integration</li>
+          <li><strong>Conversion event taxonomy</strong> — every step emits structured events for funnel analysis</li>
+          <li><strong>JSON import/export</strong> — doctor networks bringing JSON-defined intake structures can import; tenants can export for backup</li>
+          <li><strong>SOC 2-aligned audit</strong> — every form change, variant deployment, patient submission audited</li>
+          <li><strong>Accessibility</strong> — WCAG 2.1 AA at minimum</li>
+          <li><strong>Per-tenant ownership</strong> — each tenant manages their own intake form catalog</li>
+        </ul>
+
+        <h3>9.2 · Pharmacy + Refill v2.1</h3>
+        <ul>
+          <li>Subscription model (US tenants) — auto-renewal on pharmacy shipping cadence, dunning, pause, resume, switch products, cancel</li>
+          <li>Multi-product cart — multiple medications in a single intake/checkout where program design permits</li>
+          <li>Switching — patient can switch from product A to product B within a program, with appropriate clinician review</li>
+          <li>Compounding-aware extension points — for future US 503A/503B compounding integration</li>
+          <li>Pre-authorization windows — refills can be pre-authorized for 3 to 6 months, after which clinician review is required</li>
+          <li>Inventory-aware — pharmacy adapter reports availability; refill flow handles stockouts</li>
+          <li>Shipment tracking — patient sees status from pharmacy through last-mile delivery</li>
+        </ul>
+
+        <h3>9.3 · Admin Backend v1.1</h3>
+        <ul>
+          <li>Two role hierarchies: platform admin (Telecheck operators) and tenant admin (Heros operators, Telecheck-Ghana operators, future tenant operators)</li>
+          <li><strong>Inventory</strong> — per-tenant medication catalog with availability, pricing, allowed pharmacy adapter routing</li>
+          <li><strong>Pricing rules</strong> — per-product, per-program subscription tiers, per-region overrides, time-based promotions</li>
+          <li><strong>Discount codes</strong> — single-use, multi-use, per-product, per-program, percentage or fixed amount, expiry rules, usage caps</li>
+          <li><strong>Affiliate program (MVP)</strong> — per-tenant affiliate accounts, unique tracking links/UTMs, attribution windows, conversion crediting, payout via Stripe Connect (US tenants) / manual reconciliation (emerging-market tenants at launch)</li>
+          <li><strong>Conversion dashboards</strong> — funnel analysis (PostHog-backed), drop-off identification, cohort retention, revenue per cohort</li>
+          <li><strong>Stripe / Paystack admin</strong> — refunds, subscription edits, customer lookup, dispute management</li>
+          <li><strong>AI-assisted admin</strong> — anomaly detection on conversion rates, copy suggestions, alert routing intelligence</li>
+          <li><strong>Operator audit trail</strong> — every admin action audited with operator identity, action, target, before/after</li>
+        </ul>
+
+        <h3>9.4 · Tenant configuration management</h3>
+        <ul>
+          <li><strong>Platform admin can:</strong> create tenants, configure country, configure brand identity, configure adapter selections, suspend tenants, view aggregate cross-tenant metrics</li>
+          <li><strong>Tenant admin can:</strong> configure brand assets (logo, colors, custom domain, copy), manage intake form catalog, manage product catalog, manage pricing, manage clinician panel (within their adapter's bounds), manage discount codes, manage affiliate accounts, view their tenant's dashboards</li>
+        </ul>
+      </section>
+
+      <!-- ====== §10 ====== -->
+      <section class="section" id="s10">
+        <div class="section-meta"><span class="section-num">§ 10</span><span class="rule"></span><span class="of">10 / 26</span></div>
+        <h2>Operating model</h2>
+
+        <h3>10.1 · Revenue per tenant</h3>
+        <p>Each tenant operates its own commercial model.</p>
+        <ul>
+          <li><strong>Telecheck-US (Heros Health DBA)</strong> — DTC subscription model per Hims/Ro pattern. Per-product subscriptions ($30–200/month range for typical DTC categories). Cash-pay only at launch (no insurance billing). Stripe processes payments. Revenue settles to Telecheck Health LLC's Stripe account.</li>
+          <li><strong>Telecheck-Ghana (Heros Health Ghana DBA)</strong> — chronic-care anchored. Per-consult fees, per-prescription medication margin, RPM/CCM subscriptions. Paystack processes payments. Revenue settles to Telecheck-Ghana Ltd.'s account. Each subsequent African market is a separately incorporated Telecheck subsidiary surfacing the Heros Health consumer brand at a country subdomain (ghana.heroshealth.com today; nigeria.heroshealth.com, kenya.heroshealth.com, etc. as expansion proceeds).</li>
+        </ul>
+
+        <h3>10.2 · Telecheck platform monetization</h3>
+        <p>Per <code>ADR-023</code>'s tenant model and following Rimo's transparent model:</p>
+        <ul>
+          <li><strong>Per-tenant flat platform fee</strong> — monthly subscription for platform access at tier (starter, growth, enterprise)</li>
+          <li><strong>Per-patient fee</strong> — small per-active-patient charge layered on the flat fee</li>
+          <li><strong>No revenue share</strong> on patient transactions — tenant revenue settles directly to tenant accounts</li>
+          <li><strong>No medication markup</strong> — pharmacy adapter passes through wholesale + tenant margin</li>
+          <li><strong>No transaction fees</strong> beyond what payment processors charge tenant directly</li>
+        </ul>
+        <div class="pullquote">Telecheck-platform's profitability comes from per-tenant fees, not from extracting value from patient transactions.</div>
+
+        <h3>10.3 · Acquisition engines</h3>
+        <p>Food/calorie scanning, fitness tracking, pregnancy tracking. Per-tenant configuration determines which are exposed.</p>
+
+        <h3>10.4 · Clinician compensation</h3>
+        <p>Per-tenant per the tenant's clinician network adapter:</p>
+        <ul>
+          <li>US tenants using Telecheck PLLC: Telecheck pays clinicians per work-unit (consult, refill review, async case)</li>
+          <li>US tenants using OpenLoop / Wheel: tenant pays the network adapter per consult; network adapter pays clinicians</li>
+          <li>Telecheck-Ghana: Telecheck pays its in-house panel per work-unit</li>
+        </ul>
+        <p>Clinician compensation models are not platform-prescribed beyond requiring named accountability and audit traceability (per <code>ADR-014</code>).</p>
+
+        <h3>10.5 · Program catalog architecture</h3>
+        <p>The platform supports a single multi-country program catalog with country-specific offerability. This section makes the architecture explicit; it is implemented across the Forms Engine contract, the Market Launch contract, the Market Rollout Cockpit slice, the RPM/CCM slice, and the Country Configuration Runtime.</p>
+
+        <p>Five layers, each with distinct authoring and approval semantics:</p>
+
+        <div class="table-wrap compact">
+          <table>
+            <thead><tr><th>Layer</th><th>Defined where</th><th>Example</th></tr></thead>
+            <tbody>
+              <tr><td>Program (clinical pathway)</td><td>Platform-level, once</td><td>"GLP-1 Weight Management" · "RPM Diabetes" · "ED" — defined in the platform catalog with intake structure, decision logic, monitoring schedule.</td></tr>
+              <tr><td>Intake form template</td><td>Platform-level (per program), with country-locale variants per <code>ADR-004</code> Pattern A</td><td>The structure of the GLP-1 intake; locale-specific copy and regulatory disclaimers per country.</td></tr>
+              <tr><td>Protocol library</td><td>Platform-level (clinical pathway), with country-specific activation</td><td>Clinical decision logic; named accountable clinician per country; market-specific approval signature.</td></tr>
+              <tr><td>Country runtime</td><td>CCR per ISO country code (per <code>ADR-024</code>)</td><td>Stripe (US) vs Paystack (Ghana); USD vs GHS; FDA vs Ghana FDA reporting; SMS vs WhatsApp.</td></tr>
+              <tr><td>Offerability</td><td>ProgramMarketPolicy per (program × country × tenant)</td><td>"GLP-1 is offerable to Telecheck-US patients" / "GLP-1 is offerable to Telecheck-Ghana patients" — independent decisions, both attaching to the same program definition.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>What this means in practice. A program is defined once at the platform level. Country-specific availability is a ProgramMarketPolicy authoring exercise, not a re-implementation. Forms inherit clinical structure; only L1 (presentation) and L4 (approval) localize per country, with selective L2 (branching) and L3 (eligibility) edits where regulation, formulary, or locale demand them. The Pattern A versioning rule means each market gets its own immutable form version — three markets running byte-identical GLP-1 intakes still produce three separate version records, each with its own clinical approval chain. That's the price of regulatory provenance, accepted explicitly.</p>
+
+        <p>What this enables. Heros Health programs (GLP-1, ED, hair loss, skincare) are portable to Telecheck-Ghana and future emerging-market tenants via ProgramMarketPolicy authoring. RPM/CCM programs are portable from Telecheck-Ghana to Telecheck-US — architecturally enabled, contingent on tenant-strategy decision (does Heros add chronic care to its catalog?). The platform doesn't make that strategy call; it provides the mechanism.</p>
+
+        <p>Reference: see the Program Porting Checklist (Heros US GLP-1 → Telecheck-Ghana GLP-1) for a worked example with section-by-section breakdown of what's inherited, adapted, and authored from scratch when a program is brought to a new market.</p>
+      </section>
+
+      <!-- ====== §11 ====== -->
+      <section class="section" id="s11">
+        <div class="section-meta"><span class="section-num">§ 11</span><span class="rule"></span><span class="of">11 / 26</span></div>
+        <h2>Architecture summary</h2>
+        <p>Detailed in System Architecture v1.2.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Decision</th><th>Authority</th></tr></thead>
+            <tbody>
+              <tr><td>11.1</td><td>Modular monolith with separate AI Service · 15 internal modules at launch (one added: Tenant Configuration). Plus separate AI Service.</td><td><code>ADR-001</code></td></tr>
+              <tr><td>11.2</td><td>Multi-tenant by <code>tenant_id</code> with country-driven config</td><td><code>ADR-023</code>, <code>ADR-024</code></td></tr>
+              <tr><td>11.3</td><td>LLM provider abstraction · Anthropic Claude primary; multi-provider abstraction; per-route configuration</td><td><code>ADR-020</code></td></tr>
+              <tr><td>11.4</td><td>Sync video on LiveKit self-hosted</td><td><code>ADR-021</code></td></tr>
+              <tr><td>11.5</td><td>Native-first stack</td><td><code>ADR-022</code></td></tr>
+              <tr><td>11.6</td><td>AWS hosting · us-east-1 primary · us-west-2 cold DR</td><td><code>ADR-026</code> <em>(supersedes ADR-025)</em></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>11.7 · The 18 launch slices</h3>
+        <p>Same 17 slices as v1.6, with three substantially upgraded for Tier-1 ecom, plus one new slice introduced for Tier-1 ecom admin.</p>
+        <div class="table-wrap compact">
+          <table>
+            <thead><tr><th>#</th><th>Slice</th><th>Note</th></tr></thead>
+            <tbody>
+              <tr><td>01</td><td>Forms / Intake Engine</td><td><strong>v2.0 Tier-1 conversion-optimized</strong></td></tr>
+              <tr><td>02</td><td>Refill</td><td><strong>v2.0 subscription mechanics, multi-product cart, switching</strong></td></tr>
+              <tr><td>03</td><td>Medication Interaction &amp; Validation Engine</td><td>v1.0</td></tr>
+              <tr><td>04</td><td>Pharmacy Portal</td><td><strong>v2.0 adapter framework, US partner integrations</strong></td></tr>
+              <tr><td>05</td><td>Sync Video Consult</td><td>v1.0</td></tr>
+              <tr><td>06</td><td>Async Consult</td><td>v1.0</td></tr>
+              <tr><td>07</td><td>AI Clinical Assistant</td><td>v1.0</td></tr>
+              <tr><td>08</td><td>Consent &amp; Delegated Access</td><td>v1.0</td></tr>
+              <tr><td>09</td><td>Labs and Document Interpretation</td><td>v1.0</td></tr>
+              <tr><td>10</td><td>RPM / CCM</td><td>v1.0</td></tr>
+              <tr><td>11</td><td>Community Platform</td><td>v1.0</td></tr>
+              <tr><td>12</td><td>Adverse Event Reporting</td><td>v1.0</td></tr>
+              <tr><td>13</td><td>Herb-Drug Interaction Engine</td><td>v1.0</td></tr>
+              <tr><td>14</td><td>Fake Medication Detection</td><td>v1.0</td></tr>
+              <tr><td>15</td><td>Acquisition &amp; Engagement Tools</td><td>v1.0</td></tr>
+              <tr><td>16</td><td>Admin Configuration Surfaces</td><td>v1.0</td></tr>
+              <tr><td>17</td><td>Market Rollout Cockpit</td><td>v1.0</td></tr>
+              <tr><td>18</td><td>Admin Backend</td><td><strong>v1.1 NEW</strong> · gold-standard ecom admin</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ====== §12 ====== -->
+      <section class="section" id="s12">
+        <div class="section-meta"><span class="section-num">§ 12</span><span class="rule"></span><span class="of">12 / 26</span></div>
+        <h2>Launch readiness criteria</h2>
+        <p>Per Ghana Launch Playbook v1.2 §6 (still canonical for Telecheck-Ghana). For Heros launch, equivalent US Launch Playbook is engineering-scope deliverable.</p>
+
+        <p>Both must be <strong>Yes</strong> before respective tenant goes live:</p>
+        <ul>
+          <li>All Tier 0 OR items resolved</li>
+          <li>All Tier 1 OR items resolved</li>
+          <li>Clinical safety case documented (per <code>OR-004</code>)</li>
+          <li>Threat model documented (per <code>OR-001</code>)</li>
+          <li>DPIA / equivalent privacy assessment per country (per <code>OR-002</code> and equivalents)</li>
+          <li>Pen test passed (per <code>OR-217</code>)</li>
+          <li>Performance budgets met under projected load (per <code>OR-218</code>)</li>
+          <li>Tenant data, clinician panel, pharmacy partner, payment processor all configured and tested</li>
+          <li>Tenant operator team trained on tenant admin tooling</li>
+        </ul>
+      </section>
+
+      <!-- ====== §13 ====== -->
+      <section class="section" id="s13">
+        <div class="section-meta"><span class="section-num">§ 13</span><span class="rule"></span><span class="of">13 / 26</span></div>
+        <h2>Special handling and governance review</h2>
+
+        <h3>13.1 · Special handling categories</h3>
+        <p><strong>Pediatric, pregnancy, lactation</strong> populations require human review at every clinical decision point. Detection of category membership at runtime (per <code>OR-212</code>) is shared platform infrastructure consumed per tenant per program.</p>
+
+        <h3>13.2 · Marketing copy governance (per <code>ADR-027</code>)</h3>
+        <p>For markets where molecule-level marketing surfaces are permitted by country regulatory posture (per §7.9), all marketing copy referencing specific medications follows the same governance review cadence as guardrail templates and clinical protocols:</p>
+        <ul>
+          <li>Drafted by content author with clinical review by Medical Director or designated Clinical Lead</li>
+          <li>Regulatory review against country-specific marketing rules (Ghana FDA / Pharmacy Council guidance in launch market; analogous regulators per market)</li>
+          <li>Audit trail per <code>AUDIT_EVENTS</code> — every change to molecule-level marketing copy is logged with author, reviewer, approver, before/after</li>
+          <li>Re-review on a documented cadence (initial cadence: 6 months for high-risk medication categories like GLP-1; 12 months for lower-risk categories)</li>
+          <li>Country-conditional activation through the Country Configuration Runtime; copy that has not passed governance for a market cannot render in that market</li>
+        </ul>
+        <p>The platform safety floor (interaction engine, herb-drug engine, fake-medication detection, clinician sign-off) applies to every fulfillment regardless of acquisition path. Marketing changes acquisition; it does not change clinical authority.</p>
+      </section>
+
+      <!-- ====== §14 ====== -->
+      <section class="section" id="s14">
+        <div class="section-meta"><span class="section-num">§ 14</span><span class="rule"></span><span class="of">14 / 26</span></div>
+        <h2>Hard rules</h2>
+        <p>These cannot be relaxed by any tenant configuration. See Contracts Pack <code>INVARIANTS</code> for the full list.</p>
+
+        <ul>
+          <li><code>I-001</code> through <code>I-022</code> platform-floor invariants</li>
+          <li><code>I-023</code> · tenant isolation three-layer enforcement (RLS + app filtering + per-tenant KMS)</li>
+          <li><code>I-024</code> · research data export requires active DSA + active research consent + k-anonymity threshold met (per <code>ADR-028</code>)</li>
+          <li><code>I-025</code> · research consent declination has zero impact on care delivery</li>
+          <li><code>I-026</code> · research data export is fully audited with cohort definition, k-anonymity threshold, requester identity, and DSA reference recorded immutably</li>
+          <li><code>ADR-018</code> · English-only at launch (Track A)</li>
+          <li><code>ADR-019</code> · AI-first lab interpretation with caveat</li>
+          <li><code>ADR-023</code> · multi-tenant isolation (tenant cannot access another tenant's data)</li>
+          <li><code>ADR-024</code> · country-driven config (cannot configure US payment for a Ghana tenant or vice versa without country change)</li>
+          <li>Crisis detection always-on per <code>FLOOR-021</code></li>
+          <li>Audit immutability per <code>ADR-013</code></li>
+          <li>Per-tenant encryption keys per <code>ADR-024</code></li>
+        </ul>
+      </section>
+
+      <!-- ====== §15 ====== -->
+      <section class="section" id="s15">
+        <div class="section-meta"><span class="section-num">§ 15</span><span class="rule"></span><span class="of">15 / 26</span></div>
+        <h2>Progressive consent and research data governance</h2>
+
+        <h3>15.1 · Progressive consent presentation</h3>
+        <p>Per <code>ADR-015</code>. Per-tenant consent text variants supported via <code>tenant_config</code>; underlying consent infrastructure shared.</p>
+        <p>Five consent tiers, each independent, separately revocable:</p>
+        <ol>
+          <li><strong>Platform consent</strong> — terms of service, privacy policy, account creation. Required to use the platform.</li>
+          <li><strong>Care + data-use consent</strong> — consent to receive care via the platform and for the operating tenant to process data for that care. Required to enroll in any program.</li>
+          <li><strong>Delegation consent</strong> — when a delegate is acting on behalf of the patient (e.g., spouse, parent, caregiver). Optional; required only when delegation is exercised.</li>
+          <li><strong>Jurisdictional consent</strong> — consent to cross-border data processing where applicable (e.g., Telecheck-Ghana patient data processed in <code>us-east-1</code> per <code>ADR-026</code>). Required for patients in markets where cross-border processing occurs.</li>
+          <li><strong>Research data-use consent</strong> — described in §15.2 below. Optional; declining has zero impact on care.</li>
+        </ol>
+
+        <h3>15.2 · Research data-use consent (fifth tier)</h3>
+        <p>Per <code>ADR-028</code>. The platform offers patients the option to consent to anonymized or aggregated data from their care being shared with public-health and research partners under data-sharing agreements (DSAs). This consent is offered at the operating-tenant level (via Heros Health surfaces, any country instance) and governs research data flow upward to the Telecheck parent for partnership use.</p>
+        <p>Patient-facing consent text:</p>
+        <div class="card">
+          <span class="card-label">Research data-use consent · patient-facing copy</span>
+          <p><em>"Anonymized or aggregated data from your care may be shared with public-health and research partners (such as the World Health Organization, UN agencies, or academic researchers) to help improve health outcomes globally. You can decline this and still receive full care from us. You can revoke this consent at any time, and future data won't be shared (data already shared in aggregate cannot be retracted)."</em></p>
+        </div>
+        <p>Properties of research data-use consent:</p>
+        <ul>
+          <li><strong>Optional.</strong> Patients can use the platform without consenting to research data use.</li>
+          <li><strong>Care-independent.</strong> Per invariant <code>I-025</code>, declining research consent has zero impact on care delivery, clinician availability, medication access, or any other care surface.</li>
+          <li><strong>Separately revocable.</strong> Patients can revoke at any time. Future data is not shared after revocation.</li>
+          <li><strong>Asymmetric on retraction.</strong> Aggregate data already shared with research partners cannot be retracted (it has already been combined with other patients' contributions in ways that cannot be reversed). The patient-facing copy is explicit about this asymmetry.</li>
+          <li><strong>Audit-tracked.</strong> Every grant and revocation is audited per <code>AUDIT_EVENTS</code> (<code>research.consent_granted</code>, <code>research.consent_revoked</code>).</li>
+          <li><strong>Launch-active, Release 2 actionable.</strong> Consent collection is active at launch so the consenting cohort accrues from day 1; the export pipeline (cohort definition layer, de-identification engine, aggregation layer, DSA enforcement) is a Release 2 capability per §19.</li>
+        </ul>
+
+        <h3>15.3 · Research data governance</h3>
+        <p>Per <code>ADR-028</code> (Posture A — research data partner / population observatory). This subsection defines the governance surface that activates in Release 2.</p>
+
+        <h4>Posture distinction</h4>
+        <ul>
+          <li><strong>In scope (Posture A):</strong> Research data partnership. Telecheck supplies de-identified, audited longitudinal data and aggregated population-level statistics to public-health and academic research partners under DSAs. Telecheck is the data source; partners conduct the research.</li>
+          <li><strong>Out of scope (Posture B):</strong> Trial execution platform. Telecheck does not run interventional trials, randomization, eCRFs, IRB-managed protocols, sponsor reporting, or any trial workflow. Posture B remains a non-goal per §21.</li>
+        </ul>
+
+        <h4>Export pipeline (Release 2 capability)</h4>
+        <p>Four layers between consented patient data and external research partners:</p>
+        <ol>
+          <li><strong>Cohort definition layer.</strong> Researchers (or their proxies in the platform admin) define cohorts by clinical criteria without seeing PHI. Cohort definitions are versioned, audited (<code>research.cohort_defined</code>), and reviewed against the active DSA's permitted use scope.</li>
+          <li><strong>De-identification engine.</strong> Safe Harbor-equivalent stripping of direct identifiers, with k-anonymity thresholds applied to indirect identifiers. The standard is documented (per pre-launch decision in §24) and applied uniformly before any export.</li>
+          <li><strong>Aggregation layer.</strong> For population-level statistics (prevalence, adherence rates, AE rates, outcome trajectories) where individual-level data is not needed, the aggregation layer produces statistical outputs only.</li>
+          <li><strong>DSA enforcement.</strong> Every external partner has a signed data-sharing agreement specifying allowed uses, retention, and re-sharing rules. Access is gated on agreement validity. DSA expiry halts the pipeline for that partner per <code>I-024</code>.</li>
+        </ol>
+
+        <h4>Ethics oversight</h4>
+        <p>Research Ethics Committee (REC) partnership at the operating-tenant level. Each market has an in-country ethics body that reviews proposed DSAs and material changes to consent text. Initial REC partnership for Telecheck-Ghana is a pre-launch decision (§24); analogous bodies for future markets onboard alongside country expansion.</p>
+
+        <h4>Partnership level</h4>
+        <p>Per §7.10 and <code>ADR-028</code>, research partnerships are anchored at the Telecheck parent / platform level rather than at the Heros consumer brand. Patients consent at the operating-tenant level (Heros Health surfaces); data flows through the parent's governance for partnership use; the partnership counterparty (e.g., WHO Africa Region NCD program, UN agency, academic institution) signs a DSA with Telecheck-the-parent.</p>
+
+        <h4>Audit posture</h4>
+        <p>Every research-use export is logged immutably per <code>I-026</code>: cohort definition, requester identity, agreement reference, exported field set, k-anonymity threshold applied, timestamp. The audit chain is queryable by ethics review boards, regulators, and the partner organization itself for verification.</p>
+      </section>
+
+      <!-- ====== §16 ====== -->
+      <section class="section" id="s16">
+        <div class="section-meta"><span class="section-num">§ 16</span><span class="rule"></span><span class="of">16 / 26</span></div>
+        <h2>Notification posture</h2>
+        <p>Per Notification Spec v1.1. Per-tenant notification copy variants. Channel hierarchy per country: <strong>WhatsApp-primary in emerging markets</strong> (piloting with Telecheck-Ghana on 360dialog), <strong>SMS-primary in US</strong>.</p>
+      </section>
+
+      <!-- ====== §17 ====== -->
+      <section class="section" id="s17">
+        <div class="section-meta"><span class="section-num">§ 17</span><span class="rule"></span><span class="of">17 / 26</span></div>
+        <h2>Honest status, design rules, copy posture</h2>
+        <p>See Design System v1.1 for the rules. Per-tenant theming via design tokens does not relax the design hard rules.</p>
+      </section>
+
+      <!-- ====== §18 ====== -->
+      <section class="section" id="s18">
+        <div class="section-meta"><span class="section-num">§ 18</span><span class="rule"></span><span class="of">18 / 26</span></div>
+        <h2>Business and operating model</h2>
+
+        <h3>18.1 · Telecheck platform business</h3>
+        <p><strong>Revenue:</strong> per-tenant flat platform fee + per-patient fee. No revenue share, no transaction fees, no markup.</p>
+        <p><strong>Cost:</strong> AWS infrastructure, AI provider costs, engineering team, operations team, compliance and legal.</p>
+
+        <h3>18.2 · Telecheck-Ghana operating business</h3>
+        <p><strong>Revenue:</strong> per-consult fees, per-prescription margin, RPM/CCM subscriptions per Ghana market.</p>
+        <p><strong>Cost:</strong> clinician compensation, pharmacy partner fees, delivery costs, mobile-money fees, marketing.</p>
+
+        <h3>18.3 · Telecheck-US operating business (Heros Health DBA)</h3>
+        <p><strong>Revenue:</strong> subscription products per Hims/Ro DTC pattern. Cash-pay at launch.</p>
+        <p><strong>Cost:</strong> clinician network fees (PLLC or partner per Heros's choice), pharmacy partner fees, fulfillment, marketing, Stripe fees.</p>
+        <p>Heros pays Telecheck the platform fee + per-patient fee. Heros's patient revenue settles to Heros's Stripe account.</p>
+
+        <h3>18.4 · Future tenants</h3>
+        <p>Same model as Heros: tenant pays Telecheck platform + per-patient fees; tenant's patient revenue settles to tenant's payment processor account; tenant operates their own commercial model.</p>
+
+        <h3>18.5 · Unit economics requirements</h3>
+        <p>For each tenant on the platform, the unit-economics model (<code>OR-109</code>) must demonstrate:</p>
+        <ul>
+          <li>Per-active-patient gross margin positive within tenant's commercial model</li>
+          <li>Customer acquisition cost (CAC) recoverable within plausible LTV horizon</li>
+          <li>Per-consult, per-refill, per-RPM-month margin lines documented</li>
+        </ul>
+        <p>For emerging-market tenants — Telecheck-Ghana being the launch instance — unit economics must remain workable under the "no per-unit fees from managed providers" discipline (<code>ADR-022</code>).</p>
+      </section>
+
+      <!-- ====== §19 ====== -->
+      <section class="section" id="s19">
+        <div class="section-meta"><span class="section-num">§ 19</span><span class="rule"></span><span class="of">19 / 26</span></div>
+        <h2>Roadmap beyond launch</h2>
+
+        <h3>Phase 2 · 3–6 months post-launch</h3>
+        <ul>
+          <li>Heros migration tooling productization (so future US tenants can migrate from Rimo or Hims-style platforms via standard tooling)</li>
+          <li>Productized self-service tenant onboarding</li>
+          <li>Affiliate program advanced features (multi-tier commissions, dedicated affiliate dashboards)</li>
+          <li>US owned-pharmacy considerations (per-tenant decision)</li>
+          <li>Multi-region deployment (US-region primary for US tenants if latency becomes competitive issue)</li>
+          <li>Track B Wave 1 (USSD-initiated workflows for Telecheck-Ghana)</li>
+          <li>Mode 2 auto-approve activation per <code>OR-305</code></li>
+        </ul>
+
+        <h3>Phase 3 · 6–12 months post-launch</h3>
+        <ul>
+          <li>Additional African country expansion via separately incorporated Telecheck subsidiaries (<code>Telecheck-Nigeria</code>, <code>Telecheck-Kenya</code>, <code>Telecheck-SouthAfrica</code> as operating tenants per CCR template additions; all surfacing the unified Heros Health consumer brand at country subdomains: nigeria.heroshealth.com, kenya.heroshealth.com, southafrica.heroshealth.com)</li>
+          <li>Additional US tenants onboarded</li>
+          <li>Multilingual UI for Track A tenants where market demand justifies</li>
+          <li>Insurance billing capability for US tenants where relevant (post-DTC-only launch)</li>
+          <li>Advanced AI capabilities (cross-mode data flow per AI Slice §15 Q6, voice agent per Track B Wave 2)</li>
+        </ul>
+
+        <h3>Phase 4 · 12+ months post-launch</h3>
+        <ul>
+          <li>SOC 2 Type II audit completion (targeting month 12–18)</li>
+          <li>Track B Waves 2–5 (AI voice, SMS RPM, voice consults, CHW network)</li>
+          <li>Federated patient identity across tenants (if business case develops)</li>
+          <li>Owned-pharmacy operational launches per per-tenant decisions</li>
+        </ul>
+      </section>
+
+      <!-- ====== §20 ====== -->
+      <section class="section" id="s20">
+        <div class="section-meta"><span class="section-num">§ 20</span><span class="rule"></span><span class="of">20 / 26</span></div>
+        <h2>Success metrics</h2>
+        <p>The platform's success at launch is measured against these metrics. Per-tenant breakdowns; aggregate platform health.</p>
+
+        <h3>20.1 · Patient outcomes (clinical, primary)</h3>
+        <ul>
+          <li><strong>Care continuity</strong> — % of patients on chronic medication who maintain continuous medication access (no &gt;7-day gap) over 6-month rolling window. <em>Target: ≥95%.</em></li>
+          <li><strong>Adherence proxy via refill timing</strong> — for chronic medications, % refilling within 7 days of pre-auth window expiry. <em>Target: ≥90%.</em></li>
+          <li><strong>Adverse event reporting rate</strong> — % of clinically-significant AEs captured and reported. <em>Target: as high as possible.</em></li>
+          <li><strong>Time-to-clinician-decision for case prep</strong> — median time intake → approve/decline. <em>Target: ≤24 hours routine; ≤4 hours urgent.</em></li>
+          <li><strong>Crisis detection sensitivity</strong> — % of crisis-language communications correctly flagged. <em>Target: ≥99%.</em></li>
+        </ul>
+
+        <h3>20.2 · Patient experience (operational)</h3>
+        <ul>
+          <li><strong>Onboarding completion rate</strong> — <em>Target: ≥75% emerging-market tenants; ≥60% US Tier-1 DTC.</em></li>
+          <li><strong>Median onboarding time</strong> — <em>Target: ≤8 minutes emerging-market tenants; ≤5 minutes US Tier-1.</em></li>
+          <li><strong>App load time on 3G mobile</strong> — <em>Target: &lt;2 seconds initial load.</em></li>
+          <li><strong>Patient satisfaction (NPS)</strong> — <em>Target: ≥40 platform-wide.</em></li>
+        </ul>
+
+        <h3>20.3 · Commercial (per-tenant)</h3>
+        <ul>
+          <li><strong>Subscription LTV at 90 days</strong> — for US tenants, per-cohort. No platform target.</li>
+          <li><strong>Subscription churn (90-day)</strong> — for US tenants, per-product. No platform target.</li>
+          <li><strong>Acquisition CAC</strong> — when paired with marketing spend data per tenant.</li>
+          <li><strong>Cancellation deflection rate</strong> — <em>Target: ≥30%; if higher than ~60%, audit for coercion.</em></li>
+        </ul>
+
+        <h3>20.4 · Platform operational health</h3>
+        <ul>
+          <li><strong>System uptime per critical path</strong> — <em>Target: ≥99.5% in 90-day rolling window.</em></li>
+          <li><strong>Latency p95 per critical endpoint</strong> — <em>Target: &lt;500ms.</em></li>
+          <li><strong>Audit chain integrity</strong> — <em>Target: 100% verifiable hash chains; 0 silent corruption.</em></li>
+          <li><strong>Tenant isolation incidents</strong> — <em>Target: 0.</em> Any breach is incident-grade.</li>
+        </ul>
+
+        <h3>20.5 · AI quality</h3>
+        <ul>
+          <li><strong>AI Mode 2 protocol-authorized auto-approval rate</strong> — for medication classes where protocol authorization is configured.</li>
+          <li><strong>AI Mode 2 clinician override rate</strong> — <em>Target: &lt;15%.</em> Persistent higher rate triggers protocol/guardrail recalibration.</li>
+          <li><strong>AI Mode 1 escalation rate</strong> — % of Mode 1 conversations that escalate to human or to Mode 2.</li>
+          <li><strong>Crisis detection precision/recall</strong> — sensitivity ≥99%; precision tracked operationally.</li>
+        </ul>
+      </section>
+
+      <!-- ====== §21 ====== -->
+      <section class="section" id="s21">
+        <div class="section-meta"><span class="section-num">§ 21</span><span class="rule"></span><span class="of">21 / 26</span></div>
+        <h2>Non-goals</h2>
+        <p>The platform explicitly does <strong>NOT</strong> do these things at launch. Listing them is a scope-discipline tool — but the framing matters. Each entry below is classified along three axes: <strong>Regulatory posture</strong> (what regulatory regime makes this a non-goal in launch markets), <strong>Architecture posture</strong> (what the platform does and does not build to support it), and <strong>Activation mechanism</strong> (what would have to be true — a new ADR, a regulatory contract, a country policy in the CCR, a separate platform product — for this to become a goal in some future market).</p>
+
+        <div class="card">
+          <span class="card-label">Future-release summary · regulatory-conditional posture</span>
+          <p>Most entries below are non-goals <em>because the regulatory posture in the launch markets does not currently permit them or because no activation governance has been built</em>, not because they are forbidden in principle. Entries marked <strong>Future Release</strong> have a defined activation path through a new ADR or country-specific regulatory contract, and may activate in specific markets when those instruments exist. Entries without that marker are either genuine never-goals (forbidden by floor invariant or by hard regulatory rules with no plausible reform path) or settled product-strategy decisions that are unlikely to revisit.</p>
+        </div>
+
+        <ul>
+          <li><strong>Direct-to-consumer prescription marketing in regulatory regimes that prohibit it.</strong> <span class="tag med">Future Release</span> The platform does not run molecule-level marketing surfaces in the US (FDA DTC rules, state telehealth advertising restrictions) or in any market whose regulatory posture prohibits it. <em>Regulatory:</em> US tenants follow FDA DTC fair-balance and risk-disclosure rules and operate program-level (not molecule-level) acquisition surfaces. Emerging-market tenants operate under country-specific advertising rules (e.g., Ghana FDA and Pharmacy Council in the launch market; analogous regulators per country as the platform expands). <em>Architecture:</em> The acquisition and admin-backend slices support program-level marketing today; molecule-level marketing surfaces would require additional governance review tooling at the same review cadence as guardrail templates and clinical protocols (§13.5). <em>Activation:</em> Country-conditional policy in the Country Configuration Runtime (<code>ADR-024</code>) plus a new ADR governing molecule-level marketing in markets where harm-reduction logic applies (i.e., emerging markets where the counterfactual is unmediated pharmacy purchase). The platform's safety floor — interaction engine, herb-drug engine, fake-medication detection, clinician sign-off — applies regardless of acquisition path.</li>
+
+          <li><strong>In-house drug manufacturing.</strong> Pharmacy adapters integrate with licensed manufacturer and pharmacy partners; the platform does not manufacture pharmaceuticals. <em>Regulatory:</em> Manufacturing requires FDA / Ghana FDA manufacturing license, cGMP compliance, facility inspection — a fundamentally different regulated entity. <em>Architecture:</em> Pharmacy adapter framework (per Pharmacy + Refill Slice v2.x); no manufacturing infrastructure. <em>Activation:</em> Out of platform scope. Would require a separate regulated entity, not a platform feature.</li>
+
+          <li><strong>Insurance underwriting or claims processing.</strong> <span class="tag med">Future Release</span> Patient-pay subscriptions only at launch; the platform is not an insurer or a claims clearinghouse. <em>Regulatory:</em> US state insurance commissioner registration + NAIC + ERISA (where applicable); Ghana insurance commission (where applicable). <em>Architecture:</em> Payment infrastructure handles cash-pay and subscription only; no claims adjudication, no payer integration. <em>Activation:</em> A new ADR for claims integration via partnership (e.g., a US insurance clearinghouse like Change Healthcare or a payer partnership) — not in-house underwriting. Phase 3+ per §19.</li>
+
+          <li><strong>Clinical trial execution.</strong> The platform does not build trial management, randomization, eCRFs, IRB workflow, or sponsor reporting infrastructure (Posture B). <em>Regulatory:</em> ICH-GCP, 21 CFR Part 11 validation regime, IRB-managed protocols, sponsor-CRO contracts — a fundamentally different software product (Veeva Vault, Medidata Rave, OpenClinica). <em>Architecture:</em> Care platform, not trial platform; consent regime is care-consent, not research-consent. <em>Activation:</em> Out of platform scope. Trial execution would require a separate regulated product, not a platform feature.</li>
+
+          <li><strong>Clinical research data partnership at launch.</strong> <span class="tag low">Future Release</span> Adverse Event Reporting is internal safety surveillance at launch. The platform does not yet supply de-identified longitudinal data to public-health or academic research partners (Posture A — research data partner / population observatory) — but it is positioned to. <em>Regulatory:</em> Emerging-market data-protection regimes govern cross-border transfer (e.g., Ghana DPA in the launch market); ethics review by an in-country body (e.g., Ghana Health Service REC or Noguchi Memorial Institute IRB at pilot) governs research use, with analogous review bodies in each subsequent market. <em>Architecture:</em> Consent regime is currently four-tier (platform · care + data-use · delegation · jurisdictional); a fifth-tier research data-use consent would be needed. De-identification engine (Safe Harbor + k-anonymity), cohort definition layer, aggregation layer, and DSA infrastructure are not yet built. <em>Activation:</em> A new ADR establishing Posture A; a fifth consent tier in §15; a Research Ethics Committee partnership; a data-sharing agreement template; a de-identification standard — all as a Release-2 capability under WHO / UN partnership scope.</li>
+
+          <li><strong>Telecheck-branded D2C in the US.</strong> US D2C runs through the Heros tenant. <em>Regulatory:</em> US state telehealth + FDA DTC apply identically to any US D2C operator. <em>Architecture:</em> Brand/tenant boundary per <code>ADR-023</code>; platform is infrastructure, brand is the tenant. <em>Activation:</em> Not regulatorily blocked — strategic. Would require onboarding a Telecheck-branded US tenant alongside Heros, which conflicts with the "platform monetizes via per-tenant fees, not via consumer-facing brand" position (§10). Unlikely revisit.</li>
+
+          <li><strong>Cross-tenant patient identity.</strong> <span class="tag med">Future Release</span> A human with accounts in two tenants has two independent accounts at launch. No federated identity. <em>Regulatory:</em> HIPAA (US) and Ghana DPA require independent consent regimes per controller; cross-tenant identity collapses two controllers into one for that patient. <em>Architecture:</em> Tenant isolation per <code>ADR-023</code>, enforced by floor invariant <code>I-023</code> (three-layer: RLS + app filtering + per-tenant KMS). <em>Activation:</em> A new ADR superseding the cross-tenant-isolation default for federated identity, plus a new cross-tenant consent framework, plus a cross-tenant data-sharing agreement model. Phase 3+ per §19; only if the business case develops.</li>
+
+          <li><strong>Multi-language patient experience.</strong> <span class="tag low">Future Release</span> English at launch (Track A) per <code>ADR-018</code>. <em>Regulatory:</em> None — strategic / scope decision. <em>Architecture:</em> Patient app, clinician portal, AI guardrail templates, notification copy, consent text — all currently English. Track B (USSD + AI Bridge + multilingual UI) is post-launch infrastructure. <em>Activation:</em> ADR-018 supersession; Track B activation in roadmap Phase 2 (Wave 1 USSD) and Phase 3 (multilingual UI where market demand justifies).</li>
+
+          <li><strong>AI autonomous prescribing.</strong> Per floor invariant <code>I-001</code>. <em>Regulatory:</em> Medical-board licensure in every operating jurisdiction (all US states + Ghana MDC) requires a named human prescriber on every prescription. <em>Architecture:</em> Floor invariant — immutable; protocolized autonomy (<code>ADR-005</code>) operates only with named human accountability at the policy layer. <em>Activation:</em> None. Would require law change in every operating jurisdiction. This is a genuine never-goal, not a deferred capability.</li>
+
+          <li><strong>AI in patient communities.</strong> Per floor invariant <code>I-009</code> and <code>ADR-007</code> — peer support is human-only at launch. <em>Regulatory:</em> None — design / safety choice. <em>Architecture:</em> Community Slice excludes AI as actor; moderation is human-led. <em>Activation:</em> A new ADR superseding ADR-007 — but the design rationale (peer authenticity, crisis-detection integrity, manipulation resistance) means this is unlikely to revisit. Not a future-release candidate at this time.</li>
+
+          <li><strong>Heros migration from Rimo.</strong> Heros launches greenfield. <em>Regulatory:</em> None. <em>Architecture:</em> Greenfield US tenant onboarding. <em>Activation:</em> Settled decision (2026-04-25 per §24). Not a future-release candidate.</li>
+
+          <li><strong>Schedule II controlled substances (US).</strong> <span class="tag med">Future Release</span> Out of launch scope. <em>Regulatory:</em> DEA Schedule II requires in-person evaluation per the Ryan Haight Act (with limited telehealth exceptions during PHE flexibilities); state-specific rules layer on top. <em>Architecture:</em> Pharmacy adapter framework does not currently route Schedule II prescriptions; platform has no DEA registration. <em>Activation:</em> A new ADR + DEA registration + state-by-state telehealth Schedule II activation; possibly enabled by Ryan Haight Act reform or by per-state telehealth-Schedule-II carve-outs. Phase 2+ per §19.</li>
+
+          <li><strong>Pediatric care below age 13.</strong> <span class="tag med">Future Release</span> Out of launch in both markets. <em>Regulatory:</em> COPPA (US under-13 data-collection rules) + pediatric-specific consent regimes + state pediatric telehealth licensure + Ghana MDC pediatric scope. <em>Architecture:</em> Special-handling category infrastructure exists for pregnancy and lactation populations (§13); pediatric clinical pathways below age 13 are not built. <em>Activation:</em> A new ADR + pediatric-specific consent flow (parental consent + age-gate) + clinical pathway design + COPPA-compliant data handling. Phase 3+ per §25.</li>
+        </ul>
+      </section>
+
+      <!-- ====== §22 ====== -->
+      <section class="section" id="s22">
+        <div class="section-meta"><span class="section-num">§ 22</span><span class="rule"></span><span class="of">22 / 26</span></div>
+        <h2>Dependencies and constraints</h2>
+
+        <h3>22.1 · Critical external dependencies</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Dependency</th><th>Used by</th><th>Risk</th><th>Mitigation</th></tr></thead>
+            <tbody>
+              <tr><td>Anthropic Claude API</td><td>AI Mode 1, Mode 2, lab interpretation, admin AI</td><td><span class="tag high">High</span></td><td>Multi-provider abstraction; Bedrock and Azure as backup</td></tr>
+              <tr><td>AWS us-east-1 region</td><td>Primary hosting per ADR-026</td><td><span class="tag high">High</span></td><td>us-west-2 cold DR; data backup discipline; us-west-2 IaC maintained for failover</td></tr>
+              <tr><td>Telecheck-Ghana cross-border processing</td><td>Ghana patient data processed in us-east-1</td><td><span class="tag high">High</span></td><td>Counsel engagement before Ghana launch; Ghana DPC registration; counsel-confirmed privacy notice; Phase 2 LiveKit edge routing</td></tr>
+              <tr><td>Stripe API (US)</td><td>Heros tenant payments</td><td><span class="tag high">High</span></td><td>Known SLA and reliability</td></tr>
+              <tr><td>Paystack API (Ghana)</td><td>Telecheck-Ghana tenant payments</td><td><span class="tag high">High</span></td><td>MTN MoMo direct as backup</td></tr>
+              <tr><td>LiveKit self-hosted</td><td>Sync video consults</td><td><span class="tag med">Medium</span></td><td>Owned infrastructure; engineering controls reliability</td></tr>
+              <tr><td>360dialog (WhatsApp Business API)</td><td>Ghana tenant primary patient channel</td><td><span class="tag high">High</span></td><td>SMS fallback per Notification Spec</td></tr>
+              <tr><td>Pharmacy partners</td><td>Per-tenant fulfillment</td><td><span class="tag high">High</span></td><td>Multi-adapter routing per Pharmacy + Refill v2.1 §6.1</td></tr>
+              <tr><td>RxNorm and drug interaction database</td><td>Medication Interaction Engine</td><td><span class="tag high">High</span></td><td>Vendor evaluation per OR item</td></tr>
+              <tr><td>Hubtel / mNotify · Plivo / MessageBird</td><td>Country SMS</td><td><span class="tag med">Medium</span></td><td>Multi-vendor available</td></tr>
+              <tr><td>AWS Textract Medical</td><td>Lab document OCR</td><td><span class="tag med">Medium</span></td><td>Alternative providers exist</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>22.2 · Critical internal dependencies</h3>
+        <ul>
+          <li><strong>Engineering team capability</strong> — multi-tenant architecture and native-first stack require senior engineering. Constraint: hiring/contracting for Sprint 0 onwards.</li>
+          <li><strong>Tenant Clinical Lead</strong> — each tenant requires a designated Clinical Lead per RBAC v1.1.</li>
+          <li><strong>Privacy Officer capability</strong> — reviews break-glass sessions within 7 days. Dedicated capacity required.</li>
+          <li><strong>Design file delivery</strong> — DIC v1.0 is provisional pending design file delivery; post-launch design delivery triggers reimplementation cycles.</li>
+          <li><strong>Research Ethics Committee (REC) partnership</strong> — per <code>ADR-028</code>, research data partnership requires in-country ethics oversight. Initial designation for Telecheck-Ghana (Ghana Health Service REC or Noguchi Memorial Institute IRB) is a pre-launch decision per §24. Analogous bodies for future markets onboard with country expansion.</li>
+          <li><strong>Marketing copy governance lead</strong> — per <code>ADR-027</code>, country-conditional DTC marketing posture requires designated governance review owner. Initial designation for emerging-market tenants (where molecule-level marketing is permitted) is a pre-launch decision per §24.</li>
+        </ul>
+
+        <h3>22.3 · Regulatory constraints</h3>
+        <ul>
+          <li><strong>HIPAA (US, Telecheck-US tenant)</strong> — full BAA structure with all PHI-touching subprocessors per <code>OR-243</code>.</li>
+          <li><strong>Ghana Data Protection Act</strong> — DPC registration per <code>OR-002</code>.</li>
+          <li><strong>State-by-state US telemedicine</strong> — clinician licensure scoping per state. Telecheck-US tenant (Heros Health DBA) onboards in scope states first; expands.</li>
+          <li><strong>FDA reporting (US adverse events)</strong> — per Adverse Event Reporting Slice.</li>
+          <li><strong>Ghana FDA reporting</strong> — per Telecheck-Ghana operations.</li>
+          <li><strong>Schedule III–V controlled substances (US)</strong> — DEA compliance per state. Schedule II out of scope.</li>
+          <li><strong>Research data cross-border transfer</strong> — per <code>ADR-028</code>, Posture A research data partnership involves cross-border transfer beyond the existing care-data processing posture. Ghana DPA cross-border-transfer rules apply to research use (in addition to care use). Sharing with WHO/UN partners (Geneva-based, etc.) is a further cross-border transfer beyond the US processing. Patient privacy notice must disclose both. <strong>[COUNSEL-REQUIRED]</strong> before research data export pipeline activates.</li>
+          <li><strong>Country-conditional DTC marketing posture</strong> — per <code>ADR-027</code>, molecule-level marketing in emerging markets requires country regulatory contract (e.g., Ghana FDA + Pharmacy Council guidance review). Activation gated on regulatory engagement per market.</li>
+        </ul>
+      </section>
+
+      <!-- ====== §23 ====== -->
+      <section class="section" id="s23">
+        <div class="section-meta"><span class="section-num">§ 23</span><span class="rule"></span><span class="of">23 / 26</span></div>
+        <h2>Risks</h2>
+
+        <h3>23.1 · Top 10 platform-level risks at launch</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Risk</th><th>Probability</th><th>Impact</th><th>Mitigation</th></tr></thead>
+            <tbody>
+              <tr><td>01</td><td>Tenant isolation breach (cross-tenant data leak)</td><td><span class="tag low">Low</span></td><td><span class="tag cat">Catastrophic</span></td><td>Three-layer enforcement (RLS + app filtering + per-tenant KMS); <code>I-023</code></td></tr>
+              <tr><td>02</td><td>Clinical safety incident from AI Mode 2 mis-calibration</td><td><span class="tag med">Low–Medium</span></td><td><span class="tag cat">Catastrophic</span></td><td>Clinician sign-off invariant <code>I-012</code>; guardrail templates; clinical safety case (<code>OR-004</code>)</td></tr>
+              <tr><td>03</td><td>Pharmacy adapter outage causing missed refills</td><td><span class="tag med">Medium</span></td><td><span class="tag high">High</span></td><td>Multi-adapter routing; STOCKOUT auto-pause-and-bridge</td></tr>
+              <tr><td>04</td><td>Payment processor outage</td><td><span class="tag med">Low–Medium</span></td><td><span class="tag med">Med–High</span></td><td>Documented dunning; per-tenant adapter; honest patient communication</td></tr>
+              <tr><td>05</td><td>Heros launches greenfield with insufficient acquisition</td><td><span class="tag high">Med–High</span></td><td><span class="tag high">Med–High</span></td><td>Marketing investment; conversion-optimized intake; affiliate program</td></tr>
+              <tr><td>06</td><td>Emerging-market regulatory friction (Ghana as launch instance)</td><td><span class="tag med">Medium</span></td><td><span class="tag high">High in launch market</span></td><td>Ghana Launch Playbook v1.2; per-OR-tracker items</td></tr>
+              <tr><td>07</td><td>Engineering team capacity insufficient for 22–26 week timeline</td><td><span class="tag med">Medium</span></td><td><span class="tag high">High</span></td><td>Sprint plan discipline per EHBG v1.3; verification gate; honest mid-sprint scope cuts if needed</td></tr>
+              <tr><td>08</td><td>LLM provider unavailability or quality regression</td><td><span class="tag low">Low</span></td><td><span class="tag med">Med–High</span></td><td>Multi-provider abstraction per <code>ADR-020</code>; degraded mode</td></tr>
+              <tr><td>09</td><td>Crisis-detection false negative leading to patient harm</td><td><span class="tag low">Very Low</span></td><td><span class="tag cat">Catastrophic</span></td><td>Conservative thresholds; multi-layer detection; clinician escalation</td></tr>
+              <tr><td>10</td><td>Audit chain corruption invalidating regulatory inquiry</td><td><span class="tag low">Very Low</span></td><td><span class="tag high">High</span></td><td>Hash chain per <code>AUDIT_EVENTS</code>; cross-partition checkpoints; offline backup verification</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>23.2 · Per-tenant launch risks</h3>
+        <h4>Heros tenant</h4>
+        <ul>
+          <li>Greenfield launch requires marketing CAC for patient acquisition (no migration baseline)</li>
+          <li>Multi-state US clinician licensure complexity</li>
+          <li>Stripe Connect for affiliate payouts adds vendor dependency</li>
+          <li>Pharmacy partner SLA in early scaling</li>
+        </ul>
+
+        <h4>Telecheck-Ghana tenant</h4>
+        <ul>
+          <li>The launch market validates every emerging-markets cross-cutting concern (chronic care, herbal co-medication reporting, mobile money, WhatsApp-first, motorcycle delivery) under real load</li>
+          <li>Regulatory environment less mature than US — DPC registration timing</li>
+          <li>Connectivity variance; degraded-mode behavior under real load is unproven at scale</li>
+          <li>Clinician network depth in Ghana</li>
+        </ul>
+      </section>
+
+      <!-- ====== §24 ====== -->
+      <section class="section" id="s24">
+        <div class="section-meta"><span class="section-num">§ 24</span><span class="rule"></span><span class="of">24 / 26</span></div>
+        <h2>Pre-launch decision requirements</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Decision</th><th>Owner</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>01</td><td>Heros migration from Rimo</td><td>Product Lead + Heros leadership</td><td><span class="tag low">Decided 2026-04-25</span> · NO migration. Greenfield.</td></tr>
+              <tr><td>02</td><td>Design file delivery timing</td><td>Product Lead</td><td><span class="tag med">Deferred</span> · DIC v1.0 provisional. Engineering proceeds without pixel-exact-match.</td></tr>
+              <tr><td>03</td><td>Clinical safety case sign-off</td><td>Tenant Clinical Leads</td><td>Open · <code>OR-004</code> · Required pre-launch each tenant</td></tr>
+              <tr><td>04</td><td>Threat model sign-off</td><td>Engineering Lead + Privacy Officer</td><td>Open · <code>OR-001</code></td></tr>
+              <tr><td>05</td><td>AI bias and fairness assessment</td><td>Platform AI Safety</td><td>Open · <code>OR-005</code></td></tr>
+              <tr><td>06</td><td>Ghana DPIA</td><td>Privacy Officer + Telecheck-Ghana team</td><td>Open · <code>OR-002</code> · Required pre-Ghana-launch</td></tr>
+              <tr><td>07</td><td>LLM provider final selection</td><td>Platform AI Safety</td><td><span class="tag low">Decided</span> · <code>ADR-020</code> · Anthropic Claude primary</td></tr>
+              <tr><td>08</td><td>Pharmacy adapter partnerships finalized</td><td>Tenant Operations</td><td>Open per tenant</td></tr>
+              <tr><td>09</td><td>Tenant Clinical Lead designation</td><td>Each tenant</td><td>Open per tenant · Required before clinical surfaces enabled</td></tr>
+              <tr><td>10</td><td>Privacy Officer designation</td><td>Platform</td><td>Open · Required for break-glass session reviews</td></tr>
+              <tr><td>11</td><td>Research Ethics Committee (REC) partnership designation — Ghana</td><td>Privacy Officer + Telecheck-Ghana team</td><td>Open · Required for research data partnership activation per <code>ADR-028</code> · Ghana GHS REC or Noguchi Memorial Institute IRB</td></tr>
+              <tr><td>12</td><td>Research data-use consent text — drafted + ethics-reviewed</td><td>Privacy Officer + Legal + REC partner</td><td>Open · Required pre-launch (5th consent tier active at launch per §15.2)</td></tr>
+              <tr><td>13</td><td>Data Sharing Agreement (DSA) template — legal-reviewed</td><td>Legal + Privacy Officer</td><td>Open · Required before first DSA activation (Release 2)</td></tr>
+              <tr><td>14</td><td>De-identification standard — chosen + documented</td><td>Engineering + Privacy Officer</td><td>Open · Required before research data export pipeline activates (Release 2) · Safe Harbor + k-anonymity</td></tr>
+              <tr><td>15</td><td>Initial WHO/UN partner identification</td><td>Product Lead + External Comms</td><td>Open · Strategic — first partnership scope (NCD program, surveillance, etc.) shapes Release 2 architecture</td></tr>
+              <tr><td>16</td><td>Marketing copy governance lead designation</td><td>Product Lead + Regulatory Affairs Lead</td><td>Open · Required for emerging-market tenants where molecule-level marketing is permitted per <code>ADR-027</code></td></tr>
+              <tr><td>17</td><td>First molecule-level marketing copy approval — Ghana</td><td>Marketing copy governance lead + Clinical Safety Officer + Regulatory Affairs Lead</td><td>Open · Per §13.2 governance review · pre-launch for first emerging-market activation</td></tr>
+              <tr><td>18</td><td>CCR marketing key initial values per country</td><td>Engineering + Regulatory Affairs Lead</td><td>Open · US=false, Ghana=pending regulatory engagement</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ====== §25 ====== -->
+      <section class="section" id="s25">
+        <div class="section-meta"><span class="section-num">§ 25</span><span class="rule"></span><span class="of">25 / 26</span></div>
+        <h2>Open questions</h2>
+        <p>Strategic questions that don't require pre-launch decision but warrant attention.</p>
+        <ol>
+          <li><strong>When and how to onboard Tenant 3+</strong> — process, contracts, brand identity guidance, country addition workflow per <code>CCR_RUNTIME</code> v5.1</li>
+          <li><strong>Federated patient identity across tenants</strong> — Phase 2 design and timing</li>
+          <li><strong>Heros Health consumer brand expansion across additional African markets beyond Ghana</strong> — country-subsidiary sequencing (Telecheck-Nigeria, Telecheck-Kenya, Telecheck-SouthAfrica) and corresponding subdomain rollouts (nigeria.heroshealth.com, etc.); out of launch scope; future strategic question</li>
+          <li><strong>AI conversation persistence across tenants for the same human</strong> — privacy/UX trade-off; default is no persistence</li>
+          <li><strong>Cross-tenant clinician network optimization</strong> — UX for clinicians authorized in multiple tenants</li>
+          <li><strong>Heros' marketing channel mix without Rimo migration baseline</strong> — Heros team owns this; platform supports</li>
+          <li><strong>When to add Schedule II controlled substances</strong> — regulatory and operational complexity; Phase 2+</li>
+          <li><strong>Pediatric expansion (&lt;13) timing</strong> — regulatory and product complexity; Phase 3+</li>
+          <li><strong>Owned-pharmacy considerations</strong> — vs partner-only model. Phase 2 evaluation</li>
+          <li><strong>Multilingual coverage Track B timing</strong> — USSD + AI Bridge; <code>ADR-018</code> deferred</li>
+          <li><strong>Affiliate program productization beyond MVP</strong> — automated payouts, affiliate self-service dashboards</li>
+          <li><strong>Research data partnership scope — first WHO/UN program</strong> — which specific program (NCD surveillance, chronic disease registry, pharmacovigilance, etc.) is the first DSA target? Affects export-pipeline architecture priorities. Per <code>ADR-028</code>; Release 2 dependency.</li>
+          <li><strong>Molecule-level vs program-level marketing definition</strong> — what counts as molecule-level (requiring §13.2 governance review) vs program-level (standard marketing review)? Working definition needed before first emerging-market marketing copy ships. Per <code>ADR-027</code>.</li>
+          <li><strong>Cross-mode AI data flow (Mode 1 ↔ Mode 2)</strong> — privacy and clinical safety trade-off. Per AI Slice §15 Q6.</li>
+          <li><strong>Per-(tenant, country) encryption keys for future multi-country tenants</strong> — current per-tenant KMS (per ADR-024) suffices for one-tenant-per-country model; revisit if multi-country tenants emerge.</li>
+        </ol>
+      </section>
+
+      <!-- ====== §26 ====== -->
+      <section class="section" id="s26">
+        <div class="section-meta"><span class="section-num">§ 26</span><span class="rule"></span><span class="of">26 / 26</span></div>
+        <h2>Feature PRD index</h2>
+        <p>The 18 slice PRDs that govern feature-level workflows.</p>
+
+        <h3>Pillar 1 · Care delivery (3 slices)</h3>
+        <ul>
+          <li>AI Clinical Assistant Slice PRD v1.0 <em>(+ Tenant Threading Addendum §3.1)</em></li>
+          <li>Async Consult Slice PRD v1.0 <em>(+ §3.2)</em></li>
+          <li>Sync Video Consult Slice PRD v1.0 <em>(+ §3.3)</em></li>
+        </ul>
+
+        <h3>Pillar 2 · Clinical intelligence (3 slices)</h3>
+        <ul>
+          <li>Medication Interaction &amp; Validation Engine Slice PRD v1.0 <em>(+ §3.8)</em></li>
+          <li>Herb-Drug Interaction Engine Slice PRD v1.0 <em>(+ §3.9)</em></li>
+          <li>Adverse Event Reporting Slice PRD v1.0 <em>(+ §3.6)</em></li>
+        </ul>
+
+        <h3>Pillar 3 · Pharmacy and prescription commerce (1 consolidated slice)</h3>
+        <ul>
+          <li>Pharmacy + Refill Slice PRD v2.x <em>(consolidates Refill v1.0 + Pharmacy Portal v1.0)</em></li>
+        </ul>
+
+        <h3>Pillar 4 · Patient onboarding and intake (1 slice)</h3>
+        <ul>
+          <li>Forms / Intake Engine Slice PRD v2.x <em>(Tier-1 conversion-optimized rewrite)</em></li>
+        </ul>
+
+        <h3>Pillar 5 · Labs and documents (1 slice)</h3>
+        <ul>
+          <li>Labs Document Interpretation Slice PRD v1.0 <em>(+ §3.10)</em></li>
+        </ul>
+
+        <h3>Pillar 6 · RPM/CCM (1 slice)</h3>
+        <ul>
+          <li>RPM/CCM Slice PRD v1.0 <em>(+ §3.4)</em></li>
+        </ul>
+
+        <h3>Pillar 7 · Community (1 slice)</h3>
+        <ul>
+          <li>Community Platform Slice PRD v1.0 <em>(+ §3.5)</em></li>
+        </ul>
+
+        <h3>Pillar 8 · Acquisition (1 slice)</h3>
+        <ul>
+          <li>Acquisition &amp; Engagement Tools Slice PRD v1.0 <em>(+ §3.12)</em></li>
+        </ul>
+
+        <h3>Pillar 9 · Consent and access (1 slice)</h3>
+        <ul>
+          <li>Consent &amp; Delegated Access Slice PRD v1.0 <em>(+ §3.7)</em></li>
+        </ul>
+
+        <h3>Pillar 10 · Fake medication detection (1 slice)</h3>
+        <ul>
+          <li>Fake Medication Detection Slice PRD v1.0 <em>(+ §3.11)</em></li>
+        </ul>
+
+        <h3>Pillar 11 · Admin (3 slices)</h3>
+        <ul>
+          <li>Admin Configuration Surfaces Slice PRD v1.0 <em>(governance — platform admin)</em></li>
+          <li>Market Rollout Cockpit Slice PRD v1.0 <em>(market launch — platform admin)</em></li>
+          <li>Admin Backend Slice PRD v1.x <em>(gold-standard ecom admin — both Platform Admin and Tenant Admin)</em></li>
+        </ul>
+      </section>
+
+      <!-- ====== §27 — PostDraft additions (preview) ====== -->
+      <section class="section" id="s27">
+        <div class="section-meta"><span class="section-num">§ 27</span><span class="rule"></span><span class="of">Preview supplement</span></div>
+        <h2>PostDraft additions — v1.10 cycle status as of 2026-04-29</h2>
+
+        <p><strong>Read this section first if you are returning to v1.10 after 2026-04-28.</strong> The §1–§26 body above is the v1.10 drafted target as captured in the original HTML preview generated 2026-04-28. Several material decisions and architectural additions have landed in the v1.10 cycle since then. They have NOT yet been threaded into §1–§26 because Master PRD edits land in Phase 2 of the cycle. This §27 captures the deltas so reviewers see the current state without contaminating the Phase 2 edit surface.</p>
+
+        <p><strong>Status of the v1.10 cycle:</strong> Pre-Phase-0. Planning Freeze v1.3 declared Phase-0-ready by Codex on 2026-04-29 (4 review cycles, 9 → 4 → 0 convergence). C7 forward-compatibility bundle declared ready for matrix commit by Codex on 2026-04-29 (4 review cycles, 15 → 7 → 1 → 0 convergence). Phase 0 walk pending stakeholder convening.</p>
+
+        <h3>27.1 · Workstream lead designated</h3>
+        <p><strong>Evans</strong> (Product Lead) designated as v1.10 PRD update workstream lead on 2026-04-28, satisfying the planning freeze §3 Phase 0 single-named-owner requirement. Codex (OpenAI Codex CLI v0.125.0 via the <code>codex@openai-codex</code> Claude Code plugin) designated as adversarial reviewer on the workstream, replacing the human-adversarial role. Per Evans's directive 2026-04-28, Codex adversarial review autoinvokes at every phase/milestone exit.</p>
+
+        <h3>27.2 · Design Implementation Contract (DIC) v1.0 → v1.1 fold-in</h3>
+        <p>DIC v1.0 was previously marked PROVISIONAL pending design file delivery (per HIGH-11 product decision recorded in <code>Telecheck_Adversarial_Counsel_Review_Sessions_1_to_3.md</code>). On 2026-04-28, the design handoff arrived at <code>telecheck-design-system/</code> (Patient interactive mock <strong>v7</strong> authoritative; Claude Design HTML/CSS/JSX prototypes; Manrope/Lucide/wordmark/photography flagged as substitutions for replacement before customer ship).</p>
+        <p>Per Evans's <strong>Option B</strong> decision (2026-04-28), DIC promotion is folded into the v1.10 cycle rather than executed as a standalone cycle. DIC v1.0 → v1.1 lands as one row in the v1.10 traceability matrix (Phase 5.6 / F49), alongside the C3 brand-structure cascade that the matrix's prior adversarial review already required.</p>
+        <p>The §24 row 02 ("Design file delivery timing — Deferred — DIC v1.0 provisional") is superseded by this fold-in; status becomes <em>Decided 2026-04-28 — design handoff received; DIC v1.0 → v1.1 promoted under v1.10 cycle Phase 5.6 / Phase 6</em>.</p>
+
+        <h3>27.3 · C7 — AI workload taxonomy + autonomy levels (forward-compatibility for agentic autonomy)</h3>
+        <p>A seventh architectural shift, <strong>C7</strong>, has been added to the v1.10 cycle to make the platform forward-compatible with future agentic autonomy without rewriting the system. C7 sits alongside C1–C6 and adds 10 new matrix rows for Phase 0 walk.</p>
+        <p><strong>What changes:</strong> The current binary "AI Mode 1 / Mode 2" framing of <code>AI-LAYERING</code> AI-ARCH-001 is replaced with a property-based <strong>AI workload taxonomy</strong> (<code>ai_workload_type</code> discriminator) carrying four orthogonal properties: <code>autonomy_level</code>, <code>tool_access</code>, <code>memory_scope</code>, <code>governance_class</code>. Mode 1 maps to <code>conversational_assistant</code>; Mode 2 maps to <code>protocol_execution</code>. Reserved future workload types (<code>autonomous_agent</code>, <code>multi_agent_supervisor</code>, <code>tool_using_agent</code>) are namespace placeholders requiring named successor ADRs to activate.</p>
+        <p><strong>What does NOT change at v1.0:</strong> ADR-002 remains binding for current Mode 1 / Mode 2 until separate successor ADR. ADR-005 (protocolized autonomy) remains binding for <code>protocol_execution</code> at autonomy_level ≤ <code>action_with_confirm</code>. I-012 (clinician sign-off for prescription) is preserved with explicit state machine validation rejecting prescription/refill/medication-order transitions to <code>executed</code> at autonomy_level ∈ {advisory, suggestion}.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>New artifact</th><th>Type</th><th>Phase</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td><code>ADR-029 · AI Workload Taxonomy</code></td><td>New ADR (prospectively supersedes ADR-002 for new workload additions)</td><td>4</td><td><span class="tag low">Drafted v0.3</span> · Codex-verified ready for matrix commit</td></tr>
+              <tr><td><code>WORKLOAD_TAXONOMY</code> contract</td><td>New cross-cutting contract (Contracts Pack v5.1)</td><td>3.X</td><td><span class="tag low">Drafted v0.3</span></td></tr>
+              <tr><td><code>AUTONOMY_LEVELS</code> contract</td><td>New cross-cutting contract (Contracts Pack v5.1)</td><td>3.X</td><td><span class="tag low">Drafted v0.3</span></td></tr>
+              <tr><td><code>AUDIT_EVENTS</code> nullable agentic-context fields</td><td>Audit envelope additions: <code>ai_workload_type</code>, <code>autonomy_level</code> (required for new AI events); <code>agent_id</code>, <code>agent_version</code>, <code>tool_call_id</code>, <code>memory_read_set_id</code>, <code>memory_write_set_id</code>, <code>supervising_policy_id</code>, <code>knowledge_source_versions[]</code> (nullable reserved)</td><td>3.3</td><td><span class="tag low">Drafted</span></td></tr>
+              <tr><td><code>CDM AIExecution</code> entity</td><td>New canonical entity unifying current Mode 1 invocations and Mode 2 cases</td><td>5.4</td><td><span class="tag low">Drafted</span></td></tr>
+              <tr><td><code>State Machines · ProtocolAuthorizedAction</code></td><td>New lifecycle gated on <code>autonomy_level</code>; only <code>human_confirmed</code> path implemented at v1.0; reserved transitions documented as non-normative future sketches owned by ADR-030</td><td>5.4</td><td><span class="tag low">Drafted</span></td></tr>
+              <tr><td>Reserved ADRs</td><td><code>ADR-030</code> Tiered Autonomy Progression Model · <code>ADR-031</code> Agent Tool Contract · <code>ADR-032</code> Agent Memory Architecture · <code>ADR-033</code> Multi-Agent Service Split · <code>ADR-034</code> Knowledge Source Registry</td><td>Deferred (post-v1.10)</td><td><span class="tag med">Reserved namespace</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><strong>Cost (calibrated v1.3 — single source of truth):</strong> +10 matrix rows; ~2-3 weeks added v1.10 cycle time; ~+3-5% engineering cost on the 24-week build (only if implementation is limited to enum surface, audit nullability, AIExecution entity without reserved-entity persistence, validation rejection, terminology refresh, and the I-012 preservation validator). Avoided cost: ~3-4 weeks total when agentic ships (~2-3 weeks classification refactor + ~1 week audit-envelope migration). Bulk of agentic engineering work remains for deferred ADR cycles.</p>
+
+        <h3>27.4 · Planning freeze v1.0 → v1.3 — patches landed since 2026-04-28</h3>
+        <p>The v1.10 planning freeze went through three Codex adversarial-review patch passes (2026-04-29) and is now Phase-0-ready. Material structural changes that downstream Phase 2 / 3 / 4 / 5 / 6 work depends on:</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Patch</th><th>Change</th></tr></thead>
+            <tbody>
+              <tr><td>Phase 1 ordering (HIGH-1)</td><td>Phase 1 produces glossary <strong>drafts only</strong>. Final F13 glossary approval moves to new Phase 2.X reconciliation step (after Master PRD canonical text exists). Glossary entries cannot be approved against pre-canonical PRD wording.</td></tr>
+              <tr><td>Audit-B owner pairing (HIGH-2)</td><td>Reclassified from §5 deferred to <strong>Phase 0 BLOCKER</strong> per I-015. Phase 0 cannot exit until every audit-B row has a validated owner pair. 24 audit-B rows currently have single owners.</td></tr>
+              <tr><td>DIC fold-in (HIGH-3)</td><td>Added explicitly to Phase 0 validation, Phase 5.6 (F49), Phase 6 promotion artifacts (Registry, Index, Promotion Ledger P-008, Boot Sequence), and §7 sign-off gates.</td></tr>
+              <tr><td>Sign-off gate revalidation (HIGH-4)</td><td>Status workflow no longer monotonic. <code>Approved → Revalidation required</code> transition added; deterministic for Phase-0-tagged rows on upstream changes; manual reviewer responsibility for non-tagged rows. Required by §7 sign-off gate completeness.</td></tr>
+              <tr><td>ADR draft prerequisites (MEDIUM-5)</td><td>Phase 2 sections referencing ADR-027/028 gate on Phase 4 <em>drafts</em> existing — drafts must include Status, Context, Decision, Consequences, Activation requirements, and Posture A scope (ADR-028) / activation mechanism (ADR-027).</td></tr>
+              <tr><td>Scope reconciliation (MEDIUM-6)</td><td>Phase 0 reconciles 7 missing items: Consent Slice clarification, AI Slice update, country regulatory contracts, Pharmacy Council guidance, DSA template, REC/IRB engagement, DIC v1.0 fold-in. Final matrix row count locks at Phase 0 exit.</td></tr>
+              <tr><td>Dependency tagging (MEDIUM-7)</td><td>Phase 0 tags high-risk rows: glossary, §10.5, §X, ADR-027/028, contracts, F41 System Architecture, F48 Tenant Threading, F49 DIC, registry/index/ledger.</td></tr>
+              <tr><td>Frozen vs mutable distinction</td><td>Planning freeze is frozen; matrix is mutable under Phase 0 controls. Header status reframed to "Planning freeze frozen (matrix mutable under Phase 0 controls)."</td></tr>
+              <tr><td>Row-count rule</td><td>90 rows is a v1.0 baseline; Phase 0 reconciliation may add rows; final count locks at Phase 0 exit. §1 + §3 + §7 + §8 references all align on this rule (single source of truth).</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>27.5 · Codex adversarial-review cadence (workstream-binding)</h3>
+        <p>Per Evans's 2026-04-28 directive, Codex adversarial review autoinvokes at every v1.10 phase/milestone exit. Invocation path bypasses the plugin's slash-command guardrail (which is user-invocation-only) by calling the plugin's companion script directly via Bash:</p>
+<pre><code>node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs" adversarial-review \
+  "--background --base main Telecheck_v1_10_PRD_Update/"</code></pre>
+        <p>Phase exits return Codex findings (HIGH/MEDIUM/LOW); HIGH findings force the offending phase back to in-progress per the §7 revalidation rule. The Stop hook (<code>stop-review-gate-hook.mjs</code>, 15-min timeout) is wired as a backstop review gate at end of every Claude turn.</p>
+
+        <h3>27.6 · §13 Special handling — workload taxonomy reframe (Phase 2 work)</h3>
+        <p>The current §13 ("Special handling and governance review") will gain a §13.7 in Phase 2 reframing the AI / clinical autonomy framework from binary mode model to workload taxonomy + autonomy levels. Mode 1 / Mode 2 narrative preserved as labeled special cases (<code>conversational_assistant</code>, <code>protocol_execution</code>) for operator UX continuity; code, schema, audit, and config use the workload taxonomy values. Reference: ADR-029.</p>
+
+        <h3>27.7 · §24 Pre-launch decisions — status updates since 2026-04-28</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Decision (from §24 above)</th><th>Updated status</th></tr></thead>
+            <tbody>
+              <tr><td>02</td><td>Design file delivery timing</td><td><span class="tag low">Decided 2026-04-28</span> · Design handoff received at <code>telecheck-design-system/</code>; DIC v1.0 → v1.1 promotion folded into v1.10 cycle Phase 5.6 / Phase 6 per Evans Option B. Supersedes prior "Deferred · DIC provisional" status.</td></tr>
+              <tr><td>NEW 19</td><td>v1.10 workstream lead designation</td><td><span class="tag low">Decided 2026-04-28</span> · Evans (Product Lead) designated. Satisfies planning freeze §3 Phase 0 single-named-owner requirement.</td></tr>
+              <tr><td>NEW 20</td><td>Adversarial reviewer designation</td><td><span class="tag low">Decided 2026-04-28</span> · Codex (OpenAI Codex CLI via <code>codex@openai-codex</code> plugin) designated. Replaces human-adversarial role. Autoinvoke authorized at every phase/milestone exit.</td></tr>
+              <tr><td>NEW 21</td><td>Audit-B owner pair designations (Adversarial Review Finding 3)</td><td><span class="tag high">Phase 0 BLOCKER</span> · 24 audit-B rows still need second-approver pairing per I-015. Phase 0 cannot exit without these pairings.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>27.8 · Phase 0 readiness checklist</h3>
+        <p>Before walking the matrix with stakeholders:</p>
+        <ol>
+          <li><span class="tag low">Done</span> Planning Freeze v1.3 (frozen 2026-04-29; Codex Phase-0-ready)</li>
+          <li><span class="tag low">Done</span> C7 bundle drafted (Tier2 row additions v1.3 + WORKLOAD_TAXONOMY v0.3 + AUTONOMY_LEVELS v0.3 + ADR-029 v0.3; Codex matrix-commit-ready)</li>
+          <li><span class="tag low">Done</span> Workstream lead + adversarial reviewer designated</li>
+          <li><span class="tag low">Done</span> Codex autoinvocation path documented (CLAUDE.md + feedback memory)</li>
+          <li><span class="tag med">Pending</span> Phase 0 walk convened with: Product, Engineering, Clinical Safety, Regulatory Affairs, Privacy Officer</li>
+          <li><span class="tag med">Pending</span> Matrix mutations applied (add C7 rows; add DIC fold-in row; add Revalidation required to status dropdown; add dependency-tag column; add 7 scope-reconciliation rows or close as out-of-scope)</li>
+          <li><span class="tag med">Pending</span> 24 audit-B single-owner rows paired with second approvers per I-015</li>
+          <li><span class="tag med">Pending</span> Edit-type vocabulary normalized to controlled set (Reference update / New entry / New section / Section rewrite / Terminology rewrite / Verification only / New file authoring)</li>
+          <li><span class="tag med">Pending</span> High-risk rows tagged with dependencies</li>
+          <li><span class="tag med">Pending</span> Final matrix row count locked (estimated ~108-115 rows after Phase 0 reconciliation: 90 baseline + 7 scope items + 10 C7 + DIC fold-in)</li>
+          <li><span class="tag med">Pending</span> Codex adversarial review at Phase 0 exit returns no HIGH-severity findings</li>
+        </ol>
+
+        <h3>27.9 · How this preview relates to canonical Phase 2 work</h3>
+        <p>This <em>Preview · PostDraft</em> HTML is a delta-only supplement. The canonical Phase 2 work — taking the v1.9 source <code>Telecheck_Master_Platform_PRD_v1_9.md</code> and producing canonical v1.10 <code>Telecheck_Master_Platform_PRD_v1_10.md</code> — has not yet started and will land in §1–§26 directly when Phase 2 executes. At that point a fresh HTML rendering will be regenerated and this preview supersedes itself. The original <code>Telecheck_Master_Platform_PRD_v1_10.html</code> remains untouched as the Phase 2 starting point.</p>
+
+        <p style="margin-top: 1.5em; padding: 1em 1.25em; background: rgba(0,0,0,0.03); border-left: 3px solid var(--accent, #6b1a1a); font-style: italic;">
+          PostDraft additions (this §27) are non-canonical until they thread into §1–§26 during Phase 2 of the v1.10 cycle. Reviewing this preview is a useful pre-Phase-0 sanity check; do NOT treat any §27 content as binding. Bindings derive from the Planning Freeze v1.3, the C7 v1.3 bundle, and the cascading contract/CDM/state-machine edits that follow Phase 2.
+        </p>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>
+    <div>
+      <div class="col-label">Telecheck</div>
+      <div>Master Platform PRD</div>
+      <div class="accent" style="margin-top:4px;">v1.10 · Preview (PostDraft)</div>
+    </div>
+    <div class="colophon">
+      Set in Fraunces (display) and Source Serif 4 (text), with Inter Tight for labels and JetBrains Mono for technical identifiers. One platform. Multiple brands. Multiple countries. — Preview supplement: PostDraft additions for v1.10 cycle status as of 2026-04-29; canonical Phase 2 work pending.
+    </div>
+    <div>
+      <div class="col-label">Companion</div>
+      <div>Artifact Registry v2.10 (target)</div>
+      <div style="margin-top:4px;">2026-04-29</div>
+    </div>
+  </footer>
+
+</div>
+
+<!-- Static document: scroll-spy JavaScript removed for offline / sandboxed rendering.
+     TOC anchor links still work without JavaScript. -->
+
+</body>
+</html>

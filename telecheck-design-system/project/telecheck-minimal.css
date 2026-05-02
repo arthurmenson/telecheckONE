@@ -1,0 +1,283 @@
+/*
+ * Telecheck — Minimal Color Override
+ * Strips back the per-section color identities.
+ * Rule: white surfaces · warm neutral bg · teal for primary CTAs only ·
+ *       iris for AI only · semantic chips for status only · nothing else.
+ */
+
+/* ── Reset all gradient heroes to clean white ────────────────── */
+/* .v2-hero.home-hero and .hero are EXCLUDED — home keeps its original style */
+.cr-hero,
+.ph-hero,
+.lb-hero,
+.me-hero {
+  background: var(--surface-1) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+/* ── Reset ALL inner page colored headers to plain white ─────── */
+.cr-hdr,
+.ph-hdr,
+.lb-hdr,
+.me-hdr {
+  background: var(--surface-1) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+/* Keep back-button text neutral */
+.cr-hdr-back, .ph-hdr-back, .lb-hdr-back, .me-hdr-back {
+  color: var(--fg-3) !important;
+}
+
+/* ── Eyebrows: use neutral caps, not brand color ─────────────── */
+.cr-eyebrow, .ph-eyebrow, .lb-eyebrow, .me-eyebrow {
+  color: var(--fg-3) !important;
+}
+
+/* ── Remove colored left stripes from hub primary cards ──────── */
+.cr-prime-stripe,
+.ph-prime-stripe,
+.me-prime-stripe {
+  background: var(--n-200) !important;
+}
+
+/* ── Hub card icon backgrounds: neutral only ─────────────────── */
+.cr-prime-ico,
+.ph-prime-ico,
+.me-prime-ico {
+  background: var(--n-50) !important;
+}
+.cr-prime-ico svg,
+.ph-prime-ico svg,
+.me-prime-ico svg {
+  stroke: var(--fg-2) !important;
+}
+
+/* ── Mini cards: white, no tinted backgrounds ────────────────── */
+.cr-mini, .ph-mini, .lb-mini, .me-mini {
+  background: var(--surface-1) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: none !important;
+}
+
+/* Mini icon backgrounds: neutral wash */
+.cr-mini-ico, .ph-mini-ico, .lb-mini-ico, .me-mini-ico {
+  background: var(--n-50) !important;
+}
+
+/* Mini status pills: keep semantic color text but neutral bg */
+.cr-mini .cr-mini-pill,
+.ph-mini .ph-mini-pill,
+.lb-mini .lb-mini-chip,
+.me-mini [style*="background"] {
+  background: var(--n-50) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+
+/* ── AI shortcut rows: neutral ───────────────────────────────── */
+.cr-ai-row {
+  background: var(--n-50) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+.cr-ai-ico {
+  background: var(--n-100) !important;
+}
+
+/* ── Visit / Rx / lab result cards ──────────────────────────── */
+.cr-vcard,
+.ph-rx-card,
+.ph-check-card,
+.ph-prog-card,
+.cr-tcard,
+.lb-result,
+.lb-cat-card,
+.lb-chart-card,
+.lb-report-card,
+.me-doc-card,
+.me-fam-card,
+.me-event-card,
+.me-consent-card,
+.me-setting-row,
+.me-notif-row {
+  background: var(--surface-1) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: none !important;
+}
+
+/* Remove live-visit red tint from cards */
+.cr-vcard.live {
+  background: var(--surface-1) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+/* ── Lab category card: remove colored top stripe ────────────── */
+.lb-cat-card-stripe {
+  background: var(--n-200) !important;
+}
+
+/* Lab category icon: neutral */
+.lb-cat-ico {
+  background: var(--n-50) !important;
+}
+.lb-cat-ico svg { stroke: var(--fg-2) !important; }
+
+/* ── Lab flagged items: thin left border (status color), white bg */
+.lb-flag {
+  background: var(--surface-1) !important;
+}
+/* Keep the left border as the ONLY color signal — it's semantic */
+
+/* ── Pharmacy safety hero: neutral ───────────────────────────── */
+.ph-safety-hero {
+  background: var(--n-50) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+.ph-safety-shield {
+  background: var(--teal-500) !important; /* primary CTA — keep */
+}
+
+/* ── Program cards: neutral for non-dark ones ────────────────── */
+.ph-prog-card:not([style*="1b1d2b"]) {
+  background: var(--surface-1) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+/* ── Care program hero (orange gradient → neutral) ────────────── */
+.cr-prog-hero {
+  background: var(--surface-1) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+.cr-prog-tag { color: var(--fg-3) !important; }
+.cr-prog-fill { background: var(--teal-500) !important; }
+.cr-prog-wk { background: var(--n-50) !important; color: var(--fg-2) !important; }
+
+/* ── Me identity card ─────────────────────────────────────────── */
+.me-id-card {
+  background: var(--surface-1) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+.me-id-ver {
+  background: var(--n-50) !important;
+  color: var(--fg-3) !important;
+}
+
+/* ── Me billing card ──────────────────────────────────────────── */
+.me-billing-card {
+  background: var(--n-50) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+.me-billing-tag { color: var(--fg-3) !important; }
+
+/* ── Me health hero snapshot strip ───────────────────────────── */
+.me-health {
+  background: var(--n-50) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: none !important;
+}
+
+/* ── Labs AI gen card ─────────────────────────────────────────── */
+.lb-ai-gen {
+  background: var(--n-50) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+.lb-ai-gen-tag { color: var(--fg-3) !important; }
+
+/* ── AI brief card: keep iris left border, neutral bg ────────── */
+.aib {
+  background: var(--surface-1) !important;
+  border-color: var(--border-subtle) !important;
+  border-left-color: var(--iris-500) !important; /* AI signal — keep */
+}
+.aib-k { color: var(--iris-600) !important; }
+
+/* ── Care live visit strip ────────────────────────────────────── */
+.cr-live {
+  background: var(--surface-1) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: none !important;
+}
+/* Keep the pulsing dot as danger/live signal */
+
+/* ── Pharmacy alert strip ─────────────────────────────────────── */
+.ph-alert {
+  background: var(--surface-1) !important;
+  border: 1px solid var(--border-subtle) !important;
+  box-shadow: none !important;
+}
+
+/* ── Order step tracker: teal for done, neutral for pending ───── */
+.ph-step-dot.done { background: var(--teal-500) !important; border-color: var(--teal-500) !important; }
+.ph-step-dot.now  { background: var(--fg-1) !important; border-color: var(--fg-1) !important; }
+.ph-step-line.done { background: var(--teal-500) !important; }
+
+/* ── Team card availability dot: keep green (semantic) ────────── */
+/* .cr-avail-dot already uses #22c55e which is fine as semantic signal */
+
+/* ── Hero headings: scoped to redesigned sections only ───────── */
+.cr-hero-h, .ph-hero-h, .lb-hero-h, .me-hero-h,
+.cr-hdr-title, .ph-hdr-title, .lb-hdr-title, .me-hdr-title,
+.me-name { color: var(--fg-1) !important; }
+
+.cr-hero-sub, .ph-hero-sub, .lb-hero-sub, .me-hero-sub,
+.cr-hdr-stat, .ph-hdr-stat, .lb-hdr-stat, .me-hdr-stat { color: var(--fg-3) !important; }
+
+/* ── Primary CTA buttons: not overridden globally — home uses them too ── */
+
+/* ── Tab bar active: teal — keep ─────────────────────────────── */
+/* .tb.on color stays as primary */
+
+/* ── Status chips: semantic only, no teal/gold/iris chips for nav */
+/* Chips that signal state (ok/warn/bad/lo/pend) keep their semantic colors */
+/* Navigation chips (LIVE, INVITE, WK 12, ACTIVE) → neutral */
+.ph-mini-pill,
+.cr-mini-pill,
+.lb-cat-chip:not(.warn):not(.bad):not(.lo):not(.pend) {
+  background: var(--n-50) !important;
+  color: var(--fg-3) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+
+/* ── Consent cards ────────────────────────────────────────────── */
+.me-consent-card {
+  background: var(--surface-1) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+
+/* ── Quick action buttons in Labs ────────────────────────────── */
+.lb-quick-btn {
+  background: var(--surface-1) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+.lb-quick-ico {
+  background: var(--n-50) !important;
+}
+.lb-quick-ico svg { stroke: var(--fg-2) !important; }
+
+/* ── Drop zone ────────────────────────────────────────────────── */
+.lb-drop-ico {
+  background: var(--n-50) !important;
+}
+
+/* ── Avatar backgrounds: teal is brand, keep it ─────────────── */
+/* .me-av, .cr-tav, .cr-av, .ph-rx-ico stay teal when they're the
+   brand avatar — they're identity, not decoration */
+
+/* ── Topbar: clean white glass ───────────────────────────────── */
+.topbar {
+  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0)) !important;
+}
+
+/* ── Home hero: intentionally NOT overridden — keeps original gradient ── */
+
+/* ── Section headers, prog, list rows: NOT globally overridden ──
+   These classes are shared with the home page — leave them alone. */
+
+/* ── Live indicator: keep red pulse (semantic: live/urgent) ───── */
+.cr-vcard-live span,
+.cr-live-dot,
+.lv-live .p { /* these stay red — they're status signals */ }
+
+/* ── Smooth all transitions ───────────────────────────────────── */
+*, *::before, *::after {
+  transition-duration: var(--dur) !important;
+}

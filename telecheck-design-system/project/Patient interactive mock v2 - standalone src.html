@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Telecheck — Patient Mock v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="Patient interactive mock v2.css"/>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<template id="__bundler_thumbnail" data-bg-color="#0f1a17">
+  <svg viewBox="0 0 120 200" xmlns="http://www.w3.org/2000/svg">
+    <rect width="120" height="200" fill="#0f1a17"/>
+    <rect x="20" y="10" width="80" height="140" rx="12" fill="#1a2e28"/>
+    <rect x="48" y="6" width="24" height="6" rx="3" fill="#0f1a17"/>
+    <rect x="28" y="30" width="64" height="8" rx="3" fill="#7dd3c0" opacity=".9"/>
+    <rect x="28" y="48" width="44" height="5" rx="2" fill="#4a7a70" opacity=".6"/>
+    <rect x="28" y="62" width="64" height="28" rx="6" fill="#223d35"/>
+    <rect x="28" y="98" width="30" height="28" rx="6" fill="#223d35"/>
+    <rect x="62" y="98" width="30" height="28" rx="6" fill="#223d35"/>
+    <rect x="28" y="134" width="64" height="8" rx="3" fill="#2e4a40" opacity=".7"/>
+    <rect x="20" y="158" width="80" height="28" rx="8" fill="#1a2e28"/>
+    <rect x="28" y="166" width="12" height="12" rx="6" fill="#7dd3c0" opacity=".7"/>
+    <rect x="46" y="166" width="12" height="12" rx="6" fill="#4a7a70" opacity=".5"/>
+    <rect x="64" y="166" width="12" height="12" rx="6" fill="#4a7a70" opacity=".5"/>
+    <rect x="82" y="166" width="12" height="12" rx="6" fill="#4a7a70" opacity=".5"/>
+  </svg>
+</template>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="Patient interactive mock.jsx"></script>
+<script type="text/babel" src="Patient interactive mock - screens 1.jsx"></script>
+<script type="text/babel" src="Patient interactive mock - screens 2.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - care_detail.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - devices.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - home_care.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - pharmacy_programs.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - labs_me_detail.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - pharmacy_labs_me.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - consent_audit.jsx"></script>
+<script type="text/babel" src="Patient interactive mock v2 - flows.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "language": "English",
+  "delegate": "me",
+  "emergency_strip": false,
+  "protocol_refills_active": false,
+  "show_tweaks": false
+}/*EDITMODE-END*/;
+
+function AppV2() {
+  const [screen, setScreen] = useState(() => localStorage.getItem("pt-v2-screen") || "home");
+  const [careSub, setCareSub] = useState("Inbox");
+  const [phSub, setPhSub] = useState("Rx");
+  const [labSub, setLabSub] = useState("Results");
+  const [meSub, setMeSub] = useState("Profile");
+  const [sheet, setSheet] = useState(null);
+  const [fabOpen, setFabOpen] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [tweaks, setTweaks] = useState(TWEAKS);
+  const [editMode, setEditMode] = useState(TWEAKS.show_tweaks);
+  const [enrolledPrograms, setEnrolledPrograms] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("pt-v2-programs") || "[]"); } catch { return []; }
+  });
+  const [careTrackSub, setCareTrackSub] = useState("Today");
+  const [episodeActive, setEpisodeActive] = useState(false);
+  const [delegateSwitcherOpen, setDelegateSwitcherOpen] = useState(false);
+
+  // Global handle for any deep component to trigger the episode-consent flow
+  useEffect(() => {
+    window.__telecheck_openEpisodeConsent = () => setSheet("episode-consent");
+    window.__telecheck_openEpisodeActive = () => setSheet("episode-active");
+    return () => { delete window.__telecheck_openEpisodeConsent; delete window.__telecheck_openEpisodeActive; };
+  }, []);
+  const enrollProgram = (id) => {
+    setEnrolledPrograms(p => {
+      const next = p.includes(id) ? p : [...p, id];
+      localStorage.setItem("pt-v2-programs", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  useEffect(() => { localStorage.setItem("pt-v2-screen", screen); }, [screen]);
+
+  useEffect(() => {
+    const onMsg = (e) => {
+      if (e.data?.type === "__activate_edit_mode") setEditMode(true);
+      if (e.data?.type === "__deactivate_edit_mode") setEditMode(false);
+    };
+    window.addEventListener("message", onMsg);
+    window.parent.postMessage({ type: "__edit_mode_available" }, "*");
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
+  const setT = (k, v) => {
+    const next = { ...tweaks, [k]: v };
+    setTweaks(next);
+    window.parent.postMessage({ type: "__edit_mode_set_keys", edits: { [k]: v } }, "*");
+  };
+
+  const nav = (s) => {
+    // Sub-route sugar
+    if (s === "me-community") { setMeSub("Community"); setScreen("me"); return; }
+    if (s === "me-family") { setMeSub("Profile"); setScreen("me"); return; }
+    if (s === "me-records") { setMeSub("Records"); setScreen("me"); return; }
+    if (s === "me-account") { setMeSub("Account"); setScreen("me"); return; }
+    if (s === "labs-upload") { setLabSub("Upload"); setScreen("labs"); return; }
+    if (s === "labs-trends") { setLabSub("Trends"); setScreen("labs"); return; }
+    if (s === "pharmacy-shop") { setPhSub("Shop"); setScreen("pharmacy"); return; }
+    if (s === "pharmacy-safety") { setPhSub("Safety"); setScreen("pharmacy"); return; }
+    if (s === "pharmacy-programs") { setPhSub("Programs"); setScreen("pharmacy"); return; }
+    if (s === "care-visits") { setCareSub("Visits"); setScreen("care"); return; }
+    if (s === "care-track") { setCareSub("Track"); setScreen("care"); return; }
+    if (s === "care-track-devices") { setCareSub("Track"); setCareTrackSub("Devices"); setScreen("care"); return; }
+    if (s === "care-team") { setCareSub("Team"); setScreen("care"); return; }
+    setScreen(s);
+  };
+
+  const toast = (t) => {
+    const id = Date.now() + Math.random();
+    setToasts(x => [...x, { id, t }]);
+    setTimeout(() => setToasts(x => x.filter(y => y.id !== id)), 2400);
+  };
+
+  const openAccount = () => setSheet("account");
+  const openNotifs = () => setSheet("notifs");
+  const openEmergency = () => setSheet("emergency");
+  const openAI = () => setScreen("ai-ws");
+  const openFAB = () => setFabOpen(true);
+
+  const shared = { nav, toast, delegate: tweaks.delegate, openAccount, openNotifs, openEmergency, openAI,
+    openEpisodeConsent: () => setSheet("episode-consent"),
+    openEpisodeActive: () => setSheet("episode-active"),
+    openDelegateSwitcher: () => setDelegateSwitcherOpen(true),
+    episodeActive };
+
+  const threadMatch = screen.startsWith("thread-") ? screen.slice(7) : null;
+
+  const screens = {
+    home:          <HomeV2 {...shared} openFAB={openFAB}/>,
+    care:          <CareV2 {...shared} sub={careSub} setSub={setCareSub} trackSub={careTrackSub} setTrackSub={setCareTrackSub}/>,
+    pharmacy:      <PharmacyV2 {...shared} sub={phSub} setSub={setPhSub} enrolledPrograms={enrolledPrograms} protocolRefillsActive={tweaks.protocol_refills_active}/>,
+    "program-glp1":     <ProgramDetail nav={nav} toast={toast} programId="glp1" enrolled={enrolledPrograms.includes("glp1")} onEnroll={enrollProgram}/>,
+    "program-baltasar": <ProgramDetail nav={nav} toast={toast} programId="baltasar" enrolled={enrolledPrograms.includes("baltasar")} onEnroll={enrollProgram}/>,
+    "rx-metformin":   <PharmacyRxV2 nav={nav} toast={toast} rxId="metformin" protocolRefillsActive={tweaks.protocol_refills_active}/>,
+    "rx-lisinopril":  <PharmacyRxV2 nav={nav} toast={toast} rxId="lisinopril"/>,
+    "rx-paracetamol": <PharmacyRxV2 nav={nav} toast={toast} rxId="paracetamol"/>,
+    "rx-new":         <PharmacyRxV2 nav={nav} toast={toast} rxId="new"/>,
+    "device-accu-chek": <DeviceDetailScreen nav={nav} toast={toast} deviceId="accu-chek"/>,
+    "device-omron-m2":  <DeviceDetailScreen nav={nav} toast={toast} deviceId="omron-m2"/>,
+    labs:          <LabsV2 {...shared} sub={labSub} setSub={setLabSub}/>,
+    me:            <MeV2 {...shared} sub={meSub} setSub={setMeSub}/>,
+    "ai-ws":       <AIWorkspace nav={nav} toast={toast} goBack={() => setScreen("home")}/>,
+    "visit-prep":  <VisitPrep nav={nav} toast={toast}/>,
+    video:         <VideoCall nav={nav} toast={toast}/>,
+    "visit-summary": <VisitSummary nav={nav} toast={toast}/>,
+    "doctor-search": <DoctorSearch nav={nav} toast={toast}/>,
+    "pharmacy-rx":   <PharmacyRx nav={nav} toast={toast}/>,
+    "scan-start":    <ScanStartV2 nav={nav}/>,
+    "scan-result":   <ScanResultV2 nav={nav} toast={toast}/>,
+    rpm:             <RPMCheckin nav={nav} toast={toast}/>,
+    "data-use":      <DataUseScreen nav={nav} toast={toast}/>,
+    jurisdiction:    <JurisdictionScreen nav={nav} toast={toast}/>,
+    audit:           <AuditLogScreen nav={nav} toast={toast}/>,
+    // Back-compat: legacy screens from v1 (some rows still link to them)
+    glucose:      <Glucose nav={nav}/>,
+    chat:         <Chat nav={nav} toast={toast}/>,
+    meds:         <Meds nav={nav} toast={toast}/>,
+  };
+
+  return (
+    <div className="page">
+      <div className="hdr-title">Telecheck — Patient app · v2</div>
+      <div className="hdr-sub">Full IA: Home · Care · Pharmacy · Labs · Me. Tap the AI badge, bell or red button in the top bar, or the <b>+</b> FAB to try deep flows (video visit, AI workspace, scan, delegation).</div>
+
+      <div className="device">
+        <div className="island"/>
+        <div className="screen">
+          {tweaks.emergency_strip && screen !== "video" && (
+            <div className="em-strip" style={{ position: "absolute", top: 50, left: 0, right: 0, zIndex: 70 }} onClick={openEmergency}>
+              <div className="ic"><Ic2 n="sos" s={16} c="#fff"/></div>
+              <div style={{ flex: 1 }}>Emergency · tap to call 112 or share location</div>
+              <Ic2 n="chev" s={16} c="#fff"/>
+            </div>
+          )}
+
+          {/* Persistent "Viewing: [delegate]" banner — renders only when delegate ≠ self (PRD §15) */}
+          {tweaks.delegate !== "me" && !["video","thread"].includes(screen) && !screen.startsWith("thread-") && (
+            <DelegateBanner delegate={tweaks.delegate} onTap={() => setDelegateSwitcherOpen(true)}/>
+          )}
+
+          {threadMatch ? <ThreadScreen nav={nav} toast={toast} threadId={threadMatch}/> : (screens[screen] || screens.home)}
+
+          {["home","care","pharmacy","labs","me"].includes(screen) && (
+            <div className="fab" style={{ position: "absolute", bottom: 84, right: 18, width: 56, height: 56, borderRadius: "50%", background: "var(--primary)", display:"flex", alignItems:"center", justifyContent:"center", boxShadow: "0 8px 22px rgba(0,0,0,0.2)", cursor: "pointer", zIndex: 40 }} onClick={openFAB}>
+              <Ic2 n="plus" s={24} sw={2.4} c="#fff"/>
+            </div>
+          )}
+
+          {fabOpen && <FabMenu onClose={() => setFabOpen(false)} nav={nav}/>}
+          {sheet === "account" && <AccountSheetV2 onClose={() => setSheet(null)} delegate={tweaks.delegate} onPick={(d) => { setT("delegate", d); setSheet(null); toast(d === "k" ? "Switched to Kofi" : "Switched to Ama"); }}/>}
+          {sheet === "notifs" && <NotifsSheet onClose={() => setSheet(null)} nav={nav}/>}
+          {sheet === "emergency" && <EmergencySheet onClose={() => setSheet(null)} toast={toast}/>}
+          {sheet === "episode-consent" && <EpisodeConsentSheet onClose={() => setSheet(null)} onGrant={() => setEpisodeActive(true)}/>}
+          {sheet === "episode-active" && <EpisodeActiveSheet onClose={() => setSheet(null)} onRevoke={() => { setEpisodeActive(false); toast("Episode consent revoked · audited"); }} toast={toast}/>}
+          {delegateSwitcherOpen && (
+            <DelegateSwitcherSheet
+              current={tweaks.delegate}
+              onClose={() => setDelegateSwitcherOpen(false)}
+              onPick={(d) => {
+                setT("delegate", d);
+                setDelegateSwitcherOpen(false);
+                toast(d === "me" ? "Now acting as yourself" : d === "k" ? "Switched to Kofi (dad)" : "Switched to Abena (daughter)");
+              }}/>
+          )}
+
+          {toasts.map(t => <div key={t.id} className="toast">{t.t}</div>)}
+
+          <div className="home-ind"/>
+        </div>
+      </div>
+
+      <div className="hdr-sub" style={{ marginTop: 4, fontSize: 12 }}>
+        Jump to: {["home","care","pharmacy","labs","me","ai-ws","visit-prep","video","visit-summary","doctor-search","pharmacy-rx","scan-start","scan-result","rpm","data-use","jurisdiction","audit"].map(k => (
+          <span key={k} onClick={() => nav(k)} style={{ cursor: "pointer", color: screen === k ? "#7dd3c0" : "#9aa5a0", marginRight: 10, textDecoration: "underline", textUnderlineOffset: 3 }}>{k}</span>
+        ))}
+      </div>
+
+      {editMode && (
+        <div className="tweaks on">
+          <h4>Tweaks</h4>
+          <div className="tw-row"><span>Delegate</span>
+            <div className="tw-opts">
+              {[["me","Me (Ama)"],["k","Kofi (dad)"],["abena","Abena (8)"]].map(([v, l]) => (
+                <button key={v} className={`tw-opt ${tweaks.delegate === v ? "on" : ""}`} onClick={() => setT("delegate", v)}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div className="tw-row"><span>Emergency banner</span>
+            <div className="tw-opts">
+              <button className={`tw-opt ${!tweaks.emergency_strip ? "on" : ""}`} onClick={() => setT("emergency_strip", false)}>Off</button>
+              <button className={`tw-opt ${tweaks.emergency_strip ? "on" : ""}`} onClick={() => setT("emergency_strip", true)}>On</button>
+            </div>
+          </div>
+          <div className="tw-row"><span>Protocol-authorized refills</span>
+            <div className="tw-opts">
+              <button className={`tw-opt ${!tweaks.protocol_refills_active ? "on" : ""}`} onClick={() => setT("protocol_refills_active", false)}>Gated (day 1)</button>
+              <button className={`tw-opt ${tweaks.protocol_refills_active ? "on" : ""}`} onClick={() => setT("protocol_refills_active", true)}>Activated</button>
+            </div>
+          </div>
+          <div className="tw-row"><span>Language</span>
+            <div className="tw-opts">
+              {["English","Twi","Ga"].map(l => (
+                <button key={l} className={`tw-opt ${tweaks.language === l ? "on" : ""}`} onClick={() => setT("language", l)}>{l}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<AppV2/>);
+</script>
+</body>
+</html>

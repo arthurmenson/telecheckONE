@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Audit entry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css"><link rel="stylesheet" href="_card.css">
+<style>
+.timeline { position: relative; padding-left: 18px; }
+.timeline::before { content:""; position:absolute; left: 5px; top: 8px; bottom: 8px; width: 2px; background: var(--border-subtle); }
+.ev { position: relative; padding: 10px 0; display: grid; grid-template-columns: 140px 1fr; gap: 16px; }
+.ev::before { content:""; position:absolute; left: -16px; top: 16px; width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 2px solid var(--primary); }
+.ev-ai::before { border-color: var(--iris-500); }
+.ev-warn::before { border-color: var(--warning); }
+.time { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); padding-top: 2px; }
+.actor { font-size: 13px; font-weight: 600; color: var(--fg-1); }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.06em; text-transform: uppercase; margin-left: 6px; vertical-align: middle; }
+.b-ai { background: var(--iris-50); color: var(--iris-700); }
+.b-del { background: var(--gold-50); color: var(--gold-700); }
+.body { font-size: 13px; color: var(--fg-2); margin-top: 2px; line-height: 1.4; }
+.hash { font-family: var(--font-mono); font-size: 10px; color: var(--fg-4); margin-top: 3px; }
+</style></head>
+<body><div class="card"><div class="timeline">
+  <div class="ev"><div class="time">14 Apr · 09:42 GMT</div><div><div class="actor">Ama K. Owusu</div><div class="body">Requested refill · metformin 500 mg BID</div><div class="hash">evt_01HX2TA7QF3Z9K</div></div></div>
+  <div class="ev ev-ai"><div class="time">14 Apr · 09:42 GMT</div><div><div class="actor">Telecheck AI<span class="badge b-ai">ai · b</span></div><div class="body">3 interaction signals raised — 1 severe, 1 moderate, 1 monitor</div><div class="hash">rx_01HX2TA92P · model v2026.03</div></div></div>
+  <div class="ev ev-warn"><div class="time">14 Apr · 10:18 GMT</div><div><div class="actor">Dr. A. Mensah</div><div class="body">Override on severe drug–lab signal · rationale captured</div><div class="hash">evt_01HX2TBR71</div></div></div>
+  <div class="ev"><div class="time">14 Apr · 10:19 GMT</div><div><div class="actor">Kojo Owusu<span class="badge b-del">delegate</span></div><div class="body">Confirmed delivery address on behalf of Ama</div><div class="hash">evt_01HX2TBS04 · consent cns_09F</div></div></div>
+</div></div></body></html>
