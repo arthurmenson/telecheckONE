@@ -168,7 +168,8 @@
       "docs": [
         "Telecheck_Async_Consult_Slice_PRD_v1_0.md"
       ],
-      "stage": "spec-baseline"
+      "stage": "spec-baseline",
+      "updatedAt": "2026-05-02T14:45:28.024Z"
     },
     {
       "id": "slice-community",
@@ -534,5 +535,5 @@
       "stage": "internal-alpha"
     }
   ],
-  "updatedAt": "2026-05-02T14:43:11.571Z"
+  "updatedAt": "2026-05-02T14:45:28.024Z"
 }

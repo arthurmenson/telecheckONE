@@ -431,6 +431,26 @@ function timeAgo(iso){
   return Math.floor(s/86400)+"d ago";
 }
 
+const SPEC_STATES = new Set(["not-started","spec-draft","spec-final"]);
+const STAGE_BY_CATEGORY = {
+  "Slice PRD":        "slice-build",
+  "Experience":       "slice-build",
+  "Engineering Spec": "foundation-build",
+  "Operations":       "pilot",
+};
+const STAGE_OVERRIDE = { "ops-readiness": "internal-alpha", "ops-ghana": "pilot" };
+function destStageFor(area){
+  return STAGE_OVERRIDE[area.id] || STAGE_BY_CATEGORY[area.category] || "slice-build";
+}
+// Returns the stage id implied by an area's status: spec-baseline while in spec-*,
+// otherwise the area's build-time destination. Falls back to existing stage if any
+// of those targets don't exist in lifecycle.stages[].
+function autoStageFor(area){
+  const stages = new Set((PROGRESS?.lifecycle?.stages||[]).map(s=>s.id));
+  const target = SPEC_STATES.has(area.status) ? "spec-baseline" : destStageFor(area);
+  return stages.has(target) ? target : (area.stage || target);
+}
+
 function stageStats(stageId){
   const areas = (PROGRESS?.areas || []).filter(a => a.stage === stageId);
   const count = areas.length;
@@ -760,6 +780,14 @@ function bindCockpitHandlers(){
       card.dataset.status = area.status;
       card.style.borderLeftColor = sm[area.status].color;
       card.querySelector(".progress > i").style.background = sm[area.status].color;
+      // Auto-migrate stage when crossing the spec ↔ build boundary.
+      const want = autoStageFor(area);
+      if (want && want !== area.stage) {
+        area.stage = want;
+        const sel = card.querySelector(".stage");
+        if (sel) sel.value = want;
+        renderLifecycle("lc-cockpit",{editable:true});
+      }
       persistProgress();
       renderCockpitSidebar();
     });
