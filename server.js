@@ -31,8 +31,50 @@ function safeJoin(root, reqPath){
   return resolved;
 }
 
-const server = http.createServer((req, res) => {
+const PROGRESS_FILE = path.join(ROOT, "progress.json");
+
+function readBody(req){
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", c => { data += c; if (data.length > 1e7) reject(new Error("body too large")); });
+    req.on("end", () => resolve(data));
+    req.on("error", reject);
+  });
+}
+
+const server = http.createServer(async (req, res) => {
   let reqPath = url.parse(req.url).pathname;
+
+  // ---------- /api/progress ----------
+  if (reqPath === "/api/progress") {
+    if (req.method === "GET") {
+      fs.readFile(PROGRESS_FILE, "utf8", (err, data) => {
+        if (err) { res.writeHead(404); return res.end("progress.json missing"); }
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-cache" });
+        res.end(data);
+      });
+      return;
+    }
+    if (req.method === "PUT") {
+      try {
+        const body = await readBody(req);
+        const parsed = JSON.parse(body); // validate
+        if (!parsed || !Array.isArray(parsed.areas)) throw new Error("missing areas[]");
+        parsed.updated = new Date().toISOString().slice(0,10);
+        fs.writeFileSync(PROGRESS_FILE, JSON.stringify(parsed, null, 2) + "\n", "utf8");
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ ok: true, updated: parsed.updated }));
+        const ts = new Date().toISOString().slice(11,19);
+        console.log(`[${ts}] 200 PUT /api/progress (${parsed.areas.length} areas)`);
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Bad request: " + e.message);
+      }
+      return;
+    }
+    res.writeHead(405); return res.end("Method not allowed");
+  }
+
   if (reqPath === "/") reqPath = "/index.html";
 
   const filePath = safeJoin(ROOT, reqPath);

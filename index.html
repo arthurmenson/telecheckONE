@@ -87,6 +87,41 @@
   .empty{color:var(--muted);padding:24px;text-align:center}
   .legend{font-size:11px;color:var(--muted);padding:8px 12px}
   .err{color:var(--danger);padding:14px}
+  /* Cockpit */
+  .cock-head{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:14px}
+  .cock-head h2{margin:0;font-size:18px}
+  .cock-head .meta{color:var(--muted);font-size:12px}
+  .cock-toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .cock-toolbar select,.cock-toolbar input{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:5px;font-size:12px;outline:none}
+  .legend-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 14px}
+  .legend-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--border);padding:3px 8px;border-radius:11px}
+  .legend-dot{width:8px;height:8px;border-radius:50%}
+  .stats-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+  .stat-card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px}
+  .stat-card .n{font-size:20px;font-weight:600}
+  .stat-card .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+  .stat-card .bar{height:4px;background:var(--chip);border-radius:2px;margin-top:8px;overflow:hidden}
+  .stat-card .bar > i{display:block;height:100%;background:var(--accent2)}
+  .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+  .area{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s}
+  .area:hover{border-color:var(--accent)}
+  .area .title{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .area .title h4{margin:0;font-size:13.5px;line-height:1.3}
+  .area .cat{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .area .progress{height:6px;background:var(--chip);border-radius:3px;overflow:hidden}
+  .area .progress > i{display:block;height:100%;background:var(--accent);transition:width .2s}
+  .area .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .area select.status,.area input.pct,.area input.owner{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:11px;outline:none}
+  .area input.pct{width:54px;text-align:right}
+  .area input.owner{flex:1;min-width:80px}
+  .area textarea.notes{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:11.5px;outline:none;resize:vertical;min-height:36px;font-family:inherit}
+  .area .docs{display:flex;flex-wrap:wrap;gap:4px}
+  .area .docs a{font-size:10.5px;background:var(--chip);border:1px solid var(--border);padding:2px 6px;border-radius:4px;color:var(--text);cursor:pointer}
+  .area .docs a:hover{border-color:var(--accent);text-decoration:none}
+  .save-pill{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:11px}
+  .save-pill.ok{color:var(--accent2)}
+  .save-pill.err{color:var(--danger)}
+  .group-divider{grid-column:1/-1;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:14px 0 -6px;padding-bottom:4px;border-bottom:1px solid var(--border)}
 </style>
 </head>
 <body>
@@ -99,10 +134,12 @@
     <div class="search"><input id="q" placeholder="Search docs (title, version, topic)…" /></div>
     <div class="tabs">
       <button class="active" data-tab="docs">Documents</button>
+      <button data-tab="cockpit">Cockpit</button>
       <button data-tab="skills">Skills</button>
       <button data-tab="map">Hierarchy</button>
     </div>
     <div class="nav" id="nav-docs"></div>
+    <div class="nav hidden" id="nav-cockpit"></div>
     <div class="nav hidden" id="nav-skills"></div>
     <div class="nav hidden" id="nav-map"></div>
     <div class="legend">Click any doc to view. Conflicts: top of hierarchy wins.</div>
@@ -278,8 +315,238 @@ const AGENTS = [
 
 // ---------- render ----------
 const $ = s => document.querySelector(s);
-const navDocs = $("#nav-docs"), navSkills = $("#nav-skills"), navMap = $("#nav-map");
+const navDocs = $("#nav-docs"), navSkills = $("#nav-skills"), navMap = $("#nav-map"), navCockpit = $("#nav-cockpit");
 const content = $("#content"), crumb = $("#crumb");
+
+// =================== Cockpit ===================
+let PROGRESS = null;
+let saveTimer = null;
+let saveStatus = "idle"; // idle|saving|ok|err
+
+async function loadProgress(){
+  try{
+    const r = await fetch("/api/progress",{cache:"no-cache"});
+    if(!r.ok) throw new Error(r.status+" "+r.statusText);
+    PROGRESS = await r.json();
+  }catch(e){
+    // fallback: try the static file (works without server)
+    try{
+      const r2 = await fetch("progress.json",{cache:"no-cache"});
+      PROGRESS = await r2.json();
+      PROGRESS._readonly = true;
+    }catch(e2){ PROGRESS = null; }
+  }
+}
+
+function statusMap(){
+  const m = {};
+  (PROGRESS?.states||[]).forEach(s => m[s.id] = s);
+  return m;
+}
+
+function persistProgress(){
+  if(!PROGRESS || PROGRESS._readonly) return;
+  saveStatus = "saving"; renderSaveStatus();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    try{
+      const r = await fetch("/api/progress",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(PROGRESS)});
+      if(!r.ok) throw new Error(r.status);
+      const j = await r.json();
+      PROGRESS.updated = j.updated;
+      saveStatus = "ok"; renderSaveStatus();
+      const meta = $("#cock-meta"); if(meta) meta.textContent = metaText();
+    }catch(e){ saveStatus = "err"; renderSaveStatus(); }
+  }, 350);
+}
+
+function renderSaveStatus(){
+  const el = $("#save-pill"); if(!el) return;
+  el.className = "save-pill " + (saveStatus==="ok"?"ok":saveStatus==="err"?"err":"");
+  el.textContent = saveStatus==="saving" ? "Saving…" : saveStatus==="ok" ? "Saved" : saveStatus==="err" ? "Save failed" : "";
+}
+
+function metaText(){
+  const ro = PROGRESS?._readonly ? " · read-only (no server)" : "";
+  return `Last updated ${PROGRESS?.updated || "?"}${ro}`;
+}
+
+function aggregateStats(areas, sm){
+  const total = areas.length || 1;
+  const byStatus = {};
+  let totalPct = 0;
+  for(const a of areas){
+    byStatus[a.status] = (byStatus[a.status]||0)+1;
+    totalPct += Number(a.progress)||0;
+  }
+  const avgPct = Math.round(totalPct / total);
+  const shipped = byStatus["shipped"]||0;
+  const inDev = (byStatus["in-dev"]||0) + (byStatus["in-review"]||0);
+  const blocked = byStatus["blocked"]||0;
+  return { byStatus, avgPct, shipped, inDev, blocked, total };
+}
+
+function renderCockpitSidebar(){
+  const sm = statusMap();
+  const cats = {};
+  (PROGRESS?.areas||[]).forEach(a => { (cats[a.category]=cats[a.category]||[]).push(a); });
+  navCockpit.innerHTML = `
+    <div class="group">
+      <h3>Filter by status</h3>
+      <div style="display:flex;flex-direction:column;gap:4px;padding:4px">
+        <label class="legend-pill" style="cursor:pointer"><input type="checkbox" id="filt-all" checked /> Show all</label>
+        ${(PROGRESS?.states||[]).map(s=>`
+          <label class="legend-pill" style="cursor:pointer"><span class="legend-dot" style="background:${s.color}"></span>
+            <input type="checkbox" class="filt-state" value="${s.id}" checked /> ${s.label}
+          </label>`).join("")}
+      </div>
+    </div>
+    ${Object.entries(cats).map(([cat,items])=>`
+      <div class="group"><h3>${cat} <span class="count">${items.length}</span></h3>
+        ${items.map(a=>`<a class="item" data-area="${a.id}">${a.name}<small style="color:${sm[a.status]?.color||'#888'}">${sm[a.status]?.label||a.status} · ${a.progress||0}%</small></a>`).join("")}
+      </div>`).join("")}
+  `;
+  navCockpit.querySelectorAll(".item[data-area]").forEach(el=>el.addEventListener("click",()=>{
+    document.getElementById("area-"+el.dataset.area)?.scrollIntoView({behavior:"smooth",block:"center"});
+    document.getElementById("area-"+el.dataset.area)?.animate([{boxShadow:"0 0 0 2px var(--accent)"},{boxShadow:"0 0 0 0 transparent"}],{duration:1100});
+  }));
+  navCockpit.querySelectorAll(".filt-state").forEach(c=>c.addEventListener("change",applyCockpitFilter));
+  navCockpit.querySelector("#filt-all").addEventListener("change",e=>{
+    navCockpit.querySelectorAll(".filt-state").forEach(c=>c.checked = e.target.checked);
+    applyCockpitFilter();
+  });
+}
+
+function applyCockpitFilter(){
+  const allowed = new Set(Array.from(navCockpit.querySelectorAll(".filt-state:checked")).map(c=>c.value));
+  document.querySelectorAll(".area").forEach(el=>{
+    el.classList.toggle("hidden", !allowed.has(el.dataset.status));
+  });
+  // hide empty group dividers
+  document.querySelectorAll(".group-divider").forEach(d=>{
+    let n = d.nextElementSibling, vis = 0;
+    while(n && !n.classList.contains("group-divider")){ if(!n.classList.contains("hidden")) vis++; n = n.nextElementSibling; }
+    d.classList.toggle("hidden", vis===0);
+  });
+}
+
+function renderCockpit(){
+  crumb.textContent = "Cockpit";
+  content.classList.remove("home");
+  if(!PROGRESS){ content.innerHTML = `<div class="err">progress.json could not be loaded.</div>`; return; }
+  const sm = statusMap();
+  const stats = aggregateStats(PROGRESS.areas, sm);
+  const cats = {};
+  PROGRESS.areas.forEach(a => { (cats[a.category]=cats[a.category]||[]).push(a); });
+
+  content.innerHTML = `
+    <div class="cock-head">
+      <h2>Development Cockpit</h2>
+      <span id="cock-meta" class="meta">${metaText()}</span>
+      <span id="save-pill" class="save-pill"></span>
+      <div class="cock-toolbar">
+        <input id="cock-search" placeholder="Filter cards…" />
+        <select id="cock-sort">
+          <option value="cat">Sort: by category</option>
+          <option value="status">Sort: by status</option>
+          <option value="pct-desc">Sort: progress ↓</option>
+          <option value="pct-asc">Sort: progress ↑</option>
+          <option value="name">Sort: name</option>
+        </select>
+      </div>
+    </div>
+    <div class="legend-row">
+      ${PROGRESS.states.map(s=>`<span class="legend-pill"><span class="legend-dot" style="background:${s.color}"></span>${s.label} · ${stats.byStatus[s.id]||0}</span>`).join("")}
+    </div>
+    <div class="stats-strip">
+      <div class="stat-card"><div class="n">${stats.total}</div><div class="l">Tracked areas</div></div>
+      <div class="stat-card"><div class="n">${stats.avgPct}%</div><div class="l">Avg progress</div><div class="bar"><i style="width:${stats.avgPct}%"></i></div></div>
+      <div class="stat-card"><div class="n" style="color:var(--accent2)">${stats.shipped}</div><div class="l">Shipped</div></div>
+      <div class="stat-card"><div class="n" style="color:var(--warn)">${stats.inDev}</div><div class="l">Dev / Review</div></div>
+      <div class="stat-card"><div class="n" style="color:var(--danger)">${stats.blocked}</div><div class="l">Blocked</div></div>
+      <div class="stat-card"><div class="n">${PROGRESS.states.length}</div><div class="l">Status states</div></div>
+    </div>
+    <div class="board" id="board">
+      ${Object.entries(cats).map(([cat,items])=>`
+        <div class="group-divider" data-cat="${cat}">${cat} · ${items.length}</div>
+        ${items.map(a=>renderArea(a,sm)).join("")}
+      `).join("")}
+    </div>
+  `;
+  bindCockpitHandlers();
+}
+
+function renderArea(a, sm){
+  const s = sm[a.status] || {color:"#888",label:a.status};
+  const ro = PROGRESS._readonly ? "disabled" : "";
+  const docs = (a.docs||[]).map(d=>`<a data-doc="${d}" title="${d}">${(d.replace(/^Telecheck_?/,"").replace(/_v\d_\d.md$/,"").replace(/\.md$/,"").replace(/_/g," ")).slice(0,38)}</a>`).join("");
+  return `<div class="area" id="area-${a.id}" data-id="${a.id}" data-status="${a.status}" style="border-left-color:${s.color}">
+    <div class="title">
+      <div>
+        <div class="cat">${a.category}</div>
+        <h4>${a.name}</h4>
+      </div>
+    </div>
+    <div class="progress"><i style="width:${a.progress||0}%;background:${s.color}"></i></div>
+    <div class="row">
+      <select class="status" ${ro}>
+        ${PROGRESS.states.map(st=>`<option value="${st.id}" ${st.id===a.status?"selected":""}>${st.label}</option>`).join("")}
+      </select>
+      <input class="pct" type="number" min="0" max="100" value="${a.progress||0}" ${ro} />%
+      <input class="owner" placeholder="owner" value="${a.owner||""}" ${ro} />
+    </div>
+    <textarea class="notes" placeholder="Notes…" ${ro}>${a.notes||""}</textarea>
+    ${docs?`<div class="docs">${docs}</div>`:""}
+  </div>`;
+}
+
+function bindCockpitHandlers(){
+  document.querySelectorAll(".area").forEach(card=>{
+    const id = card.dataset.id;
+    const area = PROGRESS.areas.find(a=>a.id===id);
+    card.querySelector(".status").addEventListener("change",e=>{
+      area.status = e.target.value;
+      const sm = statusMap();
+      card.dataset.status = area.status;
+      card.style.borderLeftColor = sm[area.status].color;
+      card.querySelector(".progress > i").style.background = sm[area.status].color;
+      persistProgress();
+      renderCockpitSidebar();
+    });
+    card.querySelector(".pct").addEventListener("input",e=>{
+      let v = Math.max(0, Math.min(100, parseInt(e.target.value||"0",10)));
+      area.progress = v;
+      card.querySelector(".progress > i").style.width = v+"%";
+      persistProgress();
+    });
+    card.querySelector(".owner").addEventListener("input",e=>{ area.owner = e.target.value; persistProgress(); });
+    card.querySelector(".notes").addEventListener("input",e=>{ area.notes = e.target.value; persistProgress(); });
+    card.querySelectorAll(".docs a").forEach(a=>a.addEventListener("click",()=>{
+      switchTab("docs"); openDoc(a.dataset.doc, a.dataset.doc);
+    }));
+  });
+  $("#cock-search").addEventListener("input",e=>{
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll(".area").forEach(card=>{
+      card.classList.toggle("hidden", q && !card.textContent.toLowerCase().includes(q));
+    });
+  });
+  $("#cock-sort").addEventListener("change",e=>{
+    const sm = statusMap();
+    let arr = [...PROGRESS.areas];
+    const v = e.target.value;
+    if(v==="status") arr.sort((a,b)=>(PROGRESS.states.findIndex(s=>s.id===a.status))-(PROGRESS.states.findIndex(s=>s.id===b.status)));
+    else if(v==="pct-desc") arr.sort((a,b)=>(b.progress||0)-(a.progress||0));
+    else if(v==="pct-asc")  arr.sort((a,b)=>(a.progress||0)-(b.progress||0));
+    else if(v==="name") arr.sort((a,b)=>a.name.localeCompare(b.name));
+    if(v==="cat"){ renderCockpit(); applyCockpitFilter(); return; }
+    const board = $("#board");
+    board.innerHTML = arr.map(a=>renderArea(a,sm)).join("");
+    bindCockpitHandlers();
+    applyCockpitFilter();
+  });
+}
+// =============== /Cockpit ===============
 
 function docHref(file){
   const s = SOURCES[SOURCE_KEY];
@@ -412,12 +679,18 @@ $("#q").addEventListener("input",e=>{
 });
 
 // tabs
-document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>{
-  document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("active",x===b));
-  navDocs.classList.toggle("hidden", b.dataset.tab!=="docs");
-  navSkills.classList.toggle("hidden", b.dataset.tab!=="skills");
-  navMap.classList.toggle("hidden", b.dataset.tab!=="map");
-}));
+function switchTab(tab){
+  document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab===tab));
+  navDocs.classList.toggle("hidden", tab!=="docs");
+  navCockpit.classList.toggle("hidden", tab!=="cockpit");
+  navSkills.classList.toggle("hidden", tab!=="skills");
+  navMap.classList.toggle("hidden", tab!=="map");
+  if(tab==="cockpit"){
+    if(!PROGRESS) loadProgress().then(()=>{ renderCockpitSidebar(); renderCockpit(); });
+    else { renderCockpitSidebar(); renderCockpit(); }
+  }
+}
+document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
 
 // topbar actions
 $("#btn-home").addEventListener("click",renderHome);
@@ -443,6 +716,7 @@ sel.addEventListener("change",()=>{
 
 renderSidebar();
 renderHome();
+loadProgress(); // warm cache so cockpit feels instant
 </script>
 </body>
 </html>
