@@ -54,7 +54,7 @@ Notes: `evidence_quality` is present only for herb-drug signals. Medication engi
   "consent_id":    "con_<ULID>",
   "tenant_id":     "tnt_<ULID>",
   "patient_id":    "pat_<ULID>",
-  "consent_type":  "platform | care | data_use | episode | delegation | jurisdictional",
+  "consent_type":  "platform | care | data_use | episode | delegation | jurisdictional | research_data_use",
   "scope":         "<what is consented to>",
   "program_id":    "<program>" | null,
   "version":       "<consent version presented>",
@@ -313,6 +313,27 @@ Required when CCR `molecule_level_marketing_permitted = permitted` per CCR_RUNTI
 
 ## Research data types (added v5.2)
 
+### ResearchConsent (added v5.2 patch 2026-05-02 per Codex Scope 2 MEDIUM finding — explicit subtype of ConsentRecord)
+
+```
+{
+  "consent_id":                              "con_<ULID>",
+  "tenant_id":                               "tnt_<ULID>",
+  "patient_id":                              "pat_<ULID>",
+  "consent_type":                            "research_data_use",
+  "scope":                                   "<scope description per CCR research_ethics_review_body.approval_scope>",
+  "version_presented":                       "<consent text version per CCR research_ethics_review_body.approval_reference_id>",
+  "asymmetric_retraction_acknowledgment":    true,
+  "granted_at":                              "<ISO 8601>",
+  "revoked_at":                              "<ISO 8601> | null",
+  "revocation_reason":                       "<text>" | null,
+  "revocation_effective_at":                 "<ISO 8601>" | null,
+  "evidence":                                { "method": "tap | signature | verbal", "timestamp": "..." }
+}
+```
+
+A specialization of ConsentRecord with `consent_type = research_data_use` (added to the canonical ConsentRecord enum above per the same patch). Required fields beyond ConsentRecord: `scope`, `version_presented`, `asymmetric_retraction_acknowledgment` (must be `true` at grant time per Master PRD §15.2 — patient explicitly acknowledged that aggregate data already shared cannot be retracted). `revoked_at` and revocation companion fields populate on revoke; the entity is immutable per consent immutability discipline (a new grant after revoke creates a new ResearchConsent entity with a fresh `consent_id`). Per I-030, no care-delivery state machine MAY consume ResearchConsent state events. Per I-029, the export pipeline gates on per-patient `granted_at` non-null AND `revoked_at` null at completion-time evaluation.
+
 ### DataSharingAgreement
 ```
 {
@@ -376,17 +397,19 @@ Required when CCR `molecule_level_marketing_permitted = permitted` per CCR_RUNTI
   "cohort_version":                     "<semver>",
   "dsa_id":                             "<DSA ULID>",
   "dsa_version":                        "<semver>",
-  "dsa_status_at_export":               "active",
+  "dsa_status_at_export":               "active | expired | suspended | retired",
   "permitted_data_domains_at_export":   [ "<closed enum value>" ],
   "requester_id":                       "<requester ULID>",
   "requester_role":                     "<role>",
   "requester_partner_id":               "<partner ULID>",
   "exported_field_set":                 [ "<field schema fragment>" ],
   "k_min_required":                     11,
-  "k_threshold_actual":                 ">= k_min per I-029",
+  "k_threshold_actual":                 "<integer; >= k_min_required for status=completed; may be < k_min_required when status=invalidated>",
   "suppressed_cell_count":              "<integer>",
-  "consent_cohort_snapshot_hash":       "<SHA-256; matches cohort definition>",
-  "export_artifact_hash":               "<SHA-256>",
+  "consent_cohort_snapshot_hash_initiated": "<SHA-256; recorded at research.export_initiated>",
+  "consent_cohort_snapshot_hash_completed": "<SHA-256; recorded at completion-time check; null when status=invalidated due to early abort>",
+  "export_artifact_hash":               "<SHA-256> | null (null when status=invalidated; non-null when status=completed)",
+  "invalidation_reason":                "dsa_inactive | k_anonymity_violation | permitted_domain_drift | consent_cohort_change | consent_revocation_mid_export" | null,
   "retention_class":                    "<retention class identifier>",
   "started_at":                         "<ISO 8601>",
   "completed_at":                       "<ISO 8601>",
@@ -394,7 +417,9 @@ Required when CCR `molecule_level_marketing_permitted = permitted` per CCR_RUNTI
 }
 ```
 
-Notes: `tenant_id` and `country_of_care` are required on the export record itself (not only inherited via cohort) so audit-side I-029 / I-031 enforcement can validate tenant scope without dereferencing cohort. Per I-029, `research.export_completed` MAY only emit when `dsa_status_at_export = active` AND k-anonymity actual ≥ `k_min_required`. Failed exports use the two-event audit pattern per AUDIT_EVENTS v5.2 (see research events table).
+**Patch 2026-05-02 per Codex Scope 2 HIGH-2 finding (closes the audit-vs-type contradiction):** The type now models BOTH success and invalidation states coherently. `dsa_status_at_export` accepts the full DSA-status enum (success requires `active`; invalidation captures the actual at-completion-time state). `export_artifact_hash` is nullable (null on invalidation since no artifact is delivered; non-null on success). `consent_cohort_snapshot_hash` is split into `_initiated` and `_completed` variants so the completion-time consent-snapshot match (per OpenAPI v0.2 v1.10 cycle additions /research/exports/{export_id}/complete gate) can be expressed structurally — the two hashes match for `status=completed`; they differ (or `_completed` is null) for `status=invalidated`. `invalidation_reason` is required when `status=invalidated` and null when `status=completed`.
+
+Notes: `tenant_id` and `country_of_care` are required on the export record itself (not only inherited via cohort) so audit-side I-029 / I-031 enforcement can validate tenant scope without dereferencing cohort. Per I-029, `research.export_completed` MAY emit with `status=completed` only when `dsa_status_at_export = active` AND `k_threshold_actual >= k_min_required` AND consent snapshot match AND active per-patient consent. Per I-029 + I-003 + AUDIT_EVENTS v5.2 §5 + GOVERNANCE_CONTROLS v5.2 §7.2 audit-path discipline, failed exports MUST emit `research.export_completed` with `status=invalidated` and `invalidation_reason` populated (paired with `signal_enforcement_trigger` Category B). Bare suppression is forbidden.
 
 ---
 

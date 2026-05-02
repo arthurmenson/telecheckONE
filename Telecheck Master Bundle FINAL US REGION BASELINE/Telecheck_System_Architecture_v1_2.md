@@ -422,13 +422,13 @@ Per ADR-026 (supersedes ADR-025): AWS, single region (us-east-1 Virginia), with 
 | DR region | us-west-2 (cold DR per ADR-026) |
 | DR testing | Quarterly failover test |
 
-### 11.4 Cross-border posture (per ADR-026)
+### 11.4 Cross-border posture (per ADR-026; rewritten in place 2026-05-02 per Codex Scope 4 HIGH-1 finding to use C3 operating-tenant + DBA framing)
 
-The platform runs in `us-east-1` (United States). Both Heros (US tenant) and Telecheck-Ghana (Ghana tenant) data are processed in `us-east-1`. This is an explicit, accepted architectural posture per ADR-026.
+The platform runs in `us-east-1` (United States). Both **Telecheck-US (Heros Health DBA; operated by Telecheck Health LLC; consumer surface at heroshealth.com)** and **Telecheck-Ghana (Heros Health Ghana DBA; operated by Telecheck-Ghana Ltd.; consumer surface at ghana.heroshealth.com)** data are processed in `us-east-1`. This is an explicit, accepted architectural posture per ADR-026.
 
-**Heros (US tenant):** Standard HIPAA-region posture. Heros patient data is processed in the United States. The BAA chain (Heros → Telecheck → AWS US) is a standard chain.
+**Telecheck-US (operated by Telecheck Health LLC; trading as Heros Health DBA):** Standard HIPAA-region posture. Telecheck-US patient data is processed in the United States. The BAA chain (Telecheck Health LLC [Telecheck-US tenant operator] → AWS US) is the standard HIPAA chain. Patient-facing surfaces source the consumer DBA brand (`Heros Health`) via `tenant.consumer_dba`; the operating-tenant identifier (`Telecheck-US`) is internal/B2B only.
 
-**Telecheck-Ghana (Ghana tenant):** Cross-border posture. Ghana patient data is processed in the United States. The architectural decision is recorded; the operational implementation has the following requirements:
+**Telecheck-Ghana (operated by Telecheck-Ghana Ltd.; trading as Heros Health Ghana DBA):** Cross-border posture. Telecheck-Ghana patient data is processed in the United States. The architectural decision is recorded; the operational implementation has the following requirements:
 
 - Ghana DPC registration for cross-border processing with AWS (US) as a sub-processor
 - Specific contractual mechanism (jurisdictional instrument under Ghana DPC) **[COUNSEL-REQUIRED]**

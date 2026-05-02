@@ -98,7 +98,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 
 **Monitoring data:**
 - RPMReading entity is tenant-scoped per CDM v1.2 §3.8. Patient readings in Tenant A are not visible in Tenant B even if the same human has readings in both.
-- Device pairing is tenant-scoped (a Bluetooth glucometer paired in Telecheck-Ghana doesn't appear in Heros).
+- Device pairing is tenant-scoped (a Bluetooth glucometer paired in Telecheck-Ghana doesn't appear in Telecheck-US).
 
 **Alerting:**
 - Critical alerts (per RPM Alert state machine in State Machines v1.1 §7) escalate to the tenant's clinician on-call roster, not platform-wide.
@@ -110,7 +110,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 ### 3.5 Community Platform Slice PRD v1.0
 
 **Communities at launch:**
-- Communities are scoped to a single tenant at launch. A patient in Telecheck-Ghana sees only Telecheck-Ghana communities; same for Heros.
+- Communities are scoped to a single tenant at launch. A patient in Telecheck-Ghana sees only Telecheck-Ghana communities; same for Telecheck-US.
 - Cross-tenant communities (e.g., a "GLP-1 patients across all tenants" community) are deferred to Phase 2 — not in launch scope.
 
 **Moderation:**
@@ -118,7 +118,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 - Crisis detection per I-019 applies platform-wide; crisis-detected content escalates to the tenant's clinical safety contact and (in extreme cases) Platform AI Safety per RBAC v1.1.
 
 **Identity in community:**
-- Patient display names, avatars, and posting history are tenant-scoped. The same human's Telecheck-Ghana persona and Heros persona are independent (per ADR-023 — same person across tenants = separate accounts).
+- Patient display names, avatars, and posting history are tenant-scoped. The same human's Telecheck-Ghana persona (Heros Health Ghana DBA surface) and Telecheck-US persona (Heros Health DBA surface) are independent (per ADR-023 — same person across tenants = separate accounts).
 
 ### 3.6 Adverse Event Reporting Slice PRD v1.0
 
@@ -128,7 +128,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 - Cross-tenant AE pattern detection (a defect appearing in multiple tenants — e.g., a GLP-1 product showing the same side effect across tenants) is performed at platform level by Platform Clinical Governance per GOVERNANCE_CONTROLS v5.1 §6.3.
 
 **External reporting:**
-- FDA MedWatch (US) reporting is per-tenant — Heros reports its AEs; if a future US tenant exists it reports its own.
+- FDA MedWatch (US) reporting is per-tenant — Telecheck-US reports its AEs; if a future US tenant exists it reports its own.
 - Ghana FDA reporting (where applicable) is per-tenant for Telecheck-Ghana.
 - Platform Clinical Governance may aggregate cross-tenant AE patterns for internal safety review without disclosing tenant-specific data externally.
 
@@ -165,7 +165,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 - Knowledge base content (herbal medicine entries and drug interactions) is platform-scoped at launch. Tenant Clinical Lead may submit additions/corrections via governance workflow per GOVERNANCE_CONTROLS.
 
 **Tenant relevance:**
-- The Telecheck-Ghana tenant relies heavily on this engine due to the prevalence of herbal medicine reporting in the Ghana intake flow. Heros (US) tenant uses it less actively but the engine is available.
+- The Telecheck-Ghana tenant relies heavily on this engine due to the prevalence of herbal medicine reporting in the Ghana intake flow. Telecheck-US tenant uses it less actively but the engine is available.
 
 **Audit:**
 - Herb-drug signal evaluations carry tenant_id; the patient context is always tenant-scoped.
@@ -198,11 +198,11 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 
 **Tools tenant scoping:**
 - All acquisition / engagement tools (referral programs, marketing campaigns, onboarding tour customizations) are tenant-scoped.
-- A campaign authored by Heros marketing is not visible in Telecheck-Ghana and vice versa.
+- A campaign authored by Telecheck-US marketing (Heros Health DBA consumer-surface scope) is not visible in Telecheck-Ghana and vice versa.
 - Per-tenant marketing analytics dashboards per Admin Backend v1.1 §5.6.
 
 **Affiliate program:**
-- Affiliate accounts and conversions are tenant-scoped per CDM v1.2 §4.14-§4.15. Heros operates its own affiliate program; Telecheck-Ghana operates its own (manual reconciliation at launch).
+- Affiliate accounts and conversions are tenant-scoped per CDM v1.2 §4.14-§4.15. Telecheck-US (Heros Health DBA scope) operates its own affiliate program; Telecheck-Ghana (Heros Health Ghana DBA scope) operates its own (manual reconciliation at launch).
 
 **Cross-tenant marketing:**
 - The Telecheck platform itself (as marketed for tenant onboarding) is not addressed in this slice — that is platform-level Sales/BD function.

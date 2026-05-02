@@ -424,14 +424,14 @@ The Market Pack abstraction (§4.1) is extended in v1.10 to include a **research
   - `inactive` — no research consent surface presented; no `ResearchDataExport` permitted; default for new markets.
   - `consent_only` — 5th-tier research consent surface presented (per Consent & Delegated Access Slice §16), consent records collected, but no export pipeline active. Default for markets that have completed REC engagement but have no active DSA.
   - `active` — full Posture A pipeline active: consent surface + DSA active + export pipeline active subject to I-029 (k-anonymity ≥ k_min, audit-trail-driven, governed by ADR-028 §6 permitted-domains list).
-- 7-key research configuration block (per CCR_RUNTIME v5.2):
-  - `research_ethics_review_body` (with `approval_reference_id` for consent text version pinning)
-  - `research_data_partnership_partner_organization` (parent-level partner reference — e.g., WHO/UN at the Posture A activation gate)
-  - `research_permitted_data_domains` (closed enum subset — `chronic_disease_longitudinal | ncd_surveillance | pharmacovigilance_signal | population_health_aggregate`)
-  - `research_data_sharing_agreement_reference` (active `DataSharingAgreement` pointer per TYPES v5.2)
-  - `research_export_k_anonymity_minimum` (k_min for I-029 enforcement)
-  - `research_export_authorized_signers` (multi-party export approval roster)
-  - `research_consent_text_version_pin` (binds Forms Engine `research_data_use_consent_block` to a specific REC-approved text version)
+- 7-key research configuration block (**aligned 2026-05-02 per Codex Scope 3 HIGH-2 finding to mirror exactly the CCR_RUNTIME v5.2 research block schema**):
+  - `research_permitted_data_domains` (closed enum subset — `chronic_disease_longitudinal | ncd_surveillance | pharmacovigilance_signal | population_health_aggregate`; per-DSA scope MUST be a subset)
+  - `research_ethics_review_body` — structured object with `name`, `jurisdiction`, `approval_reference_id`, `approval_validity_from`, `approval_validity_to`, `approval_scope`, `per_dsa_review_required` (the consent-text-version pin is sourced from `approval_reference_id`)
+  - `de_identification_standard` (default `safe_harbor_plus_k_anonymity` per CCR_RUNTIME v5.2)
+  - `k_min_default` (default 11 per HIPAA expert-determination low-risk floor; per-DSA may require higher k_min; never lower per I-029)
+  - `cross_border_research_transfer_permitted` — closed enum: `prohibited | permitted_with_counsel_artifact | permitted_unrestricted`
+  - `cross_border_research_transfer_evidence` — companion structured object: `counsel_approval_artifact_id`, `transfer_mechanism`, `recipient_country`, `onward_transfer_policy`, `dsa_alignment_artifact_id`. **Required-field completeness gate: when `cross_border_research_transfer_permitted` is set to a permitting value AND a transfer is actually planned, the activation review MUST reject the transition if any required companion field is null.** This mirrors the CCR_RUNTIME v5.2 marketing-block required-field completeness pattern (rejecting transitions where structured-object sub-fields are null).
+  - DSA references — Cockpit additionally surfaces the active `DataSharingAgreement` entity link (per TYPES v5.2) and the multi-party export approval roster as workflow-derived UI affordances that are NOT part of the CCR_RUNTIME v5.2 research block per se but are required for the MARKET_LAUNCH v5.1 11-condition activation gate evidence assembly.
 
 **Country pack defaults:**
 

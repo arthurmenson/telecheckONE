@@ -12,10 +12,10 @@
 
 v1.1 reflects the multi-tenancy decision (ADR-023):
 
-1. **Two role hierarchies introduced:** Platform Admin (Telecheck operating the platform) and Tenant Admin / Tenant Operator (per-tenant operators like Heros team and Telecheck-Ghana team).
+1. **Two role hierarchies introduced:** Platform Admin (Telecheck operating the platform) and Tenant Admin / Tenant Operator (per-tenant operators — e.g., the Telecheck-US tenant operator team trading as Heros Health DBA, and the Telecheck-Ghana tenant operator team trading as Heros Health Ghana DBA). **Updated 2026-05-02 per Codex Scope 4 HIGH-2 finding to use operating-tenant + consumer-DBA framing throughout role-hierarchy normative text.**
 2. **Every existing role from v1.0 is implicitly tenant-scoped** — a clinician, a patient, a delegate exists within one tenant. Cross-tenant access is never permitted (per ADR-023).
 3. **New role: Platform Admin** with cross-tenant aggregate visibility but no per-tenant PHI access.
-4. **New role: Tenant Owner** — per-tenant superuser; the Heros operator who manages the Heros tenant in totality.
+4. **New role: Tenant Owner** — per-tenant superuser; e.g., the Telecheck-US tenant owner (Heros Health DBA scope) who manages the Telecheck-US tenant in totality, or the Telecheck-Ghana tenant owner (Heros Health Ghana DBA scope) who manages the Telecheck-Ghana tenant in totality.
 5. **Tenant-scoped permissions enforced at three layers** — application middleware, database RLS, per-tenant KMS encryption keys.
 6. **Special handling of platform admin operations** that target a specific tenant (audited, requires `X-Tenant-Id` header, tenant admin notified).
 
@@ -39,7 +39,7 @@ Platform admins authenticate without a `tenant_id`. Their operations on a specif
 
 ### 1.2 Tenant role hierarchy
 
-These roles operate within a single tenant. The Heros operator team has these roles within the Heros tenant. The Telecheck-Ghana operator team has these roles within the Telecheck-Ghana tenant.
+These roles operate within a single tenant. The Telecheck-US tenant operator team (trading patient-facing as Heros Health DBA) holds these roles within the Telecheck-US tenant. The Telecheck-Ghana tenant operator team (trading patient-facing as Heros Health Ghana DBA) holds these roles within the Telecheck-Ghana tenant.
 
 | Role | Scope | Sees this tenant's PHI | Can configure this tenant | Can manage other roles in this tenant |
 |---|---|---|---|---|
@@ -162,8 +162,8 @@ This allows a tenant to have multiple admins for operational coverage without ma
 ## 6. Clinician role within multi-tenant context
 
 Clinicians are tenant-scoped. The same physician (in the real world) can be:
-- A clinician in the Telecheck-Ghana tenant (employed by Telecheck Ghana panel)
-- A clinician in the Heros tenant (contracted via OpenLoop or Telecheck PLLC)
+- A clinician in the Telecheck-Ghana tenant (Heros Health Ghana DBA scope; employed by Telecheck-Ghana Ltd. clinician panel)
+- A clinician in the Telecheck-US tenant (Heros Health DBA scope; contracted via OpenLoop or Telecheck PLLC)
 
 These are separate Clinician records in the platform — different tenant-scoped accounts, different patient panels, different audit trails. The platform does not federate clinician identity across tenants.
 
