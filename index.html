@@ -508,6 +508,31 @@ function mergeForRetry(server, mine, baseline){
 // Lets us detect: did the user keep editing while a PUT was in flight?
 let DIRTY_GEN = 0;
 function markDirty(){ DIRTY_GEN++; }
+// Set whenever a save fails (network/validation/exhausted-retry conflict).
+// While truthy, the live poller refuses to overwrite PROGRESS so the user's
+// unsaved edits are preserved until they explicitly Resolve.
+let PENDING_RESOLVE = null; // null | { reason: string, fields?: string[] }
+
+function setMetaConflict(label, fields){
+  PENDING_RESOLVE = { reason: label, fields: fields||[] };
+  const meta = $("#cock-meta"); if(!meta) return;
+  meta.innerHTML = `<span style="color:var(--danger)">${esc(label)}</span> · <a href="#" id="meta-resolve" style="color:var(--accent)">Discard local & refresh</a> / <a href="#" id="meta-retry" style="color:var(--accent)">Retry save</a>`;
+  meta.querySelector("#meta-resolve").addEventListener("click", async (e)=>{
+    e.preventDefault();
+    PENDING_RESOLVE = null;
+    saveStatus = "idle"; renderSaveStatus();
+    await loadProgress();
+    if(content.classList.contains("home")) renderHome();
+    else if(crumb.textContent === "Cockpit") { renderCockpitSidebar(); renderCockpit(); }
+    setMeta(metaText());
+  });
+  meta.querySelector("#meta-retry").addEventListener("click", (e)=>{
+    e.preventDefault();
+    PENDING_RESOLVE = null;
+    saveStatus = "idle"; renderSaveStatus();
+    persistProgress();
+  });
+}
 
 function persistProgress(){
   if(!PROGRESS || PROGRESS._readonly) return;
@@ -536,16 +561,19 @@ function persistProgress(){
       BASELINE = snapshot(PROGRESS);
       if(content.classList.contains("home")) renderHome();
       else if(cockpitWasOpen) { renderCockpitSidebar(); renderCockpit(); }
+      PENDING_RESOLVE = null;
       saveStatus = "ok"; renderSaveStatus();
       const meta = $("#cock-meta"); if(meta) meta.textContent = metaText();
       // If newer edits raced this save, queue another save to flush them.
       if(racedEdit) persistProgress();
     }catch(e){
       saveStatus = "err"; renderSaveStatus();
-      const meta = $("#cock-meta");
-      if(meta) meta.textContent = e.conflict
-        ? `Conflict on ${(e.fields||["field"]).slice(0,2).join(", ")} — refresh to see latest`
-        : "Save failed";
+      setMetaConflict(
+        e.conflict
+          ? `Conflict on ${(e.fields||["field"]).slice(0,2).join(", ")}`
+          : ("Save failed: " + (e.message||"unknown")),
+        e.fields
+      );
     }
   }, 350);
 }
@@ -743,10 +771,13 @@ function bindLcSetButton(el, opts, targetId){
       // If a card edit raced this lifecycle save, flush it.
       if(racedEdit) persistProgress();
     }catch(e){
-      saveStatus = "error";
-      setMeta(e.conflict
-        ? `Conflict on ${(e.fields||["field"]).slice(0,2).join(", ")} — refresh to see latest`
-        : ("Save failed: "+(e.message||"")));
+      saveStatus = "err"; renderSaveStatus();
+      setMetaConflict(
+        e.conflict
+          ? `Conflict on ${(e.fields||["field"]).slice(0,2).join(", ")}`
+          : ("Save failed: " + (e.message||"unknown")),
+        e.fields
+      );
     }
   });
 }
@@ -809,6 +840,12 @@ function startLivePoll(){
     // even when there are no data changes or saves in flight.
     refreshTimeAgo();
     if(saveStatus === "saving") return; // don't clobber an in-flight save
+    // CRITICAL: while local edits are unresolved (last save failed or
+    // same-field conflict), refuse to overwrite PROGRESS with the server's
+    // newer doc. Otherwise polling silently discards the user's pending
+    // edits before they can resolve them. Still fetch so the user can see
+    // there IS a newer revision via the meta line.
+    if(saveStatus === "err" || PENDING_RESOLVE) return;
     const prevAt = PROGRESS?.updatedAt;
     try{
       const r = await fetch("/api/progress",{cache:"no-cache"});
