@@ -504,24 +504,42 @@ function mergeForRetry(server, mine, baseline){
   return out;
 }
 
+// Bump on every local edit (status/progress/owner/notes/stage/lifecycle/etc).
+// Lets us detect: did the user keep editing while a PUT was in flight?
+let DIRTY_GEN = 0;
+function markDirty(){ DIRTY_GEN++; }
+
 function persistProgress(){
   if(!PROGRESS || PROGRESS._readonly) return;
+  markDirty();
   saveStatus = "saving"; renderSaveStatus();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async ()=>{
+    // Snapshot exactly what we send. After the response, compare PROGRESS
+    // (current local state) vs sentSnap to find fields the user touched WHILE
+    // the PUT was in flight, then re-apply those onto `written` so they
+    // survive adoption. Without this, a B-edit racing an A-PUT vanishes.
+    const sentSnap = snapshot(PROGRESS);
+    const genAtSendStart = DIRTY_GEN;
     try{
-      const { written } = await putProgress(PROGRESS);
-      // Adopt the exact doc the server accepted as new source of truth.
-      // If the retry path merged in another user's fields, this brings them
-      // into PROGRESS so our next save doesn't revert them.
+      const { written } = await putProgress(sentSnap);
       const cockpitWasOpen = !content.classList.contains("home") && crumb.textContent === "Cockpit";
-      PROGRESS = written;
+      const racedEdit = DIRTY_GEN !== genAtSendStart;
+      let adopted = written;
+      if(racedEdit){
+        // The user typed something while we were sending sentSnap. Find which
+        // fields differ between sentSnap and current PROGRESS — those are the
+        // newer edits — and apply them onto `written`.
+        adopted = applyLocalDeltas(written, sentSnap, PROGRESS);
+      }
+      PROGRESS = adopted;
       BASELINE = snapshot(PROGRESS);
-      // Re-render visible panels so any merged-in remote changes show up now.
       if(content.classList.contains("home")) renderHome();
       else if(cockpitWasOpen) { renderCockpitSidebar(); renderCockpit(); }
       saveStatus = "ok"; renderSaveStatus();
       const meta = $("#cock-meta"); if(meta) meta.textContent = metaText();
+      // If newer edits raced this save, queue another save to flush them.
+      if(racedEdit) persistProgress();
     }catch(e){
       saveStatus = "err"; renderSaveStatus();
       const meta = $("#cock-meta");
@@ -530,6 +548,35 @@ function persistProgress(){
         : "Save failed";
     }
   }, 350);
+}
+
+// Replay fields the user touched between `sent` (what was PUT) and `current`
+// (live PROGRESS) onto `base` (what server accepted, possibly merged with
+// another user's edits). For any field where current !== sent, that's a
+// newer local edit; for fields where current === sent, base wins (so remote
+// merges from the retry path are preserved).
+function applyLocalDeltas(base, sent, current){
+  const eq = (a,b) => JSON.stringify(a) === JSON.stringify(b);
+  const out = JSON.parse(JSON.stringify(base));
+  // Lifecycle.current
+  if(!eq(current?.lifecycle?.current, sent?.lifecycle?.current)){
+    out.lifecycle = out.lifecycle || {};
+    out.lifecycle.current = current.lifecycle.current;
+  }
+  // Per-area
+  const sentMap = new Map((sent?.areas||[]).map(a=>[a.id,a]));
+  const curMap  = new Map((current?.areas||[]).map(a=>[a.id,a]));
+  out.areas = (out.areas||[]).map(b => {
+    const sentArea = sentMap.get(b.id);
+    const curArea  = curMap.get(b.id);
+    if(!sentArea || !curArea) return b;
+    const merged = {...b};
+    for(const k of ["status","progress","owner","notes","stage","docs"]){
+      if(!eq(curArea[k], sentArea[k])) merged[k] = curArea[k]; // newer local edit
+    }
+    return merged;
+  });
+  return out;
 }
 
 function renderSaveStatus(){
