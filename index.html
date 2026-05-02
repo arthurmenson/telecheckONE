@@ -1142,8 +1142,22 @@ async function openDoc(file,label){
       if(!r.ok) throw new Error(r.status+" "+r.statusText);
       md = await r.text();
     }
+    // Fail closed: refuse to render markdown unless DOMPurify is available.
+    // The previous <script>-strip fallback didn't remove inline event
+    // handlers or javascript: URLs, which would execute in the cockpit
+    // origin and could rewrite /api/progress.
+    if (!window.DOMPurify || typeof window.DOMPurify.sanitize !== "function") {
+      content.innerHTML = `<div class="err">Markdown sanitizer (DOMPurify) failed to load — refusing to render <code>${esc(file)}</code>.<br><br>Document HTML is not safe to inject without a sanitizer. Check your network connection (CDN at <code>cdn.jsdelivr.net</code>) or bundle DOMPurify locally, then reload.</div>`;
+      return;
+    }
     const rawHtml = marked.parse(md);
-    const safeHtml = (window.DOMPurify ? DOMPurify.sanitize(rawHtml, {USE_PROFILES:{html:true}}) : rawHtml.replace(/<script[\s\S]*?<\/script>/gi,""));
+    const safeHtml = DOMPurify.sanitize(rawHtml, {
+      USE_PROFILES: { html: true },
+      // Defence-in-depth on top of profile defaults.
+      FORBID_TAGS: ["style","iframe","object","embed","form"],
+      FORBID_ATTR: ["style","srcdoc","formaction"],
+      ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|#|\/|[^:]+$)/i,
+    });
     content.innerHTML = `<div class="md">${safeHtml}</div>`;
     content.scrollTop = 0;
   }catch(e){
