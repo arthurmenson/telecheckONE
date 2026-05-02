@@ -86,6 +86,10 @@ function validateProgress(p){
   const seenIds = new Set();
   const allowedFields = new Set(["id","name","category","status","progress","owner","notes","docs","updatedAt","stage"]);
   const stageIdSet = new Set((p.lifecycle?.stages || []).map(s => s.id));
+  const HEX = /^#[0-9a-fA-F]{6}$/;
+  for (const [i, s] of p.states.entries()) {
+    if (s && typeof s.color === "string" && !HEX.test(s.color)) errs.push(`states[${i}].color must be #rrggbb`);
+  }
   for (const [i, a] of p.areas.entries()) {
     if (!a || typeof a !== "object") { errs.push(`areas[${i}] must be object`); continue; }
     for (const k of Object.keys(a)) if (!allowedFields.has(k)) errs.push(`areas[${i}] has unknown field "${k}"`);
@@ -123,7 +127,13 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET") {
       fs.readFile(PROGRESS_FILE, "utf8", (err, data) => {
         if (err) { res.writeHead(404); return res.end("progress.json missing"); }
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-cache" });
+        let rev = 0;
+        try { rev = JSON.parse(data).revision || 0; } catch {}
+        res.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-cache",
+          "ETag": `"r${rev}"`,
+        });
         res.end(data);
       });
       return;
@@ -138,10 +148,23 @@ const server = http.createServer(async (req, res) => {
           res.writeHead(422, { "Content-Type": "application/json; charset=utf-8" });
           return res.end(JSON.stringify({ ok: false, errors: errs }));
         }
+        // Optimistic concurrency: require If-Match header matching current revision.
+        let prevDoc = {};
+        try { prevDoc = JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8")); } catch {}
+        const currentRev = prevDoc.revision || 0;
+        const ifMatchRaw = req.headers["if-match"] || "";
+        const ifMatch = (ifMatchRaw.match(/r(\d+)/) || [])[1];
+        if (ifMatch == null) {
+          res.writeHead(428, { "Content-Type": "application/json; charset=utf-8" });
+          return res.end(JSON.stringify({ ok:false, error:"missing If-Match header", currentRevision: currentRev }));
+        }
+        if (Number(ifMatch) !== currentRev) {
+          res.writeHead(409, { "Content-Type": "application/json; charset=utf-8", "ETag": `"r${currentRev}"` });
+          return res.end(JSON.stringify({ ok:false, error:"revision conflict", expectedRevision: Number(ifMatch), currentRevision: currentRev, current: prevDoc }));
+        }
         // Stamp updatedAt on areas whose tracked fields changed.
         const now = new Date().toISOString();
-        let prevAreas = [];
-        try { prevAreas = JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8")).areas || []; } catch {}
+        const prevAreas = prevDoc.areas || [];
         const prev = new Map(prevAreas.map(a => [a.id, a]));
         const tracked = ["status","progress","owner","notes"];
         let changed = 0;
@@ -155,11 +178,15 @@ const server = http.createServer(async (req, res) => {
         parsed.schema = parsed.schema || 1;
         parsed.updated = now.slice(0,10);
         parsed.updatedAt = now;
+        parsed.revision = currentRev + 1;
         atomicWriteJson(PROGRESS_FILE, parsed);
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ ok: true, updated: parsed.updated, updatedAt: now, changed, areas: parsed.areas.length }));
+        res.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "ETag": `"r${parsed.revision}"`,
+        });
+        res.end(JSON.stringify({ ok: true, updated: parsed.updated, updatedAt: now, revision: parsed.revision, changed, areas: parsed.areas.length }));
         const ts = now.slice(11,19);
-        console.log(`[${ts}] 200 PUT /api/progress (${parsed.areas.length} areas, ${changed} changed)`);
+        console.log(`[${ts}] 200 PUT /api/progress (rev ${currentRev}→${parsed.revision}, ${changed} changed)`);
       } catch (e) {
         res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
         res.end("Bad request: " + e.message);

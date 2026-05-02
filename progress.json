@@ -1,5 +1,6 @@
 {
   "schema": 1,
+  "revision": 2,
   "updated": "2026-05-02",
   "lifecycle": {
     "current": "spec-baseline",
@@ -290,7 +291,7 @@
         "Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md"
       ],
       "updatedAt": "2026-05-02T05:58:17.535Z",
-      "stage": "slice-build"
+      "stage": "spec-baseline"
     },
     {
       "id": "slice-rpm-ccm",
@@ -535,5 +536,5 @@
       "stage": "internal-alpha"
     }
   ],
-  "updatedAt": "2026-05-02T14:45:28.024Z"
+  "updatedAt": "2026-05-02T16:19:59.784Z"
 }

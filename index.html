@@ -372,6 +372,16 @@ let PROGRESS = null;
 let saveTimer = null;
 let saveStatus = "idle"; // idle|saving|ok|err
 
+// HTML-escape any user-controlled string before innerHTML interpolation.
+function esc(s){
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+// Hex-color allowlist; falls back to neutral grey on bad input so user-controlled
+// state colors can't smuggle CSS expressions through inline style attributes.
+function safeColor(c){
+  return (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : "#888888";
+}
+
 async function loadProgress(){
   try{
     const r = await fetch("/api/progress",{cache:"no-cache"});
@@ -393,19 +403,71 @@ function statusMap(){
   return m;
 }
 
+async function putProgress(doc, attempt){
+  const ifMatch = `"r${doc.revision || 0}"`;
+  const r = await fetch("/api/progress",{
+    method:"PUT",
+    headers:{"Content-Type":"application/json","If-Match":ifMatch},
+    body: JSON.stringify(doc),
+  });
+  if(r.status === 409){
+    // Server has a newer revision. Refetch + replay our local-only fields onto
+    // the server's version, bump revision, retry once. If our edit still
+    // collides with someone else's edit on the same field, server's value wins
+    // and we surface a soft conflict notice.
+    const conflict = await r.json();
+    const server = conflict.current;
+    if(attempt && attempt >= 1){ throw Object.assign(new Error("conflict"), {conflict:true}); }
+    const merged = mergeForRetry(server, doc);
+    return putProgress(merged, (attempt||0)+1);
+  }
+  if(!r.ok){
+    let msg = r.status+" "+r.statusText;
+    try { msg = (await r.text()).slice(0,200) || msg; } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+// Replay only fields the local client touched onto the server's latest doc.
+// "Touched" = anything that differs between PROGRESS (last good baseline) and doc.
+function mergeForRetry(server, mine){
+  const out = JSON.parse(JSON.stringify(server));
+  // Lifecycle.current
+  if(mine.lifecycle?.current && mine.lifecycle.current !== server.lifecycle?.current){
+    out.lifecycle = out.lifecycle || {}; out.lifecycle.current = mine.lifecycle.current;
+  }
+  // Per-area shallow merge of tracked fields where mine differs from server.
+  const sMap = new Map((server.areas||[]).map(a=>[a.id,a]));
+  out.areas = (mine.areas||[]).map(myArea=>{
+    const sv = sMap.get(myArea.id) || myArea;
+    const merged = {...sv};
+    for(const k of ["status","progress","owner","notes","stage","docs"]){
+      if(JSON.stringify(myArea[k]) !== JSON.stringify(sv[k])) merged[k] = myArea[k];
+    }
+    return merged;
+  });
+  return out;
+}
+
 function persistProgress(){
   if(!PROGRESS || PROGRESS._readonly) return;
   saveStatus = "saving"; renderSaveStatus();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async ()=>{
     try{
-      const r = await fetch("/api/progress",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(PROGRESS)});
-      if(!r.ok) throw new Error(r.status);
-      const j = await r.json();
-      PROGRESS.updated = j.updated;
+      const j = await putProgress(PROGRESS);
+      PROGRESS.revision = j.revision;
+      PROGRESS.updated  = j.updated;
+      PROGRESS.updatedAt = j.updatedAt;
       saveStatus = "ok"; renderSaveStatus();
       const meta = $("#cock-meta"); if(meta) meta.textContent = metaText();
-    }catch(e){ saveStatus = "err"; renderSaveStatus(); }
+    }catch(e){
+      saveStatus = "err"; renderSaveStatus();
+      if(e.conflict){
+        const meta = $("#cock-meta"); if(meta) meta.textContent = "Conflict — refresh to see latest";
+      }
+    }
   }, 350);
 }
 
@@ -487,25 +549,25 @@ function renderLifecycle(targetId, opts){
         const off = C * (1 - pctVal/100);
         const mark = i<idx && pctVal>=99 ? "✓" : (pctVal>0 ? Math.round(pctVal)+"%" : (i+1));
         const subtitle = stats.count ? `${stats.done}/${stats.count}` : "0/0";
-        return `<div class="step ${cls}" data-i="${i}" data-id="${s.id}" title="${(s.description||"").replace(/"/g,"&quot;")} (${stats.done}/${stats.count} areas, avg ${Math.round(pctVal)}%)">
+        return `<div class="step ${cls}" data-i="${i}" data-id="${esc(s.id)}" title="${esc(s.description||"")} (${stats.done}/${stats.count} areas, avg ${Math.round(pctVal)}%)">
           <div class="ring">
             <svg viewBox="0 0 38 38">
               <circle class="ring-bg" cx="19" cy="19" r="16"/>
               <circle class="ring-fg" cx="19" cy="19" r="16" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"/>
             </svg>
-            <div class="ring-label">${mark}</div>
+            <div class="ring-label">${esc(mark)}</div>
           </div>
-          <div class="lbl">${s.label}<br><span style="color:var(--muted);font-size:10.5px;font-weight:400">${subtitle}</span></div>
+          <div class="lbl">${esc(s.label)}<br><span style="color:var(--muted);font-size:10.5px;font-weight:400">${esc(subtitle)}</span></div>
         </div>`;
       }).join("")}
     </div>
     <div class="lc-detail">
-      <div class="d-label">${cur?.label||"Current stage"} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${(()=>{const st=stageStats(cur?.id||"");return `${st.done}/${st.count} done · avg ${Math.round(st.avg)}%`;})()}</span></div>
-      <div>${cur?.description||""}</div>
-      ${(()=>{const st=stageStats(cur?.id||""); if(!st.count) return ""; const sm=statusMap(); return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${Object.entries(st.byStatus).map(([k,v])=>{const s=sm[k]||{label:k,color:"#888"};return `<span class="legend-pill"><span class="legend-dot" style="background:${s.color}"></span>${s.label}: ${v}</span>`;}).join("")}</div>`;})()}
-      ${cur?.exit ? `<div class="d-exit">Exit criteria: ${cur.exit}</div>` : ""}
+      <div class="d-label">${esc(cur?.label||"Current stage")} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${(()=>{const st=stageStats(cur?.id||"");return `${st.done}/${st.count} done · avg ${Math.round(st.avg)}%`;})()}</span></div>
+      <div>${esc(cur?.description||"")}</div>
+      ${(()=>{const st=stageStats(cur?.id||""); if(!st.count) return ""; const sm=statusMap(); return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${Object.entries(st.byStatus).map(([k,v])=>{const s=sm[k]||{label:k,color:"#888"};return `<span class="legend-pill"><span class="legend-dot" style="background:${safeColor(s.color)}"></span>${esc(s.label)}: ${v}</span>`;}).join("")}</div>`;})()}
+      ${cur?.exit ? `<div class="d-exit">Exit criteria: ${esc(cur.exit)}</div>` : ""}
       ${editable ? `<div class="lc-edit">
-        <select id="lc-select">${lc.stages.map((s,i)=>{const st=stageStats(s.id); return `<option value="${s.id}" ${i===idx?"selected":""}>${i+1}. ${s.label} — ${Math.round(st.avg)}%</option>`;}).join("")}</select>
+        <select id="lc-select">${lc.stages.map((s,i)=>{const st=stageStats(s.id); return `<option value="${esc(s.id)}" ${i===idx?"selected":""}>${i+1}. ${esc(s.label)} — ${Math.round(st.avg)}%</option>`;}).join("")}</select>
         <button id="lc-set">Set current stage</button>
       </div>` : ""}
     </div>
@@ -520,15 +582,15 @@ function renderLifecycle(targetId, opts){
     const stats = stageStats(id);
     const sm = statusMap();
     const breakdown = stats.count
-      ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${Object.entries(stats.byStatus).map(([k,v])=>{const s=sm[k]||{label:k,color:"#888"};return `<span class="legend-pill"><span class="legend-dot" style="background:${s.color}"></span>${s.label}: ${v}</span>`;}).join("")}</div>`
+      ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${Object.entries(stats.byStatus).map(([k,v])=>{const s=sm[k]||{label:k,color:"#888"};return `<span class="legend-pill"><span class="legend-dot" style="background:${safeColor(s.color)}"></span>${esc(s.label)}: ${v}</span>`;}).join("")}</div>`
       : "";
     detail.innerHTML = `
-      <div class="d-label">${stg.label}${id===lc.current?" (current)":""} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${stats.done}/${stats.count} done · avg ${Math.round(stats.avg)}%</span></div>
-      <div>${stg.description||""}</div>
+      <div class="d-label">${esc(stg.label)}${id===lc.current?" (current)":""} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${stats.done}/${stats.count} done · avg ${Math.round(stats.avg)}%</span></div>
+      <div>${esc(stg.description||"")}</div>
       ${breakdown}
-      ${stg.exit ? `<div class="d-exit">Exit criteria: ${stg.exit}</div>` : ""}
+      ${stg.exit ? `<div class="d-exit">Exit criteria: ${esc(stg.exit)}</div>` : ""}
       ${editable ? `<div class="lc-edit">
-        <select id="lc-select">${lc.stages.map((s2,i2)=>{const st2=stageStats(s2.id); return `<option value="${s2.id}" ${s2.id===id?"selected":""}>${i2+1}. ${s2.label} — ${Math.round(st2.avg)}%</option>`;}).join("")}</select>
+        <select id="lc-select">${lc.stages.map((s2,i2)=>{const st2=stageStats(s2.id); return `<option value="${esc(s2.id)}" ${s2.id===id?"selected":""}>${i2+1}. ${esc(s2.label)} — ${Math.round(st2.avg)}%</option>`;}).join("")}</select>
         <button id="lc-set">Set current stage</button>
       </div>` : ""}
     `;
@@ -545,14 +607,15 @@ function bindLcSetButton(el, opts, targetId){
     next.lifecycle.current = id;
     saveStatus = "saving"; setMeta("Saving lifecycle…");
     try{
-      const r = await fetch("/api/progress",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(next)});
-      if(!r.ok) throw new Error(await r.text());
-      const j = await r.json();
-      PROGRESS = next; PROGRESS.updatedAt = j.updatedAt;
+      const j = await putProgress(next);
+      PROGRESS = next;
+      PROGRESS.revision = j.revision;
+      PROGRESS.updatedAt = j.updatedAt;
       saveStatus = "idle"; setMeta(metaText());
       renderLifecycle(targetId, opts);
     }catch(e){
-      saveStatus = "error"; setMeta("Save failed: "+e.message);
+      saveStatus = "error";
+      setMeta(e.conflict ? "Conflict — refresh to see latest" : ("Save failed: "+(e.message||"")));
     }
   });
 }
@@ -580,14 +643,16 @@ function renderFlightPanel(targetId){
     ${items.length===0
       ? `<div class="empty">Nothing flagged In dev / In review / Blocked yet — set a card's status in the Cockpit tab.</div>`
       : `<div class="grid2">${items.map(a=>{
-          const s = sm[a.status]||{color:"#888",label:a.status};
+          const s = sm[a.status]||{color:"#888888",label:a.status};
+          const c = safeColor(s.color);
           const recent = a.updatedAt && new Date(a.updatedAt).getTime() > recentCutoff;
-          return `<div class="row-card ${recent?"recent":""}" data-id="${a.id}" style="border-left-color:${s.color}" title="${(a.notes||"").replace(/"/g,"&quot;")}">
-            <div class="n"><span>${a.name}</span><em>${a.category}</em></div>
-            <div class="bar"><i style="width:${a.progress||0}%;background:${s.color}"></i></div>
+          const pct = Math.max(0, Math.min(100, Number(a.progress)||0));
+          return `<div class="row-card ${recent?"recent":""}" data-id="${esc(a.id)}" style="border-left-color:${c}" title="${esc(a.notes||"")}">
+            <div class="n"><span>${esc(a.name)}</span><em>${esc(a.category)}</em></div>
+            <div class="bar"><i style="width:${pct}%;background:${c}"></i></div>
             <div class="meta">
-              <span style="color:${s.color}">● ${s.label} · ${a.progress||0}%</span>
-              <span>${a.owner?("👤 "+a.owner+" · "):""}${timeAgo(a.updatedAt)}</span>
+              <span style="color:${c}">● ${esc(s.label)} · ${pct}%</span>
+              <span>${a.owner?("👤 "+esc(a.owner)+" · "):""}${esc(timeAgo(a.updatedAt))}</span>
             </div>
           </div>`;
         }).join("")}</div>`
@@ -656,14 +721,14 @@ function renderCockpitSidebar(){
       <div style="display:flex;flex-direction:column;gap:4px;padding:4px">
         <label class="legend-pill" style="cursor:pointer"><input type="checkbox" id="filt-all" checked /> Show all</label>
         ${(PROGRESS?.states||[]).map(s=>`
-          <label class="legend-pill" style="cursor:pointer"><span class="legend-dot" style="background:${s.color}"></span>
-            <input type="checkbox" class="filt-state" value="${s.id}" checked /> ${s.label}
+          <label class="legend-pill" style="cursor:pointer"><span class="legend-dot" style="background:${safeColor(s.color)}"></span>
+            <input type="checkbox" class="filt-state" value="${esc(s.id)}" checked /> ${esc(s.label)}
           </label>`).join("")}
       </div>
     </div>
     ${Object.entries(cats).map(([cat,items])=>`
       <div class="group"><h3>${cat} <span class="count">${items.length}</span></h3>
-        ${items.map(a=>`<a class="item" data-area="${a.id}">${a.name}<small style="color:${sm[a.status]?.color||'#888'}">${sm[a.status]?.label||a.status} · ${a.progress||0}%</small></a>`).join("")}
+        ${items.map(a=>`<a class="item" data-area="${esc(a.id)}">${esc(a.name)}<small style="color:${safeColor(sm[a.status]?.color)}">${esc(sm[a.status]?.label||a.status)} · ${Math.max(0,Math.min(100,Number(a.progress)||0))}%</small></a>`).join("")}
       </div>`).join("")}
   `;
   navCockpit.querySelectorAll(".item[data-area]").forEach(el=>el.addEventListener("click",()=>{
@@ -718,7 +783,7 @@ function renderCockpit(){
     <div class="lifecycle" id="lc-cockpit"></div>
     <div class="flight" id="flight-cockpit"></div>
     <div class="legend-row">
-      ${PROGRESS.states.map(s=>`<span class="legend-pill"><span class="legend-dot" style="background:${s.color}"></span>${s.label} · ${stats.byStatus[s.id]||0}</span>`).join("")}
+      ${PROGRESS.states.map(s=>`<span class="legend-pill"><span class="legend-dot" style="background:${safeColor(s.color)}"></span>${esc(s.label)} · ${stats.byStatus[s.id]||0}</span>`).join("")}
     </div>
     <div class="stats-strip">
       <div class="stat-card"><div class="n">${stats.total}</div><div class="l">Tracked areas</div></div>
@@ -741,31 +806,36 @@ function renderCockpit(){
 }
 
 function renderArea(a, sm){
-  const s = sm[a.status] || {color:"#888",label:a.status};
+  const s = sm[a.status] || {color:"#888888",label:a.status};
+  const c = safeColor(s.color);
   const ro = PROGRESS._readonly ? "disabled" : "";
-  const docs = (a.docs||[]).map(d=>`<a data-doc="${d}" title="${d}">${(d.replace(/^Telecheck_?/,"").replace(/_v\d_\d.md$/,"").replace(/\.md$/,"").replace(/_/g," ")).slice(0,38)}</a>`).join("");
-  return `<div class="area" id="area-${a.id}" data-id="${a.id}" data-status="${a.status}" style="border-left-color:${s.color}">
+  const pct = Math.max(0, Math.min(100, Number(a.progress)||0));
+  const docs = (a.docs||[]).map(d=>{
+    const label = (String(d).replace(/^Telecheck_?/,"").replace(/_v\d_\d.md$/,"").replace(/\.md$/,"").replace(/_/g," ")).slice(0,38);
+    return `<a data-doc="${esc(d)}" title="${esc(d)}">${esc(label)}</a>`;
+  }).join("");
+  return `<div class="area" id="area-${esc(a.id)}" data-id="${esc(a.id)}" data-status="${esc(a.status)}" style="border-left-color:${c}">
     <div class="title">
       <div>
-        <div class="cat">${a.category} · <span title="${a.updatedAt||""}">${timeAgo(a.updatedAt)}</span></div>
-        <h4>${a.name}</h4>
+        <div class="cat">${esc(a.category)} · <span title="${esc(a.updatedAt||"")}">${esc(timeAgo(a.updatedAt))}</span></div>
+        <h4>${esc(a.name)}</h4>
       </div>
     </div>
-    <div class="progress"><i style="width:${a.progress||0}%;background:${s.color}"></i></div>
+    <div class="progress"><i style="width:${pct}%;background:${c}"></i></div>
     <div class="row">
       <select class="status" ${ro}>
-        ${PROGRESS.states.map(st=>`<option value="${st.id}" ${st.id===a.status?"selected":""}>${st.label}</option>`).join("")}
+        ${PROGRESS.states.map(st=>`<option value="${esc(st.id)}" ${st.id===a.status?"selected":""}>${esc(st.label)}</option>`).join("")}
       </select>
-      <input class="pct" type="number" min="0" max="100" value="${a.progress||0}" ${ro} />%
-      <input class="owner" placeholder="owner" value="${a.owner||""}" ${ro} />
+      <input class="pct" type="number" min="0" max="100" value="${pct}" ${ro} />%
+      <input class="owner" placeholder="owner" value="${esc(a.owner||"")}" ${ro} />
     </div>
     <div class="row" style="margin-top:4px">
       <select class="stage" ${ro} title="Lifecycle stage this area rolls up to">
         <option value="">— stage —</option>
-        ${(PROGRESS.lifecycle?.stages||[]).map(st=>`<option value="${st.id}" ${st.id===a.stage?"selected":""}>${st.label}</option>`).join("")}
+        ${(PROGRESS.lifecycle?.stages||[]).map(st=>`<option value="${esc(st.id)}" ${st.id===a.stage?"selected":""}>${esc(st.label)}</option>`).join("")}
       </select>
     </div>
-    <textarea class="notes" placeholder="Notes…" ${ro}>${a.notes||""}</textarea>
+    <textarea class="notes" placeholder="Notes…" ${ro}>${esc(a.notes||"")}</textarea>
     ${docs?`<div class="docs">${docs}</div>`:""}
   </div>`;
 }
