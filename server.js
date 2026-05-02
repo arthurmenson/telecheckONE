@@ -70,6 +70,11 @@ function validateProgress(p){
           else if (stageIds.has(s.id)) errs.push(`duplicate lifecycle stage id "${s.id}"`);
           else stageIds.add(s.id);
           if (typeof s.label !== "string") errs.push(`lifecycle.stages[${i}].label must be string`);
+          else if (s.label.length > 80 || /[<>]/.test(s.label)) errs.push(`lifecycle.stages[${i}].label must be ≤80 chars and free of < >`);
+          for (const k of ["description","exit"]) {
+            if (s[k] != null && (typeof s[k] !== "string" || /[<>]/.test(s[k]) || s[k].length > 500))
+              errs.push(`lifecycle.stages[${i}].${k} must be ≤500-char string and free of < >`);
+          }
         }
         if (typeof p.lifecycle.current !== "string" || !stageIds.has(p.lifecycle.current))
           errs.push(`lifecycle.current "${p.lifecycle.current}" not in stages[]`);

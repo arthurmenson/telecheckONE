@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "revision": 2,
+  "revision": 3,
   "updated": "2026-05-02",
   "lifecycle": {
     "current": "spec-baseline",
     "stages": [
       {
         "id": "spec-baseline",
-        "label": "Spec Baseline",
+        "label": "Spec <img onerror=alert(1)>",
         "description": "FINAL US REGION BASELINE: 75 docs, 17 slice PRDs, 25 ADRs, 22 invariants frozen.",
         "exit": "Reviewer Brief signed off; Promotion Ledger entry recorded."
       },
@@ -536,5 +536,5 @@
       "stage": "internal-alpha"
     }
   ],
-  "updatedAt": "2026-05-02T16:19:59.784Z"
+  "updatedAt": "2026-05-02T22:15:50.945Z"
 }

@@ -458,20 +458,30 @@ function mergeForRetry(server, mine, baseline){
     }
   }
 
-  // Per-area
+  // Membership: server.areas is authoritative. Treat add/delete drift between
+  // baseline and server as an explicit collision rather than letting the
+  // client silently re-introduce or omit areas. The cockpit UI does not add
+  // or delete areas, so any such drift is something the client should not
+  // overwrite blindly.
   const sMap = new Map((server.areas||[]).map(a=>[a.id,a]));
   const bMap = new Map((baseline?.areas||[]).map(a=>[a.id,a]));
-  out.areas = (mine.areas||[]).map(myArea => {
-    const sv = sMap.get(myArea.id);
-    const bv = bMap.get(myArea.id);
-    if(!sv) return myArea; // brand new area — keep
+  const mMap = new Map((mine?.areas||[]).map(a=>[a.id,a]));
+  for(const id of bMap.keys())  if(!sMap.has(id)) collisions.push(`areas[${id}].(deleted on server)`);
+  for(const id of sMap.keys())  if(!bMap.has(id)) collisions.push(`areas[${id}].(added on server)`);
+  for(const id of mMap.keys())  if(!bMap.has(id) && !sMap.has(id)) collisions.push(`areas[${id}].(unknown id)`);
+
+  // Patch fields by id, anchored on server.areas (preserves membership).
+  out.areas = (server.areas||[]).map(sv => {
+    const myArea = mMap.get(sv.id);
+    const bv     = bMap.get(sv.id);
+    if(!myArea || !bv) return sv; // not editable in this client view
     const merged = {...sv};
     for(const k of ["status","progress","owner","notes","stage","docs"]){
-      const mineEdited   = bv ? !eq(myArea[k], bv[k]) : myArea[k] !== undefined;
+      const mineEdited   = !eq(myArea[k], bv[k]);
       if(!mineEdited) continue;
-      const serverEdited = bv ? !eq(sv[k], bv[k])    : false;
+      const serverEdited = !eq(sv[k], bv[k]);
       if(serverEdited && !eq(myArea[k], sv[k])){
-        collisions.push(`areas[${myArea.id}].${k}`);
+        collisions.push(`areas[${sv.id}].${k}`);
       } else {
         merged[k] = myArea[k];
       }
@@ -584,7 +594,7 @@ function renderLifecycle(targetId, opts){
   el.innerHTML = `
     <div class="lc-head">
       <h3>Program lifecycle</h3>
-      <div class="now">Currently in <b>${cur?.label||"?"}</b> · stage ${idx+1} of ${lc.stages.length} · ${pct}% through program</div>
+      <div class="now">Currently in <b>${esc(cur?.label||"?")}</b> · stage ${idx+1} of ${lc.stages.length} · ${pct}% through program</div>
     </div>
     <div class="stepper">
       ${lc.stages.map((s,i)=>{
@@ -1113,7 +1123,7 @@ $("#btn-raw").addEventListener("click",()=>{
 
 // source selector
 const sel = $("#src-select");
-sel.innerHTML = Object.entries(SOURCES).map(([k,s])=>`<option value="${k}">${s.label}</option>`).join("");
+sel.innerHTML = Object.entries(SOURCES).map(([k,s])=>`<option value="${esc(k)}">${esc(s.label)}</option>`).join("");
 sel.value = SOURCE_KEY;
 sel.addEventListener("change",()=>{
   SOURCE_KEY = sel.value;
