@@ -720,15 +720,28 @@ function bindLcSetButton(el, opts, targetId){
   el.querySelector("#lc-set")?.addEventListener("click", async ()=>{
     const id = el.querySelector("#lc-select").value;
     if(id === PROGRESS.lifecycle.current) return;
-    const next = JSON.parse(JSON.stringify(PROGRESS));
-    next.lifecycle.current = id;
+    // Use the same race-protection machinery as persistProgress: capture both
+    // the doc we send and DIRTY_GEN at request start, so any card edits the
+    // user makes while this PUT is in flight survive the adoption step.
+    markDirty(); // a lifecycle change IS a local edit; bumping ensures consistent semantics
+    const sentSnap = JSON.parse(JSON.stringify(PROGRESS));
+    sentSnap.lifecycle.current = id;
+    // Mirror the change into PROGRESS too, so concurrent edits start from a
+    // consistent local state. Bumping DIRTY_GEN above means our own change
+    // here doesn't trigger a false "race" against ourselves below.
+    PROGRESS.lifecycle.current = id;
+    const genAtSendStart = DIRTY_GEN;
     saveStatus = "saving"; setMeta("Saving lifecycle…");
     try{
-      const { written } = await putProgress(next);
-      PROGRESS = written; // adopt merged doc as authoritative
+      const { written } = await putProgress(sentSnap);
+      const racedEdit = DIRTY_GEN !== genAtSendStart;
+      const adopted = racedEdit ? applyLocalDeltas(written, sentSnap, PROGRESS) : written;
+      PROGRESS = adopted;
       BASELINE = snapshot(PROGRESS);
       saveStatus = "idle"; setMeta(metaText());
       renderLifecycle(targetId, opts);
+      // If a card edit raced this lifecycle save, flush it.
+      if(racedEdit) persistProgress();
     }catch(e){
       saveStatus = "error";
       setMeta(e.conflict
