@@ -555,14 +555,21 @@ Device readings are subject to plausibility checks (same as manual entry). Impla
 
 **Scope boundary — export pipeline ownership.** Any export of RPM/CCM data into a Posture A research data flow is governed by the **research export pipeline** (a separate platform component, not by the RPM/CCM slice directly). The RPM/CCM slice is the upstream data producer; export decisions, k-anonymity enforcement, audit governance, and DSA matching are owned by the research export pipeline downstream.
 
-**Preconditions for any RPM/CCM data inclusion in a `ResearchDataExport`:**
+**Preconditions for any RPM/CCM data inclusion in a `ResearchDataExport`** *(canonical 5-condition I-029 gate enumerated 2026-05-02 per Codex Round-10 Scope 2 HIGH-2 finding; was previously listing only 3 of the 5 I-029 conditions — added permitted-domain snapshot equality and consent-cohort hash equality at completion-time as explicit canonical conditions)*:
 
-1. **Active DSA.** A signed `DataSharingAgreement` (per TYPES v5.2) MUST exist for the patient's `country_of_care`, with the partner organization and permitted domains aligned with `research_permitted_data_domains.chronic_disease_longitudinal`.
-2. **Active 5th-tier consent.** The patient MUST have an active `ResearchConsent` record (consent type `research_data_use`) per Consent & Delegated Access Slice §16, with no pending revocation. Asymmetric retraction acknowledgement is recorded at grant time.
-3. **k-anonymity ≥ k_min.** The export MUST satisfy I-029 — k-anonymity ≥ CCR `research_export_k_anonymity_minimum` for the patient's `country_of_care`. Below-threshold cohorts are rejected at export time.
-4. **CCR `research_data_partnership_active = active`.** Markets in `inactive` or `consent_only` state MUST NOT export RPM/CCM data.
-5. **Authorized signers.** Export MUST be signed off by members of `research_export_authorized_signers` per CCR_RUNTIME v5.2 (multi-party approval).
-6. **Audit envelope.** Export emits AUDIT_EVENTS v5.2 §5 research events (audit class `high_pii` per I-031).
+**Canonical I-029 5-condition reject-unless gate (per INVARIANTS v5.2 I-029; mirrored exactly here — local additions are explicitly additive and labeled as RPM/CCM-specific):**
+
+1. **`dsa_status_at_export = active`.** A signed `DataSharingAgreement` (per TYPES v5.2) MUST exist for the patient's `country_of_care`, with the partner organization and permitted domains aligned with `research_permitted_data_domains.chronic_disease_longitudinal`. Non-active DSAs (expired, suspended, retired) reject. → `invalidation_reason = dsa_inactive`.
+2. **`k_threshold_actual >= k_min_required`.** The export MUST satisfy I-029 — k-anonymity ≥ CCR `research_export_k_anonymity_minimum` for the patient's `country_of_care`. Below-threshold cohorts are rejected at export time. → `invalidation_reason = k_anonymity_violation`.
+3. **`permitted_data_domains_at_export` matches the `research.export_initiated` snapshot.** Permitted-domain drift between initiation and completion (CCR change mid-export) rejects. → `invalidation_reason = permitted_domain_drift`.
+4. **`consent_cohort_snapshot_hash_completed = consent_cohort_snapshot_hash_initiated`.** Cohort changed mid-export by any mechanism rejects. → `invalidation_reason = consent_cohort_change`.
+5. **Every contributing patient has active `ResearchConsent` at completion-time evaluation.** Each contributing patient's `ResearchConsent` MUST satisfy `consent_type = research_data_use`, `granted_at` non-null, `revoked_at` null at completion-time. Covers BOTH mid-export revocation events AND pre-existing stale/invalid consent records. Asymmetric retraction acknowledgement is recorded at grant time per Consent & Delegated Access Slice §16. → `invalidation_reason = consent_revocation_mid_export`.
+
+**RPM/CCM-specific additive preconditions** (additional to the canonical 5-condition gate above):
+
+6. **CCR `research_data_partnership_active = active`.** Markets in `inactive` or `consent_only` state MUST NOT export RPM/CCM data. (Stage 2 activation gate per MARKET_LAUNCH v5.1.)
+7. **Authorized signers.** Export MUST be signed off by members of `research_export_authorized_signers` per CCR_RUNTIME v5.2 (multi-party approval; ADR-028 v0.4 quad sign-off + Country Launch Director).
+8. **Audit envelope.** Export emits AUDIT_EVENTS v5.2 §5 research events (audit class `high_pii` per I-031). Failed exports emit `research.export_completed(status=invalidated)` paired with `signal_enforcement_trigger` Category B per I-003.
 
 **I-030 zero-impact restatement.** The presence or absence of a patient's `ResearchConsent` MUST NOT affect any RPM/CCM clinical pathway — alert thresholds, escalation logic, care plan structure, milestone tracking, subscription billing, or connected-device support. RPM/CCM operates identically for consenting and non-consenting patients; only downstream export inclusion differs.
 

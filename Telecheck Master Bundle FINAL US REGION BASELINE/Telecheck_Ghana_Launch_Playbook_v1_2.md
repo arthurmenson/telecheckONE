@@ -411,7 +411,7 @@ Telecheck-Ghana is the brand-name and operational identity used in the Ghana mar
 - Platform-level governance: Platform Clinical Governance, Platform AI Safety, Platform Privacy Officer, Platform Security Officer
 - Cross-tenant audit aggregation, cross-tenant pattern detection
 - Country profile authoring (the Ghana CountryProfile itself is platform-authored; Telecheck-Ghana selects from its available adapters)
-- Heros tenant (the US D2C tenant operating in parallel; Heros has its own equivalent of this playbook for its market)
+- **Telecheck-US tenant** (the US D2C operating tenant operating in parallel, trading patient-facing as Heros Health DBA; Telecheck-US has its own equivalent of this playbook for its market) *(updated 2026-05-02 per Codex Round-10 Scope 4 MEDIUM-2 finding — was previously stated as `Heros tenant`, using bare `Heros` as a tenant identifier in violation of the C3 brand-structure rule per Master PRD v1.10 §17 + Glossary v5.2)*
 
 ### Cross-tenant operational coordination
 

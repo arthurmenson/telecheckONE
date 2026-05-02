@@ -83,7 +83,7 @@ Multiple control-plane documents now explicitly distinguish jurisdictional regul
 - **OR-103** (data residency): closing rationale updated under ADR-026 (per-tenant KMS unchanged; physical region updated)
 - **OR-111** (deployment topology): topology under ADR-026 now reflects cold-DR posture (was warm-snapshot under ADR-025); CI/CD, runbooks, monitoring remain open
 - **OR-302** (Ghana DPC cross-border registration): rescoped — Ghana data processed in us-east-1; specific contractual mechanism, patient privacy notice language, and sub-processor list all marked `[COUNSEL-REQUIRED]`
-- **OR-303** (US BAA structure): simplified — standard HIPAA-region BAA chain (Heros → Telecheck → AWS US, all US-jurisdiction); was non-standard cross-border framing under ADR-025
+- **OR-303** (US BAA structure): simplified — standard HIPAA-region BAA chain. **Canonical 3-party chain (per System Architecture v1.2 §11.4 + OR-303 2026-05-02 supersession entry; updated 2026-05-02 per Codex Round-10 Scope 4 MEDIUM-3 finding to align with the canonical BAA chain — was previously stated as `Heros → Telecheck → AWS US` shorthand which violated C3 brand structure AND collapsed two distinct business-associate parties):** **Telecheck Health LLC (Telecheck-US tenant operator; Heros Health DBA consumer surface) → Telecheck parent/platform (separate business associate; data-plane operator + per-tenant KMS / RLS enforcement layer per ADR-023) → AWS US (subprocessor)**, all US-jurisdiction; was non-standard cross-border framing under ADR-025.
 
 Status log entries appended for the four reframings (2026-04-26).
 

@@ -153,9 +153,10 @@ Example:
   --color-brand-primary: #0A7E8C;  /* Telecheck teal */
 }
 
-/* Telecheck-US tenant override (Heros Health DBA) */
-[data-tenant="heros"] {
-  --color-brand-primary: #1F3A5C;  /* Heros Health navy */
+/* Telecheck-US tenant override (Heros Health DBA) — patch 2026-05-02 per Codex Round-10 Scope 4 HIGH-1 finding: */
+/* The data-tenant attribute MUST key off the canonical operating-tenant identifier (`Telecheck-US`), NOT the consumer-DBA shorthand (`heros`). Was previously [data-tenant="heros"] which violates the C3 brand-structure rule per Master PRD v1.10 §17 + Glossary v5.2 (operating-tenant identifiers are `Telecheck-{country}`; consumer DBA is `Heros Health` and lives in `tenant.consumer_dba`, not the data-tenant attribute). Implementations SHOULD use the operating-tenant identifier in the data-tenant attribute to keep style routing consistent with the auth/RBAC/audit-envelope tenant identifier. */
+[data-tenant="Telecheck-US"] {
+  --color-brand-primary: #1F3A5C;  /* Heros Health DBA navy (per `tenant.consumer_dba` runtime resolution) */
 }
 
 /* Telecheck-Ghana tenant — uses platform default; no override */

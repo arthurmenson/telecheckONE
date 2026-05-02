@@ -62,7 +62,7 @@ type AutonomyLevel =
 
 **Sign-off chain:** None at execution time. Workload-level sign-off (e.g., guardrail template approval) governs the AI's outputs.
 
-**Audit envelope:** standard audit event with `actor.type = ai_workload`, `ai_workload_type` populated, `autonomy_level = "advisory"`. No PolicyAuthorization reference required.
+**Audit envelope:** standard audit event with `actor_type = ai_workload` *(field name corrected 2026-05-02 per Codex Round-10 Scope 1 HIGH-1 finding from prior `actor.type` — flat field name per AUDIT_EVENTS v5.2 envelope schema)*, `ai_workload_type` populated, `autonomy_level = "advisory"`. No PolicyAuthorization reference required.
 
 **State machine:** terminates at `ai_recommended` or `ai_information_provided`; no action transition.
 

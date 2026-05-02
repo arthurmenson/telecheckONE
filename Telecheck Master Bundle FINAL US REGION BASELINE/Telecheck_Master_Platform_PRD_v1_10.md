@@ -661,7 +661,7 @@ This is the single normative source of truth for I-012 + autonomy-level interact
 
 **UI / operator-facing terminology** may continue to use "Mode 1 / Mode 2" labels where helpful. Code, schema, audit, and config MUST use the workload taxonomy values (`conversational_assistant`, `protocol_execution`).
 
-**Audit envelope.** Every audit event with `actor.type = ai_workload` carries required fields `ai_workload_type` and `autonomy_level` (nullable only for legacy/backfilled events and non-AI events). Reserved nullable agentic-context fields exist on day one: `agent_id`, `agent_version`, `tool_call_id`, `memory_read_set_id`, `memory_write_set_id`, `supervising_policy_id`, `knowledge_source_versions[]`. These populate only when the corresponding capability activates.
+**Audit envelope.** Every audit event with `actor_type = ai_workload` *(field name corrected 2026-05-02 per Codex Round-10 Scope 1 HIGH-1 finding from prior `actor.type` (with dot) — the canonical envelope discriminator is the flat `actor_type` field per AUDIT_EVENTS v5.2 envelope schema)* carries required fields `ai_workload_type` and `autonomy_level` (nullable only for legacy/backfilled events and non-AI events; required regardless of `actor_type` for I-012 action-class records per AUDIT_EVENTS v5.2 §I-012 closure rule). Reserved nullable agentic-context fields exist on day one: `agent_id`, `agent_version`, `tool_call_id`, `memory_read_set_id`, `memory_write_set_id`, `supervising_policy_id`, `knowledge_source_versions[]`. These populate only when the corresponding capability activates.
 
 ---
 
