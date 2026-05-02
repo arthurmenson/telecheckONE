@@ -144,9 +144,9 @@ ADR-028 is **accepted at v1.10 promotion**, but per-country **activation of `res
 | Cohort definition layer | Architecture defined; not implemented | Yes, per country activation |
 | De-identified longitudinal data export under DSAs | Architecture defined; not implemented | Yes, per country activation |
 | Aggregation layer for population-level statistics | Architecture defined; not implemented | Yes, per country activation |
-| 5th consent tier (research data-use) | Active at v1.0 launch (consent text via §24 row 12) | Live |
-| Consented participation (revocable, no care impact) | Active at v1.0 launch | Live |
-| Audit per I-029/I-030/I-031 + new research.* events | Active at v1.0 launch (consent-related); export-related at Release 2 | Full at Release 2 |
+| 5th consent tier (research data-use) | **`inactive` at v1.0 launch in all countries** (patch 2026-05-02 per Codex Round-4 Scope 3 HIGH-2 finding aligning with CCR_RUNTIME v5.2 launch defaults). Consent prompt does NOT render until the per-country `inactive → consent_only` activation gate passes (REC approval reference + ethics-reviewed consent text version pin per §24 row 12 + Country Launch Director sign-off per MARKET_LAUNCH v5.1). | Live (per country, after `inactive → consent_only` activation) |
+| Consented participation (revocable, no care impact) | **`inactive` at v1.0 launch** (no consent collection until per-country `consent_only` activation; once active, opt-in only, separately revocable, zero care impact per I-030) | Live (per country, after activation) |
+| Audit per I-029/I-030/I-031 + new research.* events | **`inactive` at v1.0 launch** for consent-related events (`research.consent_granted` / `research.consent_revoked` do NOT emit until per-country `consent_only` activation); export-related events at Release 2 (per `consent_only → active` activation) | Full at Release 2 (per country, after `consent_only → active` activation) |
 | REC/IRB ethics review at Ghana level (or analogous per market) | Designated pre-launch (§24 row 11) | Engaged at Release 2 activation |
 | DSA template legal-reviewed | Pre-launch decision (§24 row 13) | Required before first DSA activation |
 | De-identification engine (Safe Harbor + k-anonymity) | Standard chosen pre-launch (§24 row 14) | Implemented at Release 2 |

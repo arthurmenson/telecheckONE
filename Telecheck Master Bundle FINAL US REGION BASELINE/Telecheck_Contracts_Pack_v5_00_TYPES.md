@@ -432,10 +432,11 @@ type AIWorkloadType =
   | "protocol_execution"
   | "autonomous_agent"
   | "multi_agent_supervisor"
-  | "tool_using_agent";
+  | "tool_using_agent"
+  | "rejected_invalid_attempt";
 ```
 
-Active at v1.0: `conversational_assistant`, `protocol_execution`. Reserved (require successor ADR + activation audit event): `autonomous_agent`, `multi_agent_supervisor`, `tool_using_agent`. Per ADR-029.
+Active at v1.0: `conversational_assistant`, `protocol_execution`. Reserved (require successor ADR + activation audit event): `autonomous_agent`, `multi_agent_supervisor`, `tool_using_agent`. **Sentinel (added v5.2 patch 2026-05-02 per Codex Round-4 Scope 1 MEDIUM-1):** `rejected_invalid_attempt` — reserved exclusively for envelope-level value on `*.execution_rejected` audit events when the rejection captures a null/unknown/reserved attempted_ai_workload_type; never emitted by AI workloads themselves. Per ADR-029 + AUDIT_EVENTS v5.2 §I-012-closure-rule exception.
 
 ### AutonomyLevel (operative shape; full enum + activation policy in AUTONOMY_LEVELS contract)
 ```typescript
@@ -444,10 +445,11 @@ type AutonomyLevel =
   | "suggestion"
   | "action_with_confirm"
   | "action_with_audit_only"
-  | "fully_autonomous";
+  | "fully_autonomous"
+  | "rejected_invalid_attempt";
 ```
 
-Active at v1.0: `advisory`, `suggestion`, `action_with_confirm`. Reserved (require successor ADR + activation audit event per ADR-030): `action_with_audit_only`, `fully_autonomous`. I-012 reject-unless three-clause rule binds prescription / refill / medication-order actions to `action_with_confirm` ceiling per Master PRD §13.7.
+Active at v1.0: `advisory`, `suggestion`, `action_with_confirm`. Reserved (require successor ADR + activation audit event per ADR-030): `action_with_audit_only`, `fully_autonomous`. **Sentinel (added v5.2 patch 2026-05-02 per Codex Round-4 Scope 1 MEDIUM-1):** `rejected_invalid_attempt` — reserved exclusively for envelope-level value on `*.execution_rejected` audit events when the rejection captures a null/unknown/reserved attempted_autonomy_level; never used by an actual AI workload's execution. I-012 reject-unless three-clause rule binds prescription / refill / medication-order actions to `action_with_confirm` ceiling per Master PRD §13.7.
 
 ### PolicyAuthorization (placeholder skeleton; activates under ADR-030 + GOVERNANCE_CONTROLS framework)
 ```

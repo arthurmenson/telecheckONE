@@ -50,7 +50,8 @@ type AIWorkloadType =
   | "protocol_execution"            // active at v1.0 (current Mode 2)
   | "autonomous_agent"              // RESERVED — requires ADR-030
   | "multi_agent_supervisor"        // RESERVED — requires ADR-033
-  | "tool_using_agent";             // RESERVED — requires ADR-031 + ADR-030
+  | "tool_using_agent"              // RESERVED — requires ADR-031 + ADR-030
+  | "rejected_invalid_attempt";     // SENTINEL — added v5.2 patch 2026-05-02 per Codex Round-4 Scope 1 MEDIUM-1 finding. Reserved exclusively for use as the envelope-level value on `*.execution_rejected` audit events when the rejection captures null/unknown/reserved attempted workload-type values. Never emitted by AI workloads themselves; never the discriminator on a successful AIExecution record. Per AUDIT_EVENTS v5.2 §I-012-closure-rule exception for execution_rejected events.
 ```
 
 ## 2 · Active workload types (v1.0)
