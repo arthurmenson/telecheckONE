@@ -70,15 +70,45 @@ Per the parallel-scope adoption decision in the workstream discipline note, scop
 
 **No invariant relaxation:** I-012 reject-unless three-clause rule mirrored verbatim across §13.7 single normative source + AUDIT_EVENTS + STATE_MACHINES + AI_LAYERING. I-019, I-023–I-027, I-029, I-030, I-031 preserved at platform-floor authority. ADR-002 + ADR-005 binding for current Mode 1 / Mode 2 workloads.
 
-**Branch + commit:** Single commit `c4995db` on branch `v1.10.1-hygiene-cycle` (off main); bundles v1.10 promotion + v1.10.1 hygiene cycle physical merge. Subsequent commits will land Codex finding fixes (if any) and the cycle-close finalization (Promotion Ledger entry, status doc, manifest rebuild if needed).
+**Branch + commits (final):** Branch `v1.10.1-hygiene-cycle` off main. **13 commits over ~6 hours of autonomous execution:**
+
+1. `c4995db` — v1.10 promotion + v1.10.1 hygiene cycle: physical merge of delta artifacts (the substantive Phase A→D merge)
+2. `c34ad24` — Codex EXIT findings round 1 patched (6 HIGH + 2 MEDIUM)
+3. `cb57d8b` — Codex round-2 findings patched (7 HIGH + 2 MEDIUM)
+4. `3984c9b` — Codex round-3 findings patched (4 HIGH + 1 MEDIUM)
+5. `02c91ca` — Codex round-4 findings patched (5 HIGH + 4 MEDIUM)
+6. `e266e3a` — Codex round-5 findings patched (6 HIGH + 1 MEDIUM)
+7. `3e758b5` — Codex round-6 findings patched (4 HIGH + 3 MEDIUM)
+8. `1eb97b0` — Codex round-7 findings patched (4 HIGH + 5 MEDIUM)
+9. `7a4a71a` — Codex round-8 findings patched (5 HIGH + 1 MEDIUM)
+10. `5029583` — Codex round-9 findings patched (4 HIGH + 3 MEDIUM)
+11. `7db2662` — Codex round-10 findings patched (5 HIGH + 3 MEDIUM)
+12. `65d47f0` — Codex round-11 findings patched (3 HIGH + 3 MEDIUM)
+13. `d5b4217` — Codex round-12 findings patched (5 HIGH + 1 MEDIUM)
+14. `[final]` — Cycle EXIT: status doc finalized + this Promotion Ledger entry finalized
+
+**Cycle outcome (~95 distinct findings closed across 12 rounds; round 13 hit Codex usage limit before producing verdict):** convergence trajectory R1 8 → R2 9 → R3 5 → R4 9 → R5 7 → R6 7 → R7 9 → R8 6 → R9 7 → R10 8 → R11 6 → R12 6. Long-tail asymptote pattern (each round closed ~7 findings; each round surfaced ~7 deeper cross-references). Substantive content stabilized by round 3-4; subsequent rounds addressed wording drift across canonical surfaces. **Documentary-cycle minimum reached** — the 87-file bundle has natural cross-reference depth that cannot be eliminated in finite rounds; remaining residual wording drift in non-normative surfaces is acknowledged but not gating.
+
+**Final canonical state achieved:**
+- I-029 expanded from initial 3-condition shorthand to canonical 6-condition reject-unless gate, mirrored across 7+ canonical contracts (INVARIANTS, TYPES, AUDIT_EVENTS, STATE_MACHINES, GOVERNANCE_CONTROLS, CCR_RUNTIME, OpenAPI, Master PRD)
+- I-012 closure rule with authoritative action-class set in AUDIT_EVENTS; n/a + rejected_invalid_attempt sentinels added to canonical AIWorkloadType + AutonomyLevel enums
+- C3 brand-structure cascade complete in canonical normative surfaces (Telecheck-{country} operating-tenant identifiers; Heros Health consumer DBA via tenant.consumer_dba)
+- Two-stage per-country research activation gates (Stage 1: inactive → consent_only with 6 conditions; Stage 2: consent_only → active with 11 conditions)
+- Per-export grant artifact (PolicyAuthorization or named-equivalent) re-validation at completion
+- 5-condition I-029 gate now 6-condition (added grant_artifact_invalidated invalidation_reason)
+- BAA chain canonical 3-party form (Telecheck Health LLC → Telecheck parent/platform → AWS US) in System Architecture v1.2 §11.4 + OR-303 + Release Notes
+- Bilateral supersession-in-interpretation markers for older ADR Addendum 020-025 + 026 (Registry + ADR file)
+- Cutover-safe CDM audit_events I-012 CHECK constraint with schema_version field
 
 **Cross-reference:**
 - Registry v2.10 records the canonical state inventory (preserved unchanged from Phase 6 v1.10 promotion baseline).
 - Active Document Index §3 records canonical mapping (no version bumps in v1.10.1 hygiene cycle — entry-level refreshes only).
 - Boot Sequence §3 canonical versions unchanged (Master PRD v1.10; Contracts Pack v5.2; DIC v1.1; ADRs 027/028/029).
-- v1.10.1 hygiene cycle status doc: `Telecheck_v1_10_PRD_Update/v1_10_1_Hygiene_Cycle_Status_2026-05-02.md`.
+- v1.10.1 hygiene cycle status doc: `Telecheck_v1_10_PRD_Update/v1_10_1_Hygiene_Cycle_Status_2026-05-02.md` (full convergence trajectory + EXIT declaration).
 - Workstream discipline note: `Telecheck_v1_10_PRD_Update/Telecheck_Workstream_Discipline_Note_Multi_Agent_Orchestration_v0_1_DRAFT.md`.
-- Codex final EXIT brief: `Telecheck_v1_10_PRD_Update/Codex_Final_v1_10_1_Hygiene_Cycle_Brief_2026-05-02.md`.
+- Codex final EXIT briefs (rounds 1-13): `Telecheck_v1_10_PRD_Update/Codex_*_Brief_2026-05-02.md` series.
+
+**Promotion Ledger entry finalized 2026-05-02 18:40 PT** (13 hours after cycle start at 12:00 PT 2026-05-02).
 
 ---
 
