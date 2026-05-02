@@ -84,7 +84,8 @@ function validateProgress(p){
     else stateIds.add(s.id);
   }
   const seenIds = new Set();
-  const allowedFields = new Set(["id","name","category","status","progress","owner","notes","docs","updatedAt"]);
+  const allowedFields = new Set(["id","name","category","status","progress","owner","notes","docs","updatedAt","stage"]);
+  const stageIdSet = new Set((p.lifecycle?.stages || []).map(s => s.id));
   for (const [i, a] of p.areas.entries()) {
     if (!a || typeof a !== "object") { errs.push(`areas[${i}] must be object`); continue; }
     for (const k of Object.keys(a)) if (!allowedFields.has(k)) errs.push(`areas[${i}] has unknown field "${k}"`);
@@ -98,6 +99,7 @@ function validateProgress(p){
     if (a.owner != null && typeof a.owner !== "string") errs.push(`areas[${i}].owner must be string`);
     if (a.notes != null && typeof a.notes !== "string") errs.push(`areas[${i}].notes must be string`);
     if (a.docs != null && (!Array.isArray(a.docs) || a.docs.some(d => typeof d !== "string"))) errs.push(`areas[${i}].docs must be string[]`);
+    if (a.stage != null && (typeof a.stage !== "string" || (stageIdSet.size && !stageIdSet.has(a.stage)))) errs.push(`areas[${i}].stage "${a.stage}" not in lifecycle.stages[]`);
     // clamp progress in place
     if (typeof a.progress === "number") a.progress = Math.max(0, Math.min(100, Math.round(a.progress)));
   }

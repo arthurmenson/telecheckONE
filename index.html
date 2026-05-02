@@ -148,11 +148,17 @@
   .lifecycle .lc-head .now b{color:var(--accent2)}
   .stepper{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding-bottom:6px}
   .step{flex:1 0 130px;min-width:130px;display:flex;flex-direction:column;align-items:center;position:relative;cursor:pointer;padding:0 4px}
-  .step:not(:last-child)::after{content:"";position:absolute;top:14px;left:calc(50% + 14px);right:calc(-50% + 14px);height:2px;background:var(--border);z-index:0}
+  .step:not(:last-child)::after{content:"";position:absolute;top:19px;left:calc(50% + 22px);right:calc(-50% + 22px);height:2px;background:var(--border);z-index:0}
   .step.done:not(:last-child)::after{background:var(--accent2)}
-  .step .dot{width:28px;height:28px;border-radius:50%;background:var(--chip);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);font-weight:600;z-index:1;position:relative;transition:all .2s}
-  .step.done .dot{background:var(--accent2);border-color:var(--accent2);color:#0b0f17}
-  .step.active .dot{background:#15233b;border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 4px rgba(106,169,255,.18);animation:pulse-step 1.8s infinite}
+  .step .ring{width:38px;height:38px;position:relative;z-index:1}
+  .step .ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .step .ring .ring-bg{fill:none;stroke:var(--border);stroke-width:3}
+  .step .ring .ring-fg{fill:none;stroke:var(--accent2);stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset .35s ease}
+  .step .ring .ring-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:600;color:var(--muted)}
+  .step.done .ring .ring-label{color:var(--accent2)}
+  .step.active .ring .ring-fg{stroke:var(--accent)}
+  .step.active .ring .ring-label{color:var(--accent)}
+  .step.active .ring{box-shadow:0 0 0 4px rgba(106,169,255,.15);border-radius:50%;animation:pulse-step 1.8s infinite}
   @keyframes pulse-step{0%{box-shadow:0 0 0 0 rgba(106,169,255,.4)}70%{box-shadow:0 0 0 9px rgba(106,169,255,0)}100%{box-shadow:0 0 0 0 rgba(106,169,255,0)}}
   .step .lbl{margin-top:6px;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.25}
   .step.done .lbl{color:var(--text)}
@@ -425,6 +431,17 @@ function timeAgo(iso){
   return Math.floor(s/86400)+"d ago";
 }
 
+function stageStats(stageId){
+  const areas = (PROGRESS?.areas || []).filter(a => a.stage === stageId);
+  const count = areas.length;
+  if (!count) return { count:0, done:0, avg:0, byStatus:{} };
+  const sum = areas.reduce((a,x) => a + (x.progress||0), 0);
+  const done = areas.filter(a => a.status === "shipped" || (a.progress||0) >= 100).length;
+  const byStatus = {};
+  for (const a of areas) byStatus[a.status] = (byStatus[a.status]||0) + 1;
+  return { count, done, avg: sum/count, byStatus };
+}
+
 function renderLifecycle(targetId, opts){
   const el = document.getElementById(targetId); if(!el) return;
   const lc = PROGRESS?.lifecycle;
@@ -444,19 +461,31 @@ function renderLifecycle(targetId, opts){
     <div class="stepper">
       ${lc.stages.map((s,i)=>{
         const cls = i<idx ? "done" : (i===idx ? "active" : "upcoming");
-        const mark = i<idx ? "✓" : (i+1);
-        return `<div class="step ${cls}" data-i="${i}" data-id="${s.id}" title="${(s.description||"").replace(/"/g,"&quot;")}">
-          <div class="dot">${mark}</div>
-          <div class="lbl">${s.label}</div>
+        const stats = stageStats(s.id);
+        const pctVal = stats.count ? stats.avg : (i<idx ? 100 : 0);
+        const C = 2 * Math.PI * 16; // r=16
+        const off = C * (1 - pctVal/100);
+        const mark = i<idx && pctVal>=99 ? "✓" : (pctVal>0 ? Math.round(pctVal)+"%" : (i+1));
+        const subtitle = stats.count ? `${stats.done}/${stats.count}` : "0/0";
+        return `<div class="step ${cls}" data-i="${i}" data-id="${s.id}" title="${(s.description||"").replace(/"/g,"&quot;")} (${stats.done}/${stats.count} areas, avg ${Math.round(pctVal)}%)">
+          <div class="ring">
+            <svg viewBox="0 0 38 38">
+              <circle class="ring-bg" cx="19" cy="19" r="16"/>
+              <circle class="ring-fg" cx="19" cy="19" r="16" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"/>
+            </svg>
+            <div class="ring-label">${mark}</div>
+          </div>
+          <div class="lbl">${s.label}<br><span style="color:var(--muted);font-size:10.5px;font-weight:400">${subtitle}</span></div>
         </div>`;
       }).join("")}
     </div>
     <div class="lc-detail">
-      <div class="d-label">${cur?.label||"Current stage"}</div>
+      <div class="d-label">${cur?.label||"Current stage"} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${(()=>{const st=stageStats(cur?.id||"");return `${st.done}/${st.count} done · avg ${Math.round(st.avg)}%`;})()}</span></div>
       <div>${cur?.description||""}</div>
+      ${(()=>{const st=stageStats(cur?.id||""); if(!st.count) return ""; const sm=statusMap(); return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${Object.entries(st.byStatus).map(([k,v])=>{const s=sm[k]||{label:k,color:"#888"};return `<span class="legend-pill"><span class="legend-dot" style="background:${s.color}"></span>${s.label}: ${v}</span>`;}).join("")}</div>`;})()}
       ${cur?.exit ? `<div class="d-exit">Exit criteria: ${cur.exit}</div>` : ""}
       ${editable ? `<div class="lc-edit">
-        <select id="lc-select">${lc.stages.map((s,i)=>`<option value="${s.id}" ${i===idx?"selected":""}>${i+1}. ${s.label}</option>`).join("")}</select>
+        <select id="lc-select">${lc.stages.map((s,i)=>{const st=stageStats(s.id); return `<option value="${s.id}" ${i===idx?"selected":""}>${i+1}. ${s.label} — ${Math.round(st.avg)}%</option>`;}).join("")}</select>
         <button id="lc-set">Set current stage</button>
       </div>` : ""}
     </div>
@@ -465,35 +494,47 @@ function renderLifecycle(targetId, opts){
     const id = st.dataset.id;
     const sel = document.getElementById("lc-select");
     if(sel) sel.value = id;
-    // Show detail for clicked stage even if not committing
     const stg = lc.stages.find(s=>s.id===id);
     const detail = el.querySelector(".lc-detail");
-    if(stg && detail){
-      detail.querySelector(".d-label").textContent = stg.label + (id===lc.current?" (current)":"");
-      detail.querySelectorAll(":scope > div")[1].textContent = stg.description||"";
-      const exitEl = detail.querySelector(".d-exit");
-      if(exitEl) exitEl.textContent = stg.exit ? "Exit criteria: " + stg.exit : "";
-    }
+    if(!stg || !detail) return;
+    const stats = stageStats(id);
+    const sm = statusMap();
+    const breakdown = stats.count
+      ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${Object.entries(stats.byStatus).map(([k,v])=>{const s=sm[k]||{label:k,color:"#888"};return `<span class="legend-pill"><span class="legend-dot" style="background:${s.color}"></span>${s.label}: ${v}</span>`;}).join("")}</div>`
+      : "";
+    detail.innerHTML = `
+      <div class="d-label">${stg.label}${id===lc.current?" (current)":""} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${stats.done}/${stats.count} done · avg ${Math.round(stats.avg)}%</span></div>
+      <div>${stg.description||""}</div>
+      ${breakdown}
+      ${stg.exit ? `<div class="d-exit">Exit criteria: ${stg.exit}</div>` : ""}
+      ${editable ? `<div class="lc-edit">
+        <select id="lc-select">${lc.stages.map((s2,i2)=>{const st2=stageStats(s2.id); return `<option value="${s2.id}" ${s2.id===id?"selected":""}>${i2+1}. ${s2.label} — ${Math.round(st2.avg)}%</option>`;}).join("")}</select>
+        <button id="lc-set">Set current stage</button>
+      </div>` : ""}
+    `;
+    if(editable) bindLcSetButton(el, opts, targetId);
   }));
-  if(editable){
-    el.querySelector("#lc-set")?.addEventListener("click", async ()=>{
-      const id = el.querySelector("#lc-select").value;
-      if(id === lc.current) return;
-      const next = JSON.parse(JSON.stringify(PROGRESS));
-      next.lifecycle.current = id;
-      saveStatus = "saving"; setMeta("Saving lifecycle…");
-      try{
-        const r = await fetch("/api/progress",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(next)});
-        if(!r.ok) throw new Error(await r.text());
-        const j = await r.json();
-        PROGRESS = next; PROGRESS.updatedAt = j.updatedAt;
-        saveStatus = "idle"; setMeta(metaText());
-        renderLifecycle(targetId,opts);
-      }catch(e){
-        saveStatus = "error"; setMeta("Save failed: "+e.message);
-      }
-    });
-  }
+  if(editable) bindLcSetButton(el, opts, targetId);
+}
+
+function bindLcSetButton(el, opts, targetId){
+  el.querySelector("#lc-set")?.addEventListener("click", async ()=>{
+    const id = el.querySelector("#lc-select").value;
+    if(id === PROGRESS.lifecycle.current) return;
+    const next = JSON.parse(JSON.stringify(PROGRESS));
+    next.lifecycle.current = id;
+    saveStatus = "saving"; setMeta("Saving lifecycle…");
+    try{
+      const r = await fetch("/api/progress",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(next)});
+      if(!r.ok) throw new Error(await r.text());
+      const j = await r.json();
+      PROGRESS = next; PROGRESS.updatedAt = j.updatedAt;
+      saveStatus = "idle"; setMeta(metaText());
+      renderLifecycle(targetId, opts);
+    }catch(e){
+      saveStatus = "error"; setMeta("Save failed: "+e.message);
+    }
+  });
 }
 
 const ACTIVE_STATES = new Set(["in-dev","in-review","blocked"]);
@@ -698,6 +739,12 @@ function renderArea(a, sm){
       <input class="pct" type="number" min="0" max="100" value="${a.progress||0}" ${ro} />%
       <input class="owner" placeholder="owner" value="${a.owner||""}" ${ro} />
     </div>
+    <div class="row" style="margin-top:4px">
+      <select class="stage" ${ro} title="Lifecycle stage this area rolls up to">
+        <option value="">— stage —</option>
+        ${(PROGRESS.lifecycle?.stages||[]).map(st=>`<option value="${st.id}" ${st.id===a.stage?"selected":""}>${st.label}</option>`).join("")}
+      </select>
+    </div>
     <textarea class="notes" placeholder="Notes…" ${ro}>${a.notes||""}</textarea>
     ${docs?`<div class="docs">${docs}</div>`:""}
   </div>`;
@@ -724,6 +771,11 @@ function bindCockpitHandlers(){
     });
     card.querySelector(".owner").addEventListener("input",e=>{ area.owner = e.target.value; persistProgress(); });
     card.querySelector(".notes").addEventListener("input",e=>{ area.notes = e.target.value; persistProgress(); });
+    card.querySelector(".stage")?.addEventListener("change",e=>{
+      area.stage = e.target.value || undefined;
+      persistProgress();
+      renderLifecycle("lc-cockpit",{editable:true});
+    });
     card.querySelectorAll(".docs a").forEach(a=>a.addEventListener("click",()=>{
       switchTab("docs"); openDoc(a.dataset.doc, a.dataset.doc);
     }));

@@ -102,7 +102,8 @@
       "notes": "Mode 1 + Mode 2 architecture per ADR-002.",
       "docs": [
         "Telecheck_AI_Clinical_Assistant_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-acquisition",
@@ -114,7 +115,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Acquisition_Engagement_Tools_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-admin-backend",
@@ -126,7 +128,8 @@
       "notes": "v1.1 promoted.",
       "docs": [
         "Telecheck_Admin_Backend_Slice_PRD_v1_1.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-admin-config",
@@ -138,7 +141,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Admin_Configuration_Surfaces_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-adverse-events",
@@ -150,7 +154,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Adverse_Event_Reporting_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-async-consult",
@@ -162,7 +167,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Async_Consult_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-community",
@@ -174,7 +180,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Community_Platform_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-consent",
@@ -186,7 +193,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Consent_Delegated_Access_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-fake-meds",
@@ -198,7 +206,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Fake_Medication_Detection_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-forms",
@@ -212,7 +221,8 @@
         "Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md",
         "Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md"
       ],
-      "updatedAt": "2026-05-02T05:58:17.535Z"
+      "updatedAt": "2026-05-02T05:58:17.535Z",
+      "stage": "slice-build"
     },
     {
       "id": "slice-herb-drug",
@@ -224,7 +234,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Herb_Drug_Interaction_Engine_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-labs",
@@ -236,7 +247,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Labs_Document_Interpretation_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-market-rollout",
@@ -249,7 +261,8 @@
       "docs": [
         "Telecheck_Market_Rollout_Cockpit_Slice_PRD_v1_0.md",
         "Telecheck_Contracts_Pack_v5_00_MARKET_LAUNCH.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-med-interaction",
@@ -261,7 +274,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Medication_Interaction_Engine_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-pharmacy",
@@ -274,7 +288,8 @@
       "docs": [
         "Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md"
       ],
-      "updatedAt": "2026-05-02T05:58:17.535Z"
+      "updatedAt": "2026-05-02T05:58:17.535Z",
+      "stage": "slice-build"
     },
     {
       "id": "slice-rpm-ccm",
@@ -286,7 +301,8 @@
       "notes": "",
       "docs": [
         "Telecheck_RPM_CCM_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "slice-sync-video",
@@ -298,7 +314,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Sync_Video_Consult_Slice_PRD_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "spec-cdm",
@@ -311,7 +328,8 @@
       "docs": [
         "Telecheck_Canonical_Data_Model_v1_2.md"
       ],
-      "updatedAt": "2026-05-02T05:58:17.535Z"
+      "updatedAt": "2026-05-02T05:58:17.535Z",
+      "stage": "foundation-build"
     },
     {
       "id": "spec-openapi",
@@ -324,7 +342,8 @@
       "docs": [
         "Telecheck_OpenAPI_v0_2.md"
       ],
-      "updatedAt": "2026-05-02T05:58:17.535Z"
+      "updatedAt": "2026-05-02T05:58:17.535Z",
+      "stage": "foundation-build"
     },
     {
       "id": "spec-state-machines",
@@ -337,7 +356,8 @@
       "docs": [
         "Telecheck_State_Machines_v1_1.md"
       ],
-      "updatedAt": "2026-05-02T05:58:17.535Z"
+      "updatedAt": "2026-05-02T05:58:17.535Z",
+      "stage": "foundation-build"
     },
     {
       "id": "spec-architecture",
@@ -350,7 +370,8 @@
       "docs": [
         "Telecheck_System_Architecture_v1_2.md"
       ],
-      "updatedAt": "2026-05-02T05:58:17.535Z"
+      "updatedAt": "2026-05-02T05:58:17.535Z",
+      "stage": "foundation-build"
     },
     {
       "id": "spec-rbac",
@@ -362,7 +383,8 @@
       "notes": "v1.1.",
       "docs": [
         "Telecheck_RBAC_Permissions_Matrix_v1_1.md"
-      ]
+      ],
+      "stage": "foundation-build"
     },
     {
       "id": "spec-identity",
@@ -374,7 +396,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Identity_Authentication_Spec_v1_0.md"
-      ]
+      ],
+      "stage": "foundation-build"
     },
     {
       "id": "spec-notification",
@@ -386,7 +409,8 @@
       "notes": "v1.1.",
       "docs": [
         "Telecheck_Notification_Spec_v1_1.md"
-      ]
+      ],
+      "stage": "foundation-build"
     },
     {
       "id": "spec-messaging",
@@ -398,7 +422,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Messaging_Inbox_Spec_v1_0.md"
-      ]
+      ],
+      "stage": "foundation-build"
     },
     {
       "id": "spec-payment",
@@ -410,7 +435,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Payment_Billing_Spec_v1_0.md"
-      ]
+      ],
+      "stage": "foundation-build"
     },
     {
       "id": "ux-design-system",
@@ -422,7 +448,8 @@
       "notes": "v1.1.",
       "docs": [
         "Telecheck_Design_System_v1_1.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "ux-dic",
@@ -434,7 +461,8 @@
       "notes": "PROVISIONAL until design files arrive.",
       "docs": [
         "Telecheck_Design_Implementation_Contract_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "ux-patient-app",
@@ -446,7 +474,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Patient_App_IA_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "ux-clinician",
@@ -458,7 +487,8 @@
       "notes": "",
       "docs": [
         "Telecheck_Clinician_Portal_IA_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "ux-admin-ia",
@@ -471,7 +501,8 @@
       "docs": [
         "Telecheck_Admin_Operator_IA_v1_1.md",
         "Telecheck_Unified_Admin_Sidebar_v1_0.md"
-      ]
+      ],
+      "stage": "slice-build"
     },
     {
       "id": "ops-ghana",
@@ -484,7 +515,8 @@
       "docs": [
         "Telecheck_Ghana_Launch_Playbook_v1_2.md",
         "Telecheck_Protocol_Library_Ghana_v1_0.md"
-      ]
+      ],
+      "stage": "pilot"
     },
     {
       "id": "ops-readiness",
@@ -498,7 +530,8 @@
         "Telecheck_Operational_Readiness_Todo_v1_5.md",
         "Telecheck_Consolidated_Launch_Tracker_v1_0.md"
       ],
-      "updatedAt": "2026-05-02T05:58:17.535Z"
+      "updatedAt": "2026-05-02T05:58:17.535Z",
+      "stage": "internal-alpha"
     }
   ],
   "updatedAt": "2026-05-02T14:12:06.078Z"
