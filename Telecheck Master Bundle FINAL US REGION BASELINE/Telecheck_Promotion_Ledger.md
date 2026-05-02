@@ -36,6 +36,52 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-009 — 2026-05-02 — v1.10.1 Hygiene Cycle (physical merge of v1.10 delta artifacts into bundle file bodies)
+
+**User instruction (verbatim):** "use your recommended and go yolo mode while I sleep for 6 hrs" (Evans, 2026-05-02). After Phase 6 v1.10 promotion cycle completed 2026-05-01 with Codex Phase 6 POST-MERGE EXIT v0.5 closed at 0 HIGH / 0 MEDIUM, the orchestrator proposed Option A (physical-merge follow-on cycle) to eliminate the dual-read requirement from the Phase 6 delta-artifact-supplement convention. Evans's "yolo mode" instruction authorized autonomous execution. Subsequent ratifying instructions during the cycle: "auto allow always from here" (2026-05-02; suspends per-action confirmation prompts), "i agree" (2026-05-02; ratifies multi-agent expert workstream orchestration adoption for Phase D + Codex EXIT), "commit authorized for next 6 hrs. do not prompt or ask" (2026-05-02; blanket commit authorization), "auto run fire codex scope and all for 6hrs" (2026-05-02; ratifies the parallel scoped Codex EXIT + autonomous follow-through).
+
+**Cycle:** v1.10.1 PRD bundle hygiene (physical merge of v1.10 delta artifacts into bundle file bodies; pointer-note headers removed; v5.2 doc-control entries added).
+
+**Cycle scope:** Eliminate the dual-read requirement introduced by the Phase 6 v1.10 promotion's delta-artifact-supplement convention. Bundle file bodies receive the v1.10 substantive content edits; delta artifacts in `Telecheck_v1_10_PRD_Update/` are preserved as authoritative-reference audit trail.
+
+**Workstream lead:** Evans (Product Lead; via Claude proxy as orchestrator).
+
+**Adversarial reviewer:** Codex (gpt-5.5 via OpenAI Codex CLI v0.125.0).
+
+**Multi-agent orchestration adoption:** Per Evans's "i agree" 2026-05-02, the orchestrator adopted tier-1 multi-agent expert workstream orchestration as a workstream-side discipline for the cycle's Phase D and Codex EXIT review. Workstream-discipline note authored at `Telecheck_v1_10_PRD_Update/Telecheck_Workstream_Discipline_Note_Multi_Agent_Orchestration_v0_1_DRAFT.md`. The pattern is **workstream-side** (engineering process) and **orthogonal to ADR-029** (product-side AI workload taxonomy); the orchestrator + sub-agents do not access patient data, do not make clinical decisions, and do not activate any reserved workload type from ADR-029.
+
+**Phase plan and outcomes:**
+
+- **Phase A — 6 Contracts Pack core files (orchestrator-sequential).** INVARIANTS v5.2, AUDIT_EVENTS v5.2, CCR_RUNTIME v5.2, TYPES v5.2, GLOSSARY v5.2, AI_LAYERING v5.2. Pointer-note headers removed; substantive content folded in; v5.2 doc-control entries added.
+- **Phase B — 4 Contracts Pack remainder files (orchestrator-sequential).** DOMAIN_EVENTS v5.2 (4 research + 2 marketing events; 3 new aggregates), FORMS_ENGINE v5.2 (research consent integration with 6-category I-030 static analysis; §10.5 cross-reference), GOVERNANCE_CONTROLS v5.2 (§7 Research export envelope CONFIG/INCIDENT/SIGNAL; §8 PolicyAuthorization placeholder), MARKET_LAUNCH v5.1 (§10.5 cross-reference; marketing posture activation gate per ADR-027; research data partnership activation gate per ADR-028 with 11 conditions).
+- **Phase C — 6 engineering specs (orchestrator-sequential).** CDM v1.2, State Machines v1.1, OpenAPI v0.2, RBAC v1.1, System Architecture v1.2, Tenant Threading Addendum v1.0 — additive "v1.10 cycle additions" sections in each. Total active entities post-v1.10: 48 + 7 reserved-future. Total active state machines: 18 + 4 reserved-future transitions on ProtocolAuthorizedAction. Total endpoints: 187 across 22 modules. Total modules: 16 (15 baseline + Research Data Export Module).
+- **Phase D — Slice PRDs + OR Tracker + DIC + other docs + country regulatory placeholders (multi-agent fan-out, 6 parallel sub-agents).** D1 (C2 emerging-markets reframe, 5 slice rows), D2 (C3 brand structure cascade, 4 slice rows), D3 (C4 marketing posture, 4 slice rows), D4 (C5 research + C6 program catalog, 8 slice rows), D5 (C7 AI taxonomy, 3 slice rows), D6 (DIC + Design + OR Tracker + Group 5E other docs + Group 5F country regulatory placeholders, ~33 rows). All 6 sub-agents returned with clean outputs; concurrent-edit races on shared files (Market Rollout Cockpit, Forms/Intake, Pharmacy/Refill, Consent & Delegated Access) resolved additively under shared "v1.10 cycle additions" section headers with row-numbered subsections. No invariant relaxation; no glossary-term violation; no edits outside the specified scope.
+
+**Codex final EXIT — 4 parallel scoped reviews (fired post-commit 2026-05-02):**
+
+1. **Clinical safety scope** (I-012 / autonomy levels / ADR-002 / ADR-005 / §13.7 single normative source / reserved-transition discipline)
+2. **Privacy scope** (I-029 / I-030 / I-031 / failed-export audit-path discipline / 5th consent tier asymmetric retraction)
+3. **Regulatory scope** (ADR-027 / ADR-028 activation gates / CCR initial values per launch country / cross-border transfer evidence)
+4. **Brand structure C3 scope** (Telecheck-{country} naming / Heros Health DBA sourcing / chatbot universally forbidden / Mode 1+2 ↔ taxonomy mapping with code-vs-UI rule)
+
+Per the parallel-scope adoption decision in the workstream discipline note, scopes ran in parallel against the single hygiene-cycle commit `c4995db` on the `v1.10.1-hygiene-cycle` branch (off main).
+
+**Files affected:** ~47 bundle files modified or created (10 Contracts Pack + 6 engineering specs + 14 slice PRDs + Design System + DIC v1.1 + OR Tracker + 9 other docs + 4 country regulatory placeholders + 3 ADRs + Master PRD v1.10 + Artifact Registry v2.10 + Active Document Index + Boot Sequence + Promotion Ledger).
+
+**No invariant relaxation:** I-012 reject-unless three-clause rule mirrored verbatim across §13.7 single normative source + AUDIT_EVENTS + STATE_MACHINES + AI_LAYERING. I-019, I-023–I-027, I-029, I-030, I-031 preserved at platform-floor authority. ADR-002 + ADR-005 binding for current Mode 1 / Mode 2 workloads.
+
+**Branch + commit:** Single commit `c4995db` on branch `v1.10.1-hygiene-cycle` (off main); bundles v1.10 promotion + v1.10.1 hygiene cycle physical merge. Subsequent commits will land Codex finding fixes (if any) and the cycle-close finalization (Promotion Ledger entry, status doc, manifest rebuild if needed).
+
+**Cross-reference:**
+- Registry v2.10 records the canonical state inventory (preserved unchanged from Phase 6 v1.10 promotion baseline).
+- Active Document Index §3 records canonical mapping (no version bumps in v1.10.1 hygiene cycle — entry-level refreshes only).
+- Boot Sequence §3 canonical versions unchanged (Master PRD v1.10; Contracts Pack v5.2; DIC v1.1; ADRs 027/028/029).
+- v1.10.1 hygiene cycle status doc: `Telecheck_v1_10_PRD_Update/v1_10_1_Hygiene_Cycle_Status_2026-05-02.md`.
+- Workstream discipline note: `Telecheck_v1_10_PRD_Update/Telecheck_Workstream_Discipline_Note_Multi_Agent_Orchestration_v0_1_DRAFT.md`.
+- Codex final EXIT brief: `Telecheck_v1_10_PRD_Update/Codex_Final_v1_10_1_Hygiene_Cycle_Brief_2026-05-02.md`.
+
+---
+
 ### Entry P-008 — 2026-05-01 — v1.10 PRD Update Cycle (Phases 0–6 complete; final promotion ceremony)
 
 **User instruction (verbatim):** "authorized" — Evans's authorization to execute the Phase 6 v1.10 promotion ceremony, given in response to Claude's request for explicit ceremony-execution authorization following Codex Phase 6 EXIT plan review v0.4 CLOSED. The phase-advance "yes" authorizations driving Phases 0–5 were earlier and did NOT constitute promotion-execution authorization; "authorized" is the discrete ceremony-execution instruction per CLAUDE.md "v1.10 promotion is a multi-phase ceremony" + risky-action pacing memo.
