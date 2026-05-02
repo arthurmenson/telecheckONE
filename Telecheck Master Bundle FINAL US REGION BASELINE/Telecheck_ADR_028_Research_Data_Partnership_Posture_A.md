@@ -191,7 +191,7 @@ ADR-028 is activated by:
 12. Master PRD §7.10 + §15.2 + §15.3 (Research data governance) + §22.3 + §24 (rows 11-15) reflect the Posture A framing per the C5 cycle edits (post-Phase-2 canonicalization 2026-05-01)
 13. RBAC Permissions Matrix v1.1 amended with research roles
 
-**Per-country activation of `research_data_partnership_active: active`** is a Release 2 capability requiring all Activation requirements above per country, plus Country Launch Director + Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer joint sign-off.
+**Per-country activation of `research_data_partnership_active: active`** is a Release 2 capability requiring all Activation requirements above per country, plus the canonical ADR-028 v0.4 quad sign-off (**Privacy Officer + Regulatory Affairs Lead + Clinical Safety Officer + Product Lead**) — patch 2026-05-02 per Codex Round-2 Scope 3 MEDIUM-1 finding (prior wording omitted Product Lead, conflicting with MARKET_LAUNCH v5.1 condition 9 + CCR_RUNTIME v5.2 change-control row + RBAC v1.1 v1.10 cycle additions). Country Launch Director sign-off is **separately required** per MARKET_LAUNCH v5.1 condition 11 (per-country launch authority; distinct from the quad sign-off). REC concurrence per `research_ethics_review_body.per_dsa_review_required` is also separately required when applicable.
 
 ## What is NOT decided here
 

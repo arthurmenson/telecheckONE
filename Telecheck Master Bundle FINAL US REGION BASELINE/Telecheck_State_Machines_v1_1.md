@@ -806,15 +806,19 @@ States: `queued`, `processing`, `ready`, `delivered`, `expired`, `invalidated`.
 Transitions:
 - `queued → processing` (export pipeline begins de-identification + k-anonymity computation; emits `research.export_initiated` audit event at `audit_sensitivity_level = high_pii` per I-031)
 - `processing → ready` (de-identification complete; k-anonymity actual computed)
-- `ready → delivered` (k-anonymity verified ≥ k_min_required AND `dsa_status_at_export = active` AND `permitted_data_domains_at_export` matches snapshot AND consent-cohort snapshot hash unchanged; emits `research_export.delivered` domain event + `research.export_completed` audit event with `status = completed`)
+- `ready → delivered` (full 5-condition I-029 gate per OpenAPI v0.2 `/research/exports/{export_id}/complete`: k-anonymity verified ≥ k_min_required AND `dsa_status_at_export = active` AND `permitted_data_domains_at_export` matches snapshot AND `consent_cohort_snapshot_hash_completed = consent_cohort_snapshot_hash_initiated` AND every contributing patient has active `ResearchConsent` at completion-time evaluation; emits `research_export.delivered` domain event + `research.export_completed` audit event with `status = completed`)
 - `ready → invalidated` OR `processing → invalidated` (any I-029 condition unmet)
 - `delivered → expired` (retention class TTL elapsed; export artifact destroyed)
 
-**Per I-029 reject-unless rule for `ready → delivered`:** the transition MUST be rejected (and `delivered` MUST NOT be reached) when ANY of the following:
-- `dsa_status_at_export ≠ active` (DSA expiry, suspension, or retirement during export)
-- `k_threshold_actual < k_min_required` (k-anonymity violation)
-- `permitted_data_domains_at_export` differs from the `research.export_initiated` snapshot (CCR drift mid-export)
-- consent-cohort change (a `research_consent.revoked` event for any patient in the cohort during the export window)
+**Per I-029 reject-unless rule for `ready → delivered` (patch 2026-05-02 per Codex Round-2 Scope 2 HIGH-2 finding — adds explicit per-patient active-consent guard):** the transition MUST be rejected (and `delivered` MUST NOT be reached) when ANY of the following 5 conditions fail, mirrored exactly from OpenAPI v0.2 v1.10 cycle additions /research/exports/{export_id}/complete endpoint contract:
+
+1. `dsa_status_at_export ≠ active` (DSA expiry, suspension, or retirement during export) → `invalidation_reason = dsa_inactive`.
+2. `k_threshold_actual < k_min_required` (k-anonymity violation) → `invalidation_reason = k_anonymity_violation`.
+3. `permitted_data_domains_at_export` differs from the `research.export_initiated` snapshot (CCR drift mid-export) → `invalidation_reason = permitted_domain_drift`.
+4. `consent_cohort_snapshot_hash_completed ≠ consent_cohort_snapshot_hash_initiated` (cohort changed mid-export) → `invalidation_reason = consent_cohort_change`.
+5. **Every contributing patient MUST have active `ResearchConsent` at completion-time evaluation** (per-patient gate; covers stale/invalid consent records that existed before initiation, not only `research_consent.revoked` events emitted during the export window). Specifically: each contributing patient's `ResearchConsent` entity MUST have `consent_type = research_data_use`, `granted_at` non-null, `revoked_at` null at completion-time evaluation. If ANY contributing patient fails this check → `invalidation_reason = consent_revocation_mid_export` (the canonical name covers both mid-export revocation events and pre-existing invalid consent state).
+
+The 5-value `invalidation_reason` enum is canonical and shared with TYPES.ResearchDataExport (per Codex Round-2 Scope 2 HIGH-1 alignment patch). Implementations MUST emit exactly one of the 5 enum values; a "fallthrough other" bucket is forbidden.
 
 **Audit-side discipline (per AUDIT_EVENTS v5.2 §5 + GOVERNANCE_CONTROLS v5.2 §7.2):** when `ready → invalidated` fires, the audit-side `research.export_completed` event MAY emit with `status = invalidated` and the violated state recorded in payload (e.g., `dsa_status_at_export = expired`); concurrently, a `signal_enforcement_trigger` Category B audit event captures the enforcement action (export artifact destruction; partner notification per DSA terms; engineering review trigger). Bare suppression of the completion event (no audit record at all) is forbidden — silent invalidation is an audit gap per I-003.
 
@@ -837,6 +841,8 @@ Transitions (active at v1.0):
 1. `autonomy_level == action_with_confirm` (string equality; not membership in a set).
 2. An explicit clinician confirmation event exists in the immutable audit chain scoped to this `action_id` prior to the transition.
 3. The confirming actor holds a role authorized to sign for the action class under RBAC v1.1 / I-012.
+
+**Rejection-audit-emit MUST (added v5.2 patch 2026-05-02 per Codex Round-2 Scope 1 MEDIUM-1 finding):** When the state machine validator rejects an I-012 `*.executed` transition under any of the three clauses above, the validator **MUST emit a Category A `<action_class>.execution_rejected` audit event** (`prescribing.execution_rejected`, `refill.execution_rejected`, or `medication_order.execution_rejected`) per AUDIT_EVENTS v5.2 §I-012 reject-unless rejection-audit-event rule. The event payload MUST carry `action_id`, `action_class`, `attempted_actor_id`, `attempted_actor_type`, `attempted_ai_workload_type`, `attempted_autonomy_level`, `violated_clauses[]` (one or more of `autonomy_level_string_equality`, `audit_chain_confirmation_event_missing`, `confirming_actor_rbac_unauthorized`, `reserved_level_without_activation_audit_event`), `confirmation_event_state`, `rbac_role_check_result`. **Bare suppression — no audit record at all on rejection — is forbidden per I-003.** This requirement mirrors AUDIT_EVENTS v5.2 §I-012 reject-unless rejection-audit-event rule and is a state-machine-side enforcement obligation.
 
 **Reserved transitions (non-normative future sketches, NOT implemented as executable code paths at v1.0):**
 

@@ -409,7 +409,7 @@ A specialization of ConsentRecord with `consent_type = research_data_use` (added
   "consent_cohort_snapshot_hash_initiated": "<SHA-256; recorded at research.export_initiated>",
   "consent_cohort_snapshot_hash_completed": "<SHA-256; recorded at completion-time check; null when status=invalidated due to early abort>",
   "export_artifact_hash":               "<SHA-256> | null (null when status=invalidated; non-null when status=completed)",
-  "invalidation_reason":                "dsa_inactive | k_anonymity_violation | permitted_domain_drift | consent_cohort_change | consent_revocation_mid_export" | null,
+  "invalidation_reason":                "dsa_inactive | k_anonymity_violation | permitted_domain_drift | consent_cohort_change | consent_revocation_mid_export" | null,  // Patch 2026-05-02 per Codex Round-2 Scope 2 HIGH-1 finding: this enum is the canonical shared enum mirrored in AUDIT_EVENTS v5.2 §5 research.export_completed payload. The two contracts MUST stay aligned. No separate "other" bucket is permitted — all 5 conditions of the OpenAPI export-complete gate map deterministically to one of the 5 values.
   "retention_class":                    "<retention class identifier>",
   "started_at":                         "<ISO 8601>",
   "completed_at":                       "<ISO 8601>",

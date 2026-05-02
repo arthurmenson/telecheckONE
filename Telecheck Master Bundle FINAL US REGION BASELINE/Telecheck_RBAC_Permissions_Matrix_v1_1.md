@@ -151,9 +151,9 @@ Break-glass is not normal-operation access. Routine platform-admin work uses agg
 
 Both have full access to their tenant. The distinction:
 
-- **Tenant Owner** — can add or remove other Tenant Owners. The "root" tenant role. Typically 1-2 people per tenant (e.g., the Heros founder and the Heros COO). Cannot be removed except by Platform Admin via documented process (e.g., business-relationship dispute resolution).
+- **Tenant Owner** — can add or remove other Tenant Owners. The "root" tenant role. Typically 1-2 people per tenant (e.g., the Telecheck-US tenant founder and COO operating the Heros Health DBA scope; or the Telecheck-Ghana tenant founder and COO operating the Heros Health Ghana DBA scope). Cannot be removed except by Platform Admin via documented process (e.g., business-relationship dispute resolution). **Patch 2026-05-02 per Codex Round-2 Scope 4 HIGH-1 finding — operating-tenant + DBA framing applied throughout.**
 
-- **Tenant Admin** — full access to the tenant, but cannot add or remove Tenant Owners. Can add/remove other Tenant Admins, Operators, Marketing, etc. Multiple Tenant Admins typical (e.g., the Heros operations team).
+- **Tenant Admin** — full access to the tenant, but cannot add or remove Tenant Owners. Can add/remove other Tenant Admins, Operators, Marketing, etc. Multiple Tenant Admins typical (e.g., the Telecheck-US tenant operations team operating the Heros Health DBA scope).
 
 This allows a tenant to have multiple admins for operational coverage without making every admin able to lock the others out.
 
@@ -173,7 +173,7 @@ This matches the legal reality: the physician's relationship is with the tenant'
 
 ## 7. Patient role within multi-tenant context
 
-A patient is tenant-scoped. The same person (in the real world) using both Heros and Telecheck-Ghana would have two separate Patient/Account records — different tenant_ids, different account_ids, different patient profiles, different clinical histories.
+A patient is tenant-scoped. The same person (in the real world) using both the Telecheck-US tenant (Heros Health DBA consumer surface) and the Telecheck-Ghana tenant (Heros Health Ghana DBA consumer surface) would have two separate Patient/Account records — different tenant_ids, different account_ids, different patient profiles, different clinical histories.
 
 Cross-tenant patient identity (federated identity) is explicitly out of scope per ADR-023. This is consistent with the Rimo / Healthie pattern.
 
