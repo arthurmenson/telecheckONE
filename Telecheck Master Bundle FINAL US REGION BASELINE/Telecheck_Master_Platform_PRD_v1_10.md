@@ -24,7 +24,7 @@ v1.10 canonicalizes six architectural shifts that emerged during the brand-and-t
 
 **New invariants for v1.10** (renumbered from I-024/025/026 to I-029/030/031 in v1.10 cycle planning freeze v1.5 hotfix to avoid collision with existing canonical I-024 cross-tenant break-glass, I-025 information-leak prevention, I-026 tenant configuration governance, I-027 audit envelope, I-028 single physical region):
 
-- I-029 — research data export requires active DSA + active research consent + k-anonymity threshold ≥ k_min (default k_min=11) met
+- I-029 — research data export 5-condition reject-unless gate (canonical full statement at §14 / INVARIANTS v5.2 I-029 — *summary updated 2026-05-02 per Codex Round-9 Scope 2 HIGH-1 finding from prior 3-condition shorthand to canonical 5-condition gate*): (1) `dsa_status_at_export = active`; (2) `k_threshold_actual >= k_min_required`; (3) `permitted_data_domains_at_export` matches snapshot (no CCR drift); (4) `consent_cohort_snapshot_hash_completed = consent_cohort_snapshot_hash_initiated`; (5) every contributing patient has active `ResearchConsent` at completion-time. Failed delivery MUST emit `research.export_completed(status=invalidated)` paired with `signal_enforcement_trigger` per I-003.
 - I-030 — research consent declination has zero impact on care delivery
 - I-031 — research data export is fully audited with cohort definition, k-threshold actually used, requester identity, DSA reference, audit_sensitivity_level: high_pii
 

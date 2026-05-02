@@ -63,7 +63,7 @@ When the platform adds support for a new country per Country Addition Workflow, 
 - **Kenya** — KEMRI Scientific and Ethics Review Committee (SERC) candidate; institutional IRBs as alternative
 - **South Africa** — Provincial RECs + national HPCSA framework; institutional IRBs as alternative
 
-Each future market REC/IRB partnership is added when the corresponding country's `consent_only` → `active` activation engages.
+Each future market REC/IRB partnership is **added before the corresponding country's `inactive → consent_only` activation engages** (Stage 1 precondition per MARKET_LAUNCH v5.1; *updated 2026-05-02 per Codex Round-9 Scope 3 MEDIUM-1 finding aligning with the Round-7/Round-8 patches that introduced explicit Stage 1 gating — was previously deferred to `consent_only → active` (Stage 2), which contradicted the Stage 1 condition 1 requirement that all 7 `research_ethics_review_body` sub-fields be populated before consent collection begins*). Per-DSA REC concurrence is then a separate Stage 2 (`consent_only → active`) requirement when `per_dsa_review_required = true`.
 
 ---
 
@@ -93,15 +93,22 @@ Stage 1 is a precondition (the 6 Stage 1 conditions remain valid). Stage 2 addit
 
 ---
 
-## Engagement protocol
+## Engagement protocol (two-step workflow per Round-9 Scope 3 MEDIUM patch 2026-05-02)
 
-Each market's REC/IRB engagement follows:
+Each market's REC/IRB engagement follows two distinct steps mapped to the two-stage activation gates:
+
+### Step 1 — REC/IRB designation + Stage 1 prerequisites (BEFORE `inactive → consent_only`)
 
 1. **Identify** — Privacy Officer + tenant operator team identify the appropriate REC/IRB body for the market
 2. **Engage** — Initial contact, scope discussion, materials submission (consent text per Master PRD §24 row 12; DSA template per Master PRD §24 row 13; partnership scope per ADR-028 Decision §1)
 3. **Review** — REC/IRB reviews materials; provides approval reference + validity period + scope + per-DSA review requirements
-4. **Document** — Populate CCR `research_ethics_review_body` structured object; record this document with the partnership designation
-5. **Activate** — Country transitions from `consent_only` to `active` per MARKET_LAUNCH v5.1 research activation gate
+4. **Document Stage 1 evidence** — Populate CCR `research_ethics_review_body` structured object with all 7 sub-fields; record this document with the partnership designation; ethics-reviewed consent text version pin in place at platform consent module
+5. **Stage 1 activation** — Country transitions from `inactive` to `consent_only` per MARKET_LAUNCH v5.1 Stage 1 6-condition gate (REC populated + consent text pin + audit emission readiness + Forms Engine I-030 static validation + CCR runtime validator readiness + Country Launch Director sign-off). The 5th-tier consent prompt now renders; `research.consent_granted` and `research.consent_revoked` events accrue.
+
+### Step 2 — Per-DSA REC concurrence + Stage 2 activation (BEFORE `consent_only → active`)
+
+6. **Per-DSA REC concurrence** — For each prospective DSA, if `per_dsa_review_required = true` per Step 1, the REC/IRB conducts per-DSA review and provides concurrence
+7. **Stage 2 activation** — Country transitions from `consent_only` to `active` per MARKET_LAUNCH v5.1 Stage 2 11-condition gate (DSA active + ADR-028 v0.4 quad sign-off + Country Launch Director + the remaining Stage 2 elements). Export pipeline now operates.
 
 ---
 
