@@ -160,7 +160,11 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
         return res.end(JSON.stringify({ ok: false, error: err.slice(0, 200) }));
       }
-      const commits = out.split("\0").filter(Boolean).map(rec => {
+      // git's --pretty=format inserts a literal newline between records, so
+      // every record after the first starts with \n. Strip per-record before
+      // splitting on the unit-separator, otherwise date parses as Invalid
+      // and the UI's timeAgo falls back to "—".
+      const commits = out.split("\0").map(s => s.replace(/^\s+/, "")).filter(Boolean).map(rec => {
         const [date, sha, author, subject] = rec.split("\x1f");
         return { date, sha, author, subject };
       });
