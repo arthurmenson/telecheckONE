@@ -1166,7 +1166,7 @@ async function openDoc(file,label){
   currentFile = file;
   crumb.textContent = `${BUNDLE} / ${file}`;
   content.classList.remove("home");
-  content.innerHTML = `<div class="empty">Loading ${file}…</div>`;
+  content.innerHTML = `<div class="empty">Loading ${esc(file)}…</div>`;
   navDocs.querySelectorAll(".item").forEach(i=>i.classList.toggle("active", i.dataset.file===file));
   try{
     let md;
@@ -1200,10 +1200,11 @@ async function openDoc(file,label){
   }catch(e){
     const s = SOURCES[SOURCE_KEY];
     let hint;
-    if(s.kind==="embedded") hint = `Embedded load failed (${e.message}). Make sure <code>docs-data.js</code> sits next to <code>index.html</code>, then reload.`;
+    const msg = esc(e.message || "unknown");
+    if(s.kind==="embedded") hint = `Embedded load failed (${msg}). Make sure <code>docs-data.js</code> sits next to <code>index.html</code>, then reload.`;
     else if(s.kind==="local") hint = `Local fetch failed. If you opened via <code>file://</code>, browsers block local fetches — switch Source to <b>Embedded</b>, or run <code>python -m http.server 8000</code>.`;
-    else hint = `GitHub fetch failed (${e.message}). Repo may be private (raw.githubusercontent.com requires auth) — switch Source to <b>Embedded</b>.`;
-    content.innerHTML = `<div class="err">Failed to load <code>${file}</code>.<br><br>${hint}</div>`;
+    else hint = `GitHub fetch failed (${msg}). Repo may be private (raw.githubusercontent.com requires auth) — switch Source to <b>Embedded</b>.`;
+    content.innerHTML = `<div class="err">Failed to load <code>${esc(file)}</code>.<br><br>${hint}</div>`;
   }
 }
 

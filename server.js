@@ -108,7 +108,17 @@ function validateProgress(p){
     if (typeof a.progress !== "number" || !Number.isFinite(a.progress)) errs.push(`areas[${i}].progress must be number`);
     if (a.owner != null && typeof a.owner !== "string") errs.push(`areas[${i}].owner must be string`);
     if (a.notes != null && typeof a.notes !== "string") errs.push(`areas[${i}].notes must be string`);
-    if (a.docs != null && (!Array.isArray(a.docs) || a.docs.some(d => typeof d !== "string"))) errs.push(`areas[${i}].docs must be string[]`);
+    if (a.docs != null) {
+      if (!Array.isArray(a.docs)) errs.push(`areas[${i}].docs must be string[]`);
+      else for (const [j, d] of a.docs.entries()) {
+        if (typeof d !== "string") { errs.push(`areas[${i}].docs[${j}] must be string`); continue; }
+        // Bundle filenames only: positive allowlist [A-Za-z0-9._-], length <=200,
+        // no path separators / metacharacters / control bytes, no traversal.
+        if (d.length === 0 || d.length > 200) errs.push(`areas[${i}].docs[${j}] length out of range`);
+        else if (!/^[A-Za-z0-9._-]+$/.test(d)) errs.push(`areas[${i}].docs[${j}] must match [A-Za-z0-9._-]`);
+        else if (d.includes("..")) errs.push(`areas[${i}].docs[${j}] must not contain ..`);
+      }
+    }
     if (a.stage != null && (typeof a.stage !== "string" || (stageIdSet.size && !stageIdSet.has(a.stage)))) errs.push(`areas[${i}].stage "${a.stage}" not in lifecycle.stages[]`);
     // clamp progress in place
     if (typeof a.progress === "number") a.progress = Math.max(0, Math.min(100, Math.round(a.progress)));

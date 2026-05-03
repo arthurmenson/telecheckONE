@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "revision": 4,
-  "updated": "2026-05-02",
+  "revision": 5,
+  "updated": "2026-05-03",
   "lifecycle": {
     "current": "spec-baseline",
     "stages": [
@@ -536,5 +536,5 @@
       "stage": "internal-alpha"
     }
   ],
-  "updatedAt": "2026-05-02T22:46:55.036Z"
+  "updatedAt": "2026-05-03T00:01:27.783Z"
 }
