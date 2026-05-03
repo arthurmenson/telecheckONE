@@ -28,15 +28,18 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 1. **Append-only.** Once a promotion entry is recorded, it is never edited or deleted. Errors are corrected by appending a new entry that references and supersedes the prior one.
 2. **One entry per user request.** A single user instruction ("promote these documents") becomes one entry, regardless of how many artifacts that instruction promoted.
-3. **Each entry records:** the date, the verbatim user instruction (or close paraphrase), the artifacts promoted, the Registry version that absorbed the promotion, and any related decisions ratified at the same time (such as ADRs).
-4. **The Registry is updated in lockstep.** Every promotion entry corresponds to a Registry version bump (e.g., this entry corresponds to Registry v2.3 → v2.4).
+3. **Each entry records:** the date, the verbatim user instruction (or close paraphrase), the artifacts promoted (or the bodies reconciled), the Registry version that absorbed the entry, and any related decisions ratified at the same time (such as ADRs).
+4. **The Registry is updated in lockstep — with one explicit carve-out for reconciliation entries.** Every *content-change* promotion entry corresponds to a Registry version bump (e.g., U-001 corresponded to Registry v2.0 → v2.4; v1.10 promotion ceremony corresponded to v2.9 → v2.10 per P-008). **Reconciliation entries** — which align body text with already-canonical doc-control claims, fix partial-merge defects from prior cycles, or close SPEC ISSUEs without introducing new artifact content — absorb into the EXISTING Registry version without bumping it. Reconciliation entries MUST explicitly record their "Registry absorption" line citing the absorbed-into version + cite a precedent or rationale for not bumping. **Precedent:** P-009 (v1.10.1 hygiene cycle physical merge) absorbed into Registry v2.10 without a v2.11 bump; P-010 (CDM §4.1 SPEC ISSUE resolution) follows the same pattern. (Carve-out clarification added 2026-05-02 per Codex spec-r2 MEDIUM finding closure: the prior absolute-bump phrasing left an unresolvable conflict between the rule and the legitimately Registry-version-stable hygiene-cycle pattern that the v1.10.1 cycle established.)
 5. **Reverse chronological order.** Most recent entry at the top.
+6. **Promotion vs reconciliation distinction.** Each entry is classified at the top of its section as either a **content-change promotion** (Registry version bump expected) or a **reconciliation entry** (no Registry bump; absorbs into the existing canonical version). Reconciliation entries are still APPLIED with full Engineering-Lead-review-pending status; the difference is in Registry-impact accounting, not in entry validity or audit-trail standing.
 
 ---
 
 ## Promotion entries
 
 ### Entry P-010 — 2026-05-02 — CDM §4.1 SPEC ISSUE resolution (tenant.id format + columns the v1.10.1 cycle promised but never merged)
+
+**Type:** Reconciliation entry (per operating rule 6 — no Registry version bump; aligns body with already-canonical doc-control claims; precedent: P-009).
 
 **Status:** APPLIED.
 

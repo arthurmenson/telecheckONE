@@ -225,10 +225,14 @@ The canonical tenant identifier. Required field on every PHI-touching record. Re
 ### TenantContext
 ```
 {
-  "tenant_id":          "Telecheck-{country}",
-  "country":            "<ISO 3166-1 alpha-2>",
+  "tenant_id":          "Telecheck-{country}",                  // operating-tenant identifier per CDM v1.2 §4.1; canonical source of truth (mirrors `tenants.id`)
+  "country":            "<ISO 3166-1 alpha-2>",                 // mirrors `tenants.country`
+  "display_name":       "Telecheck-{country}",                  // operating-tenant label for platform-admin UI; mirrors `tenants.display_name` (added v5.2 patch 2026-05-02 per CDM SPEC ISSUE P-010 closure)
+  "consumer_dba":       "Heros Health{ Ghana | <variant>}",    // patient-facing brand per C3; mirrors `tenants.consumer_dba` (NEVER write `tenant_id` to a patient surface — write this) (added v5.2 patch 2026-05-02)
+  "legal_entity":       "<incorporated subsidiary>",            // e.g., 'Telecheck Health LLC'; mirrors `tenants.legal_entity` (added v5.2 patch 2026-05-02)
+  "consumer_subdomain": "<subdomain>",                          // e.g., 'heroshealth.com'; mirrors `tenants.consumer_subdomain` (added v5.2 patch 2026-05-02)
   "brand": {
-    "display_name":     "<string>",
+    "display_name":     "<string>",                             // patient-facing display name (typically equals consumer_dba; kept here for backward-compat with surfaces that already read brand.display_name)
     "primary_color":    "<hex>",
     "logo_url":         "<URL>",
     ...
@@ -239,11 +243,13 @@ The canonical tenant identifier. Required field on every PHI-touching record. Re
     "clinician_network_provider": "<adapter slug>",
     "notification_channels":      [ "<adapter slug>", ... ]
   },
-  "ccr_overrides":      { <per-tenant CCR overrides — see CCR_RUNTIME v5.1> }
+  "ccr_overrides":      { <per-tenant CCR overrides — see CCR_RUNTIME v5.2> }
 }
 ```
 
 Resolved at request time by the Tenant Configuration module per System Architecture v1.2 §13. Cached per session; cache-busted on tenant configuration changes per Tenant Configuration module change-broadcast contract.
+
+**Field-set alignment with CDM v1.2 §4.1 (Codex spec-r2 MEDIUM closure 2026-05-02):** the top-level operating-tenant identity fields (`tenant_id`, `country`, `display_name`, `consumer_dba`, `legal_entity`, `consumer_subdomain`) mirror the canonical `tenants` table columns 1:1. Patient-facing surfaces MUST source the consumer brand from `consumer_dba`, NEVER from `tenant_id`. Generated client/server DTOs from this contract are the binding shape for the OpenAPI `POST /v0/tenants` create response, the `GET /v0/tenants/{id}` retrieve response, and any update endpoint response — all return TenantContext with the full top-level field set populated.
 
 ### CrossTenantAccessContext
 ```
