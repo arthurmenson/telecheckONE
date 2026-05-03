@@ -1049,9 +1049,15 @@ ALTER TABLE tenants
 
 -- Day-1 tenant rows (greenfield insert; populates ALL NOT NULL columns per the canonical §4.1 DDL:
 -- id, country, status, display_name, created_by; plus the new v1.10 columns).
+-- NOTE: display_name uses the OPERATING-TENANT label (Telecheck-{country}), NOT the consumer DBA.
+-- The consumer brand belongs ONLY in consumer_dba per the C3 brand-structure rule.
+-- (Patched 2026-05-02 per Codex spec-r1 MEDIUM finding closure: prior migration block
+--  used 'Heros Health' as display_name, which contradicted the canonical §4.1 seed-value
+--  table at line 178 and recreated the brand-as-tenant-name confusion this SPEC ISSUE
+--  resolution was meant to close.)
 INSERT INTO tenants (id, country, status, display_name, created_by, consumer_dba, legal_entity, consumer_subdomain) VALUES
-  ('Telecheck-US',    'US', 'active', 'Heros Health',       '<platform-admin-tnu-id>', 'Heros Health',       'Telecheck Health LLC', 'heroshealth.com'),
-  ('Telecheck-Ghana', 'GH', 'active', 'Heros Health Ghana', '<platform-admin-tnu-id>', 'Heros Health Ghana', 'Telecheck-Ghana Ltd.', 'ghana.heroshealth.com');
+  ('Telecheck-US',    'US', 'active', 'Telecheck-US',    '<platform-admin-tnu-id>', 'Heros Health',       'Telecheck Health LLC', 'heroshealth.com'),
+  ('Telecheck-Ghana', 'GH', 'active', 'Telecheck-Ghana', '<platform-admin-tnu-id>', 'Heros Health Ghana', 'Telecheck-Ghana Ltd.', 'ghana.heroshealth.com');
 ```
 
 Migration discipline: any v1.x slice PRD example or test fixture using `Heros-Health` as a tenant ID is rewritten to `Telecheck-US`. The patient-facing brand surface (Heros Health) is sourced from `tenant.consumer_dba`, never from `tenant.id`.

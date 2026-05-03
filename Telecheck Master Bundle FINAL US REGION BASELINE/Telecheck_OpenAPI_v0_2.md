@@ -840,8 +840,12 @@ Idempotency-Key: required
 
 Body:
 {
-  "display_name": "Heros Health",
-  "country": "US",
+  "id": "Telecheck-US",                                     // operating-tenant identifier per CDM v1.2 §4.1 + Master PRD v1.10 §17 ('Telecheck-{country}' format; CHECK regex ^Telecheck-[A-Z][A-Za-z]+$); platform admin chooses
+  "country": "US",                                          // ISO 3166-1 alpha-2; drives CCR resolution per ADR-024
+  "display_name": "Telecheck-US",                           // operating-tenant label shown in platform-admin UI; typically equals `id`
+  "consumer_dba": "Heros Health",                           // patient-facing brand per C3 (CHECK: starts with 'Heros Health'); NEVER show `id` to a patient
+  "legal_entity": "Telecheck Health LLC",                   // per-country incorporated subsidiary
+  "consumer_subdomain": "heroshealth.com",                  // country-instanced URL serving the consumer DBA
   "brand": { "primary_color": "...", "logo_url": "...", ... },
   "active_adapters": { "payment_provider": "stripe", "pharmacy_providers": ["truepill"], ... },
   "initial_owner_email": "..."
@@ -849,6 +853,15 @@ Body:
 
 Response 201: TenantContext + invitation status for initial owner
 ```
+
+**Required-fields validation per CDM v1.2 §4.1:** `id`, `country`, `display_name`, `consumer_dba`, `legal_entity`, `consumer_subdomain`, `initial_owner_email`. The `id` value MUST satisfy the `tenant_id_format_valid` CHECK regex AND fail the `tenant_id_no_bare_heros` anti-pattern check (per Glossary v5.2). The `consumer_dba` MUST satisfy the `consumer_dba_starts_heros_health` C3 invariant. Reject with 400 + canonical error envelope (per ERROR_MODEL v5.1) if any field fails — do NOT silently truncate or default. (Updated 2026-05-02 per Codex spec-r1 HIGH finding closure to align with CDM §4.1 SPEC ISSUE resolution P-010.)
+
+**Canonical day-1 examples:**
+
+| `id` | `country` | `display_name` | `consumer_dba` | `legal_entity` | `consumer_subdomain` |
+|---|---|---|---|---|---|
+| `Telecheck-US` | `US` | `Telecheck-US` | `Heros Health` | `Telecheck Health LLC` | `heroshealth.com` |
+| `Telecheck-Ghana` | `GH` | `Telecheck-Ghana` | `Heros Health Ghana` | `Telecheck-Ghana Ltd.` | `ghana.heroshealth.com` |
 
 ### 19.4 Update tenant configuration
 

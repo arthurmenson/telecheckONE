@@ -73,7 +73,11 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 - `Telecheck_OpenAPI_v0_2.md` (admin example + payload-examples appendix)
 - `Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md` (example payload)
 
-**No version-number bumps.** Per the engineering-spec discipline, this is a body-text reconciliation correcting a hygiene-cycle partial merge — not a content-change requiring versioning. CDM remains v1.2; AUDIT_EVENTS/DOMAIN_EVENTS/TYPES remain v5.2; OpenAPI remains v0.2; Forms/Intake Slice remains v2.1. The change-trail is captured in this Promotion Ledger entry plus per-file doc-control patch notes.
+**Registry absorption:** **Artifact Registry v2.10** (no Registry version bump). Per the engineering-spec discipline used in the v1.10.1 hygiene cycle (P-009 precedent: physical-merge entries appended to the Ledger without bumping the Registry version), this entry records a body-text reconciliation that absorbs into the existing canonical Registry v2.10 baseline. CDM remains v1.2; AUDIT_EVENTS/DOMAIN_EVENTS/TYPES remain v5.2; OpenAPI remains v0.2; Forms/Intake Slice remains v2.1.
+
+**Why no Registry version bump?** P-010 corrects a hygiene-cycle partial merge — the v1.10.1 cycle's doc-control entry CLAIMED columns existed but the body never received them. Promoting a Registry version for a body-text reconciliation that aligns the body with an already-canonical doc-control claim would itself be misleading (the Registry would imply new artifact content that's actually already promised). Same precedent as P-009 which absorbed into v2.10 without a v2.11 bump. **Lockstep invariant satisfied** by explicit absorption-into-existing-version reference, consistent with the Ledger's reconciliation-entry pattern. (Clarification added 2026-05-02 per Codex spec-r1 MEDIUM finding closure addressing the lockstep-Registry rule application.)
+
+**Change-trail:** captured in this Promotion Ledger entry plus per-file doc-control patch notes inside each touched file.
 
 **Verification:** post-edit grep across the bundle for `tnt_01H` / `tnt_<ULID>` / `"tenant_id":\s*"tnt_` returns matches ONLY in change-trail / supersession notes; zero current-state authoritative example values remain in the prior format. Cross-references to CDM §4.1 from slice PRDs and engineering specs all resolve to the new schema. Code-repo migrations/001_tenants.sql at `arthurmenson/telecheck-app` (commit de2370a) is now consistent with the CDM canonical schema; the `tenant_id_format_valid` regex and the column set match exactly.
 
