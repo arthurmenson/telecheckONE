@@ -98,7 +98,7 @@
       "name": "AI Clinical Assistant",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 15,
+      "progress": 100,
       "owner": "",
       "notes": "Mode 1 + Mode 2 architecture per ADR-002.",
       "docs": [
@@ -111,7 +111,7 @@
       "name": "Acquisition & Engagement",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 10,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -124,7 +124,7 @@
       "name": "Admin Backend",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 20,
+      "progress": 100,
       "owner": "",
       "notes": "v1.1 promoted.",
       "docs": [
@@ -137,7 +137,7 @@
       "name": "Admin Configuration Surfaces",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 10,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -150,7 +150,7 @@
       "name": "Adverse Event Reporting",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 5,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -163,7 +163,7 @@
       "name": "Async Consult",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 10,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -177,7 +177,7 @@
       "name": "Community Platform",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 5,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -190,7 +190,7 @@
       "name": "Consent & Delegated Access",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 10,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -203,7 +203,7 @@
       "name": "Fake Medication Detection",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 5,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -216,7 +216,7 @@
       "name": "Forms / Intake Engine",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 25,
+      "progress": 100,
       "owner": "",
       "notes": "v2.1 â€” engine contract finalized.",
       "docs": [
@@ -231,7 +231,7 @@
       "name": "Herbâ€“Drug Interaction Engine",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 5,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -244,7 +244,7 @@
       "name": "Labs & Document Interpretation",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 5,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -257,7 +257,7 @@
       "name": "Market Rollout Cockpit",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 5,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -271,7 +271,7 @@
       "name": "Medication Interaction Engine",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 5,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -291,14 +291,14 @@
         "Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md"
       ],
       "updatedAt": "2026-05-02T05:58:17.535Z",
-      "stage": "spec-baseline"
+      "stage": "slice-build"
     },
     {
       "id": "slice-rpm-ccm",
       "name": "RPM / CCM",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 10,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -311,7 +311,7 @@
       "name": "Sync Video Consult",
       "category": "Slice PRD",
       "status": "spec-final",
-      "progress": 15,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -324,7 +324,7 @@
       "name": "Canonical Data Model",
       "category": "Engineering Spec",
       "status": "spec-final",
-      "progress": 30,
+      "progress": 100,
       "owner": "",
       "notes": "v1.2 â€” 41 entities.",
       "docs": [
@@ -338,7 +338,7 @@
       "name": "OpenAPI Surface",
       "category": "Engineering Spec",
       "status": "spec-final",
-      "progress": 25,
+      "progress": 100,
       "owner": "",
       "notes": "v0.2 â€” 178 endpoints.",
       "docs": [
@@ -352,7 +352,7 @@
       "name": "State Machines",
       "category": "Engineering Spec",
       "status": "spec-final",
-      "progress": 30,
+      "progress": 100,
       "owner": "",
       "notes": "v1.1 â€” 13 machines.",
       "docs": [
@@ -366,7 +366,7 @@
       "name": "System Architecture",
       "category": "Engineering Spec",
       "status": "spec-final",
-      "progress": 30,
+      "progress": 100,
       "owner": "",
       "notes": "v1.2 â€” modular monolith, 15 modules.",
       "docs": [
@@ -380,7 +380,7 @@
       "name": "RBAC Permissions Matrix",
       "category": "Engineering Spec",
       "status": "spec-final",
-      "progress": 25,
+      "progress": 100,
       "owner": "",
       "notes": "v1.1.",
       "docs": [
@@ -393,7 +393,7 @@
       "name": "Identity & Authentication",
       "category": "Engineering Spec",
       "status": "spec-final",
-      "progress": 20,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -406,7 +406,7 @@
       "name": "Notification",
       "category": "Engineering Spec",
       "status": "spec-final",
-      "progress": 20,
+      "progress": 100,
       "owner": "",
       "notes": "v1.1.",
       "docs": [
@@ -419,7 +419,7 @@
       "name": "Messaging Inbox",
       "category": "Engineering Spec",
       "status": "spec-final",
-      "progress": 15,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -432,7 +432,7 @@
       "name": "Payment & Billing",
       "category": "Engineering Spec",
       "status": "spec-final",
-      "progress": 15,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -445,7 +445,7 @@
       "name": "Design System",
       "category": "Experience",
       "status": "spec-final",
-      "progress": 25,
+      "progress": 100,
       "owner": "",
       "notes": "v1.1.",
       "docs": [
@@ -471,7 +471,7 @@
       "name": "Patient App IA",
       "category": "Experience",
       "status": "spec-final",
-      "progress": 20,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -484,7 +484,7 @@
       "name": "Clinician Portal IA",
       "category": "Experience",
       "status": "spec-final",
-      "progress": 20,
+      "progress": 100,
       "owner": "",
       "notes": "",
       "docs": [
@@ -497,7 +497,7 @@
       "name": "Admin Operator IA",
       "category": "Experience",
       "status": "spec-final",
-      "progress": 20,
+      "progress": 100,
       "owner": "",
       "notes": "v1.1.",
       "docs": [
@@ -511,7 +511,7 @@
       "name": "Ghana Launch Playbook",
       "category": "Operations",
       "status": "spec-final",
-      "progress": 30,
+      "progress": 100,
       "owner": "",
       "notes": "v1.2.",
       "docs": [

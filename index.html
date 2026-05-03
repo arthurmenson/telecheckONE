@@ -704,8 +704,8 @@ function renderLifecycle(targetId, opts){
         const C = 2 * Math.PI * 16; // r=16
         const off = C * (1 - pctVal/100);
         const mark = i<idx && pctVal>=99 ? "✓" : (pctVal>0 ? Math.round(pctVal)+"%" : (i+1));
-        const subtitle = stats.count ? `${stats.done}/${stats.count}` : "0/0";
-        return `<div class="step ${cls}" data-i="${i}" data-id="${esc(s.id)}" title="${esc(s.description||"")} (${stats.done}/${stats.count} areas, avg ${Math.round(pctVal)}%)">
+        const subtitle = stats.count ? `${stats.done}/${stats.count} shipped` : "—";
+        return `<div class="step ${cls}" data-i="${i}" data-id="${esc(s.id)}" title="${esc(s.description||"")} (${stats.count} areas, ${stats.done} shipped, avg ${Math.round(pctVal)}% complete)">
           <div class="ring">
             <svg viewBox="0 0 38 38">
               <circle class="ring-bg" cx="19" cy="19" r="16"/>
@@ -718,7 +718,7 @@ function renderLifecycle(targetId, opts){
       }).join("")}
     </div>
     <div class="lc-detail">
-      <div class="d-label">${esc(cur?.label||"Current stage")} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${(()=>{const st=stageStats(cur?.id||"");return `${st.done}/${st.count} done · avg ${Math.round(st.avg)}%`;})()}</span></div>
+      <div class="d-label">${esc(cur?.label||"Current stage")} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${(()=>{const st=stageStats(cur?.id||"");return `${st.count} areas · ${st.done} shipped · avg ${Math.round(st.avg)}% complete`;})()}</span></div>
       <div>${esc(cur?.description||"")}</div>
       ${(()=>{const st=stageStats(cur?.id||""); if(!st.count) return ""; const sm=statusMap(); return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${Object.entries(st.byStatus).map(([k,v])=>{const s=sm[k]||{label:k,color:"#888"};return `<span class="legend-pill"><span class="legend-dot" style="background:${safeColor(s.color)}"></span>${esc(s.label)}: ${v}</span>`;}).join("")}</div>`;})()}
       ${cur?.exit ? `<div class="d-exit">Exit criteria: ${esc(cur.exit)}</div>` : ""}
@@ -741,7 +741,7 @@ function renderLifecycle(targetId, opts){
       ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${Object.entries(stats.byStatus).map(([k,v])=>{const s=sm[k]||{label:k,color:"#888"};return `<span class="legend-pill"><span class="legend-dot" style="background:${safeColor(s.color)}"></span>${esc(s.label)}: ${v}</span>`;}).join("")}</div>`
       : "";
     detail.innerHTML = `
-      <div class="d-label">${esc(stg.label)}${id===lc.current?" (current)":""} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${stats.done}/${stats.count} done · avg ${Math.round(stats.avg)}%</span></div>
+      <div class="d-label">${esc(stg.label)}${id===lc.current?" (current)":""} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${stats.count} areas · ${stats.done} shipped · avg ${Math.round(stats.avg)}% complete</span></div>
       <div>${esc(stg.description||"")}</div>
       ${breakdown}
       ${stg.exit ? `<div class="d-exit">Exit criteria: ${esc(stg.exit)}</div>` : ""}
