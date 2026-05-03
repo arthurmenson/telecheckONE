@@ -11,3 +11,8 @@ desktop.ini
 
 # Claude Code local state (memory, plans, project-specific harness data)
 .claude/
+
+# Cockpit runtime artifacts
+*.bak
+*.tmp.*
+node_modules/

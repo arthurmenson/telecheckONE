@@ -1,0 +1,1266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Telecheck Command Center</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script src="docs-data.js"></script>
+<style>
+  :root{
+    --bg:#0b0f17; --panel:#111826; --panel2:#0d1422; --border:#1f2a3d;
+    --text:#e5e9f0; --muted:#8b95a7; --accent:#6aa9ff; --accent2:#9ee37d;
+    --warn:#ffb454; --danger:#ff6b6b; --chip:#1a2438;
+    --code:#0a1020;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Inter,Roboto,sans-serif}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .app{display:grid;grid-template-columns:340px 1fr;height:100vh;min-height:0}
+  /* Sidebar */
+  aside{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+  .brand{padding:14px 16px;border-bottom:1px solid var(--border)}
+  .brand h1{margin:0;font-size:15px;letter-spacing:.3px}
+  .brand .sub{color:var(--muted);font-size:12px;margin-top:2px}
+  .search{padding:10px 12px;border-bottom:1px solid var(--border)}
+  .search input{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:6px;outline:none}
+  .search input:focus{border-color:var(--accent)}
+  .tabs{display:flex;border-bottom:1px solid var(--border);background:var(--panel2)}
+  .tabs button{flex:1;background:transparent;color:var(--muted);border:0;padding:10px;cursor:pointer;font-size:12px;border-bottom:2px solid transparent}
+  .tabs button.active{color:var(--text);border-bottom-color:var(--accent)}
+  .nav{overflow:auto;padding:6px 0;flex:1;min-height:0}
+  .group{padding:6px 12px}
+  .group h3{margin:10px 4px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .group h3 .count{background:var(--chip);color:var(--muted);padding:1px 6px;border-radius:10px;font-size:10px}
+  .group h3 .pill{background:#15324a;color:var(--accent);padding:1px 6px;border-radius:10px;font-size:10px}
+  .group h3.danger .pill{background:#3a1818;color:var(--danger)}
+  .item{display:block;padding:6px 8px;border-radius:5px;color:var(--text);font-size:12.5px;cursor:pointer;border:1px solid transparent}
+  .item small{color:var(--muted);display:block;font-size:10.5px;margin-top:1px}
+  .item:hover{background:var(--panel2);text-decoration:none}
+  .item.active{background:#15233b;border-color:var(--accent)}
+  .item .v{color:var(--accent2);font-size:10px;margin-left:6px}
+  /* Main */
+  main{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .topbar{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--panel2);flex-wrap:wrap}
+  .topbar .path{color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,monospace}
+  .topbar .actions{margin-left:auto;display:flex;gap:8px}
+  .btn{background:var(--chip);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px}
+  .btn:hover{border-color:var(--accent)}
+  .content{overflow:auto;padding:24px 36px;flex:1;min-height:0}
+  .content.home{padding:24px}
+  /* Markdown */
+  .md{max-width:920px}
+  .md h1,.md h2,.md h3,.md h4{border-bottom:1px solid var(--border);padding-bottom:6px;margin-top:1.6em}
+  .md h1{font-size:24px}
+  .md h2{font-size:19px}
+  .md h3{font-size:16px;border-bottom:0}
+  .md code{background:var(--code);padding:1px 5px;border-radius:3px;font-size:12.5px}
+  .md pre{background:var(--code);padding:12px;border-radius:6px;overflow:auto;border:1px solid var(--border)}
+  .md pre code{background:transparent;padding:0}
+  .md table{border-collapse:collapse;margin:12px 0;width:100%}
+  .md th,.md td{border:1px solid var(--border);padding:6px 10px;text-align:left;font-size:13px}
+  .md th{background:var(--panel2)}
+  .md blockquote{border-left:3px solid var(--accent);margin:10px 0;padding:4px 12px;color:var(--muted);background:var(--panel2)}
+  .md a{color:var(--accent)}
+  /* Home */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px}
+  .card h4{margin:0 0 6px;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+  .card p{margin:0;color:var(--muted);font-size:12px}
+  .card .row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{background:var(--chip);border:1px solid var(--border);color:var(--text);padding:3px 8px;border-radius:12px;font-size:11px;cursor:pointer}
+  .chip:hover{border-color:var(--accent)}
+  .stat{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px}
+  .stat div{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:120px}
+  .stat .n{font-size:20px;font-weight:600;color:var(--accent)}
+  .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .banner{background:linear-gradient(135deg,#15233b,#1a3a3a);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:8px}
+  .banner h2{margin:0 0 6px;font-size:18px}
+  .banner p{margin:0;color:var(--muted);font-size:13px}
+  .skill{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px dashed var(--border)}
+  .skill:last-child{border-bottom:0}
+  .skill code{color:var(--accent2);font-size:11px;background:var(--code);padding:1px 5px;border-radius:3px;white-space:nowrap}
+  .skill .d{font-size:12px;color:var(--muted)}
+  details summary{cursor:pointer;color:var(--muted);font-size:12px;padding:6px 0}
+  .hidden{display:none!important}
+  .empty{color:var(--muted);padding:24px;text-align:center}
+  .legend{font-size:11px;color:var(--muted);padding:8px 12px}
+  .err{color:var(--danger);padding:14px}
+  /* Cockpit */
+  .cock-head{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:14px}
+  .cock-head h2{margin:0;font-size:18px}
+  .cock-head .meta{color:var(--muted);font-size:12px}
+  .cock-toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .cock-toolbar select,.cock-toolbar input{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:5px;font-size:12px;outline:none}
+  .legend-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 14px}
+  .legend-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--border);padding:3px 8px;border-radius:11px}
+  .legend-dot{width:8px;height:8px;border-radius:50%}
+  .stats-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+  .stat-card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px}
+  .stat-card .n{font-size:20px;font-weight:600}
+  .stat-card .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+  .stat-card .bar{height:4px;background:var(--chip);border-radius:2px;margin-top:8px;overflow:hidden}
+  .stat-card .bar > i{display:block;height:100%;background:var(--accent2)}
+  .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+  .area{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s}
+  .area:hover{border-color:var(--accent)}
+  .area .title{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .area .title h4{margin:0;font-size:13.5px;line-height:1.3}
+  .area .cat{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .area .progress{height:6px;background:var(--chip);border-radius:3px;overflow:hidden}
+  .area .progress > i{display:block;height:100%;background:var(--accent);transition:width .2s}
+  .area .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .area select.status,.area input.pct,.area input.owner{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:11px;outline:none}
+  .area input.pct{width:54px;text-align:right}
+  .area input.owner{flex:1;min-width:80px}
+  .area textarea.notes{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:11.5px;outline:none;resize:vertical;min-height:36px;font-family:inherit}
+  .area .docs{display:flex;flex-wrap:wrap;gap:4px}
+  .area .docs a{font-size:10.5px;background:var(--chip);border:1px solid var(--border);padding:2px 6px;border-radius:4px;color:var(--text);cursor:pointer}
+  .area .docs a:hover{border-color:var(--accent);text-decoration:none}
+  .save-pill{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:11px}
+  .save-pill.ok{color:var(--accent2)}
+  .save-pill.err{color:var(--danger)}
+  .group-divider{grid-column:1/-1;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:14px 0 -6px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+  /* In-flight live panel */
+  .flight{background:linear-gradient(135deg,#15233b,#1a3a3a);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+  .flight .head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .flight .head h3{margin:0;font-size:14px;display:flex;align-items:center;gap:8px}
+  .flight .live-dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);box-shadow:0 0 0 0 rgba(158,227,125,.7);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(158,227,125,.5)}70%{box-shadow:0 0 0 7px rgba(158,227,125,0)}100%{box-shadow:0 0 0 0 rgba(158,227,125,0)}}
+  .flight .last{margin-left:auto;font-size:11px;color:var(--muted)}
+  .flight .grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+  .flight .row-card{background:rgba(0,0,0,.18);border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:6px;padding:8px 10px;cursor:pointer;transition:border-color .15s}
+  .flight .row-card:hover{border-color:var(--accent)}
+  .flight .row-card .n{font-size:12.5px;font-weight:600;display:flex;justify-content:space-between;gap:6px}
+  .flight .row-card .n em{font-style:normal;color:var(--muted);font-weight:400;font-size:10.5px}
+  .flight .row-card .meta{font-size:10.5px;color:var(--muted);display:flex;justify-content:space-between;margin-top:4px;gap:6px}
+  .flight .row-card .bar{height:3px;background:var(--chip);border-radius:2px;margin-top:6px;overflow:hidden}
+  .flight .row-card .bar > i{display:block;height:100%}
+  .flight .empty{color:var(--muted);font-size:12px;font-style:italic;padding:6px 0}
+  .flight .row-card.recent{box-shadow:0 0 0 2px rgba(158,227,125,.35)}
+  /* Lifecycle stepper */
+  .lifecycle{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+  .lifecycle .lc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
+  .lifecycle .lc-head h3{margin:0;font-size:14px}
+  .lifecycle .lc-head .now{font-size:11px;color:var(--muted)}
+  .lifecycle .lc-head .now b{color:var(--accent2)}
+  .stepper{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding-bottom:6px}
+  .step{flex:1 0 130px;min-width:130px;display:flex;flex-direction:column;align-items:center;position:relative;cursor:pointer;padding:0 4px}
+  .step:not(:last-child)::after{content:"";position:absolute;top:19px;left:calc(50% + 22px);right:calc(-50% + 22px);height:2px;background:var(--border);z-index:0}
+  .step.done:not(:last-child)::after{background:var(--accent2)}
+  .step .ring{width:38px;height:38px;position:relative;z-index:1}
+  .step .ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .step .ring .ring-bg{fill:none;stroke:var(--border);stroke-width:3}
+  .step .ring .ring-fg{fill:none;stroke:var(--accent2);stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset .35s ease}
+  .step .ring .ring-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:600;color:var(--muted)}
+  .step.done .ring .ring-label{color:var(--accent2)}
+  .step.active .ring .ring-fg{stroke:var(--accent)}
+  .step.active .ring .ring-label{color:var(--accent)}
+  .step.active .ring{box-shadow:0 0 0 4px rgba(106,169,255,.15);border-radius:50%;animation:pulse-step 1.8s infinite}
+  @keyframes pulse-step{0%{box-shadow:0 0 0 0 rgba(106,169,255,.4)}70%{box-shadow:0 0 0 9px rgba(106,169,255,0)}100%{box-shadow:0 0 0 0 rgba(106,169,255,0)}}
+  .step .lbl{margin-top:6px;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.25}
+  .step.done .lbl{color:var(--text)}
+  .step.active .lbl{color:var(--accent);font-weight:600}
+  .step:hover .lbl{color:var(--text)}
+  .lc-detail{margin-top:10px;padding:10px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;font-size:12.5px}
+  .lc-detail .d-label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+  .lc-detail .d-exit{margin-top:6px;color:var(--muted);font-size:11.5px;font-style:italic}
+  .lc-edit{display:flex;gap:6px;margin-top:8px}
+  .lc-edit select{background:var(--chip);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 8px;font-size:12px;flex:1}
+  .lc-edit button{background:var(--accent);border:0;color:#0b0f17;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer}
+  .lc-edit button:disabled{opacity:.5;cursor:not-allowed}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <h1>Telecheck Command Center</h1>
+      <div class="sub">FINAL US REGION BASELINE · 75 docs</div>
+    </div>
+    <div class="search"><input id="q" placeholder="Search docs (title, version, topic)…" /></div>
+    <div class="tabs">
+      <button class="active" data-tab="docs">Documents</button>
+      <button data-tab="cockpit">Cockpit</button>
+      <button data-tab="skills">Skills</button>
+      <button data-tab="map">Hierarchy</button>
+    </div>
+    <div class="nav" id="nav-docs"></div>
+    <div class="nav hidden" id="nav-cockpit"></div>
+    <div class="nav hidden" id="nav-skills"></div>
+    <div class="nav hidden" id="nav-map"></div>
+    <div class="legend">Click any doc to view. Conflicts: top of hierarchy wins.</div>
+  </aside>
+  <main>
+    <div class="topbar">
+      <span id="crumb" class="path">Home</span>
+      <div class="actions">
+        <select class="btn" id="src-select" title="Document source"></select>
+        <button class="btn" id="btn-home">Home</button>
+        <button class="btn" id="btn-raw">Open on GitHub</button>
+        <button class="btn" id="btn-print">Print</button>
+      </div>
+    </div>
+    <div class="content home" id="content"></div>
+  </main>
+</div>
+
+<script>
+const BUNDLE = "Telecheck Master Bundle FINAL US REGION BASELINE";
+const GH_OWNER = "arthurmenson";
+const GH_REPO  = "telecheckONE";
+const GH_BRANCH_DEFAULT = "main";
+// "github" | "local"  — and which branch when github
+const SOURCES = {
+  github_main:   { kind:"github", branch:"main",   label:"GitHub · main" },
+  github_branch: { kind:"github", branch:"claude/charming-poincare-854339", label:"GitHub · claude/charming-poincare-854339" },
+  local:         { kind:"local",                    label:"Local files"  },
+};
+// Default to local files so edits to the spec bundle show up live.
+let SOURCE_KEY = localStorage.getItem("tc.source") || "local";
+SOURCES.embedded = { kind:"embedded", label:"Embedded (bundled snapshot)" };
+
+// Doc registry: grouped per CLAUDE.md source-of-truth hierarchy.
+// Each entry: [filename, label, optional version]
+const GROUPS = [
+  { id:"boot", title:"Boot Sequence (read first)", priority:0, items:[
+    ["CLAUDE_CODE_BOOT_SEQUENCE.md","Claude Code Boot Sequence"],
+    ["Telecheck_Active_Document_Index_v1_0.md","Active Document Index","v1.0"],
+    ["Telecheck_Artifact_Registry_v2_9.md","Artifact Registry","v2.9"],
+    ["Telecheck_Project_Upload_Manifest_v2.md","Upload Manifest","v2"],
+    ["Telecheck_Project_Upload_Manifest_Post_Remediation.md","Upload Manifest (Post-Remediation)"],
+    ["Telecheck_Reviewer_Brief_v1_0.md","Reviewer Brief","v1.0"],
+  ]},
+  { id:"invariants", title:"Platform Invariants (floor)", priority:1, items:[
+    ["Telecheck_Contracts_Pack_v5_00_INVARIANTS.md","Invariants (22)","v5.1"],
+    ["Telecheck_Contracts_Pack_v5_00_SOURCE_OF_TRUTH.md","Source of Truth","v5.1"],
+  ]},
+  { id:"adr", title:"Architecture Decisions (ADR)", priority:2, items:[
+    ["Telecheck_ADR_Set_v1_0.md","ADR Set","v1.0"],
+    ["Telecheck_ADR_Addendum_016_to_019.md","ADR Addendum 016–019"],
+    ["Telecheck_ADR_Addendum_020_to_025.md","ADR Addendum 020–025"],
+    ["Telecheck_ADR_Addendum_026.md","ADR Addendum 026 (us-east-1 / us-west-2)"],
+  ]},
+  { id:"contracts", title:"Cross-cutting Contracts (v5.1)", priority:3, items:[
+    ["Telecheck_Contracts_Pack_v5_README.md","Contracts Pack README"],
+    ["Telecheck_Contracts_Pack_v5_Update_Spec.md","Contracts Pack Update Spec"],
+    ["Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md","Audit Events"],
+    ["Telecheck_Contracts_Pack_v5_00_DOMAIN_EVENTS.md","Domain Events"],
+    ["Telecheck_Contracts_Pack_v5_00_ERROR_MODEL.md","Error Model"],
+    ["Telecheck_Contracts_Pack_v5_00_IDEMPOTENCY.md","Idempotency"],
+    ["Telecheck_Contracts_Pack_v5_00_GLOSSARY.md","Glossary (canonical terms)"],
+    ["Telecheck_Contracts_Pack_v5_00_CCR_RUNTIME.md","Country-driven Config Runtime"],
+    ["Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md","AI Layering (Mode 1 / Mode 2)"],
+    ["Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md","Forms Engine"],
+    ["Telecheck_Contracts_Pack_v5_00_MARKET_LAUNCH.md","Market Launch","v5.0"],
+    ["Telecheck_Contracts_Pack_v5_00_GOVERNANCE_CONTROLS.md","Governance Controls"],
+    ["Telecheck_Contracts_Pack_v5_00_TYPES.md","Types"],
+  ]},
+  { id:"master", title:"Master Platform PRD", priority:4, items:[
+    ["Telecheck_Master_Platform_PRD_v1_9.md","Master Platform PRD","v1.9"],
+  ]},
+  { id:"slices", title:"Slice PRDs (17)", priority:5, items:[
+    ["Telecheck_AI_Clinical_Assistant_Slice_PRD_v1_0.md","AI Clinical Assistant","v1.0"],
+    ["Telecheck_Acquisition_Engagement_Tools_Slice_PRD_v1_0.md","Acquisition & Engagement","v1.0"],
+    ["Telecheck_Admin_Backend_Slice_PRD_v1_1.md","Admin Backend","v1.1"],
+    ["Telecheck_Admin_Configuration_Surfaces_Slice_PRD_v1_0.md","Admin Configuration Surfaces","v1.0"],
+    ["Telecheck_Adverse_Event_Reporting_Slice_PRD_v1_0.md","Adverse Event Reporting","v1.0"],
+    ["Telecheck_Async_Consult_Slice_PRD_v1_0.md","Async Consult","v1.0"],
+    ["Telecheck_Community_Platform_Slice_PRD_v1_0.md","Community Platform","v1.0"],
+    ["Telecheck_Consent_Delegated_Access_Slice_PRD_v1_0.md","Consent & Delegated Access","v1.0"],
+    ["Telecheck_Fake_Medication_Detection_Slice_PRD_v1_0.md","Fake Medication Detection","v1.0"],
+    ["Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md","Forms / Intake Engine","v2.1"],
+    ["Telecheck_Herb_Drug_Interaction_Engine_Slice_PRD_v1_0.md","Herb–Drug Interaction Engine","v1.0"],
+    ["Telecheck_Labs_Document_Interpretation_Slice_PRD_v1_0.md","Labs & Document Interpretation","v1.0"],
+    ["Telecheck_Market_Rollout_Cockpit_Slice_PRD_v1_0.md","Market Rollout Cockpit","v1.0"],
+    ["Telecheck_Medication_Interaction_Engine_Slice_PRD_v1_0.md","Medication Interaction Engine","v1.0"],
+    ["Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md","Pharmacy + Refill","v2.1"],
+    ["Telecheck_RPM_CCM_Slice_PRD_v1_0.md","RPM / CCM","v1.0"],
+    ["Telecheck_Sync_Video_Consult_Slice_PRD_v1_0.md","Sync Video Consult","v1.0"],
+    ["Telecheck_Tenant_Threading_Addendum_v1_0.md","Tenant Threading Addendum","v1.0"],
+  ]},
+  { id:"eng", title:"Engineering Specs", priority:6, items:[
+    ["Telecheck_Canonical_Data_Model_v1_2.md","Canonical Data Model","v1.2"],
+    ["Telecheck_State_Machines_v1_1.md","State Machines","v1.1"],
+    ["Telecheck_OpenAPI_v0_2.md","OpenAPI","v0.2"],
+    ["Telecheck_System_Architecture_v1_2.md","System Architecture","v1.2"],
+    ["Telecheck_RBAC_Permissions_Matrix_v1_1.md","RBAC Permissions Matrix","v1.1"],
+    ["Telecheck_Identity_Authentication_Spec_v1_0.md","Identity & Authentication","v1.0"],
+    ["Telecheck_Notification_Spec_v1_1.md","Notification Spec","v1.1"],
+    ["Telecheck_Messaging_Inbox_Spec_v1_0.md","Messaging Inbox","v1.0"],
+    ["Telecheck_Payment_Billing_Spec_v1_0.md","Payment & Billing","v1.0"],
+    ["Telecheck_Engineering_Handoff_Build_Guide_v1_3.md","Engineering Handoff / Build Guide","v1.3"],
+  ]},
+  { id:"ux", title:"Experience / Design / IA", priority:7, items:[
+    ["Telecheck_Design_System_v1_1.md","Design System","v1.1"],
+    ["Telecheck_Design_Implementation_Contract_v1_0.md","Design Implementation Contract (PROVISIONAL)","v1.0"],
+    ["Telecheck_Patient_App_IA_v1_0.md","Patient App IA","v1.0"],
+    ["Telecheck_Clinician_Portal_IA_v1_0.md","Clinician Portal IA","v1.0"],
+    ["Telecheck_Admin_Operator_IA_v1_1.md","Admin Operator IA","v1.1"],
+    ["Telecheck_Unified_Admin_Sidebar_v1_0.md","Unified Admin Sidebar","v1.0"],
+  ]},
+  { id:"ops", title:"Operations / Launch", priority:8, items:[
+    ["Telecheck_Ghana_Launch_Playbook_v1_2.md","Ghana Launch Playbook","v1.2"],
+    ["Telecheck_Operational_Readiness_Todo_v1_5.md","Operational Readiness Todo","v1.5"],
+    ["Telecheck_Consolidated_Launch_Tracker_v1_0.md","Consolidated Launch Tracker","v1.0"],
+    ["Telecheck_Guardrail_Templates_v1_0.md","Guardrail Templates","v1.0"],
+    ["Telecheck_Protocol_Library_Ghana_v1_0.md","Ghana Protocol Library","v1.0"],
+    ["Telecheck_Flagged_Items_Resolution_v1_0.md","Flagged Items Resolution","v1.0"],
+    ["Telecheck_Future_Scope_USSD_AI_Bridge_v0_1.md","Future: USSD ↔ AI Bridge","v0.1"],
+  ]},
+  { id:"gov", title:"Governance · Reviews · Releases", priority:9, items:[
+    ["Telecheck_Promotion_Ledger.md","Promotion Ledger (append-only)"],
+    ["Telecheck_Adversarial_Counsel_Review_Sessions_1_to_3.md","Adversarial Counsel Review S1–S3"],
+    ["Telecheck_Adversarial_Counsel_Review_Sessions_1_to_3_Post_Remediation.md","Adversarial Counsel Review (Post-Remediation)"],
+    ["Telecheck_Red_Team_Review.md","Red Team Review"],
+    ["TELECHECK_VALIDATION_REPORT_US_REGION_BASELINE.md","Validation Report (US Baseline)"],
+    ["TELECHECK_RELEASE_NOTES_US_REGION_BASELINE.md","Release Notes (US Baseline)"],
+    ["TELECHECK_RELEASE_NOTES_FINAL_REMEDIATED.md","Release Notes (Final Remediated)"],
+    ["Telecheck_Investor_One_Pager.md","Investor One-Pager"],
+  ]},
+];
+
+// Skills curated for spec-bundle work
+const SKILLS = [
+  ["engineering:documentation","Write/maintain technical docs — perfect for slice PRDs, ADR text, runbooks."],
+  ["engineering:architecture","Create/evaluate ADRs with trade-off analysis."],
+  ["engineering:system-design","Service boundaries, data modeling — when adding to System Architecture or CDM."],
+  ["engineering:code-review","Review code/diffs once the code repo lands."],
+  ["engineering:testing-strategy","Test plan + coverage strategy."],
+  ["engineering:tech-debt","Identify/categorize debt and refactor priorities."],
+  ["engineering:debug","Structured reproduce → isolate → diagnose → fix."],
+  ["engineering:incident-response","Triage, status updates, blameless postmortem."],
+  ["engineering:deploy-checklist","Pre-deploy verification (migrations, flags, rollback)."],
+  ["engineering:standup","Generate standup updates from recent activity."],
+  ["design:design-system","Audit/extend the Design System v1.1."],
+  ["design:design-handoff","Engineering handoff specs (tokens, props, states)."],
+  ["design:design-critique","Structured design feedback."],
+  ["design:accessibility-review","WCAG 2.1 AA audit."],
+  ["design:ux-copy","Microcopy, errors, empty states, CTAs."],
+  ["design:user-research","Plan/conduct/synthesize user research."],
+  ["productivity:task-management","Shared TASKS.md tracker."],
+  ["productivity:memory-management","Two-tier memory; decode internal shorthand."],
+  ["anthropic-skills:docx","Generate Word docs (reviewer briefs, exports)."],
+  ["anthropic-skills:pdf","Read/produce PDFs."],
+  ["anthropic-skills:pptx","Slide decks (investor / launch)."],
+  ["anthropic-skills:xlsx","Spreadsheet work (trackers, manifests)."],
+  ["security-review","Security review of pending branch changes (slash command)."],
+  ["review","Review a pull request (slash command)."],
+  ["init","Initialize CLAUDE.md for the future code repo."],
+];
+
+const AGENTS = [
+  ["appsec-expert","Security architecture review, threat modeling, vuln assessment."],
+  ["database-integration-expert","Schema, RLS, migrations, query perf."],
+  ["frontend-dev-expert","React / RN / TS / a11y / perf."],
+  ["test-qa-engineer","Test plans, automation, bug analysis."],
+  ["documentation-expert","API docs, READMEs, runbooks."],
+  ["Explore","Fast codebase exploration."],
+  ["Plan","Implementation planning."],
+  ["general-purpose","Multi-step research / search."],
+];
+
+// ---------- render ----------
+const $ = s => document.querySelector(s);
+const navDocs = $("#nav-docs"), navSkills = $("#nav-skills"), navMap = $("#nav-map"), navCockpit = $("#nav-cockpit");
+const content = $("#content"), crumb = $("#crumb");
+
+// =================== Cockpit ===================
+let PROGRESS = null;
+let saveTimer = null;
+let saveStatus = "idle"; // idle|saving|ok|err
+
+// HTML-escape any user-controlled string before innerHTML interpolation.
+function esc(s){
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+// Hex-color allowlist; falls back to neutral grey on bad input so user-controlled
+// state colors can't smuggle CSS expressions through inline style attributes.
+function safeColor(c){
+  return (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : "#888888";
+}
+
+// BASELINE = immutable copy of the last document the server confirmed.
+// Used to identify which fields THIS client actually edited (local !== baseline)
+// vs which fields just look different because the server moved on
+// (server !== baseline). Without it, mergeForRetry can resurrect stale values.
+let BASELINE = null;
+function snapshot(o){ return o ? JSON.parse(JSON.stringify(o)) : null; }
+
+async function loadProgress(){
+  try{
+    const r = await fetch("/api/progress",{cache:"no-cache"});
+    if(!r.ok) throw new Error(r.status+" "+r.statusText);
+    PROGRESS = await r.json();
+    BASELINE = snapshot(PROGRESS);
+  }catch(e){
+    // fallback: try the static file (works without server)
+    try{
+      const r2 = await fetch("progress.json",{cache:"no-cache"});
+      PROGRESS = await r2.json();
+      PROGRESS._readonly = true;
+      BASELINE = snapshot(PROGRESS);
+    }catch(e2){ PROGRESS = null; BASELINE = null; }
+  }
+}
+
+function statusMap(){
+  const m = {};
+  (PROGRESS?.states||[]).forEach(s => m[s.id] = s);
+  return m;
+}
+
+// Returns { written, resp }
+//   written = exact document the server accepted (incl. retry-merged fields)
+//   resp    = server's JSON response with revision/updated/updatedAt
+// Callers MUST adopt `written` as the new local source of truth, otherwise the
+// next save sends a stale doc that the server can't tell from a real edit and
+// silently reverts whatever was merged in during retry.
+async function putProgress(doc, attempt){
+  const ifMatch = `"r${doc.revision || 0}"`;
+  const r = await fetch("/api/progress",{
+    method:"PUT",
+    headers:{"Content-Type":"application/json","If-Match":ifMatch},
+    body: JSON.stringify(doc),
+  });
+  if(r.status === 409){
+    const conflict = await r.json();
+    const server = conflict.current;
+    if(attempt && attempt >= 1){ throw Object.assign(new Error("retry exhausted"), {conflict:true}); }
+    const merged = mergeForRetry(server, doc, BASELINE); // may throw {conflict, fields}
+    return putProgress(merged, (attempt||0)+1);
+  }
+  if(!r.ok){
+    let msg = r.status+" "+r.statusText;
+    try { msg = (await r.text()).slice(0,200) || msg; } catch {}
+    throw new Error(msg);
+  }
+  const resp = await r.json();
+  // Stamp the server's authoritative revision/timestamps onto the doc we sent.
+  const written = JSON.parse(JSON.stringify(doc));
+  written.revision  = resp.revision;
+  written.updated   = resp.updated;
+  written.updatedAt = resp.updatedAt;
+  return { written, resp };
+}
+
+// Replay only fields the local client actually edited (mine !== baseline) onto
+// the server's latest doc. If the same field was also edited on the server
+// (server !== baseline), that's a true same-field collision: throw so the
+// caller can surface a conflict instead of silently picking a winner.
+function mergeForRetry(server, mine, baseline){
+  const eq = (a,b) => JSON.stringify(a) === JSON.stringify(b);
+  const out = JSON.parse(JSON.stringify(server));
+  const collisions = [];
+
+  // Lifecycle.current
+  const baseLcCur = baseline?.lifecycle?.current;
+  const myLcCur   = mine?.lifecycle?.current;
+  const svLcCur   = server?.lifecycle?.current;
+  if(myLcCur !== baseLcCur){ // I edited it
+    if(svLcCur !== baseLcCur && svLcCur !== myLcCur){
+      collisions.push("lifecycle.current");
+    } else {
+      out.lifecycle = out.lifecycle || {}; out.lifecycle.current = myLcCur;
+    }
+  }
+
+  // Membership: server.areas is authoritative. Treat add/delete drift between
+  // baseline and server as an explicit collision rather than letting the
+  // client silently re-introduce or omit areas. The cockpit UI does not add
+  // or delete areas, so any such drift is something the client should not
+  // overwrite blindly.
+  const sMap = new Map((server.areas||[]).map(a=>[a.id,a]));
+  const bMap = new Map((baseline?.areas||[]).map(a=>[a.id,a]));
+  const mMap = new Map((mine?.areas||[]).map(a=>[a.id,a]));
+  for(const id of bMap.keys())  if(!sMap.has(id)) collisions.push(`areas[${id}].(deleted on server)`);
+  for(const id of sMap.keys())  if(!bMap.has(id)) collisions.push(`areas[${id}].(added on server)`);
+  for(const id of mMap.keys())  if(!bMap.has(id) && !sMap.has(id)) collisions.push(`areas[${id}].(unknown id)`);
+
+  // Patch fields by id, anchored on server.areas (preserves membership).
+  out.areas = (server.areas||[]).map(sv => {
+    const myArea = mMap.get(sv.id);
+    const bv     = bMap.get(sv.id);
+    if(!myArea || !bv) return sv; // not editable in this client view
+    const merged = {...sv};
+    for(const k of ["status","progress","owner","notes","stage","docs"]){
+      const mineEdited   = !eq(myArea[k], bv[k]);
+      if(!mineEdited) continue;
+      const serverEdited = !eq(sv[k], bv[k]);
+      if(serverEdited && !eq(myArea[k], sv[k])){
+        collisions.push(`areas[${sv.id}].${k}`);
+      } else {
+        merged[k] = myArea[k];
+      }
+    }
+    return merged;
+  });
+
+  if(collisions.length){
+    throw Object.assign(new Error("same-field conflict"), { conflict:true, fields: collisions });
+  }
+  return out;
+}
+
+// Bump on every local edit (status/progress/owner/notes/stage/lifecycle/etc).
+// Lets us detect: did the user keep editing while a PUT was in flight?
+let DIRTY_GEN = 0;
+function markDirty(){ DIRTY_GEN++; }
+// Set whenever a save fails (network/validation/exhausted-retry conflict).
+// While truthy, the live poller refuses to overwrite PROGRESS so the user's
+// unsaved edits are preserved until they explicitly Resolve.
+let PENDING_RESOLVE = null; // null | { reason: string, fields?: string[] }
+
+function setMetaConflict(label, fields){
+  PENDING_RESOLVE = { reason: label, fields: fields||[] };
+  const meta = $("#cock-meta"); if(!meta) return;
+  meta.innerHTML = `<span style="color:var(--danger)">${esc(label)}</span> · <a href="#" id="meta-resolve" style="color:var(--accent)">Discard local & refresh</a> / <a href="#" id="meta-retry" style="color:var(--accent)">Retry save</a>`;
+  meta.querySelector("#meta-resolve").addEventListener("click", async (e)=>{
+    e.preventDefault();
+    PENDING_RESOLVE = null;
+    saveStatus = "idle"; renderSaveStatus();
+    await loadProgress();
+    if(content.classList.contains("home")) renderHome();
+    else if(crumb.textContent === "Cockpit") { renderCockpitSidebar(); renderCockpit(); }
+    setMeta(metaText());
+  });
+  meta.querySelector("#meta-retry").addEventListener("click", (e)=>{
+    e.preventDefault();
+    PENDING_RESOLVE = null;
+    saveStatus = "idle"; renderSaveStatus();
+    persistProgress();
+  });
+}
+
+function persistProgress(){
+  if(!PROGRESS || PROGRESS._readonly) return;
+  markDirty();
+  saveStatus = "saving"; renderSaveStatus();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    // Snapshot exactly what we send. After the response, compare PROGRESS
+    // (current local state) vs sentSnap to find fields the user touched WHILE
+    // the PUT was in flight, then re-apply those onto `written` so they
+    // survive adoption. Without this, a B-edit racing an A-PUT vanishes.
+    const sentSnap = snapshot(PROGRESS);
+    const genAtSendStart = DIRTY_GEN;
+    try{
+      const { written } = await putProgress(sentSnap);
+      const cockpitWasOpen = !content.classList.contains("home") && crumb.textContent === "Cockpit";
+      const racedEdit = DIRTY_GEN !== genAtSendStart;
+      let adopted = written;
+      if(racedEdit){
+        // The user typed something while we were sending sentSnap. Find which
+        // fields differ between sentSnap and current PROGRESS — those are the
+        // newer edits — and apply them onto `written`.
+        adopted = applyLocalDeltas(written, sentSnap, PROGRESS);
+      }
+      PROGRESS = adopted;
+      BASELINE = snapshot(PROGRESS);
+      if(content.classList.contains("home")) renderHome();
+      else if(cockpitWasOpen) { renderCockpitSidebar(); renderCockpit(); }
+      PENDING_RESOLVE = null;
+      saveStatus = "ok"; renderSaveStatus();
+      const meta = $("#cock-meta"); if(meta) meta.textContent = metaText();
+      // If newer edits raced this save, queue another save to flush them.
+      if(racedEdit) persistProgress();
+    }catch(e){
+      saveStatus = "err"; renderSaveStatus();
+      setMetaConflict(
+        e.conflict
+          ? `Conflict on ${(e.fields||["field"]).slice(0,2).join(", ")}`
+          : ("Save failed: " + (e.message||"unknown")),
+        e.fields
+      );
+    }
+  }, 350);
+}
+
+// Replay fields the user touched between `sent` (what was PUT) and `current`
+// (live PROGRESS) onto `base` (what server accepted, possibly merged with
+// another user's edits). For any field where current !== sent, that's a
+// newer local edit; for fields where current === sent, base wins (so remote
+// merges from the retry path are preserved).
+function applyLocalDeltas(base, sent, current){
+  const eq = (a,b) => JSON.stringify(a) === JSON.stringify(b);
+  const out = JSON.parse(JSON.stringify(base));
+  // Lifecycle.current
+  if(!eq(current?.lifecycle?.current, sent?.lifecycle?.current)){
+    out.lifecycle = out.lifecycle || {};
+    out.lifecycle.current = current.lifecycle.current;
+  }
+  // Per-area
+  const sentMap = new Map((sent?.areas||[]).map(a=>[a.id,a]));
+  const curMap  = new Map((current?.areas||[]).map(a=>[a.id,a]));
+  out.areas = (out.areas||[]).map(b => {
+    const sentArea = sentMap.get(b.id);
+    const curArea  = curMap.get(b.id);
+    if(!sentArea || !curArea) return b;
+    const merged = {...b};
+    for(const k of ["status","progress","owner","notes","stage","docs"]){
+      if(!eq(curArea[k], sentArea[k])) merged[k] = curArea[k]; // newer local edit
+    }
+    return merged;
+  });
+  return out;
+}
+
+function renderSaveStatus(){
+  const el = $("#save-pill"); if(!el) return;
+  el.className = "save-pill " + (saveStatus==="ok"?"ok":saveStatus==="err"?"err":"");
+  el.textContent = saveStatus==="saving" ? "Saving…" : saveStatus==="ok" ? "Saved" : saveStatus==="err" ? "Save failed" : "";
+}
+
+function metaText(){
+  const ro = PROGRESS?._readonly ? " · read-only (no server)" : "";
+  return `Last updated ${PROGRESS?.updated || "?"}${ro}`;
+}
+
+// Refresh every visible "X min ago" label without re-rendering the page.
+// Tagging contract: any element rendered with a timestamp gets
+// class="timeago" data-ts="<iso>". This walks them all and updates textContent.
+function refreshTimeAgo(){
+  document.querySelectorAll(".timeago").forEach(el => {
+    el.textContent = timeAgo(el.dataset.ts || "");
+  });
+}
+
+function timeAgo(iso){
+  if(!iso) return "—";
+  const d = new Date(iso); if(isNaN(d)) return "—";
+  const s = Math.max(0, Math.floor((Date.now() - d.getTime())/1000));
+  if(s < 30) return "just now";
+  if(s < 60) return s+"s ago";
+  if(s < 3600) return Math.floor(s/60)+"m ago";
+  if(s < 86400) return Math.floor(s/3600)+"h ago";
+  return Math.floor(s/86400)+"d ago";
+}
+
+const SPEC_STATES = new Set(["not-started","spec-draft","spec-final"]);
+const STAGE_BY_CATEGORY = {
+  "Slice PRD":        "slice-build",
+  "Experience":       "slice-build",
+  "Engineering Spec": "foundation-build",
+  "Operations":       "pilot",
+};
+const STAGE_OVERRIDE = { "ops-readiness": "internal-alpha", "ops-ghana": "pilot" };
+function destStageFor(area){
+  return STAGE_OVERRIDE[area.id] || STAGE_BY_CATEGORY[area.category] || "slice-build";
+}
+// Returns the stage id implied by an area's status: spec-baseline while in spec-*,
+// otherwise the area's build-time destination. Falls back to existing stage if any
+// of those targets don't exist in lifecycle.stages[].
+function autoStageFor(area){
+  const stages = new Set((PROGRESS?.lifecycle?.stages||[]).map(s=>s.id));
+  const target = SPEC_STATES.has(area.status) ? "spec-baseline" : destStageFor(area);
+  return stages.has(target) ? target : (area.stage || target);
+}
+
+function stageStats(stageId){
+  const areas = (PROGRESS?.areas || []).filter(a => a.stage === stageId);
+  const count = areas.length;
+  if (!count) return { count:0, done:0, avg:0, byStatus:{} };
+  const sum = areas.reduce((a,x) => a + (x.progress||0), 0);
+  const done = areas.filter(a => a.status === "shipped" || (a.progress||0) >= 100).length;
+  const byStatus = {};
+  for (const a of areas) byStatus[a.status] = (byStatus[a.status]||0) + 1;
+  return { count, done, avg: sum/count, byStatus };
+}
+
+function renderLifecycle(targetId, opts){
+  const el = document.getElementById(targetId); if(!el) return;
+  const lc = PROGRESS?.lifecycle;
+  if(!lc || !Array.isArray(lc.stages) || !lc.stages.length){
+    el.innerHTML = `<div class="lc-head"><h3>Program lifecycle</h3></div><div style="color:var(--muted);font-size:12px">No lifecycle defined.</div>`;
+    return;
+  }
+  const editable = !!opts?.editable && !PROGRESS?._readonly;
+  const idx = Math.max(0, lc.stages.findIndex(s=>s.id===lc.current));
+  const cur = lc.stages[idx];
+  const pct = Math.round((idx / Math.max(1, lc.stages.length-1)) * 100);
+  el.innerHTML = `
+    <div class="lc-head">
+      <h3>Program lifecycle</h3>
+      <div class="now">Currently in <b>${esc(cur?.label||"?")}</b> · stage ${idx+1} of ${lc.stages.length} · ${pct}% through program</div>
+    </div>
+    <div class="stepper">
+      ${lc.stages.map((s,i)=>{
+        const cls = i<idx ? "done" : (i===idx ? "active" : "upcoming");
+        const stats = stageStats(s.id);
+        const pctVal = stats.count ? stats.avg : (i<idx ? 100 : 0);
+        const C = 2 * Math.PI * 16; // r=16
+        const off = C * (1 - pctVal/100);
+        const mark = i<idx && pctVal>=99 ? "✓" : (pctVal>0 ? Math.round(pctVal)+"%" : (i+1));
+        const subtitle = stats.count ? `${stats.done}/${stats.count}` : "0/0";
+        return `<div class="step ${cls}" data-i="${i}" data-id="${esc(s.id)}" title="${esc(s.description||"")} (${stats.done}/${stats.count} areas, avg ${Math.round(pctVal)}%)">
+          <div class="ring">
+            <svg viewBox="0 0 38 38">
+              <circle class="ring-bg" cx="19" cy="19" r="16"/>
+              <circle class="ring-fg" cx="19" cy="19" r="16" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"/>
+            </svg>
+            <div class="ring-label">${esc(mark)}</div>
+          </div>
+          <div class="lbl">${esc(s.label)}<br><span style="color:var(--muted);font-size:10.5px;font-weight:400">${esc(subtitle)}</span></div>
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="lc-detail">
+      <div class="d-label">${esc(cur?.label||"Current stage")} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${(()=>{const st=stageStats(cur?.id||"");return `${st.done}/${st.count} done · avg ${Math.round(st.avg)}%`;})()}</span></div>
+      <div>${esc(cur?.description||"")}</div>
+      ${(()=>{const st=stageStats(cur?.id||""); if(!st.count) return ""; const sm=statusMap(); return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${Object.entries(st.byStatus).map(([k,v])=>{const s=sm[k]||{label:k,color:"#888"};return `<span class="legend-pill"><span class="legend-dot" style="background:${safeColor(s.color)}"></span>${esc(s.label)}: ${v}</span>`;}).join("")}</div>`;})()}
+      ${cur?.exit ? `<div class="d-exit">Exit criteria: ${esc(cur.exit)}</div>` : ""}
+      ${editable ? `<div class="lc-edit">
+        <select id="lc-select">${lc.stages.map((s,i)=>{const st=stageStats(s.id); return `<option value="${esc(s.id)}" ${i===idx?"selected":""}>${i+1}. ${esc(s.label)} — ${Math.round(st.avg)}%</option>`;}).join("")}</select>
+        <button id="lc-set">Set current stage</button>
+      </div>` : ""}
+    </div>
+  `;
+  el.querySelectorAll(".step").forEach(st=>st.addEventListener("click",()=>{
+    const id = st.dataset.id;
+    const sel = document.getElementById("lc-select");
+    if(sel) sel.value = id;
+    const stg = lc.stages.find(s=>s.id===id);
+    const detail = el.querySelector(".lc-detail");
+    if(!stg || !detail) return;
+    const stats = stageStats(id);
+    const sm = statusMap();
+    const breakdown = stats.count
+      ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${Object.entries(stats.byStatus).map(([k,v])=>{const s=sm[k]||{label:k,color:"#888"};return `<span class="legend-pill"><span class="legend-dot" style="background:${safeColor(s.color)}"></span>${esc(s.label)}: ${v}</span>`;}).join("")}</div>`
+      : "";
+    detail.innerHTML = `
+      <div class="d-label">${esc(stg.label)}${id===lc.current?" (current)":""} <span style="color:var(--muted);text-transform:none;letter-spacing:0">· ${stats.done}/${stats.count} done · avg ${Math.round(stats.avg)}%</span></div>
+      <div>${esc(stg.description||"")}</div>
+      ${breakdown}
+      ${stg.exit ? `<div class="d-exit">Exit criteria: ${esc(stg.exit)}</div>` : ""}
+      ${editable ? `<div class="lc-edit">
+        <select id="lc-select">${lc.stages.map((s2,i2)=>{const st2=stageStats(s2.id); return `<option value="${esc(s2.id)}" ${s2.id===id?"selected":""}>${i2+1}. ${esc(s2.label)} — ${Math.round(st2.avg)}%</option>`;}).join("")}</select>
+        <button id="lc-set">Set current stage</button>
+      </div>` : ""}
+    `;
+    if(editable) bindLcSetButton(el, opts, targetId);
+  }));
+  if(editable) bindLcSetButton(el, opts, targetId);
+}
+
+function bindLcSetButton(el, opts, targetId){
+  el.querySelector("#lc-set")?.addEventListener("click", async ()=>{
+    const id = el.querySelector("#lc-select").value;
+    if(id === PROGRESS.lifecycle.current) return;
+    // Use the same race-protection machinery as persistProgress: capture both
+    // the doc we send and DIRTY_GEN at request start, so any card edits the
+    // user makes while this PUT is in flight survive the adoption step.
+    markDirty(); // a lifecycle change IS a local edit; bumping ensures consistent semantics
+    const sentSnap = JSON.parse(JSON.stringify(PROGRESS));
+    sentSnap.lifecycle.current = id;
+    // Mirror the change into PROGRESS too, so concurrent edits start from a
+    // consistent local state. Bumping DIRTY_GEN above means our own change
+    // here doesn't trigger a false "race" against ourselves below.
+    PROGRESS.lifecycle.current = id;
+    const genAtSendStart = DIRTY_GEN;
+    saveStatus = "saving"; setMeta("Saving lifecycle…");
+    try{
+      const { written } = await putProgress(sentSnap);
+      const racedEdit = DIRTY_GEN !== genAtSendStart;
+      const adopted = racedEdit ? applyLocalDeltas(written, sentSnap, PROGRESS) : written;
+      PROGRESS = adopted;
+      BASELINE = snapshot(PROGRESS);
+      saveStatus = "idle"; setMeta(metaText());
+      renderLifecycle(targetId, opts);
+      // If a card edit raced this lifecycle save, flush it.
+      if(racedEdit) persistProgress();
+    }catch(e){
+      saveStatus = "err"; renderSaveStatus();
+      setMetaConflict(
+        e.conflict
+          ? `Conflict on ${(e.fields||["field"]).slice(0,2).join(", ")}`
+          : ("Save failed: " + (e.message||"unknown")),
+        e.fields
+      );
+    }
+  });
+}
+
+const ACTIVE_STATES = new Set(["in-dev","in-review","blocked"]);
+function activeAreas(){
+  if(!PROGRESS) return [];
+  // Active first, then most recently touched.
+  return PROGRESS.areas
+    .filter(a => ACTIVE_STATES.has(a.status))
+    .sort((a,b) => (b.updatedAt||"").localeCompare(a.updatedAt||""));
+}
+
+function renderFlightPanel(targetId){
+  const el = document.getElementById(targetId); if(!el) return;
+  const sm = statusMap();
+  const items = activeAreas();
+  const recentCutoff = Date.now() - 5*60*1000; // 5 min "hot"
+  const last = PROGRESS?.updatedAt;
+  el.innerHTML = `
+    <div class="head">
+      <h3><span class="live-dot"></span> Now in flight <span class="legend-pill">${items.length}</span></h3>
+      <span class="last" title="${esc(last||"")}">Bundle <span class="timeago" data-ts="${esc(last||"")}">${esc(timeAgo(last))}</span></span>
+    </div>
+    ${items.length===0
+      ? `<div class="empty">Nothing flagged In dev / In review / Blocked yet — set a card's status in the Cockpit tab.</div>`
+      : `<div class="grid2">${items.map(a=>{
+          const s = sm[a.status]||{color:"#888888",label:a.status};
+          const c = safeColor(s.color);
+          const recent = a.updatedAt && new Date(a.updatedAt).getTime() > recentCutoff;
+          const pct = Math.max(0, Math.min(100, Number(a.progress)||0));
+          return `<div class="row-card ${recent?"recent":""}" data-id="${esc(a.id)}" style="border-left-color:${c}" title="${esc(a.notes||"")}">
+            <div class="n"><span>${esc(a.name)}</span><em>${esc(a.category)}</em></div>
+            <div class="bar"><i style="width:${pct}%;background:${c}"></i></div>
+            <div class="meta">
+              <span style="color:${c}">● ${esc(s.label)} · ${pct}%</span>
+              <span>${a.owner?("👤 "+esc(a.owner)+" · "):""}<span class="timeago" data-ts="${esc(a.updatedAt||"")}">${esc(timeAgo(a.updatedAt))}</span></span>
+            </div>
+          </div>`;
+        }).join("")}</div>`
+    }
+  `;
+  el.querySelectorAll(".row-card").forEach(c=>c.addEventListener("click",()=>{
+    switchTab("cockpit");
+    setTimeout(()=>{
+      const card = document.getElementById("area-"+c.dataset.id);
+      card?.scrollIntoView({behavior:"smooth",block:"center"});
+      card?.animate([{boxShadow:"0 0 0 2px var(--accent)"},{boxShadow:"0 0 0 0 transparent"}],{duration:1100});
+    },50);
+  }));
+}
+
+// Live polling — refetch /api/progress every 5s; if updatedAt changed, re-render visible panels.
+let LIVE_TIMER = null;
+function startLivePoll(){
+  if(LIVE_TIMER) return;
+  LIVE_TIMER = setInterval(async ()=>{
+    if(document.hidden) return;
+    // Always refresh time-ago labels each tick so "X min ago" stays current
+    // even when there are no data changes or saves in flight.
+    refreshTimeAgo();
+    if(saveStatus === "saving") return; // don't clobber an in-flight save
+    // CRITICAL: while local edits are unresolved (last save failed or
+    // same-field conflict), refuse to overwrite PROGRESS with the server's
+    // newer doc. Otherwise polling silently discards the user's pending
+    // edits before they can resolve them. Still fetch so the user can see
+    // there IS a newer revision via the meta line.
+    if(saveStatus === "err" || PENDING_RESOLVE) return;
+    const prevAt = PROGRESS?.updatedAt;
+    try{
+      const r = await fetch("/api/progress",{cache:"no-cache"});
+      if(!r.ok) return;
+      const next = await r.json();
+      if(next.updatedAt && next.updatedAt !== prevAt){
+        PROGRESS = next;
+        BASELINE = snapshot(PROGRESS);
+        // Re-render whatever panels are visible.
+        if(content.classList.contains("home")) renderHome();
+        else if(crumb.textContent === "Cockpit") { renderCockpitSidebar(); renderCockpit(); }
+        // Time-ago refresh fires automatically via the next tick.
+      }
+    }catch{}
+  }, 5000);
+  // Repaint timestamps when the user switches back to the tab (catches up
+  // on time elapsed while the poll loop was paused).
+  document.addEventListener("visibilitychange", () => { if(!document.hidden) refreshTimeAgo(); });
+}
+
+function aggregateStats(areas, sm){
+  const total = areas.length || 1;
+  const byStatus = {};
+  let totalPct = 0;
+  for(const a of areas){
+    byStatus[a.status] = (byStatus[a.status]||0)+1;
+    totalPct += Number(a.progress)||0;
+  }
+  const avgPct = Math.round(totalPct / total);
+  const shipped = byStatus["shipped"]||0;
+  const inDev = (byStatus["in-dev"]||0) + (byStatus["in-review"]||0);
+  const blocked = byStatus["blocked"]||0;
+  return { byStatus, avgPct, shipped, inDev, blocked, total };
+}
+
+function renderCockpitSidebar(){
+  const sm = statusMap();
+  const cats = {};
+  (PROGRESS?.areas||[]).forEach(a => { (cats[a.category]=cats[a.category]||[]).push(a); });
+  navCockpit.innerHTML = `
+    <div class="group">
+      <h3>Filter by status</h3>
+      <div style="display:flex;flex-direction:column;gap:4px;padding:4px">
+        <label class="legend-pill" style="cursor:pointer"><input type="checkbox" id="filt-all" checked /> Show all</label>
+        ${(PROGRESS?.states||[]).map(s=>`
+          <label class="legend-pill" style="cursor:pointer"><span class="legend-dot" style="background:${safeColor(s.color)}"></span>
+            <input type="checkbox" class="filt-state" value="${esc(s.id)}" checked /> ${esc(s.label)}
+          </label>`).join("")}
+      </div>
+    </div>
+    ${Object.entries(cats).map(([cat,items])=>`
+      <div class="group"><h3>${esc(cat)} <span class="count">${items.length}</span></h3>
+        ${items.map(a=>`<a class="item" data-area="${esc(a.id)}">${esc(a.name)}<small style="color:${safeColor(sm[a.status]?.color)}">${esc(sm[a.status]?.label||a.status)} · ${Math.max(0,Math.min(100,Number(a.progress)||0))}%</small></a>`).join("")}
+      </div>`).join("")}
+  `;
+  navCockpit.querySelectorAll(".item[data-area]").forEach(el=>el.addEventListener("click",()=>{
+    document.getElementById("area-"+el.dataset.area)?.scrollIntoView({behavior:"smooth",block:"center"});
+    document.getElementById("area-"+el.dataset.area)?.animate([{boxShadow:"0 0 0 2px var(--accent)"},{boxShadow:"0 0 0 0 transparent"}],{duration:1100});
+  }));
+  navCockpit.querySelectorAll(".filt-state").forEach(c=>c.addEventListener("change",applyCockpitFilter));
+  navCockpit.querySelector("#filt-all").addEventListener("change",e=>{
+    navCockpit.querySelectorAll(".filt-state").forEach(c=>c.checked = e.target.checked);
+    applyCockpitFilter();
+  });
+}
+
+function applyCockpitFilter(){
+  const allowed = new Set(Array.from(navCockpit.querySelectorAll(".filt-state:checked")).map(c=>c.value));
+  document.querySelectorAll(".area").forEach(el=>{
+    el.classList.toggle("hidden", !allowed.has(el.dataset.status));
+  });
+  // hide empty group dividers
+  document.querySelectorAll(".group-divider").forEach(d=>{
+    let n = d.nextElementSibling, vis = 0;
+    while(n && !n.classList.contains("group-divider")){ if(!n.classList.contains("hidden")) vis++; n = n.nextElementSibling; }
+    d.classList.toggle("hidden", vis===0);
+  });
+}
+
+function renderCockpit(){
+  crumb.textContent = "Cockpit";
+  content.classList.remove("home");
+  if(!PROGRESS){ content.innerHTML = `<div class="err">progress.json could not be loaded.</div>`; return; }
+  const sm = statusMap();
+  const stats = aggregateStats(PROGRESS.areas, sm);
+  const cats = {};
+  PROGRESS.areas.forEach(a => { (cats[a.category]=cats[a.category]||[]).push(a); });
+
+  content.innerHTML = `
+    <div class="cock-head">
+      <h2>Development Cockpit</h2>
+      <span id="cock-meta" class="meta">${metaText()}</span>
+      <span id="save-pill" class="save-pill"></span>
+      <div class="cock-toolbar">
+        <input id="cock-search" placeholder="Filter cards…" />
+        <select id="cock-sort">
+          <option value="cat">Sort: by category</option>
+          <option value="status">Sort: by status</option>
+          <option value="pct-desc">Sort: progress ↓</option>
+          <option value="pct-asc">Sort: progress ↑</option>
+          <option value="name">Sort: name</option>
+        </select>
+      </div>
+    </div>
+    <div class="lifecycle" id="lc-cockpit"></div>
+    <div class="flight" id="flight-cockpit"></div>
+    <div class="legend-row">
+      ${PROGRESS.states.map(s=>`<span class="legend-pill"><span class="legend-dot" style="background:${safeColor(s.color)}"></span>${esc(s.label)} · ${stats.byStatus[s.id]||0}</span>`).join("")}
+    </div>
+    <div class="stats-strip">
+      <div class="stat-card"><div class="n">${stats.total}</div><div class="l">Tracked areas</div></div>
+      <div class="stat-card"><div class="n">${stats.avgPct}%</div><div class="l">Avg progress</div><div class="bar"><i style="width:${stats.avgPct}%"></i></div></div>
+      <div class="stat-card"><div class="n" style="color:var(--accent2)">${stats.shipped}</div><div class="l">Shipped</div></div>
+      <div class="stat-card"><div class="n" style="color:var(--warn)">${stats.inDev}</div><div class="l">Dev / Review</div></div>
+      <div class="stat-card"><div class="n" style="color:var(--danger)">${stats.blocked}</div><div class="l">Blocked</div></div>
+      <div class="stat-card"><div class="n">${PROGRESS.states.length}</div><div class="l">Status states</div></div>
+    </div>
+    <div class="board" id="board">
+      ${Object.entries(cats).map(([cat,items])=>`
+        <div class="group-divider" data-cat="${esc(cat)}">${esc(cat)} · ${items.length}</div>
+        ${items.map(a=>renderArea(a,sm)).join("")}
+      `).join("")}
+    </div>
+  `;
+  renderLifecycle("lc-cockpit", {editable:true});
+  renderFlightPanel("flight-cockpit");
+  bindCockpitHandlers();
+}
+
+function renderArea(a, sm){
+  const s = sm[a.status] || {color:"#888888",label:a.status};
+  const c = safeColor(s.color);
+  const ro = PROGRESS._readonly ? "disabled" : "";
+  const pct = Math.max(0, Math.min(100, Number(a.progress)||0));
+  const docs = (a.docs||[]).map(d=>{
+    const label = (String(d).replace(/^Telecheck_?/,"").replace(/_v\d_\d.md$/,"").replace(/\.md$/,"").replace(/_/g," ")).slice(0,38);
+    return `<a data-doc="${esc(d)}" title="${esc(d)}">${esc(label)}</a>`;
+  }).join("");
+  return `<div class="area" id="area-${esc(a.id)}" data-id="${esc(a.id)}" data-status="${esc(a.status)}" style="border-left-color:${c}">
+    <div class="title">
+      <div>
+        <div class="cat">${esc(a.category)} · <span title="${esc(a.updatedAt||"")}"><span class="timeago" data-ts="${esc(a.updatedAt||"")}">${esc(timeAgo(a.updatedAt))}</span></span></div>
+        <h4>${esc(a.name)}</h4>
+      </div>
+    </div>
+    <div class="progress"><i style="width:${pct}%;background:${c}"></i></div>
+    <div class="row">
+      <select class="status" ${ro}>
+        ${PROGRESS.states.map(st=>`<option value="${esc(st.id)}" ${st.id===a.status?"selected":""}>${esc(st.label)}</option>`).join("")}
+      </select>
+      <input class="pct" type="number" min="0" max="100" value="${pct}" ${ro} />%
+      <input class="owner" placeholder="owner" value="${esc(a.owner||"")}" ${ro} />
+    </div>
+    <div class="row" style="margin-top:4px">
+      <select class="stage" ${ro} title="Lifecycle stage this area rolls up to">
+        <option value="">— stage —</option>
+        ${(PROGRESS.lifecycle?.stages||[]).map(st=>`<option value="${esc(st.id)}" ${st.id===a.stage?"selected":""}>${esc(st.label)}</option>`).join("")}
+      </select>
+    </div>
+    <textarea class="notes" placeholder="Notes…" ${ro}>${esc(a.notes||"")}</textarea>
+    ${docs?`<div class="docs">${docs}</div>`:""}
+  </div>`;
+}
+
+function bindCockpitHandlers(){
+  document.querySelectorAll(".area").forEach(card=>{
+    const id = card.dataset.id;
+    const area = PROGRESS.areas.find(a=>a.id===id);
+    card.querySelector(".status").addEventListener("change",e=>{
+      area.status = e.target.value;
+      const sm = statusMap();
+      card.dataset.status = area.status;
+      card.style.borderLeftColor = sm[area.status].color;
+      card.querySelector(".progress > i").style.background = sm[area.status].color;
+      // Auto-migrate stage when crossing the spec ↔ build boundary.
+      const want = autoStageFor(area);
+      if (want && want !== area.stage) {
+        area.stage = want;
+        const sel = card.querySelector(".stage");
+        if (sel) sel.value = want;
+        renderLifecycle("lc-cockpit",{editable:true});
+      }
+      persistProgress();
+      renderCockpitSidebar();
+    });
+    card.querySelector(".pct").addEventListener("input",e=>{
+      let v = Math.max(0, Math.min(100, parseInt(e.target.value||"0",10)));
+      area.progress = v;
+      card.querySelector(".progress > i").style.width = v+"%";
+      persistProgress();
+    });
+    card.querySelector(".owner").addEventListener("input",e=>{ area.owner = e.target.value; persistProgress(); });
+    card.querySelector(".notes").addEventListener("input",e=>{ area.notes = e.target.value; persistProgress(); });
+    card.querySelector(".stage")?.addEventListener("change",e=>{
+      area.stage = e.target.value || undefined;
+      persistProgress();
+      renderLifecycle("lc-cockpit",{editable:true});
+    });
+    card.querySelectorAll(".docs a").forEach(a=>a.addEventListener("click",()=>{
+      switchTab("docs"); openDoc(a.dataset.doc, a.dataset.doc);
+    }));
+  });
+  $("#cock-search").addEventListener("input",e=>{
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll(".area").forEach(card=>{
+      card.classList.toggle("hidden", q && !card.textContent.toLowerCase().includes(q));
+    });
+  });
+  $("#cock-sort").addEventListener("change",e=>{
+    const sm = statusMap();
+    let arr = [...PROGRESS.areas];
+    const v = e.target.value;
+    if(v==="status") arr.sort((a,b)=>(PROGRESS.states.findIndex(s=>s.id===a.status))-(PROGRESS.states.findIndex(s=>s.id===b.status)));
+    else if(v==="pct-desc") arr.sort((a,b)=>(b.progress||0)-(a.progress||0));
+    else if(v==="pct-asc")  arr.sort((a,b)=>(a.progress||0)-(b.progress||0));
+    else if(v==="name") arr.sort((a,b)=>a.name.localeCompare(b.name));
+    if(v==="cat"){ renderCockpit(); applyCockpitFilter(); return; }
+    const board = $("#board");
+    board.innerHTML = arr.map(a=>renderArea(a,sm)).join("");
+    bindCockpitHandlers();
+    applyCockpitFilter();
+  });
+}
+// =============== /Cockpit ===============
+
+function docHref(file){
+  const s = SOURCES[SOURCE_KEY];
+  const path = encodeURI(BUNDLE + "/" + file);
+  if(s.kind==="github") return `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${s.branch}/${path}`;
+  return BUNDLE + "/" + file;
+}
+function docViewHref(file){
+  const s = SOURCES[SOURCE_KEY];
+  const path = encodeURI(BUNDLE + "/" + file);
+  if(s.kind==="github") return `https://github.com/${GH_OWNER}/${GH_REPO}/blob/${s.branch}/${path}`;
+  return BUNDLE + "/" + file;
+}
+
+function renderSidebar(){
+  navDocs.innerHTML = GROUPS.map(g=>`
+    <div class="group" data-group="${g.id}">
+      <h3>${g.title} <span class="count">${g.items.length}</span> <span class="pill">tier ${g.priority}</span></h3>
+      ${g.items.map(([f,label,v])=>`
+        <a class="item" data-file="${f}" data-label="${label}">${label}${v?`<span class="v">${v}</span>`:""}<small>${f}</small></a>
+      `).join("")}
+    </div>`).join("");
+  navDocs.querySelectorAll(".item").forEach(a=>a.addEventListener("click",()=>openDoc(a.dataset.file,a.dataset.label)));
+
+  navSkills.innerHTML = `
+    <div class="group"><h3>Skills <span class="count">${SKILLS.length}</span></h3>
+      ${SKILLS.map(([n,d])=>`<div class="skill"><code>/${n}</code><div class="d">${d}</div></div>`).join("")}
+    </div>
+    <div class="group"><h3>Subagents <span class="count">${AGENTS.length}</span></h3>
+      ${AGENTS.map(([n,d])=>`<div class="skill"><code>${n}</code><div class="d">${d}</div></div>`).join("")}
+    </div>`;
+
+  navMap.innerHTML = `
+    <div class="group"><h3>Source-of-truth hierarchy</h3>
+      <ol style="padding-left:18px;color:var(--muted);font-size:12px;line-height:1.7">
+        <li><b>Invariants</b> — 22 floor guarantees</li>
+        <li><b>ADRs</b> + addendums (026 latest)</li>
+        <li><b>Cross-cutting Contracts</b> v5.1</li>
+        <li><b>Master PRD</b> v1.9</li>
+        <li><b>Slice PRDs</b> (17)</li>
+        <li><b>Engineering specs</b> — CDM v1.2 · OpenAPI v0.2 · State Machines v1.1 · System Architecture v1.2</li>
+        <li><b>Experience</b> — Design System v1.1 · IA · DIC v1.0 (PROVISIONAL)</li>
+        <li><b>Operations</b> — Ghana Playbook v1.2 · Readiness v1.5 · Guardrails · Protocols</li>
+      </ol>
+      <div style="font-size:11px;color:var(--muted);padding:0 6px">
+        <p><b>Conflict rules:</b> Slice vs CDM → CDM wins · Slice vs OpenAPI → OpenAPI wins · Slice vs State Machines → State Machines wins · ADR-025 vs ADR-026 → 026 wins.</p>
+        <p><b>Hard rules:</b> never edit Active Doc Index §4 (Superseded). Promotion Ledger is append-only. Manifest must be rebuilt from filesystem, not prose. Don't relax invariants. Glossary terms are canonical.</p>
+      </div>
+    </div>`;
+}
+
+function renderHome(){
+  crumb.textContent = "Home";
+  content.classList.add("home");
+  const totalDocs = GROUPS.reduce((a,g)=>a+g.items.length,0);
+  content.innerHTML = `
+    <div class="banner">
+      <h2>Telecheck — FINAL US REGION BASELINE</h2>
+      <p>Multi-tenant AI telehealth platform spec bundle. ${totalDocs} indexed docs. Code repo not yet built — all work is editing the spec corpus.</p>
+    </div>
+    <div class="lifecycle" id="lc-home"></div>
+    <div class="flight" id="flight-home"></div>
+    <div class="stat">
+      <div><div class="n">41</div><div class="l">Canonical entities</div></div>
+      <div><div class="n">178</div><div class="l">OpenAPI endpoints</div></div>
+      <div><div class="n">13</div><div class="l">State machines</div></div>
+      <div><div class="n">22</div><div class="l">Platform invariants</div></div>
+      <div><div class="n">25</div><div class="l">ADRs</div></div>
+      <div><div class="n">17</div><div class="l">Slice PRDs</div></div>
+      <div><div class="n">15</div><div class="l">Modules (modular monolith)</div></div>
+      <div><div class="n">2</div><div class="l">Day-1 tenants (Heros · Telecheck-Ghana)</div></div>
+    </div>
+    <div class="grid">
+      ${GROUPS.map(g=>`
+        <div class="card">
+          <h4>${g.title} <span class="chip">${g.items.length}</span></h4>
+          <p>Tier ${g.priority} in source-of-truth hierarchy.</p>
+          <div class="row">
+            ${g.items.slice(0,4).map(([f,l])=>`<span class="chip" data-file="${f}" data-label="${l}">${l}</span>`).join("")}
+            ${g.items.length>4?`<span class="chip" data-group="${g.id}">+${g.items.length-4} more…</span>`:""}
+          </div>
+        </div>`).join("")}
+    </div>`;
+  content.querySelectorAll(".chip[data-file]").forEach(c=>c.addEventListener("click",()=>openDoc(c.dataset.file,c.dataset.label)));
+  content.querySelectorAll(".chip[data-group]").forEach(c=>c.addEventListener("click",()=>{
+    document.querySelector(`.group[data-group="${c.dataset.group}"]`)?.scrollIntoView({behavior:"smooth"});
+  }));
+  const paint = ()=>{ renderLifecycle("lc-home"); renderFlightPanel("flight-home"); };
+  if(PROGRESS) paint(); else loadProgress().then(paint);
+}
+
+let currentFile = null;
+async function openDoc(file,label){
+  currentFile = file;
+  crumb.textContent = `${BUNDLE} / ${file}`;
+  content.classList.remove("home");
+  content.innerHTML = `<div class="empty">Loading ${esc(file)}…</div>`;
+  navDocs.querySelectorAll(".item").forEach(i=>i.classList.toggle("active", i.dataset.file===file));
+  try{
+    let md;
+    if(SOURCES[SOURCE_KEY].kind === "embedded"){
+      if(!window.DOCS) throw new Error("docs-data.js not loaded");
+      md = window.DOCS[file];
+      if(md == null) throw new Error("not found in embedded bundle");
+    } else {
+      const r = await fetch(docHref(file));
+      if(!r.ok) throw new Error(r.status+" "+r.statusText);
+      md = await r.text();
+    }
+    // Fail closed: refuse to render markdown unless DOMPurify is available.
+    // The previous <script>-strip fallback didn't remove inline event
+    // handlers or javascript: URLs, which would execute in the cockpit
+    // origin and could rewrite /api/progress.
+    if (!window.DOMPurify || typeof window.DOMPurify.sanitize !== "function") {
+      content.innerHTML = `<div class="err">Markdown sanitizer (DOMPurify) failed to load — refusing to render <code>${esc(file)}</code>.<br><br>Document HTML is not safe to inject without a sanitizer. Check your network connection (CDN at <code>cdn.jsdelivr.net</code>) or bundle DOMPurify locally, then reload.</div>`;
+      return;
+    }
+    const rawHtml = marked.parse(md);
+    const safeHtml = DOMPurify.sanitize(rawHtml, {
+      USE_PROFILES: { html: true },
+      // Defence-in-depth on top of profile defaults.
+      FORBID_TAGS: ["style","iframe","object","embed","form"],
+      FORBID_ATTR: ["style","srcdoc","formaction"],
+      ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|#|\/|[^:]+$)/i,
+    });
+    content.innerHTML = `<div class="md">${safeHtml}</div>`;
+    content.scrollTop = 0;
+  }catch(e){
+    const s = SOURCES[SOURCE_KEY];
+    let hint;
+    const msg = esc(e.message || "unknown");
+    if(s.kind==="embedded") hint = `Embedded load failed (${msg}). Make sure <code>docs-data.js</code> sits next to <code>index.html</code>, then reload.`;
+    else if(s.kind==="local") hint = `Local fetch failed. If you opened via <code>file://</code>, browsers block local fetches — switch Source to <b>Embedded</b>, or run <code>python -m http.server 8000</code>.`;
+    else hint = `GitHub fetch failed (${msg}). Repo may be private (raw.githubusercontent.com requires auth) — switch Source to <b>Embedded</b>.`;
+    content.innerHTML = `<div class="err">Failed to load <code>${esc(file)}</code>.<br><br>${hint}</div>`;
+  }
+}
+
+// search
+$("#q").addEventListener("input",e=>{
+  const q = e.target.value.trim().toLowerCase();
+  navDocs.querySelectorAll(".group").forEach(g=>{
+    let visible = 0;
+    g.querySelectorAll(".item").forEach(i=>{
+      const hit = !q || i.textContent.toLowerCase().includes(q) || i.dataset.file.toLowerCase().includes(q);
+      i.classList.toggle("hidden",!hit);
+      if(hit) visible++;
+    });
+    g.classList.toggle("hidden", visible===0);
+  });
+});
+
+// tabs
+function switchTab(tab){
+  document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab===tab));
+  navDocs.classList.toggle("hidden", tab!=="docs");
+  navCockpit.classList.toggle("hidden", tab!=="cockpit");
+  navSkills.classList.toggle("hidden", tab!=="skills");
+  navMap.classList.toggle("hidden", tab!=="map");
+  if(tab==="cockpit"){
+    if(!PROGRESS) loadProgress().then(()=>{ renderCockpitSidebar(); renderCockpit(); });
+    else { renderCockpitSidebar(); renderCockpit(); }
+  }
+}
+document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+
+// topbar actions
+$("#btn-home").addEventListener("click",renderHome);
+$("#btn-print").addEventListener("click",()=>window.print());
+$("#btn-raw").addEventListener("click",()=>{
+  if(!currentFile) return;
+  // Always link to the GitHub web view of the file on main, regardless of source
+  window.open(`https://github.com/${GH_OWNER}/${GH_REPO}/blob/main/${encodeURI(BUNDLE+"/"+currentFile)}`, "_blank");
+});
+
+// source selector
+const sel = $("#src-select");
+sel.innerHTML = Object.entries(SOURCES).map(([k,s])=>`<option value="${esc(k)}">${esc(s.label)}</option>`).join("");
+sel.value = SOURCE_KEY;
+sel.addEventListener("change",()=>{
+  SOURCE_KEY = sel.value;
+  localStorage.setItem("tc.source", SOURCE_KEY);
+  if(currentFile){
+    const active = navDocs.querySelector(".item.active");
+    openDoc(currentFile, active?.dataset.label||currentFile);
+  }
+});
+
+renderSidebar();
+renderHome();
+loadProgress().then(()=>{ renderFlightPanel("flight-home"); startLivePoll(); });
+</script>
+</body>
+</html>
