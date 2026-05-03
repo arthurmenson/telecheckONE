@@ -36,6 +36,60 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-010 — 2026-05-02 — CDM §4.1 SPEC ISSUE resolution (tenant.id format + columns the v1.10.1 cycle promised but never merged)
+
+**Status:** APPLIED.
+
+**Author:** Claude Opus 4.7 (1M context); reviewed by Codex adversarial-review (telecheck-app foundation-layer cycle, surfacing the SPEC ISSUE) and Engineering Lead pending.
+
+**Trigger:** During the foundation-layer build of the `arthurmenson/telecheck-app` code repo (commit 30907dd; subsequent Codex convergence rounds dc45ac4 → 6b24c65 → 26fc0b4 → de2370a, ship-ready at de2370a after R5 approval), the database-integration-expert subagent flagged a SPEC ISSUE: CDM v1.2 §4.1 specified `tenants.id` as `VARCHAR(26)` ULID with prefix `tnt_01H...`, while Master PRD v1.10 §17 + Glossary v5.2 C3 specified the operating-tenant identifier format `Telecheck-{country}` (e.g., `Telecheck-US`, `Telecheck-Ghana`). The migrations/001_tenants.sql in the code repo went with §17 / charter (Master PRD outranks engineering specs per the source-of-truth hierarchy in Contracts Pack v5.1 SOURCE_OF_TRUTH).
+
+**Root cause:** the v1.10.1 hygiene cycle's Group 5B §CDM row 27 doc-control entry CLAIMED that the Tenant entity gained `consumer_dba`, `legal_entity`, `consumer_subdomain` columns — but the §4.1 SQL DDL body never received those columns. Same partial-merge defect pattern that the post-merge Codex review (4-round convergence) found across other surfaces: doc-control entries got updated but the SQL/example-value bodies didn't. The hygiene cycle exited at commit 33898ec (merged to main as 9389ef7) with this defect in place; the code-repo Codex review is what surfaced it.
+
+**Resolution applied in this entry:**
+
+1. **CDM §4.1 SQL DDL physically updated:**
+   - `id` column comment changed from `tnt_01H...` to `'Telecheck-US', 'Telecheck-Ghana', ...`. Column type retained as VARCHAR(26) (sufficient for the longest current value `Telecheck-Ghana` = 15 chars; no FK-cascade across `tenant_id` references in other CDM tables).
+   - **3 new columns added** (the v1.10.1 hygiene cycle's promise): `consumer_dba VARCHAR(200) NOT NULL` (patient-facing brand, e.g., `Heros Health`); `legal_entity VARCHAR(200) NOT NULL` (per-country incorporated subsidiary, e.g., `Telecheck Health LLC`); `consumer_subdomain VARCHAR(200) NOT NULL` (country-instanced URL, e.g., `heroshealth.com`).
+   - **3 new CHECK constraints:** `tenant_id_format_valid` (regex `^Telecheck-[A-Z][A-Za-z]+$`); `tenant_id_no_bare_heros` (`id NOT ILIKE 'Heros%'` per Glossary v5.2 anti-pattern); `consumer_dba_starts_heros_health` (`consumer_dba LIKE 'Heros Health%'` C3 invariant).
+   - **Canonical seed-value table** added inline showing the two day-1 tenants with all five identifying columns populated, so engineering migrations can copy directly.
+   - **Header note** added explaining the C3 brand-structure rule and the `tenant.id` vs `tenant.consumer_dba` distinction (operating-tenant ID is internal/B2B; consumer DBA is patient-facing).
+
+2. **CDM §2 Conventions updated** with the `tenants.id` exception note: "Exception: `tenants.id` uses the operating-tenant identifier format `Telecheck-{country}` per Master Platform PRD v1.10 §17 + Glossary v5.2 C3 brand structure — NOT a ULID. This is the single PK exception in the data model. The column type remains VARCHAR(26) ... All FK references to `tenants.id` retain VARCHAR(26) — no cascade-rename was needed."
+
+3. **Cross-reference sweep across the bundle:**
+   - **AUDIT_EVENTS v5.2 §audit envelope** (line 17, 20): `"tenant_id": "tnt_<ULID>"` → `"Telecheck-{country}"` with comment pointing at CDM §4.1 + Master PRD §17.
+   - **DOMAIN_EVENTS v5.2 §domain event envelope** (line 19, 22): same swap.
+   - **TYPES v5.2** (15 example-value occurrences across §audit envelope / §research entities / §marketing entities): batch-updated `"tnt_<ULID>"` → `"Telecheck-{country}"`. Per-prefix registry entry at line 191 (`tnt_` — tenant) marked SUPERSEDED with a change-trail note pointing at this Promotion Ledger entry; backward-compat-read carve-out for archived audit records preserved per I-003.
+   - **OpenAPI v0.2 §admin examples** (line 819): example response payload updated to `Telecheck-US` with the canonical `consumer_dba` field included. Doc-control rationale at line 1305 rewritten to clarify the canonical type.
+   - **Forms/Intake Engine Slice PRD v2.1** (line 574): example payload updated.
+   - **Other CDM section** (line 1083, AIExecution entity example): swapped.
+
+**Files touched (current-state body changes; doc-control entries on the same files appended for change-trail):**
+- `Telecheck_Canonical_Data_Model_v1_2.md` (§2, §4.1, §AIExecution example, doc-control)
+- `Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md` (envelope example)
+- `Telecheck_Contracts_Pack_v5_00_DOMAIN_EVENTS.md` (envelope example)
+- `Telecheck_Contracts_Pack_v5_00_TYPES.md` (15 examples + ID-prefix registry note)
+- `Telecheck_OpenAPI_v0_2.md` (admin example + payload-examples appendix)
+- `Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md` (example payload)
+
+**No version-number bumps.** Per the engineering-spec discipline, this is a body-text reconciliation correcting a hygiene-cycle partial merge — not a content-change requiring versioning. CDM remains v1.2; AUDIT_EVENTS/DOMAIN_EVENTS/TYPES remain v5.2; OpenAPI remains v0.2; Forms/Intake Slice remains v2.1. The change-trail is captured in this Promotion Ledger entry plus per-file doc-control patch notes.
+
+**Verification:** post-edit grep across the bundle for `tnt_01H` / `tnt_<ULID>` / `"tenant_id":\s*"tnt_` returns matches ONLY in change-trail / supersession notes; zero current-state authoritative example values remain in the prior format. Cross-references to CDM §4.1 from slice PRDs and engineering specs all resolve to the new schema. Code-repo migrations/001_tenants.sql at `arthurmenson/telecheck-app` (commit de2370a) is now consistent with the CDM canonical schema; the `tenant_id_format_valid` regex and the column set match exactly.
+
+**Cross-references:**
+- Master Platform PRD v1.10 §17 (Honest status, design rules, copy posture) — the SoT for the brand-structure rule
+- Telecheck_Contracts_Pack_v5_00_GLOSSARY.md — `Telecheck-{country}` entry; `consumer DBA` entry; bare-`Heros` anti-pattern entry
+- Telecheck_Canonical_Data_Model_v1_2.md §2 + §4.1 — the patched canonical schema
+- arthurmenson/telecheck-app commit de2370a — migrations/001_tenants.sql (foundation; ship-ready post-Codex 5-round convergence)
+- Promotion Ledger P-008 (v1.10 promotion 2026-05-01) and P-009 (v1.10.1 hygiene cycle 2026-05-02) — the cycles that introduced the partial-merge defect this entry resolves
+
+**Engineering Lead review status:** PENDING. This entry is APPLIED on the basis of the SoT hierarchy (Master PRD outranks engineering specs); Engineering Lead review is a formality but should still be requested per the canonical change-discipline rule.
+
+**Next:** with CDM §4.1 now consistent with the foundation migrations, the first slice (Forms/Intake Engine v2.1 per EHBG §10) is unblocked. No further SPEC ISSUEs in the open-against-foundation list.
+
+---
+
 ### Entry P-009 — 2026-05-02 — v1.10.1 Hygiene Cycle (physical merge of v1.10 delta artifacts into bundle file bodies)
 
 **User instruction (verbatim):** "use your recommended and go yolo mode while I sleep for 6 hrs" (Evans, 2026-05-02). After Phase 6 v1.10 promotion cycle completed 2026-05-01 with Codex Phase 6 POST-MERGE EXIT v0.5 closed at 0 HIGH / 0 MEDIUM, the orchestrator proposed Option A (physical-merge follow-on cycle) to eliminate the dual-read requirement from the Phase 6 delta-artifact-supplement convention. Evans's "yolo mode" instruction authorized autonomous execution. Subsequent ratifying instructions during the cycle: "auto allow always from here" (2026-05-02; suspends per-action confirmation prompts), "i agree" (2026-05-02; ratifies multi-agent expert workstream orchestration adoption for Phase D + Codex EXIT), "commit authorized for next 6 hrs. do not prompt or ask" (2026-05-02; blanket commit authorization), "auto run fire codex scope and all for 6hrs" (2026-05-02; ratifies the parallel scoped Codex EXIT + autonomous follow-through).

@@ -571,7 +571,7 @@ When intake completes and includes subscription preferences (cadence, multi-prod
 
 ```json
 {
-  "tenant_id": "tnt_01H...",
+  "tenant_id": "Telecheck-US",
   "patient_id": "pat_01H...",
   "intake_submission_id": "sub_01H...",
   "products": [

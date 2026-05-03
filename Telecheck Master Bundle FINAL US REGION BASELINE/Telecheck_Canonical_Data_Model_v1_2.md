@@ -34,8 +34,8 @@ Engineering implements migrations against this model. Slice PRDs reference these
 
 ## 2. Conventions
 
-- **Primary keys:** ULID (`ulid` type or VARCHAR(26)) for human-readability and time-ordering. Prefixed by entity type (e.g., `acc_01H...` for accounts).
-- **Foreign keys:** stored as the referenced entity's primary key type (ULID).
+- **Primary keys:** ULID (`ulid` type or VARCHAR(26)) for human-readability and time-ordering. Prefixed by entity type (e.g., `acc_01H...` for accounts). **Exception:** `tenants.id` uses the operating-tenant identifier format `Telecheck-{country}` (e.g., `Telecheck-US`, `Telecheck-Ghana`) per Master Platform PRD v1.10 §17 + Glossary v5.2 C3 brand structure — NOT a ULID. This is the single PK exception in the data model. The column type remains VARCHAR(26) (sufficient for the longest current value `Telecheck-Ghana` = 15 chars, with headroom for future country-name expansions). All FK references to `tenants.id` retain VARCHAR(26) — no cascade-rename was needed.
+- **Foreign keys:** stored as the referenced entity's primary key type (ULID for entity-keyed FKs; VARCHAR(26) `Telecheck-{country}` string for `tenant_id` FKs per the exception above).
 - **Timestamps:** all entities have `created_at` and `updated_at` (timestamptz, UTC). Some have additional lifecycle timestamps (e.g., `submitted_at`, `confirmed_at`).
 - **Tenant scoping:** every entity has `tenant_id` (NOT NULL, foreign key to `tenants.id`). PostgreSQL Row-Level Security policy enforces tenant isolation per ADR-023.
 - **Soft deletion:** clinical entities use `deleted_at` (timestamptz, nullable). Audit entities are append-only — never deleted, never updated (ADR-013).
@@ -157,28 +157,72 @@ v1.2 expands to 41 entities: 6 tenant-management entities (introduced in v1.1), 
 
 The root entity for multi-tenancy.
 
+**v1.10 brand-structure note (per Master Platform PRD v1.10 §17 + Glossary v5.2 C3):**
+The `id` column is the **operating-tenant identifier** (`Telecheck-{country}` format, e.g., `Telecheck-US`, `Telecheck-Ghana`) — internal/B2B-facing. The `consumer_dba` column is the **patient-facing brand** (e.g., `Heros Health` for `Telecheck-US`; `Heros Health Ghana` for `Telecheck-Ghana`). Code, schema, audit, RLS policies, KMS key naming, and platform-admin UI write `id`; patient-facing surfaces source `consumer_dba` from `tenant.consumer_dba`, NEVER from `tenant.id`. Bare `Heros` (without `Health` or DBA framing) is forbidden as a tenant or operator identifier. The `legal_entity` column carries the per-country incorporated subsidiary (e.g., `Telecheck Health LLC` for US; `Telecheck-Ghana Ltd.` for GH). The `consumer_subdomain` column carries the country-instanced subdomain (`heroshealth.com`, `ghana.heroshealth.com`).
+
 ```sql
 CREATE TABLE tenants (
-  id              VARCHAR(26) PRIMARY KEY,           -- tnt_01H...
-  country         CHAR(2) NOT NULL,                  -- ISO 3166-1 alpha-2
-  status          VARCHAR(20) NOT NULL,              -- 'active', 'suspended', 'draft', 'archived'
-  display_name    VARCHAR(200) NOT NULL,             -- "Heros Health", "Telecheck Ghana"
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  activated_at    TIMESTAMPTZ,
-  suspended_at    TIMESTAMPTZ,
-  archived_at     TIMESTAMPTZ,
-  
+  -- Operating-tenant identifier per Master PRD v1.10 §17 (NOT a ULID — the
+  -- single PK exception in this data model per §2 conventions). Format:
+  -- 'Telecheck-{country}' where {country} is the country name or ISO code
+  -- corresponding to the operating subsidiary. CHECK constraint below
+  -- enforces the format. Code/schema/audit/RLS/KMS naming all use this value;
+  -- patient-facing surfaces never render this — they render consumer_dba.
+  id                  VARCHAR(26) PRIMARY KEY,           -- 'Telecheck-US', 'Telecheck-Ghana', ...
+
+  -- Country of care (ISO 3166-1 alpha-2). Drives CCR resolution per ADR-024.
+  country             CHAR(2)      NOT NULL,             -- 'US', 'GH'
+
+  -- Lifecycle status.
+  status              VARCHAR(20)  NOT NULL,             -- 'active', 'suspended', 'draft', 'archived'
+
+  -- Operating-tenant display name shown in platform-admin UI. Typically
+  -- mirrors `id` (e.g., 'Telecheck-US') but is a separate column to allow
+  -- richer admin-side rendering (e.g., "Telecheck-US (Heros Health DBA)")
+  -- without polluting the canonical tenant identifier.
+  display_name        VARCHAR(200) NOT NULL,             -- 'Telecheck-US', 'Telecheck-Ghana'
+
+  -- Patient-facing consumer DBA (Heros Health country-instance per C3).
+  -- Sourced by all patient-facing surfaces; NEVER expose `id` to a patient.
+  -- (Added 2026-05-02 per v1.10.1 hygiene cycle Group 5B §CDM row 27.)
+  consumer_dba        VARCHAR(200) NOT NULL,             -- 'Heros Health', 'Heros Health Ghana'
+
+  -- Per-country incorporated legal entity. Used by audit-export, regulatory
+  -- filings, contract metadata (BAAs etc.). (Added 2026-05-02.)
+  legal_entity        VARCHAR(200) NOT NULL,             -- 'Telecheck Health LLC', 'Telecheck-Ghana Ltd.'
+
+  -- Country-instanced consumer subdomain serving the DBA's web/mobile UI.
+  -- Drives subdomain-based tenant resolution in the application middleware
+  -- (per Tenant Threading Addendum v1.0 + src/lib/tenant-context.ts in the
+  -- code repo). (Added 2026-05-02.)
+  consumer_subdomain  VARCHAR(200) NOT NULL,             -- 'heroshealth.com', 'ghana.heroshealth.com'
+
+  created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  activated_at        TIMESTAMPTZ,
+  suspended_at        TIMESTAMPTZ,
+  archived_at         TIMESTAMPTZ,
+
   -- Operational metadata
-  created_by      VARCHAR(26) NOT NULL,              -- tenant_user_id of platform admin who created
-  notes           TEXT,                              -- internal notes for platform admin
-  
-  CONSTRAINT tenant_country_valid CHECK (country IN ('US', 'GH'))  -- extend as countries added
+  created_by          VARCHAR(26)  NOT NULL,             -- tenant_user_id of platform admin who created
+  notes               TEXT,                              -- internal notes for platform admin
+
+  CONSTRAINT tenant_country_valid    CHECK (country IN ('US', 'GH')),  -- extend as countries added
+  CONSTRAINT tenant_id_format_valid  CHECK (id ~ '^Telecheck-[A-Z][A-Za-z]+$'),
+  CONSTRAINT tenant_id_no_bare_heros CHECK (id NOT ILIKE 'Heros%'),  -- per Glossary v5.2 anti-pattern
+  CONSTRAINT consumer_dba_starts_heros_health CHECK (consumer_dba LIKE 'Heros Health%')  -- C3 invariant
 );
 
-CREATE INDEX idx_tenants_status ON tenants (status);
-CREATE INDEX idx_tenants_country ON tenants (country);
+CREATE INDEX idx_tenants_status   ON tenants (status);
+CREATE INDEX idx_tenants_country  ON tenants (country);
 ```
+
+**Canonical seed values at v1.10 promotion 2026-05-01:**
+
+| `id` | `country` | `display_name` | `consumer_dba` | `legal_entity` | `consumer_subdomain` |
+|---|---|---|---|---|---|
+| `Telecheck-US` | `US` | `Telecheck-US` | `Heros Health` | `Telecheck Health LLC` | `heroshealth.com` |
+| `Telecheck-Ghana` | `GH` | `Telecheck-Ghana` | `Heros Health Ghana` | `Telecheck-Ghana Ltd.` | `ghana.heroshealth.com` |
 
 ### 4.2 TenantBrand
 
@@ -1036,7 +1080,7 @@ Unifies current Mode 1 invocations and Mode 2 cases under the workload taxonomy.
 ```
 {
   "ai_execution_id":             "aie_<ULID>",
-  "tenant_id":                   "tnt_<ULID>",
+  "tenant_id":                   "Telecheck-{country}",
   "patient_id":                  "pat_<ULID>" | null,
   "ai_workload_type":            "conversational_assistant | protocol_execution | autonomous_agent (reserved) | multi_agent_supervisor (reserved) | tool_using_agent (reserved)",
   "autonomy_level":              "advisory | suggestion | action_with_confirm | action_with_audit_only (reserved) | fully_autonomous (reserved)",
@@ -1076,6 +1120,7 @@ Total entity count post-v1.10: **41 (v1.2 baseline) + 6 (research) + 1 (AIExecut
 
 - **v1.2** — Adds 8 ecom entities introduced by Pharmacy + Refill v2.1 and Admin Backend v1.1 slice PRDs: Subscription, SubscriptionEvent, ProductCatalog, Cart, CartItem, DiscountCode, DiscountCodeRedemption, AffiliateAccount, AffiliateConversion. New §4-bis (§4.7 through §4.15) carries full SQL DDL with tenant_id, RLS policies, indexes, constraints, and invariants for each. Total entity count: 41 (6 tenant-management + 27 inherited + 8 ecom). Pattern C remediation per Adversarial Counsel Review v1.0 finding CRITICAL-02 — schemas previously living in slice PRDs are now in canonical engineering spec; slice PRDs reference these by section number. Existing v1.1 content (tenant management entities, tenant scoping rules, audit envelope, encryption mapping) preserved without modification.
 - **v1.2 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §CDM rows 27, 70, 98)** — Additive content under "v1.10 cycle additions" section above. Tenant entity gains `consumer_dba`, `legal_entity`, `consumer_subdomain` columns (C3 brand-structure). 6 new research data entities (ResearchConsent, CohortDefinition, DataSharingAgreement, ResearchEthicsReviewBody, ResearchPartner, ResearchDataExport — all tenant-scoped per I-023; export carries country_of_care + audit at high_pii per I-031). 1 new AIExecution entity (normative, fully implemented at v1.0; unifies Mode 1 + Mode 2 under workload taxonomy with `ai_workload_type` discriminator + 5 orthogonal properties). 7 reserved-future entity names (Agent, AgentRun, Tool, ToolCall, AgentMemory, KnowledgeSource, PolicyAuthorization — non-normative at v1.0; activated under ADRs 030–034). Total entity count post-v1.10: **48 active + 7 reserved-future**. Per ADR-028 + ADR-029 + Master PRD v1.10 §10.5/§13.7/§15.3 + INVARIANTS v5.2 + TYPES v5.2 + AUDIT_EVENTS v5.2. Existing v1.2 entity schemas preserved without modification; v1.10 additions are purely additive. No version-number bump (entry-level refresh consistent with the engineering-spec discipline; CDM remains v1.2 in headers and references).
+- **v1.2 SPEC ISSUE resolution (2026-05-02 per Codex telecheck-app foundation-layer adversarial review SPEC ISSUE flagged at migrations/001_tenants.sql authorship)** — §4.1 Tenant SQL DDL physically updated to match the C3 brand-structure rule that the prior v1.10.1 hygiene cycle's doc-control entry promised but never merged into the body. Specifically: (1) `id` column comment changed from `tnt_01H...` (ULID) to `Telecheck-{country}` operating-tenant identifier per Master PRD v1.10 §17 — the SoT hierarchy resolution (Master PRD outranks engineering specs); column type retained as VARCHAR(26) (sufficient for `Telecheck-Ghana` = 15 chars, no FK-cascade across tenant_id references in other tables). (2) Three new columns physically added to the SQL DDL (the v1.10.1 hygiene cycle's Group 5B §CDM row-27 promise): `consumer_dba` (patient-facing brand, e.g., `Heros Health`); `legal_entity` (per-country incorporated subsidiary, e.g., `Telecheck Health LLC`); `consumer_subdomain` (country-instanced URL, e.g., `heroshealth.com`). (3) Three new CHECK constraints: `tenant_id_format_valid` (regex `^Telecheck-[A-Z][A-Za-z]+$`); `tenant_id_no_bare_heros` (`id NOT ILIKE 'Heros%'` per Glossary v5.2 anti-pattern); `consumer_dba_starts_heros_health` (`consumer_dba LIKE 'Heros Health%'` C3 invariant). (4) Canonical seed-value table for the two day-1 tenants added inline so engineering migrations can copy directly. (5) §2 Conventions updated with the `tenants.id` exception note explaining this is the single PK exception in the data model. **No version-number bump** (consistent with the engineering-spec discipline; CDM remains v1.2 in headers and references; this is a body-text reconciliation correcting a hygiene-cycle partial merge). Cross-references swept: AUDIT_EVENTS v5.2 + DOMAIN_EVENTS v5.2 + OpenAPI v0.2 + TYPES v5.2 + GOVERNANCE_CONTROLS v5.2 + Tenant Threading Addendum v1.0 example-value sweeps verified consistent with the canonical operating-tenant format.
 - **v1.1** — Multi-tenancy applied to all entities per ADR-023. Six new tenant-management entities added. Audit envelope updated to require tenant_id. RLS policies specified for every tenant-scoped table. Encryption-at-rest mapping updated for per-tenant KMS keys per ADR-024. Total entity count: 33 (27 inherited + 6 new).
 - **v1.0** — Initial canonical (single-tenant assumption); superseded.
 - **Next review:** after engineering applies the migration; after the first non-trivial cross-tenant query bug is detected and resolved (or never detected, which is the goal).

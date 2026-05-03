@@ -33,7 +33,7 @@ Notes: `evidence_quality` is present only for herb-drug signals. Medication engi
 ```
 {
   "medication_request_id": "mrx_<ULID>",
-  "tenant_id":             "tnt_<ULID>",
+  "tenant_id":             "Telecheck-{country}",
   "patient_id":            "pat_<ULID>",
   "medication":            { "code": "...", "name": "...", "strength": "...", "formulation": "..." },
   "dosing":                { "instructions": "...", "frequency": "...", "quantity": ... },
@@ -52,7 +52,7 @@ Notes: `evidence_quality` is present only for herb-drug signals. Medication engi
 ```
 {
   "consent_id":    "con_<ULID>",
-  "tenant_id":     "tnt_<ULID>",
+  "tenant_id":     "Telecheck-{country}",
   "patient_id":    "pat_<ULID>",
   "consent_type":  "platform | care | data_use | episode | delegation | jurisdictional | research_data_use",
   "scope":         "<what is consented to>",
@@ -68,7 +68,7 @@ Notes: `evidence_quality` is present only for herb-drug signals. Medication engi
 ```
 {
   "delegation_id":   "del_<ULID>",
-  "tenant_id":       "tnt_<ULID>",
+  "tenant_id":       "Telecheck-{country}",
   "patient_id":      "pat_<ULID>",
   "delegate_id":     "usr_<ULID>",
   "relationship":    "parent | spouse | child | caregiver | other",
@@ -106,7 +106,7 @@ Notes: `evidence_quality` is present only for herb-drug signals. Medication engi
 ```
 {
   "evaluation_id":       "m2e_<ULID>",
-  "tenant_id":           "tnt_<ULID>",
+  "tenant_id":           "Telecheck-{country}",
   "patient_id":          "pat_<ULID>",
   "program_id":          "<program>",
   "protocol_id":         "prt_<ULID>",
@@ -188,7 +188,7 @@ All entity IDs use ULID format with a type prefix:
 - `com_` — community post
 - `adv_` — adverse event
 - `cfg_` — configuration object
-- `tnt_` — tenant (added v5.1)
+- ~~`tnt_` — tenant (added v5.1)~~ **SUPERSEDED 2026-05-02 per CDM v1.2 §4.1 SPEC ISSUE resolution.** Tenant identifiers no longer use the ULID prefix convention; they use the operating-tenant identifier format `Telecheck-{country}` (e.g., `Telecheck-US`, `Telecheck-Ghana`) per Master PRD v1.10 §17 + Glossary v5.2 C3 brand structure. Existing `tnt_` references in archived audit records remain valid for backward-compat reads only; new emissions MUST use the `Telecheck-{country}` format. `tnu_`/`tnb_` etc. (tenant user / tenant brand) ID prefixes are unaffected — those are sub-entity ULIDs.
 - `tnu_` — tenant user (added v5.1)
 - `tnb_` — tenant brand record (added v5.1)
 - `cnp_` — country profile (added v5.1)
@@ -217,7 +217,7 @@ All entity IDs use ULID format with a type prefix:
 
 ### TenantId
 ```
-"tnt_<ULID>"
+"Telecheck-{country}"
 ```
 
 The canonical tenant identifier. Required field on every PHI-touching record. Required in every audit event envelope and domain event envelope per AUDIT_EVENTS v5.1 and DOMAIN_EVENTS v5.1.
@@ -225,7 +225,7 @@ The canonical tenant identifier. Required field on every PHI-touching record. Re
 ### TenantContext
 ```
 {
-  "tenant_id":          "tnt_<ULID>",
+  "tenant_id":          "Telecheck-{country}",
   "country":            "<ISO 3166-1 alpha-2>",
   "brand": {
     "display_name":     "<string>",
@@ -249,8 +249,8 @@ Resolved at request time by the Tenant Configuration module per System Architect
 ```
 {
   "actor_id":              "<actor ULID>",
-  "actor_tenant_id":       "tnt_<ULID> | null (null for platform_admin)",
-  "target_tenant_id":      "tnt_<ULID>",
+  "actor_tenant_id":       "Telecheck-{country} | null (null for platform_admin)",
+  "target_tenant_id":      "Telecheck-{country}",
   "session_id":            "<break-glass session ULID>",
   "reason":                "<free text justification>",
   "authorized_until":      "<ISO 8601 expiration>",
@@ -270,7 +270,7 @@ Required to be populated in any audit record where `actor_tenant_id != target_te
 ```
 {
   "marketing_copy_id":             "mkc_<ULID>",
-  "tenant_id":                     "tnt_<ULID>",
+  "tenant_id":                     "Telecheck-{country}",
   "country_of_care":               "<ISO 3166-1 alpha-2>",
   "version":                       "<semver>",
   "surface_type":                  "landing | email | banner | educational | testimonial | social",
@@ -294,7 +294,7 @@ Notes: `classification = molecule_level` requires `molecule_references` populate
 ```
 {
   "evidence_id":                              "mge_<ULID>",
-  "tenant_id":                                "tnt_<ULID>",
+  "tenant_id":                                "Telecheck-{country}",
   "country_of_care":                          "<ISO 3166-1 alpha-2>",
   "regulatory_jurisdiction":                  "<jurisdiction code>",
   "regulatory_authority":                     "<regulatory body>",
@@ -318,7 +318,7 @@ Required when CCR `molecule_level_marketing_permitted = permitted` per CCR_RUNTI
 ```
 {
   "consent_id":                              "con_<ULID>",
-  "tenant_id":                               "tnt_<ULID>",
+  "tenant_id":                               "Telecheck-{country}",
   "patient_id":                              "pat_<ULID>",
   "consent_type":                            "research_data_use",
   "scope":                                   "<scope description per CCR research_ethics_review_body.approval_scope>",
@@ -341,7 +341,7 @@ A specialization of ConsentRecord with `consent_type = research_data_use` (added
   "version":                         "<semver>",
   "partner_id":                      "<partner ULID>",
   "partner_name":                    "<display>",
-  "tenant_scope":                    [ "tnt_<ULID>" ],
+  "tenant_scope":                    [ "Telecheck-{country}" ],
   "permitted_data_domains":          [ "chronic_disease_longitudinal | ncd_surveillance | pharmacovigilance_signal | population_health_aggregate" ],
   "k_min_required":                  11,
   "ethics_review_body_reference":    "<ResearchEthicsReviewBody ID>",
@@ -373,7 +373,7 @@ A specialization of ConsentRecord with `consent_type = research_data_use` (added
 ```
 {
   "cohort_definition_id":      "chd_<ULID>",
-  "tenant_id":                 "tnt_<ULID>",
+  "tenant_id":                 "Telecheck-{country}",
   "version":                   "<semver>",
   "dsa_id":                    "<DSA ULID>",
   "dsa_version":               "<semver>",
@@ -391,7 +391,7 @@ A specialization of ConsentRecord with `consent_type = research_data_use` (added
 ```
 {
   "export_id":                          "rex_<ULID>",
-  "tenant_id":                          "tnt_<ULID>",
+  "tenant_id":                          "Telecheck-{country}",
   "country_of_care":                    "<ISO 3166-1 alpha-2>",
   "cohort_definition_id":               "<CohortDefinition ULID>",
   "cohort_version":                     "<semver>",
@@ -465,7 +465,7 @@ Active at v1.0: `advisory`, `suggestion`, `action_with_confirm`. Reserved (requi
   "policy_authorization_id":   "pau_<ULID>",
   "ai_workload_type":          "<AIWorkloadType>",
   "action_type":               "<action enum>",
-  "tenant_id":                 "tnt_<ULID>",
+  "tenant_id":                 "Telecheck-{country}",
   "market":                    "<ISO 3166-1 alpha-2>",
   "protocol_id":               "<protocol ULID>",
   "autonomy_level":            "<AutonomyLevel>",

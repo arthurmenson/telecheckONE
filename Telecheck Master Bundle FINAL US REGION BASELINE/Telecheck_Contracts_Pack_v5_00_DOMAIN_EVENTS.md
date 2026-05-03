@@ -16,10 +16,10 @@ Every domain event contains:
   "event_type":      "<aggregate>.<action>.<version>",
   "aggregate_type":  "<canonical aggregate name per Glossary>",
   "aggregate_id":    "<aggregate instance ID>",
-  "tenant_id":       "tnt_<ULID>",
+  "tenant_id":       "Telecheck-{country}",                       // operating-tenant identifier per CDM v1.2 §4.1 + Master PRD v1.10 §17 (e.g., 'Telecheck-US', 'Telecheck-Ghana'); NOT a ULID
   "partition_key":   "<aggregate_id by default; patient_id for cross-aggregate projections>",
   "timestamp":       "<ISO 8601 UTC>",
-  "actor":           { "type": "patient | clinician | pharmacist | operator | delegate | protocol_engine | ai_mode_1 | ai_mode_2 | system | platform_admin", "id": "<ULID>", "tenant_id": "tnt_<ULID> | null" },
+  "actor":           { "type": "patient | clinician | pharmacist | operator | delegate | protocol_engine | ai_mode_1 | ai_mode_2 | system | platform_admin", "id": "<ULID>", "tenant_id": "Telecheck-{country} | null" },
   "delegate_context": { "delegate_id": "<ULID>", "patient_id": "<ULID>", "scope": "<scope>" } | null,
   "payload":         { <event-specific data — see schemas below> },
   "metadata": {

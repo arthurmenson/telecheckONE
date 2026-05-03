@@ -816,7 +816,7 @@ Query: ?country=<ISO>&status=<active|suspended>&q=<search>&limit=<n>&cursor=<tok
 Response 200:
 {
   "tenants": [
-    { "id": "tnt_<ULID>", "display_name": "...", "country": "US", "status": "active", "active_patients": 12847, "mrr": 342000, "created_at": "..." }
+    { "id": "Telecheck-US", "display_name": "Telecheck-US", "consumer_dba": "Heros Health", "country": "US", "status": "active", "active_patients": 12847, "mrr": 342000, "created_at": "..." }
   ],
   "next_cursor": "..."
 }
@@ -1302,7 +1302,7 @@ Note: US uses Stripe Connect; Ghana is manual reconciliation at launch — for G
 All path templates and example values using `Heros-Health` as a tenant identifier MUST use `Telecheck-US`. Sweep:
 
 - `/tenants/{tenant_id}/...` — example values use `Telecheck-US` and `Telecheck-Ghana`, never `Heros-Health` or `heros`.
-- Payload examples — `tenant_id: "tnt_<ULID>"` is the canonical type; the human-readable identifier `Telecheck-US` may appear in `tenant.id` examples per CDM v1.2 §Tenant entity refresh.
+- Payload examples — `tenant_id: "Telecheck-{country}"` is the canonical operating-tenant identifier per CDM v1.2 §4.1 + Master PRD v1.10 §17 (e.g., `Telecheck-US`, `Telecheck-Ghana`); NOT a ULID. Per the CDM §4.1 SPEC ISSUE resolution 2026-05-02, this is the single PK exception in the data model — every other entity uses an entity-prefixed ULID. Patient-facing surfaces source `consumer_dba` from `tenant.consumer_dba`, never from `tenant.id`.
 - Patient-facing surfaces (notifications, app shell, marketing copy) source from `tenant.consumer_dba` (Heros Health / Heros Health Ghana), never from `tenant.id`.
 
 ### Research data endpoints (Row 74 — NEW per ADR-028)

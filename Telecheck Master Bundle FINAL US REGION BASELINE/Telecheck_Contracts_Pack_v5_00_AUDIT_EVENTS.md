@@ -14,10 +14,10 @@ Every audit event contains:
 {
   "audit_id":          "aud_<ULID>",
   "timestamp":         "<ISO 8601 with timezone>",
-  "tenant_id":         "tnt_<ULID>",
+  "tenant_id":         "Telecheck-{country}",                     // operating-tenant identifier per CDM v1.2 §4.1 + Master PRD v1.10 §17 (e.g., 'Telecheck-US', 'Telecheck-Ghana'); NOT a ULID
   "actor_type":        "patient | clinician | pharmacist | operator | delegate | protocol_engine | ai_workload | ai_mode_1 | ai_mode_2 | system | platform_admin",
   "actor_id":          "<authenticated identity ULID>",
-  "actor_tenant_id":   "tnt_<ULID> | null (null only for platform_admin actors)",
+  "actor_tenant_id":   "Telecheck-{country} | null (null only for platform_admin actors)",
   "target_patient_id": "<patient this action affects>",
   "delegate_context":  { "delegate_id": "...", "scope": "..." } | null,
   "action":            "<action from the catalog below>",
