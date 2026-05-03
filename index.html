@@ -171,6 +171,17 @@
   .lc-edit select{background:var(--chip);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 8px;font-size:12px;flex:1}
   .lc-edit button{background:var(--accent);border:0;color:#0b0f17;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer}
   .lc-edit button:disabled{opacity:.5;cursor:not-allowed}
+  /* Code activity panel */
+  .codeact{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+  .codeact .head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .codeact .head h3{margin:0;font-size:14px;display:flex;align-items:center;gap:8px}
+  .codeact .repo-link{margin-left:auto;font-size:11px;color:var(--accent2)}
+  .codeact ul{margin:0;padding:0;list-style:none}
+  .codeact li{display:grid;grid-template-columns:60px 1fr 90px;gap:10px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:12px}
+  .codeact li:last-child{border-bottom:0}
+  .codeact .sha{font-family:ui-monospace,Menlo,monospace;color:var(--accent);font-size:11px}
+  .codeact .who{color:var(--muted);font-size:10.5px;text-align:right}
+  .codeact .empty{color:var(--muted);font-size:12px;font-style:italic}
 </style>
 </head>
 <body>
@@ -178,7 +189,7 @@
   <aside>
     <div class="brand">
       <h1>Telecheck Command Center</h1>
-      <div class="sub">FINAL US REGION BASELINE · 75 docs</div>
+      <div class="sub">FINAL US REGION BASELINE · 87 docs</div>
     </div>
     <div class="search"><input id="q" placeholder="Search docs (title, version, topic)…" /></div>
     <div class="tabs">
@@ -228,7 +239,7 @@ const GROUPS = [
   { id:"boot", title:"Boot Sequence (read first)", priority:0, items:[
     ["CLAUDE_CODE_BOOT_SEQUENCE.md","Claude Code Boot Sequence"],
     ["Telecheck_Active_Document_Index_v1_0.md","Active Document Index","v1.0"],
-    ["Telecheck_Artifact_Registry_v2_9.md","Artifact Registry","v2.9"],
+    ["Telecheck_Artifact_Registry_v2_10.md","Artifact Registry","v2.10"],
     ["Telecheck_Project_Upload_Manifest_v2.md","Upload Manifest","v2"],
     ["Telecheck_Project_Upload_Manifest_Post_Remediation.md","Upload Manifest (Post-Remediation)"],
     ["Telecheck_Reviewer_Brief_v1_0.md","Reviewer Brief","v1.0"],
@@ -259,7 +270,7 @@ const GROUPS = [
     ["Telecheck_Contracts_Pack_v5_00_TYPES.md","Types"],
   ]},
   { id:"master", title:"Master Platform PRD", priority:4, items:[
-    ["Telecheck_Master_Platform_PRD_v1_9.md","Master Platform PRD","v1.9"],
+    ["Telecheck_Master_Platform_PRD_v1_10.md","Master Platform PRD","v1.10"],
   ]},
   { id:"slices", title:"Slice PRDs (17)", priority:5, items:[
     ["Telecheck_AI_Clinical_Assistant_Slice_PRD_v1_0.md","AI Clinical Assistant","v1.0"],
@@ -295,7 +306,7 @@ const GROUPS = [
   ]},
   { id:"ux", title:"Experience / Design / IA", priority:7, items:[
     ["Telecheck_Design_System_v1_1.md","Design System","v1.1"],
-    ["Telecheck_Design_Implementation_Contract_v1_0.md","Design Implementation Contract (PROVISIONAL)","v1.0"],
+    ["Telecheck_Design_Implementation_Contract_v1_1.md","Design Implementation Contract","v1.1"],
     ["Telecheck_Patient_App_IA_v1_0.md","Patient App IA","v1.0"],
     ["Telecheck_Clinician_Portal_IA_v1_0.md","Clinician Portal IA","v1.0"],
     ["Telecheck_Admin_Operator_IA_v1_1.md","Admin Operator IA","v1.1"],
@@ -782,6 +793,43 @@ function bindLcSetButton(el, opts, targetId){
   });
 }
 
+// Code activity (telecheck-app commits via /api/code-activity)
+let CODE_ACTIVITY = null; // { repo, commits[] } | null
+async function loadCodeActivity(){
+  try{
+    const r = await fetch("/api/code-activity",{cache:"no-cache"});
+    if(!r.ok){ CODE_ACTIVITY = null; return; }
+    const j = await r.json();
+    CODE_ACTIVITY = j.ok ? j : null;
+  }catch{ CODE_ACTIVITY = null; }
+}
+const TELECHECK_APP_REMOTE = "https://github.com/arthurmenson/telecheck-app";
+function renderCodeActivity(targetId){
+  const el = document.getElementById(targetId); if(!el) return;
+  if(!CODE_ACTIVITY || !CODE_ACTIVITY.repo){
+    el.innerHTML = `
+      <div class="head"><h3>Code activity</h3>
+        <a class="repo-link" href="${TELECHECK_APP_REMOTE}" target="_blank">arthurmenson/telecheck-app ↗</a>
+      </div>
+      <div class="empty">No local <code>telecheck-app/</code> clone detected next to the server.</div>`;
+    return;
+  }
+  const commits = CODE_ACTIVITY.commits || [];
+  el.innerHTML = `
+    <div class="head">
+      <h3><span class="live-dot"></span> Code activity <span class="legend-pill">${commits.length}</span></h3>
+      <a class="repo-link" href="${TELECHECK_APP_REMOTE}" target="_blank">arthurmenson/${esc(CODE_ACTIVITY.repo)} ↗</a>
+    </div>
+    ${commits.length===0
+      ? `<div class="empty">No commits yet in <code>${esc(CODE_ACTIVITY.repo)}/</code>.</div>`
+      : `<ul>${commits.slice(0,8).map(c=>`<li>
+          <span class="sha">${esc(c.sha||"")}</span>
+          <span>${esc(c.subject||"")}</span>
+          <span class="who" title="${esc(c.author||"")}">${esc(timeAgo(c.date))}</span>
+        </li>`).join("")}</ul>`
+    }`;
+}
+
 const ACTIVE_STATES = new Set(["in-dev","in-review","blocked"]);
 function activeAreas(){
   if(!PROGRESS) return [];
@@ -839,6 +887,11 @@ function startLivePoll(){
     // Always refresh time-ago labels each tick so "X min ago" stays current
     // even when there are no data changes or saves in flight.
     refreshTimeAgo();
+    // Refresh code activity opportunistically (cheap, idempotent).
+    loadCodeActivity().then(()=>{
+      if(document.getElementById("code-home"))    renderCodeActivity("code-home");
+      if(document.getElementById("code-cockpit")) renderCodeActivity("code-cockpit");
+    });
     if(saveStatus === "saving") return; // don't clobber an in-flight save
     // CRITICAL: while local edits are unresolved (last save failed or
     // same-field conflict), refuse to overwrite PROGRESS with the server's
@@ -952,6 +1005,7 @@ function renderCockpit(){
     </div>
     <div class="lifecycle" id="lc-cockpit"></div>
     <div class="flight" id="flight-cockpit"></div>
+    <div class="codeact" id="code-cockpit"></div>
     <div class="legend-row">
       ${PROGRESS.states.map(s=>`<span class="legend-pill"><span class="legend-dot" style="background:${safeColor(s.color)}"></span>${esc(s.label)} · ${stats.byStatus[s.id]||0}</span>`).join("")}
     </div>
@@ -972,6 +1026,7 @@ function renderCockpit(){
   `;
   renderLifecycle("lc-cockpit", {editable:true});
   renderFlightPanel("flight-cockpit");
+  renderCodeActivity("code-cockpit");
   bindCockpitHandlers();
 }
 
@@ -1132,6 +1187,7 @@ function renderHome(){
     </div>
     <div class="lifecycle" id="lc-home"></div>
     <div class="flight" id="flight-home"></div>
+    <div class="codeact" id="code-home"></div>
     <div class="stat">
       <div><div class="n">41</div><div class="l">Canonical entities</div></div>
       <div><div class="n">178</div><div class="l">OpenAPI endpoints</div></div>
@@ -1157,8 +1213,9 @@ function renderHome(){
   content.querySelectorAll(".chip[data-group]").forEach(c=>c.addEventListener("click",()=>{
     document.querySelector(`.group[data-group="${c.dataset.group}"]`)?.scrollIntoView({behavior:"smooth"});
   }));
-  const paint = ()=>{ renderLifecycle("lc-home"); renderFlightPanel("flight-home"); };
+  const paint = ()=>{ renderLifecycle("lc-home"); renderFlightPanel("flight-home"); renderCodeActivity("code-home"); };
   if(PROGRESS) paint(); else loadProgress().then(paint);
+  if(CODE_ACTIVITY === null) loadCodeActivity().then(()=>renderCodeActivity("code-home"));
 }
 
 let currentFile = null;
@@ -1261,6 +1318,7 @@ sel.addEventListener("change",()=>{
 renderSidebar();
 renderHome();
 loadProgress().then(()=>{ renderFlightPanel("flight-home"); startLivePoll(); });
+loadCodeActivity().then(()=>renderCodeActivity("code-home"));
 </script>
 </body>
 </html>

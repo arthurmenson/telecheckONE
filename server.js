@@ -138,6 +138,38 @@ function atomicWriteJson(file, obj){
 const server = http.createServer(async (req, res) => {
   let reqPath = url.parse(req.url).pathname;
 
+  // ---------- /api/code-activity ----------
+  // Returns recent commits from a sibling code repo (default: ./telecheck-app).
+  // Read-only; runs `git log` against the local clone.
+  if (reqPath === "/api/code-activity") {
+    if (req.method !== "GET") { res.writeHead(405); return res.end("Method not allowed"); }
+    const REPO = path.join(ROOT, "telecheck-app");
+    if (!fs.existsSync(path.join(REPO, ".git"))) {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      return res.end(JSON.stringify({ ok: true, repo: null, commits: [] }));
+    }
+    const { spawn } = require("child_process");
+    // ISO date | short hash | author | subject — unit-separated records, NUL between.
+    const fmt = "%cI%x1f%h%x1f%an%x1f%s%x00";
+    const proc = spawn("git", ["-C", REPO, "log", "-n", "20", `--pretty=format:${fmt}`], { windowsHide: true });
+    let out = "", err = "";
+    proc.stdout.on("data", c => { out += c.toString("utf8"); if (out.length > 1e6) proc.kill(); });
+    proc.stderr.on("data", c => { err += c.toString("utf8"); });
+    proc.on("close", code => {
+      if (code !== 0) {
+        res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+        return res.end(JSON.stringify({ ok: false, error: err.slice(0, 200) }));
+      }
+      const commits = out.split("\0").filter(Boolean).map(rec => {
+        const [date, sha, author, subject] = rec.split("\x1f");
+        return { date, sha, author, subject };
+      });
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-cache" });
+      res.end(JSON.stringify({ ok: true, repo: "telecheck-app", commits }));
+    });
+    return;
+  }
+
   // ---------- /api/progress ----------
   if (reqPath === "/api/progress") {
     if (req.method === "GET") {
