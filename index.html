@@ -690,11 +690,22 @@ function renderLifecycle(targetId, opts){
   const editable = !!opts?.editable && !PROGRESS?._readonly;
   const idx = Math.max(0, lc.stages.findIndex(s=>s.id===lc.current));
   const cur = lc.stages[idx];
-  const pct = Math.round((idx / Math.max(1, lc.stages.length-1)) * 100);
+  // "% through program" = mean of every stage's avg progress across ALL
+  // stages, with empty future stages counting as 0%. Earlier we tried
+  // averaging only contributing stages, which inflated the headline because
+  // it ignored the empty Pilot / GA / Scale stages. Earlier we also tried
+  // position-only (idx / N-1), which ignored how much of the active stage
+  // had been done. This calc accepts both: future work is missing (0%) and
+  // current stage is partial.
+  const stageAvgs = lc.stages.map(s => stageStats(s.id));
+  const pct = lc.stages.length
+    ? Math.round(stageAvgs.reduce((a,st) => a + (st.count ? st.avg : 0), 0) / lc.stages.length)
+    : 0;
+  const positionPct = Math.round((idx / Math.max(1, lc.stages.length-1)) * 100);
   el.innerHTML = `
     <div class="lc-head">
       <h3>Program lifecycle</h3>
-      <div class="now">Currently in <b>${esc(cur?.label||"?")}</b> · stage ${idx+1} of ${lc.stages.length} · ${pct}% through program</div>
+      <div class="now" title="Cumulative average across stages with assigned areas. Position alone would say ${positionPct}%.">Currently in <b>${esc(cur?.label||"?")}</b> · stage ${idx+1} of ${lc.stages.length} · ${pct}% through program</div>
     </div>
     <div class="stepper">
       ${lc.stages.map((s,i)=>{
