@@ -216,9 +216,9 @@
       "name": "Forms / Intake Engine",
       "category": "Slice PRD",
       "status": "in-dev",
-      "progress": 55,
+      "progress": 78,
       "owner": "Evans",
-      "notes": "Handlers 1-7 landed (publish, getTemplate, listTemplates, getDeployment, retireDeployment); through Codex verify-r8 closures.",
+      "notes": "Handlers 1-18 + variants + snapshot reads/writes + save-and-resume; through Codex verify-r1..r3 closures (split lock + INSERT, RESTORE_AMBIGUOUS_SUBMISSION operator log, schema-drift defense).",
       "docs": [
         "Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md",
         "Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md"
@@ -553,9 +553,9 @@
       "name": "RLS baseline + migrations",
       "category": "Implementation",
       "status": "in-dev",
-      "progress": 85,
+      "progress": 90,
       "owner": "",
-      "notes": "Migrations baseline through 007 rollback; idempotent ALTER for PLATFORM CHECK; schema-qualified CHECK backfill; CI green on RLS tests.",
+      "notes": "Migrations through 007 rollback + idempotent ALTER + schema-qualified CHECK; HTTP-level verify-r1 raw tenant_id scans.",
       "docs": [
         "Telecheck_System_Architecture_v1_2.md"
       ],
@@ -566,9 +566,9 @@
       "name": "Tenant binding (non-spoofable)",
       "category": "Implementation",
       "status": "in-dev",
-      "progress": 90,
+      "progress": 95,
       "owner": "",
-      "notes": "App-side tenant-blind, PLATFORM sentinel, current_tenant_id() forward-decl; concurrent-fork closure verified.",
+      "notes": "App-side tenant-blind, PLATFORM sentinel, recursive tenant_id key scan in tests; binding-table over GUC.",
       "docs": [
         "Telecheck_Contracts_Pack_v5_00_INVARIANTS.md"
       ],
@@ -579,9 +579,9 @@
       "name": "Audit chain (I-027 / I-029)",
       "category": "Implementation",
       "status": "in-dev",
-      "progress": 75,
+      "progress": 85,
       "owner": "",
-      "notes": "emitAudit returns trigger-authoritative envelope; I-029 audit_id correlation closure; redundant FOR UPDATE removed.",
+      "notes": "Trigger-authoritative envelope + I-029 audit_id correlation + audit_records REVOKE compatible (FOR UPDATE removed).",
       "docs": [
         "Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md"
       ],

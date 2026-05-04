@@ -151,15 +151,28 @@ const server = http.createServer(async (req, res) => {
     const { spawn } = require("child_process");
     // ISO date | short hash | author | subject — unit-separated records, NUL between.
     const fmt = "%cI%x1f%h%x1f%an%x1f%s%x00";
-    const proc = spawn("git", ["-C", REPO, "log", "-n", "20", `--pretty=format:${fmt}`], { windowsHide: true });
-    let out = "", err = "";
+    let proc;
+    try {
+      proc = spawn("git", ["-C", REPO, "log", "-n", "20", `--pretty=format:${fmt}`], { windowsHide: true });
+    } catch (e) {
+      res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
+      return res.end(JSON.stringify({ ok: false, error: "spawn failed: " + (e.message||"unknown") }));
+    }
+    let out = "", err = "", responded = false;
+    const respond = (status, body) => {
+      if (responded) return; responded = true;
+      res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-cache" });
+      res.end(JSON.stringify(body));
+    };
+    // Crash guard: if git is missing from PATH or the OS refuses spawn, Node
+    // fires 'error' on the ChildProcess. Without this listener it'd be an
+    // unhandled error and would tear down the whole cockpit server (which
+    // also serves /api/progress writes). Respond 503 and keep serving.
+    proc.on("error", e => respond(503, { ok:false, error: "git unavailable: " + (e.message||"unknown") }));
     proc.stdout.on("data", c => { out += c.toString("utf8"); if (out.length > 1e6) proc.kill(); });
     proc.stderr.on("data", c => { err += c.toString("utf8"); });
     proc.on("close", code => {
-      if (code !== 0) {
-        res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
-        return res.end(JSON.stringify({ ok: false, error: err.slice(0, 200) }));
-      }
+      if (code !== 0) return respond(500, { ok:false, error: err.slice(0, 200) || `git exited ${code}` });
       // git's --pretty=format inserts a literal newline between records, so
       // every record after the first starts with \n. Strip per-record before
       // splitting on the unit-separator, otherwise date parses as Invalid
@@ -168,8 +181,7 @@ const server = http.createServer(async (req, res) => {
         const [date, sha, author, subject] = rec.split("\x1f");
         return { date, sha, author, subject };
       });
-      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-cache" });
-      res.end(JSON.stringify({ ok: true, repo: "telecheck-app", commits }));
+      respond(200, { ok: true, repo: "telecheck-app", commits });
     });
     return;
   }
