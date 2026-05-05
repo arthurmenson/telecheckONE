@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "revision": 5,
-  "updated": "2026-05-03",
+  "revision": 6,
+  "updated": "2026-05-05",
   "lifecycle": {
     "current": "foundation-build",
     "stages": [
@@ -189,14 +189,14 @@
       "id": "slice-consent",
       "name": "Consent & Delegated Access",
       "category": "Slice PRD",
-      "status": "spec-final",
-      "progress": 100,
-      "owner": "",
-      "notes": "",
+      "status": "in-dev",
+      "progress": 72,
+      "owner": "Evans",
+      "notes": "Domain-event emission alongside audit (same-tx outbox), 4 integration tests; status flipped to Delivered.",
       "docs": [
         "Telecheck_Consent_Delegated_Access_Slice_PRD_v1_0.md"
       ],
-      "stage": "spec-baseline"
+      "stage": "slice-build"
     },
     {
       "id": "slice-fake-meds",
@@ -216,9 +216,9 @@
       "name": "Forms / Intake Engine",
       "category": "Slice PRD",
       "status": "in-dev",
-      "progress": 78,
+      "progress": 88,
       "owner": "Evans",
-      "notes": "Handlers 1-18 + variants + snapshot reads/writes + save-and-resume; through Codex verify-r1..r3 closures (split lock + INSERT, RESTORE_AMBIGUOUS_SUBMISSION operator log, schema-drift defense).",
+      "notes": "Handlers 1-18 + variants + snapshot read/write + save-and-resume; all 4 remaining domain events wired (variant + resume_restored), outbox-landing tests passing.",
       "docs": [
         "Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md",
         "Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md"
@@ -591,10 +591,10 @@
       "id": "impl-identity",
       "name": "Identity / Authentication",
       "category": "Implementation",
-      "status": "not-started",
-      "progress": 0,
+      "status": "in-dev",
+      "progress": 70,
       "owner": "",
-      "notes": "",
+      "notes": "events.ts (9 emitters); account.created/activated; 7 session/otp/device events; 5 integration tests; foundation status doc refreshed.",
       "docs": [
         "Telecheck_Identity_Authentication_Spec_v1_0.md"
       ],
@@ -612,7 +612,20 @@
         "Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md"
       ],
       "stage": "foundation-build"
+    },
+    {
+      "id": "impl-tenant-config",
+      "name": "Tenant Config Resolvers",
+      "category": "Implementation",
+      "status": "in-dev",
+      "progress": 30,
+      "owner": "",
+      "notes": "resolveQuietHours typed resolver + QuietHours type; 3 resolver tests (default + override + malformed).",
+      "docs": [
+        "Telecheck_Contracts_Pack_v5_00_CCR_RUNTIME.md"
+      ],
+      "stage": "foundation-build"
     }
   ],
-  "updatedAt": "2026-05-03T00:01:27.783Z"
+  "updatedAt": "2026-05-05T16:28:11.997Z"
 }
