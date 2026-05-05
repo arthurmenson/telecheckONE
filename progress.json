@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 6,
+  "revision": 7,
   "updated": "2026-05-05",
   "lifecycle": {
     "current": "foundation-build",
@@ -216,9 +216,9 @@
       "name": "Forms / Intake Engine",
       "category": "Slice PRD",
       "status": "in-dev",
-      "progress": 88,
+      "progress": 92,
       "owner": "Evans",
-      "notes": "Handlers 1-18 + variants + snapshot read/write + save-and-resume; all 4 remaining domain events wired (variant + resume_restored), outbox-landing tests passing.",
+      "notes": "Handlers 1-18 + variants + snapshot + save-and-resume + all domain events + TLC-006 governance event emitters.",
       "docs": [
         "Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md",
         "Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md"
@@ -270,14 +270,14 @@
       "id": "slice-med-interaction",
       "name": "Medication Interaction Engine",
       "category": "Slice PRD",
-      "status": "spec-final",
-      "progress": 100,
+      "status": "blocked",
+      "progress": 15,
       "owner": "",
-      "notes": "",
+      "notes": "TLC-007 module skeleton landed; blocked on slice PRD ratification.",
       "docs": [
         "Telecheck_Medication_Interaction_Engine_Slice_PRD_v1_0.md"
       ],
-      "stage": "spec-baseline"
+      "stage": "slice-build"
     },
     {
       "id": "slice-pharmacy",
@@ -525,9 +525,9 @@
       "name": "Operational Readiness",
       "category": "Operations",
       "status": "in-dev",
-      "progress": 35,
+      "progress": 50,
       "owner": "",
-      "notes": "v1.5 tracker â€” actively updated.",
+      "notes": "v1.5 tracker + TLC-015 ORT testable items audit (Sprint 5).",
       "docs": [
         "Telecheck_Operational_Readiness_Todo_v1_5.md",
         "Telecheck_Consolidated_Launch_Tracker_v1_0.md"
@@ -579,9 +579,9 @@
       "name": "Audit chain (I-027 / I-029)",
       "category": "Implementation",
       "status": "in-dev",
-      "progress": 85,
+      "progress": 92,
       "owner": "",
-      "notes": "Trigger-authoritative envelope + I-029 audit_id correlation + audit_records REVOKE compatible (FOR UPDATE removed).",
+      "notes": "Trigger-authoritative envelope + I-029 correlation + TLC-013 IDEMPOTENCY v5.1 invariant gaps closed + Codex idempotency-r5 HIGH fix-forward.",
       "docs": [
         "Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md"
       ],
@@ -618,14 +618,14 @@
       "name": "Tenant Config Resolvers",
       "category": "Implementation",
       "status": "in-dev",
-      "progress": 30,
-      "owner": "",
-      "notes": "resolveQuietHours typed resolver + QuietHours type; 3 resolver tests (default + override + malformed).",
+      "progress": 65,
+      "owner": "Evans",
+      "notes": "resolveQuietHours + TLC-004 admin read (4 GET routes) + TLC-009 admin-write 503 surface (blocked on Admin Backend).",
       "docs": [
         "Telecheck_Contracts_Pack_v5_00_CCR_RUNTIME.md"
       ],
       "stage": "foundation-build"
     }
   ],
-  "updatedAt": "2026-05-05T16:28:11.997Z"
+  "updatedAt": "2026-05-05T21:36:42.881Z"
 }
