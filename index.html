@@ -46,6 +46,12 @@
   .topbar{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--panel2);flex-wrap:wrap}
   .topbar .path{color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,monospace}
   .topbar .actions{margin-left:auto;display:flex;gap:8px}
+  /* Last-refreshed pill */
+  .last-refreshed{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-left:14px;padding:3px 8px;border-radius:10px;background:var(--chip);border:1px solid var(--border)}
+  .last-refreshed .dot{width:7px;height:7px;border-radius:50%;background:var(--accent2);box-shadow:0 0 0 0 rgba(158,227,125,.5);animation:lr-pulse 2.4s infinite}
+  .last-refreshed.stale .dot{background:var(--warn);animation:none}
+  .last-refreshed.error .dot{background:var(--danger);animation:none}
+  @keyframes lr-pulse{0%{box-shadow:0 0 0 0 rgba(158,227,125,.5)}70%{box-shadow:0 0 0 6px rgba(158,227,125,0)}100%{box-shadow:0 0 0 0 rgba(158,227,125,0)}}
   .btn{background:var(--chip);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px}
   .btn:hover{border-color:var(--accent)}
   .content{overflow:auto;padding:24px 36px;flex:1;min-height:0}
@@ -207,6 +213,10 @@
   <main>
     <div class="topbar">
       <span id="crumb" class="path">Home</span>
+      <span id="last-refreshed" class="last-refreshed" title="">
+        <span class="dot"></span>
+        <span class="lr-label">connecting…</span>
+      </span>
       <div class="actions">
         <select class="btn" id="src-select" title="Document source"></select>
         <button class="btn" id="btn-home">Home</button>
@@ -406,6 +416,8 @@ async function loadProgress(){
     if(!r.ok) throw new Error(r.status+" "+r.statusText);
     PROGRESS = await r.json();
     BASELINE = snapshot(PROGRESS);
+    LAST_POLL_AT = new Date().toISOString();
+    LAST_POLL_OK = true;
   }catch(e){
     // fallback: try the static file (works without server)
     try{
@@ -413,8 +425,11 @@ async function loadProgress(){
       PROGRESS = await r2.json();
       PROGRESS._readonly = true;
       BASELINE = snapshot(PROGRESS);
-    }catch(e2){ PROGRESS = null; BASELINE = null; }
+      LAST_POLL_AT = new Date().toISOString();
+      LAST_POLL_OK = true;
+    }catch(e2){ PROGRESS = null; BASELINE = null; LAST_POLL_OK = false; }
   }
+  paintLastRefreshed();
 }
 
 function statusMap(){
@@ -629,6 +644,33 @@ function metaText(){
   return `Last updated ${PROGRESS?.updated || "?"}${ro}`;
 }
 
+// "Last refreshed" pill in the topbar — shows when the live poll last
+// successfully read /api/progress (and what the data's own timestamp is).
+let LAST_POLL_AT = null;          // ISO of last successful poll
+let LAST_POLL_OK = null;          // boolean | null
+function paintLastRefreshed(){
+  const el = document.getElementById("last-refreshed"); if(!el) return;
+  const lbl = el.querySelector(".lr-label");
+  if(LAST_POLL_OK === null){
+    lbl.textContent = "connecting…"; el.className = "last-refreshed"; el.title = "";
+    return;
+  }
+  if(LAST_POLL_OK === false){
+    lbl.textContent = "offline · last " + timeAgo(LAST_POLL_AT);
+    el.className = "last-refreshed error";
+    el.title = "Live poll failed at last attempt. Last successful read: " + (LAST_POLL_AT||"never");
+    return;
+  }
+  // Success path — show how long ago we last polled vs how old the data is.
+  const dataAge = PROGRESS?.updatedAt ? timeAgo(PROGRESS.updatedAt) : "—";
+  lbl.textContent = "refreshed " + timeAgo(LAST_POLL_AT) + " · data " + dataAge;
+  // Stale = data hasn't been written in over an hour OR poll hasn't succeeded in 30s.
+  const pollMs = LAST_POLL_AT ? Date.now() - new Date(LAST_POLL_AT).getTime() : Infinity;
+  const dataMs = PROGRESS?.updatedAt ? Date.now() - new Date(PROGRESS.updatedAt).getTime() : Infinity;
+  el.className = "last-refreshed" + ((pollMs > 30000 || dataMs > 3600_000) ? " stale" : "");
+  el.title = `Live poll: ${LAST_POLL_AT||"—"}\nData updated: ${PROGRESS?.updatedAt||"—"}\nRevision: r${PROGRESS?.revision||0}`;
+}
+
 // Refresh every visible "X min ago" label without re-rendering the page.
 // Tagging contract: any element rendered with a timestamp gets
 // class="timeago" data-ts="<iso>". This walks them all and updates textContent.
@@ -636,6 +678,7 @@ function refreshTimeAgo(){
   document.querySelectorAll(".timeago").forEach(el => {
     el.textContent = timeAgo(el.dataset.ts || "");
   });
+  paintLastRefreshed();
 }
 
 function timeAgo(iso){
@@ -913,8 +956,10 @@ function startLivePoll(){
     const prevAt = PROGRESS?.updatedAt;
     try{
       const r = await fetch("/api/progress",{cache:"no-cache"});
-      if(!r.ok) return;
+      if(!r.ok){ LAST_POLL_OK = false; paintLastRefreshed(); return; }
       const next = await r.json();
+      LAST_POLL_AT = new Date().toISOString();
+      LAST_POLL_OK = true;
       if(next.updatedAt && next.updatedAt !== prevAt){
         PROGRESS = next;
         BASELINE = snapshot(PROGRESS);
@@ -923,7 +968,10 @@ function startLivePoll(){
         else if(crumb.textContent === "Cockpit") { renderCockpitSidebar(); renderCockpit(); }
         // Time-ago refresh fires automatically via the next tick.
       }
-    }catch{}
+      paintLastRefreshed();
+    }catch{
+      LAST_POLL_OK = false; paintLastRefreshed();
+    }
   }, 5000);
   // Repaint timestamps when the user switches back to the tab (catches up
   // on time elapsed while the poll loop was paused).
