@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "revision": 7,
-  "updated": "2026-05-05",
+  "revision": 35,
+  "updated": "2026-05-06",
   "lifecycle": {
     "current": "foundation-build",
     "stages": [
@@ -152,25 +152,26 @@
       "status": "spec-final",
       "progress": 100,
       "owner": "",
-      "notes": "",
+      "notes": "test(crisis-detection): TLC-012-rescoped coverage audit + I-019 lockdown",
       "docs": [
         "Telecheck_Adverse_Event_Reporting_Slice_PRD_v1_0.md"
       ],
-      "stage": "spec-baseline"
+      "stage": "spec-baseline",
+      "updatedAt": "2026-05-05T21:40:56.023Z"
     },
     {
       "id": "slice-async-consult",
       "name": "Async Consult",
       "category": "Slice PRD",
-      "status": "spec-final",
+      "status": "in-dev",
       "progress": 100,
       "owner": "",
-      "notes": "",
+      "notes": "test(async-consult): TLC-021f fix-forward — Codex async-consult-r15 MEDIUM closure (handler-level tenant-blind 404)",
       "docs": [
         "Telecheck_Async_Consult_Slice_PRD_v1_0.md"
       ],
-      "stage": "spec-baseline",
-      "updatedAt": "2026-05-02T14:45:28.024Z"
+      "stage": "slice-build",
+      "updatedAt": "2026-05-06T01:33:31.151Z"
     },
     {
       "id": "slice-community",
@@ -218,12 +219,12 @@
       "status": "in-dev",
       "progress": 92,
       "owner": "Evans",
-      "notes": "Handlers 1-18 + variants + snapshot + save-and-resume + all domain events + TLC-006 governance event emitters.",
+      "notes": "feat(forms-intake): TLC-006 governance event emitters + tests",
       "docs": [
         "Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md",
         "Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md"
       ],
-      "updatedAt": "2026-05-02T05:58:17.535Z",
+      "updatedAt": "2026-05-05T21:40:56.023Z",
       "stage": "slice-build"
     },
     {
@@ -271,26 +272,27 @@
       "name": "Medication Interaction Engine",
       "category": "Slice PRD",
       "status": "blocked",
-      "progress": 15,
+      "progress": 20,
       "owner": "",
-      "notes": "TLC-007 module skeleton landed; blocked on slice PRD ratification.",
+      "notes": "feat(med-interaction): TLC-007 module skeleton (BLOCKED on slice PRD ratification)",
       "docs": [
         "Telecheck_Medication_Interaction_Engine_Slice_PRD_v1_0.md"
       ],
-      "stage": "slice-build"
+      "stage": "slice-build",
+      "updatedAt": "2026-05-05T21:40:56.023Z"
     },
     {
       "id": "slice-pharmacy",
       "name": "Pharmacy + Refill",
       "category": "Slice PRD",
-      "status": "in-dev",
-      "progress": 42,
+      "status": "blocked",
+      "progress": 49,
       "owner": "Evans",
-      "notes": "Wiring refill state machine end-to-end.",
+      "notes": "fix(pharmacy): TLC-001 fix-forward — distinguish liveness vs readiness probes",
       "docs": [
         "Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md"
       ],
-      "updatedAt": "2026-05-02T05:58:17.535Z",
+      "updatedAt": "2026-05-05T21:40:56.023Z",
       "stage": "slice-build"
     },
     {
@@ -524,15 +526,15 @@
       "id": "ops-readiness",
       "name": "Operational Readiness",
       "category": "Operations",
-      "status": "in-dev",
-      "progress": 50,
+      "status": "blocked",
+      "progress": 85,
       "owner": "",
-      "notes": "v1.5 tracker + TLC-015 ORT testable items audit (Sprint 5).",
+      "notes": "docs(sprint): Sprint 16 ACCEPTANCE FULL — TLC-029 matrix r3 clean (50% utilization; 4th env-blocked-pivot sprint)",
       "docs": [
         "Telecheck_Operational_Readiness_Todo_v1_5.md",
         "Telecheck_Consolidated_Launch_Tracker_v1_0.md"
       ],
-      "updatedAt": "2026-05-02T05:58:17.535Z",
+      "updatedAt": "2026-05-06T04:43:31.369Z",
       "stage": "internal-alpha"
     },
     {
@@ -581,24 +583,26 @@
       "status": "in-dev",
       "progress": 92,
       "owner": "",
-      "notes": "Trigger-authoritative envelope + I-029 correlation + TLC-013 IDEMPOTENCY v5.1 invariant gaps closed + Codex idempotency-r5 HIGH fix-forward.",
+      "notes": "fix(idempotency): TLC-013 fix-forward — Codex idempotency-r5 HIGH closure",
       "docs": [
         "Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md"
       ],
-      "stage": "foundation-build"
+      "stage": "foundation-build",
+      "updatedAt": "2026-05-05T21:40:56.023Z"
     },
     {
       "id": "impl-identity",
       "name": "Identity / Authentication",
       "category": "Implementation",
       "status": "in-dev",
-      "progress": 70,
+      "progress": 73,
       "owner": "",
-      "notes": "events.ts (9 emitters); account.created/activated; 7 session/otp/device events; 5 integration tests; foundation status doc refreshed.",
+      "notes": "test(identity): TLC-002 cross-tenant isolation regression (8 cases)",
       "docs": [
         "Telecheck_Identity_Authentication_Spec_v1_0.md"
       ],
-      "stage": "foundation-build"
+      "stage": "foundation-build",
+      "updatedAt": "2026-05-05T21:40:56.023Z"
     },
     {
       "id": "impl-ai-skeleton",
@@ -617,15 +621,17 @@
       "id": "impl-tenant-config",
       "name": "Tenant Config Resolvers",
       "category": "Implementation",
-      "status": "in-dev",
-      "progress": 65,
+      "status": "blocked",
+      "progress": 75,
       "owner": "Evans",
-      "notes": "resolveQuietHours + TLC-004 admin read (4 GET routes) + TLC-009 admin-write 503 surface (blocked on Admin Backend).",
+      "notes": "feat(tenant-config): TLC-009 admin-write 503 surface (BLOCKED on Admin Backend slice v1.1)",
       "docs": [
         "Telecheck_Contracts_Pack_v5_00_CCR_RUNTIME.md"
       ],
-      "stage": "foundation-build"
+      "stage": "foundation-build",
+      "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-05T21:36:42.881Z"
+  "updatedAt": "2026-05-06T05:14:00.293Z",
+  "lastSyncedSha": "7ba2456"
 }

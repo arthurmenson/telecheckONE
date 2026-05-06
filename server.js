@@ -126,6 +126,156 @@ function validateProgress(p){
   return errs;
 }
 
+// ============== Auto-sync from telecheck-app commits ==============
+// Maps conventional-commit scopes to cockpit area ids. Add new mappings here
+// as new subsystems land.
+const SCOPE_TO_AREA = {
+  // Slice work (in slice-build stage when in-dev)
+  "forms-intake":      "slice-forms",
+  "forms":             "slice-forms",
+  "consent":           "slice-consent",
+  "delegation":        "slice-consent",
+  "med-interaction":   "slice-med-interaction",
+  "pharmacy":          "slice-pharmacy",
+  "ai-clinical":       "slice-ai-clinical",
+  "rpm":               "slice-rpm-ccm",
+  "ccm":               "slice-rpm-ccm",
+  "video":             "slice-sync-video",
+  "async-consult":     "slice-async-consult",
+  "labs":              "slice-labs",
+  "community":         "slice-community",
+  "fake-meds":         "slice-fake-meds",
+  "herb-drug":         "slice-herb-drug",
+  "adverse-events":    "slice-adverse-events",
+  "crisis-detection":  "slice-adverse-events",
+  "acquisition":       "slice-acquisition",
+  "engagement":        "slice-acquisition",
+  "admin-backend":     "slice-admin-backend",
+  "admin-config":      "slice-admin-config",
+  "market-rollout":    "slice-market-rollout",
+  // Foundation impl (foundation-build stage)
+  "identity":          "impl-identity",
+  "auth":              "impl-identity",
+  "tenant-config":     "impl-tenant-config",
+  "tenant-binding":    "impl-tenant-binding",
+  "rls":               "impl-rls-baseline",
+  "audit":             "impl-audit-chain",
+  "idempotency":       "impl-audit-chain",
+  "ai-skeleton":       "impl-ai-skeleton",
+  "ai-service":        "impl-ai-skeleton",
+  // Operations
+  "ort":               "ops-readiness",
+  "scrum":             "ops-readiness",
+  "sprint":            "ops-readiness",
+  "ghana":             "ops-ghana",
+};
+// How many percentage points each commit type contributes to the area.
+const TYPE_WEIGHT = { feat: 5, fix: 2, test: 3, docs: 1, chore: 1, refactor: 2, perf: 2 };
+const SYNC_CAP = 92; // monotonic ceiling — final 8% to "shipped" stays manual
+
+// Same auto-stage rule as the client's autoStageFor(), kept in sync here.
+const SYNC_SPEC_STATES = new Set(["not-started","spec-draft","spec-final"]);
+const SYNC_CAT_DEST = {
+  "Slice PRD":"slice-build","Experience":"slice-build",
+  "Engineering Spec":"foundation-build","Operations":"pilot",
+  "Implementation":"foundation-build",
+};
+const SYNC_ID_OVR = { "ops-readiness":"internal-alpha","ops-ghana":"pilot" };
+function syncAutoStage(area, stageIds) {
+  if (area.id.startsWith("impl-")) return area.stage; // explicit, leave it
+  if (SYNC_SPEC_STATES.has(area.status)) return "spec-baseline";
+  const want = SYNC_ID_OVR[area.id] || SYNC_CAT_DEST[area.category] || "slice-build";
+  return stageIds.has(want) ? want : area.stage;
+}
+
+function readCommits(){
+  return new Promise((resolve, reject) => {
+    const REPO = path.join(ROOT, "telecheck-app");
+    if (!fs.existsSync(path.join(REPO, ".git"))) return resolve([]);
+    const { spawn } = require("child_process");
+    const fmt = "%cI%x1f%h%x1f%an%x1f%s%x00";
+    let proc;
+    try { proc = spawn("git", ["-C", REPO, "log", "-n", "100", `--pretty=format:${fmt}`], { windowsHide: true }); }
+    catch (e) { return reject(e); }
+    let out = "", err = "";
+    proc.on("error", reject);
+    proc.stdout.on("data", c => { out += c.toString("utf8"); if (out.length > 5e6) proc.kill(); });
+    proc.stderr.on("data", c => { err += c.toString("utf8"); });
+    proc.on("close", code => {
+      if (code !== 0) return reject(new Error(err.slice(0,200) || `git exited ${code}`));
+      const commits = out.split("\0").map(s => s.replace(/^\s+/, "")).filter(Boolean).map(rec => {
+        const [date, sha, author, subject] = rec.split("\x1f");
+        return { date, sha, author, subject };
+      });
+      resolve(commits);
+    });
+  });
+}
+
+async function runSync(){
+  let doc;
+  try { doc = JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8")); }
+  catch (e) { return { ok:false, error: "could not read progress.json: " + e.message }; }
+  let commits;
+  try { commits = await readCommits(); }
+  catch (e) { return { ok:false, error: "could not read commits: " + e.message }; }
+  if (!commits.length) return { ok:true, processed:0, perArea:{}, note:"no telecheck-app clone" };
+
+  const lastSha = doc.lastSyncedSha;
+  const newCommits = lastSha
+    ? commits.slice(0, Math.max(0, commits.findIndex(c => c.sha === lastSha)))
+    : commits.slice(0, 30); // first run: only consider latest 30 to avoid bulk over-bumping
+  if (!newCommits.length) return { ok:true, processed:0, perArea:{}, lastSyncedSha:lastSha };
+
+  const re = /^(\w+)\(([\w-]+)\):\s*(.*)$/;
+  const perArea = {};      // {areaId: {delta, latestSubject, statusFlag}}
+  for (const c of newCommits) {
+    const m = re.exec(c.subject || "");
+    if (!m) continue;
+    const [, type, scope, rest] = m;
+    const areaId = SCOPE_TO_AREA[scope];
+    if (!areaId) continue;
+    const w = TYPE_WEIGHT[type] || 0;
+    if (!w) continue;
+    const slot = perArea[areaId] || (perArea[areaId] = { delta:0, latestSubject:"", flag:null });
+    slot.delta += w;
+    if (!slot.latestSubject) slot.latestSubject = c.subject; // most recent kept (commits desc)
+    if (/BLOCKED/i.test(rest) && !slot.flag) slot.flag = "blocked";
+  }
+
+  const stageIds = new Set((doc.lifecycle?.stages || []).map(s => s.id));
+  const areasById = new Map(doc.areas.map(a => [a.id, a]));
+  for (const [id, slot] of Object.entries(perArea)) {
+    const a = areasById.get(id); if (!a) continue;
+    const before = a.progress || 0;
+    // Cap the bumped value at SYNC_CAP, but never reduce an existing higher
+    // value (e.g. an area already manually marked 100% must stay 100%).
+    a.progress = Math.max(before, Math.min(SYNC_CAP, before + slot.delta));
+    // First flip: spec-* with active commits → in-dev
+    if (SYNC_SPEC_STATES.has(a.status)) a.status = "in-dev";
+    // BLOCKED markers in commit subject win
+    if (slot.flag === "blocked") a.status = "blocked";
+    // Re-derive stage from new status
+    a.stage = syncAutoStage(a, stageIds);
+    // Stamp notes with latest commit subject for transparency
+    a.notes = (slot.latestSubject || "").slice(0, 200);
+    a.updatedAt = new Date().toISOString();
+    slot.from = before; slot.to = a.progress; slot.status = a.status; slot.stage = a.stage;
+  }
+
+  doc.lastSyncedSha = newCommits[0].sha;
+  doc.revision = (doc.revision || 0) + 1;
+  doc.updated = new Date().toISOString().slice(0,10);
+  doc.updatedAt = new Date().toISOString();
+
+  const errs = validateProgress(doc);
+  if (errs.length) return { ok:false, error:"post-sync validation failed", errors:errs };
+
+  atomicWriteJson(PROGRESS_FILE, doc);
+  console.log(`[sync] processed ${newCommits.length} commits, touched ${Object.keys(perArea).length} areas`);
+  return { ok:true, processed:newCommits.length, lastSyncedSha:doc.lastSyncedSha, perArea };
+}
+
 function atomicWriteJson(file, obj){
   const tmp = file + ".tmp." + process.pid + "." + Date.now();
   const data = JSON.stringify(obj, null, 2) + "\n";
@@ -182,6 +332,23 @@ const server = http.createServer(async (req, res) => {
         return { date, sha, author, subject };
       });
       respond(200, { ok: true, repo: "telecheck-app", commits });
+    });
+    return;
+  }
+
+  // ---------- /api/sync ----------
+  // POST: read recent telecheck-app commits, map them onto areas via the
+  // SCOPE_TO_AREA table, bump progress (capped at 92%, monotonic only), stamp
+  // lastSyncedSha to dedupe across runs, and write atomically via the same
+  // path /api/progress uses. Returns {ok, processed, perArea:{...}}.
+  if (reqPath === "/api/sync") {
+    if (req.method !== "POST") { res.writeHead(405); return res.end("Method not allowed"); }
+    runSync().then(result => {
+      res.writeHead(result.ok ? 200 : 500, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify(result));
+    }).catch(e => {
+      res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok:false, error: e.message }));
     });
     return;
   }
@@ -305,3 +472,20 @@ server.listen(PORT, HOST, () => {
   console.log(`Serving: ${ROOT}`);
   console.log(`Stop with Ctrl+C`);
 });
+
+// Periodic auto-sync from telecheck-app commits. Runs every 10 minutes by
+// default; set SYNC_INTERVAL_MS=0 to disable. First tick fires 30s after
+// boot to give the user time to see the unsync'd state.
+const SYNC_INTERVAL_MS = Number(process.env.SYNC_INTERVAL_MS ?? 10 * 60 * 1000);
+if (SYNC_INTERVAL_MS > 0) {
+  setTimeout(() => {
+    runSync().then(r => {
+      if (r.ok && r.processed) console.log(`[sync] auto-sync at boot: ${r.processed} commits, ${Object.keys(r.perArea||{}).length} areas`);
+    }).catch(e => console.warn("[sync] boot sync failed:", e.message));
+    setInterval(() => {
+      runSync().then(r => {
+        if (r.ok && r.processed) console.log(`[sync] periodic: ${r.processed} commits, ${Object.keys(r.perArea||{}).length} areas`);
+      }).catch(e => console.warn("[sync] periodic failed:", e.message));
+    }, SYNC_INTERVAL_MS);
+  }, 30_000);
+}

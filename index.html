@@ -221,6 +221,7 @@
         <select class="btn" id="src-select" title="Document source"></select>
         <button class="btn" id="btn-home">Home</button>
         <button class="btn" id="btn-raw">Open on GitHub</button>
+        <button class="btn" id="btn-sync" title="Sync progress from telecheck-app commits (auto-runs every 10 min)">↻ Sync</button>
         <button class="btn" id="btn-print">Print</button>
       </div>
     </div>
@@ -1355,6 +1356,26 @@ document.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",
 // topbar actions
 $("#btn-home").addEventListener("click",renderHome);
 $("#btn-print").addEventListener("click",()=>window.print());
+$("#btn-sync").addEventListener("click", async ()=>{
+  const btn = $("#btn-sync"); const orig = btn.textContent;
+  btn.textContent = "↻ Syncing…"; btn.disabled = true;
+  try{
+    const r = await fetch("/api/sync",{method:"POST"});
+    const j = await r.json();
+    if(j.ok){
+      const n = j.processed || 0;
+      const touched = Object.keys(j.perArea||{}).length;
+      btn.textContent = n ? `✓ ${n} commits → ${touched} areas` : "✓ up to date";
+      // Trigger immediate poll-driven re-render by clearing prevAt-equivalent
+      await loadProgress();
+      if(content.classList.contains("home")) renderHome();
+      else if(crumb.textContent === "Cockpit") { renderCockpitSidebar(); renderCockpit(); }
+    } else {
+      btn.textContent = "✗ " + (j.error||"sync failed").slice(0,40);
+    }
+  }catch(e){ btn.textContent = "✗ " + e.message.slice(0,40); }
+  setTimeout(()=>{ btn.textContent = orig; btn.disabled = false; }, 4000);
+});
 $("#btn-raw").addEventListener("click",()=>{
   if(!currentFile) return;
   // Always link to the GitHub web view of the file on main, regardless of source
