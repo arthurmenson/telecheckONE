@@ -2,6 +2,8 @@
 
 **Status:** canonical · **Version:** 5.2 · **Owner:** engineering lead · **Consumers:** all backend services, event consumers, observability
 
+**v5.2 amendment (2026-05-11 under P-011 / SI-001 closure; no version bump — additive enum extension only, no normative-rule change):** 4 net-new tenant-scoped event types added: `medication_request.discontinued`, `medication_request.superseded`, `medication_request.expired`, `medication_request.interaction_safety_hold_triggered`. The existing canonical `medication_request.approved.v1` event is REUSED for the activation handoff in BOTH execution routes (`clinician_approve` AND `protocol_authorized_prescribing`) — its `approval_pathway: "clinician_reviewed | protocol_authorized"` field discriminates the route; no new event needed for activation.
+
 This document defines the domain event envelope, naming conventions, payload schemas for key events, aggregate catalog, ordering guarantees, and consumer contracts. Per I-016, domain events are immutable once emitted. Corrections are compensating events.
 
 ---
@@ -148,6 +150,66 @@ Same as `interaction_signal.produced.v1` with:
 }
 ```
 
+**Reuse note (added 2026-05-11 under P-011 / SI-001 closure):** This event is emitted for BOTH `pending_clinician_review → active` execution routes per State Machines v1.2 §19 — `clinician_approve` (with `approval_pathway = "clinician_reviewed"`) and `protocol_authorized_prescribing` (with `approval_pathway = "protocol_authorized"`). No parallel `medication_request.activated` event exists; subscribers (Subscription, Notification, Adverse Events) consume this single event and branch on `approval_pathway` when route-specific behavior is required. `partition_key = tenant_id:medication_request_id` (tenant-scoped per the canonical partition-key composition rule).
+
+### medication_request.discontinued.v1 (added 2026-05-11 under P-011 / SI-001 closure)
+
+```json
+{
+  "medication_request_id":  "mrx_<ULID>",
+  "patient_id":             "pat_<ULID>",
+  "discontinued_reason":    "clinical_decision | adverse_event | patient_request | replaced_by_new_prescription | expired | safety_hold",
+  "discontinued_at":        "<ISO 8601>",
+  "discontinued_by_actor":  { "actor_type": "clinician | patient | system", "actor_id": "<ULID>" }
+}
+```
+
+`partition_key = tenant_id:medication_request_id`. Subscribers: Subscription (cancels binding); Notification (patient + clinician notifications); Adverse Events (subscribes for discontinuation triggered by adverse-event reports).
+
+### medication_request.superseded.v1 (added 2026-05-11 under P-011 / SI-001 closure)
+
+```json
+{
+  "old_medication_request_id": "mrx_<ULID>",
+  "new_medication_request_id": "mrx_<ULID>",
+  "patient_id":                "pat_<ULID>",
+  "supersession_reason":       "...",
+  "superseded_at":             "<ISO 8601>"
+}
+```
+
+`partition_key = tenant_id:old_medication_request_id`. Subscribers: Subscription (rebinds to new prescription); Notification (informs patient + clinician of supersession).
+
+### medication_request.expired.v1 (added 2026-05-11 under P-011 / SI-001 closure)
+
+```json
+{
+  "medication_request_id":  "mrx_<ULID>",
+  "patient_id":             "pat_<ULID>",
+  "expired_at":             "<ISO 8601>",
+  "expires_at_window_end":  "<ISO 8601>"
+}
+```
+
+`partition_key = tenant_id:medication_request_id`. Subscribers: Subscription (terminates binding); Notification (informs patient + clinician of expiry; prompts renewal flow if applicable). Emitted by a scheduled job; not a human action.
+
+### medication_request.interaction_safety_hold_triggered.v1 (added 2026-05-11 under P-011 / SI-001 closure)
+
+```json
+{
+  "medication_request_id":      "mrx_<ULID>",
+  "patient_id":                 "pat_<ULID>",
+  "prescriber_id":              "cli_<ULID>",
+  "interaction_signals":        [ { "signal_id": "sig_<ULID>", "severity": "...", "check_class": "..." } ],
+  "interaction_signals_status": "safety_hold",
+  "engine_version":             "<semver>",
+  "knowledge_base_version":     "<semver>",
+  "triggered_at":               "<ISO 8601>"
+}
+```
+
+`partition_key = tenant_id:medication_request_id`. Subscribers: Med Interaction Engine (closes the override loop via its own override workflow + override table — clean module-boundary separation per ADR-001 Path 1); Notification (clinician alert). This event is the MedicationRequest → Med Interaction Engine integration mechanism in lieu of an `interaction_override_id` FK column on the MedicationRequest row.
+
 ### pharmacy_order.released.v1
 
 ```json
@@ -236,7 +298,7 @@ Mirroring the AUDIT_EVENTS v5.2 §4 research-export tenant-scope rule: research 
 | Aggregate | Key events | Partition key |
 |---|---|---|
 | `patient` | created, identity_verified, consent_granted, consent_revoked, delegate_added, delegate_removed | patient_id |
-| `medication_request` | initiated, approved, modified, declined, fulfilled, cancelled | medication_request_id |
+| `medication_request` | approved.v1 (BOTH `clinician_approve` AND `protocol_authorized_prescribing` routes via `approval_pathway` field), discontinued.v1, superseded.v1, expired.v1, interaction_safety_hold_triggered.v1 (4 net-new event types added 2026-05-11 under P-011 / SI-001 closure; in-place at v5.2 — additive enum extension only, no version bump) | **tenant_id:medication_request_id** (tenant-scoped per canonical partition-key composition rule; updated 2026-05-11 under P-011 from prior bare `medication_request_id` to align with the tenant-scoped partition-key rule for tenant-bound aggregates) |
 | `refill` | initiated, eligible, ineligible, checking, reviewed, approved, declined, protocol_approved, protocol_fallback, pharmacy_queued, fulfilled, delivered, completed | refill_id |
 | `interaction_signal` | produced, overridden, cleared | patient_id |
 | `herb_drug_signal` | produced, overridden, cleared | patient_id |

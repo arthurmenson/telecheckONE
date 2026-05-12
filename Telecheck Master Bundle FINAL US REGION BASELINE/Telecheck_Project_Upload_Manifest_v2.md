@@ -9,7 +9,7 @@
 **Source bundle:** `Telecheck_Master_Bundle_FINAL_US_REGION_BASELINE.zip` (post-Cycle-U-004 baseline)
 **Format:** Markdown
 **Generation method:** This manifest is rebuilt mechanically from filesystem listing at v1.10 promotion completion (Step 9 of Phase 6 ceremony plan). It is not hand-edited prose. Per workstream methodology learning #2 (manifests must be rebuilt from filesystem, not hand-edited), this manifest reflects filesystem reality at bundle-build time. Drift between this manifest and the bundle filesystem is a defect.
-**Filename note:** Contracts Pack files retain legacy `v5_00` filename pattern; document headers declare **v5.2** as canonical for the **11 amended/new files** in v1.10 cycle (9 amended in Phase 3: INVARIANTS, AUDIT_EVENTS, DOMAIN_EVENTS, CCR_RUNTIME, GLOSSARY, TYPES, AI_LAYERING, FORMS_ENGINE, GOVERNANCE_CONTROLS + 2 NEW: WORKLOAD_TAXONOMY, AUTONOMY_LEVELS); ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1; MARKET_LAUNCH v5.0 → v5.1. Headers govern; filenames are stable for cross-reference continuity.
+**Filename note:** Contracts Pack files retain legacy `v5_00` filename pattern; document headers declare **v5.2** as canonical for the v1.10 cycle's amended/new files (8 amended in Phase 3: INVARIANTS, DOMAIN_EVENTS (amended in-place at v5.2 under P-011 / SI-001 closure 2026-05-11), CCR_RUNTIME, GLOSSARY, TYPES, AI_LAYERING, FORMS_ENGINE, GOVERNANCE_CONTROLS + 2 NEW: WORKLOAD_TAXONOMY, AUTONOMY_LEVELS); **AUDIT_EVENTS declares v5.3** (bumped v5.2 → v5.3 at P-011 / SI-001 closure 2026-05-11: 7 net-new Category A action IDs + §I-012 closure-rule amendment; live-emission references for the new I-012 confirmation action MUST resolve against v5.3 or later). ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1; MARKET_LAUNCH v5.0 → v5.1. Headers govern; filenames are stable for cross-reference continuity. **Manifest refreshed 2026-05-11** for P-011 / SI-001 closure (no new files added — all changes are in-place to existing canonical files: CDM v1.2 file header bumped to v1.3 + §4.16 body-resident addition + audit_events CHECK amendment; State Machines v1.1 file header bumped to v1.2 + §19 body-resident addition; AUDIT_EVENTS v5.2 file header bumped to v5.3 + 7 net-new Category A action rows + §I-012 closure-rule amendment; DOMAIN_EVENTS v5.2 in-place 4 net-new event-type additions; Registry v2.10 file header bumped to v2.11; Promotion Ledger P-011 entry appended; control-plane files Active Document Index / Reviewer Brief / CLAUDE_CODE_BOOT_SEQUENCE / Engineering Handoff propagation-references updated). File count unchanged at 87 markdown files.
 
 ---
 
@@ -207,7 +207,7 @@
 | Artifact | Canonical version |
 |---|---|
 | Master Platform PRD | **v1.10** (v1.10 PRD Update Cycle promoted 2026-05-01; v1.9 Superseded preserved) |
-| Artifact Registry | **v2.10** (v1.10 PRD Update Cycle promoted 2026-05-01; v2.9 renamed at Phase 6 Step 7b) |
+| Artifact Registry | **v2.11** (P-011 / SI-001 closure 2026-05-11; supersedes v2.10 of v1.10 PRD Update Cycle Phase 6 promotion 2026-05-01) |
 | Active Document Index | v1.0 (refreshed 2026-05-01 for v1.10 PRD Update Cycle Phase 6 ceremony; previously refreshed 2026-04-26 for U-002 and 2026-04-27 in U-004) |
 | Reviewer Brief | v1.0 (refreshed 2026-04-26 for U-003; v1.10 cycle propagation per `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` §Group 5E) |
 | Boot Sequence | (no version; refreshed 2026-05-01 for v1.10 cycle Phase 6 ceremony — §3 canonical versions / §1 brand-structure note / §7 DIC v1.1 rewrite / §9 conflict-resolution rows; previously refreshed 2026-04-27 in U-003) |
@@ -219,11 +219,11 @@
 | **ADR-028 Research Data Partnership Posture A** | **Accepted (NEW v1.10 promotion 2026-05-01; quad sign-off)** |
 | **ADR-029 AI Workload Taxonomy** | **Accepted (NEW v1.10 promotion 2026-05-01; quad sign-off)** |
 | System Architecture | v1.2 (v1.10 cycle adds research data module per `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` §Group 5B delta artifact) |
-| Canonical Data Model | v1.2 (v1.10 cycle adds research entities + AIExecution per Phase 5 group 5B) |
-| State Machines | v1.1 (v1.10 cycle adds research state machines + ProtocolAuthorizedAction lifecycle per Phase 5 group 5B) |
+| Canonical Data Model | **v1.3** (bumped v1.2 → v1.3 at P-011 / SI-001 closure 2026-05-11: §4.16 MedicationRequest added; audit_events CHECK amended; v1.10 cycle research entities + AIExecution per Phase 5 group 5B delta-only) |
+| State Machines | **v1.2** (bumped v1.1 → v1.2 at P-011 / SI-001 closure 2026-05-11: §19 MedicationRequest lifecycle added; v1.10 cycle research state machines + ProtocolAuthorizedAction lifecycle per Phase 5 group 5B; 19 active state machines + 4 reserved-future transitions) |
 | OpenAPI | v0.2 (v1.10 cycle adds research endpoints with `audit_sensitivity_level=high_pii` per I-031 per Phase 5 group 5B) |
 | RBAC Permissions Matrix | v1.1 (v1.10 cycle adds 3 research roles per Phase 5 group 5B) |
-| Contracts Pack | **v5.2** governs **11 files** (9 amended Phase 3: INVARIANTS, AUDIT_EVENTS, DOMAIN_EVENTS, CCR_RUNTIME, GLOSSARY, TYPES, AI_LAYERING, FORMS_ENGINE, GOVERNANCE_CONTROLS + 2 NEW: WORKLOAD_TAXONOMY, AUTONOMY_LEVELS); ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1; MARKET_LAUNCH v5.0 → v5.1. Substantive body edits per `Phase3_*_v1_10_Edits_2026-05-01.md` delta artifacts. |
+| Contracts Pack | **v5.2/v5.3** — **AUDIT_EVENTS at v5.3** (bumped v5.2 → v5.3 at P-011 / SI-001 closure 2026-05-11: 7 net-new Category A action IDs + §I-012 closure-rule amendment; live emissions resolve against v5.3 or later). **v5.2 governs 10 files** (8 amended Phase 3: INVARIANTS, DOMAIN_EVENTS (amended in-place at v5.2 under P-011 with 4 net-new event types), CCR_RUNTIME, GLOSSARY, TYPES, AI_LAYERING, FORMS_ENGINE, GOVERNANCE_CONTROLS + 2 NEW: WORKLOAD_TAXONOMY, AUTONOMY_LEVELS). ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1; MARKET_LAUNCH v5.0 → v5.1. Substantive body edits per `Phase3_*_v1_10_Edits_2026-05-01.md` delta artifacts + P-011 / SI-001 closure in-place body updates. |
 | Engineering Handoff & Build Guide | v1.3 (v1.10 cycle adds tenant-naming convention + Master PRD §10.5 architectural anchor per Phase 5 group 5E) |
 | Operational Readiness Tracker | v1.5 (v1.10 cycle adds 3 marketing OR items per ADR-027 + 5 research OR items per ADR-028 per Phase 5 group 5D) |
 | Tenant Threading Addendum | v1.0 (refreshed 2026-04-26 for U-003; v1.10 cycle sweep `Heros-Health` → `Telecheck-US` per Phase 5 group 5B) |

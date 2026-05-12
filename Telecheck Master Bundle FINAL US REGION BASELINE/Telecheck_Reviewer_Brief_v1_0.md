@@ -23,8 +23,8 @@ Telecheck is an AI-powered telehealth, pharmacy, and health intelligence platfor
 
 The set contains four types of documents. Know which type you're reading:
 
-**Canonical product and platform truth** (use these as authoritative specifications; *post-v1.10 promotion 2026-05-01 + v1.10.1 hygiene cycle 2026-05-02*):
-Master Platform PRD v1.10 (v1.9 superseded), all launch slice PRDs, Contracts Pack v5.2 for the 11 amended/new files in v1.10 cycle (modular file set; filenames retain `v5_00` legacy pattern; headers govern; ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1), ADR Set v1.0 + ADR Addendum 016–019 + ADR Addendum 020–025 (with ADR-025 superseded by ADR-026) + ADR Addendum 026 + ADR-027 + ADR-028 + ADR-029, Canonical Data Model v1.2 (48 active entities + 7 reserved-future per v1.10 cycle), State Machines v1.1 (18 active + 4 reserved-future transitions), OpenAPI v0.2 (187 endpoints across 22 modules), RBAC Permissions Matrix v1.1 (3 new research roles), System Architecture v1.2 (16 modules including Research Data Export Module), Design System v1.1, Design Implementation Contract v1.1 Canonical for development, Patient App IA v1.0, Clinician Portal IA v1.0, Admin Operator IA v1.1, Notification Spec v1.1, Protocol Library Ghana v1.0, Guardrail Templates v1.0, Payment & Billing Spec v1.0, Identity & Authentication Spec v1.0, Messaging & Inbox Spec v1.0, Artifact Registry v2.10
+**Canonical product and platform truth** (use these as authoritative specifications; *post-v1.10 promotion 2026-05-01 + v1.10.1 hygiene cycle 2026-05-02 + P-011 / SI-001 closure 2026-05-11*):
+Master Platform PRD v1.10 (v1.9 superseded), all launch slice PRDs, Contracts Pack v5.2/v5.3 (modular file set; filenames retain `v5_00` legacy pattern; headers govern; AUDIT_EVENTS **v5.3** post-P-011; DOMAIN_EVENTS amended in-place at v5.2 post-P-011; ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1), ADR Set v1.0 + ADR Addendum 016–019 + ADR Addendum 020–025 (with ADR-025 superseded by ADR-026) + ADR Addendum 026 + ADR-027 + ADR-028 + ADR-029, Canonical Data Model **v1.3** (42 body-resident entities + 7 reserved-future + delta-only research + AIExecution; bumped from v1.2 at P-011 / SI-001 closure 2026-05-11), State Machines **v1.2** (19 active + 4 reserved-future transitions; bumped from v1.1 at P-011 / SI-001 closure 2026-05-11), OpenAPI v0.2 (187 endpoints across 22 modules), RBAC Permissions Matrix v1.1 (3 new research roles), System Architecture v1.2 (16 modules including Research Data Export Module), Design System v1.1, Design Implementation Contract v1.1 Canonical for development, Patient App IA v1.0, Clinician Portal IA v1.0, Admin Operator IA v1.1, Notification Spec v1.1, Protocol Library Ghana v1.0, Guardrail Templates v1.0, Payment & Billing Spec v1.0, Identity & Authentication Spec v1.0, Messaging & Inbox Spec v1.0, Artifact Registry **v2.11** (P-011 / SI-001 closure 2026-05-11; supersedes v2.10)
 
 **Supporting review history** (context for how decisions were made — read for understanding, not as specs):
 Red-Team Review, Flagged Items Resolution v1.0, Consolidated Launch Tracker v1.0
@@ -108,7 +108,7 @@ Before diving into any document, understand these five decisions — they are th
 | 3 | RBAC Permissions Matrix v1.1 | Role definitions, permission enforcement, three-layer architecture | 20 min |
 | 4 | OpenAPI v0.2 — §2 (conventions), §3 (auth), then skim endpoints | API surface, authentication model, delegation header | 30 min |
 | 5 | Contracts Pack v5 — 00-AUDIT-EVENTS, 00-IDEMPOTENCY, 00-ERROR-MODEL | Audit integrity, idempotency enforcement, error handling | 20 min |
-| 6 | Canonical Data Model v1.2 — §6 (sensitive data classification) | PII/PHI classification, encryption requirements | 10 min |
+| 6 | Canonical Data Model **v1.3** — §6 (sensitive data classification) | PII/PHI classification, encryption requirements | 10 min |
 | 7 | Notification Spec v1.1 — §10 (content rules: what's never in notifications) | Privacy in notifications | 10 min |
 | 8 | ADR Set — ADR-001, ADR-009, ADR-013 | Architecture choice, sensitive data handling, audit immutability | 10 min |
 | **Total** | | | **~2 hours** |
@@ -126,8 +126,8 @@ Before diving into any document, understand these five decisions — they are th
 | 1 | This brief | Orientation | 5 min |
 | 2 | System Architecture v1.2 | Your team's module map, data ownership, communication patterns | 30 min |
 | 3 | ADR Set v1.0 + Addenda 016–019 + 020–025 (with ADR-025 superseded) + 026 | Every architectural decision with context and consequences (ADR-026 is the canonical hosting decision; us-east-1 primary, us-west-2 cold DR) | 30 min |
-| 4 | Canonical Data Model v1.2 | 41 entities you'll be implementing | 20 min |
-| 5 | State Machines v1.1 | 13 state machines your services will execute | 30 min |
+| 4 | Canonical Data Model **v1.3** | **42 body-resident entities** you'll be implementing (including new MedicationRequest §4.16 added at P-011 / SI-001 closure 2026-05-11) + delta-only research/AIExecution entities | 20 min |
+| 5 | State Machines **v1.2** | **19 active state machines** your services will execute (including new §19 MedicationRequest lifecycle added at P-011 / SI-001 closure 2026-05-11) + 4 reserved-future transitions on ProtocolAuthorizedAction | 30 min |
 | 6 | OpenAPI v0.2 | 145 endpoints your services will expose | 40 min |
 | 7 | RBAC Permissions Matrix v1.1 | Permission logic your middleware will enforce | 15 min |
 | 8 | Design System v1.1 | If frontend: color system, typography, components, design tokens | 20 min |
@@ -184,7 +184,7 @@ These are the items the Master PRD §23 identifies as decisions that must be res
 
 ---
 
-## Known gaps (from Artifact Registry v2.10 §5)
+## Known gaps (from Artifact Registry v2.11 §5; SI-001 MedicationRequest schema gap CLOSED at P-011 / SI-001 closure 2026-05-11)
 
 | Gap | Impact on review |
 |---|---|

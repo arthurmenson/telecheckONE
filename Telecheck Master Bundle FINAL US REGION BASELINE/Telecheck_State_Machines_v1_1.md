@@ -1,10 +1,11 @@
 # Telecheck — State Machines
 
-**Version:** 1.1
+**Version:** 1.2
 **Status:** Canonical for development
 **Owner:** Engineering Lead
-**Parent document:** Telecheck Master Platform PRD v1.6, Canonical Data Model v1.0
+**Parent document:** Telecheck Master Platform PRD v1.10, Canonical Data Model v1.3 (post-P-011 / SI-001 closure 2026-05-11)
 **Source:** State transition tables from all slice PRDs
+**Supersedes:** State Machines v1.1 (which supersedes v1.0)
 
 ---
 
@@ -843,11 +844,11 @@ Transitions (active at v1.0):
 2. An explicit clinician confirmation event exists in the immutable audit chain scoped to this `action_id` prior to the transition.
 3. The confirming actor holds a role authorized to sign for the action class under RBAC v1.1 / I-012.
 
-**Rejection-audit-emit MUST (added v5.2 patch 2026-05-02 per Codex Round-2 Scope 1 MEDIUM-1 finding; envelope-population rule added v5.2 patch 2026-05-02 per Codex Round-4 Scope 1 MEDIUM-2 finding):** When the state machine validator rejects an I-012 `*.executed` transition under any of the three clauses above, the validator **MUST emit a Category A `<action_class>.execution_rejected` audit event** (`prescribing.execution_rejected`, `refill.execution_rejected`, or `medication_order.execution_rejected`) per AUDIT_EVENTS v5.2 §I-012 reject-unless rejection-audit-event rule. The event payload MUST carry `action_id`, `action_class`, `attempted_actor_id`, `attempted_actor_type`, `attempted_ai_workload_type`, `attempted_autonomy_level`, `violated_clauses[]` (one or more of `autonomy_level_string_equality`, `audit_chain_confirmation_event_missing`, `confirming_actor_rbac_unauthorized`, `reserved_level_without_activation_audit_event`), `confirmation_event_state`, `rbac_role_check_result`.
+**Rejection-audit-emit MUST (added v5.2 patch 2026-05-02 per Codex Round-2 Scope 1 MEDIUM-1 finding; envelope-population rule added v5.2 patch 2026-05-02 per Codex Round-4 Scope 1 MEDIUM-2 finding; live emission anchored at AUDIT_EVENTS v5.3 post-P-011 / SI-001 closure 2026-05-11):** When the state machine validator rejects an I-012 `*.executed` transition under any of the three clauses above, the validator **MUST emit a Category A `<action_class>.execution_rejected` audit event** (`prescribing.execution_rejected`, `refill.execution_rejected`, or `medication_order.execution_rejected`) per AUDIT_EVENTS **v5.3** §I-012 reject-unless rejection-audit-event rule (carries forward v5.2 prose unchanged; live emissions resolve against v5.3 or later per P-011 amendment). The event payload MUST carry `action_id`, `action_class`, `attempted_actor_id`, `attempted_actor_type`, `attempted_ai_workload_type`, `attempted_autonomy_level`, `violated_clauses[]` (one or more of `autonomy_level_string_equality`, `audit_chain_confirmation_event_missing`, `confirming_actor_rbac_unauthorized`, `reserved_level_without_activation_audit_event`), `confirmation_event_state`, `rbac_role_check_result`.
 
-**Envelope-population rule (Round-4 Scope 1 MEDIUM-2 closure):** At emit time the validator MUST set the audit envelope's `ai_workload_type` and `autonomy_level` to the corresponding attempted-payload values: envelope `ai_workload_type = payload.attempted_ai_workload_type` and envelope `autonomy_level = payload.attempted_autonomy_level`. **If either attempted value is null, unknown, or a reserved-but-not-yet-activated value**, the envelope value MUST be set to the literal sentinel string `"rejected_invalid_attempt"` (canonical sentinel value present in WORKLOAD_TAXONOMY v5.2 `AIWorkloadType` enum and AUTONOMY_LEVELS v5.2 `AutonomyLevel` enum, mirrored in TYPES v5.2 operative shapes). This carve-out is necessary because schema-driven implementations applying the AUDIT_EVENTS v5.2 §I-012 closure rule literally would otherwise reject the rejection-audit event itself when attempted values are null/unknown/reserved — recreating the bare-suppression audit gap.
+**Envelope-population rule (Round-4 Scope 1 MEDIUM-2 closure):** At emit time the validator MUST set the audit envelope's `ai_workload_type` and `autonomy_level` to the corresponding attempted-payload values: envelope `ai_workload_type = payload.attempted_ai_workload_type` and envelope `autonomy_level = payload.attempted_autonomy_level`. **If either attempted value is null, unknown, or a reserved-but-not-yet-activated value**, the envelope value MUST be set to the literal sentinel string `"rejected_invalid_attempt"` (canonical sentinel value present in WORKLOAD_TAXONOMY v5.2 `AIWorkloadType` enum and AUTONOMY_LEVELS v5.2 `AutonomyLevel` enum, mirrored in TYPES v5.2 operative shapes). This carve-out is necessary because schema-driven implementations applying the AUDIT_EVENTS v5.3 §I-012 closure rule (carries forward v5.2 prose plus P-011 amendment) literally would otherwise reject the rejection-audit event itself when attempted values are null/unknown/reserved — recreating the bare-suppression audit gap.
 
-**Bare suppression — no audit record at all on rejection — is forbidden per I-003.** This requirement mirrors AUDIT_EVENTS v5.2 §I-012 reject-unless rejection-audit-event rule and is the state-machine-side enforcement obligation; emitter implementations derive emission behavior from this section, so the envelope-population rule above is normative here, not just at the AUDIT_EVENTS contract.
+**Bare suppression — no audit record at all on rejection — is forbidden per I-003.** This requirement mirrors AUDIT_EVENTS **v5.3** §I-012 reject-unless rejection-audit-event rule (carries forward v5.2 prose unchanged; live emissions resolve against v5.3 or later per P-011 amendment) and is the state-machine-side enforcement obligation; emitter implementations derive emission behavior from this section, so the envelope-population rule above is normative here, not just at the AUDIT_EVENTS contract.
 
 **Reserved transitions (non-normative future sketches, NOT implemented as executable code paths at v1.0):**
 
@@ -862,6 +863,75 @@ Per ADR-029 + AI_LAYERING v5.2 §10 + AUTONOMY_LEVELS contract.
 Active state machines: **14 (v1.1 baseline) + 3 research (ResearchConsent, DataSharingAgreement, ResearchExportRequest) + 1 ProtocolAuthorizedAction = 18**.
 
 Reserved-future transitions (non-normative sketches in this doc): 4 (ProtocolAuthorizedAction reserved transitions per the table above).
+
+---
+
+## v1.11 cycle additions (added 2026-05-11 per P-011 / SI-001 closure — bumps State Machines v1.1 → v1.2)
+
+### §19 MedicationRequest lifecycle (Row P-011 — NEW per SI-001 closure 2026-05-11)
+
+States: `draft`, `pending_interaction_check`, `pending_clinician_review`, `active`, `discontinued`, `superseded`, `expired`, `rejected`.
+
+Transitions:
+
+```
+draft ──[submit_for_review]──▶ pending_interaction_check
+   │                              │
+   │                              ├──[engine_clean]──▶ pending_clinician_review
+   │                              │
+   │                              └──[engine_safety_hold]──▶ pending_clinician_review (with safety_hold flag)
+   │
+pending_clinician_review ──[clinician_approve]──────────────▶ active
+                          ──[protocol_authorized_prescribing]─▶ active   (Mode 2 protocol-engine route; see §19.X below)
+                          ──[clinician_decline]──────────────▶ rejected (terminal)
+                          ──[clinician_modify]───────────────▶ pending_interaction_check (rerun engine on modified payload)
+
+active ──[clinician_discontinue]──▶ discontinued (with discontinued_reason)
+active ──[patient_request_discontinue]──▶ discontinued (with discontinued_reason='patient_request')
+active ──[adverse_event_discontinue]──▶ discontinued (with discontinued_reason='adverse_event')
+active ──[expire_at_window_end]──▶ expired (terminal)
+active ──[supersede_by_new_prescription]──▶ superseded (paired with new row in draft→active flow)
+
+discontinued (terminal)
+superseded   (terminal)
+expired      (terminal)
+rejected     (terminal)
+```
+
+**State count:** 8 active states; 13 transitions; 2 I-012-gated transitions into `active`.
+
+**I-012 reject-unless three-clause rule applies to:** BOTH transitions entering `active` (`clinician_approve` and `protocol_authorized_prescribing`). Every transition emits an AUDIT_EVENTS Category A action; rejection at either gate MUST emit **`prescribing.execution_rejected`** per I-012 closure rule (the canonical I-012 rejection action carried forward unchanged from AUDIT_EVENTS v5.2 to v5.3; live post-ratification emission resolves against v5.3). The `clinician_modify` transition does NOT emit a rejection (it's a re-route, not a refusal).
+
+#### §19.X — `pending_clinician_review --[protocol_authorized_prescribing]--> active` (Mode 2 route)
+
+The protocol-authorized prescribing transition is the second of two normative routes into `active`. It coexists with `clinician_approve`; both routes terminate at the same destination state with identical post-conditions (active prescription bound to patient, downstream subscribers notified via `medication_request.approved.v1` domain event with `approval_pathway` field discriminating the route).
+
+| Aspect | Specification |
+|---|---|
+| **Source state** | `pending_clinician_review` |
+| **Destination state** | `active` |
+| **Trigger event** | Protocol-engine authorization completed; the engine emits an authorization decision linked to a protocol_id + protocol_version + clinician confirmation evidence per ADR-005 + ADR-029 + AUTONOMY_LEVELS v5.2 `action_with_confirm` semantics. |
+| **Actor (audit envelope)** | Per AUDIT_EVENTS **v5.3** §I-012 closure rule (carries forward v5.2 line 66 prose + the `protocol_authorized_prescribing` action row at v5.2 line 132 unchanged, plus the v5.3 amendment that adds `prescribing.protocol_authorization_granted` to the authoritative set): `actor_type = 'ai_workload'`, `actor_id = <protocol engine service account ULID>`, `ai_workload_type = 'protocol_execution'`, `autonomy_level = 'action_with_confirm'`. The legacy `protocol_engine` actor_type is permitted ONLY for pre-v1.10 backfill records; any new emission MUST use `actor_type='ai_workload'` per the canonical closure rule. The human clinician who authorized the protocol engine to act on their behalf is referenced by the `accountable_clinician_id` payload field; the clinician's prior confirmation event is bound by `action_id` (see "Required evidence" row below). |
+| **Workload + autonomy envelope** | `ai_workload_type = 'protocol_execution'` AND `autonomy_level = 'action_with_confirm'` (the ONLY I-012-permitted combination per WORKLOAD_TAXONOMY v5.2 §2.2 + I-012 preservation rule). |
+| **Required evidence** | (1) `protocol_id` + `protocol_version` populated on the row; (2) explicit clinician confirmation event of the type **`prescribing.protocol_authorization_granted`** (a distinct Category A action ID added at AUDIT_EVENTS v5.3 by P-011; clinician actor; scoped to the same `action_id` as this `protocol_authorized_prescribing` record). This is the "or equivalent" form of the canonical AUDIT_EVENTS v5.3 §I-012 preservation rule (carries forward v5.2 line 78 prose unchanged): "An explicit clinician confirmation event (`prescribing.approved` or equivalent) exists in the immutable audit chain prior to the `*.executed` transition, scoped to the same `action_id`." A DISTINCT confirmation action is required (rather than reusing `prescribing.approved`) because `prescribing.approved` is the success audit for the `clinician_approve` transition route; reusing it would mean the row had already taken the clinician route to `active`. (3) RBAC-authorization on the confirming actor. The binding mechanism is the canonical audit-chain `action_id` scoping — NO separate FK column on the MedicationRequest row. |
+| **Guard (I-012 reject-unless three-clause)** | All three clauses MUST hold: workload+autonomy canonical AND confirming actor recorded AND RBAC-authorized. Failure on any clause emits `prescribing.execution_rejected` (Category A audit; canonical I-012 rejection action) AND the transition is REJECTED (state remains `pending_clinician_review`; no domain event emitted; row state unchanged). Bare suppression on rejection is forbidden per I-003. |
+| **Success audit emission** | `protocol_authorized_prescribing` (canonical Category A action ID; carries forward unchanged from AUDIT_EVENTS v5.2 to v5.3). The audit envelope's `ai_workload_type` MUST equal `'protocol_execution'` and `autonomy_level` MUST equal `'action_with_confirm'`. |
+| **Success domain event emission** | `medication_request.approved.v1` with `approval_pathway = 'protocol_authorized'` (reuses the existing canonical DOMAIN_EVENTS v5.2 event type — no new event needed; the `approval_pathway: "clinician_reviewed | protocol_authorized"` field already discriminates the route). |
+| **Distinction from `clinician_approve`** | `clinician_approve` is the clinician-only execution path: the human is the executing actor. Per AUDIT_EVENTS **v5.3** §I-012 closure rule (carries forward v5.2 line 66 + line 127 prose), the audit envelope's `ai_workload_type` and `autonomy_level` are REQUIRED for any I-012 action-class record regardless of `actor_type` — null is NOT permitted. For purely human-driven approvals with no upstream AI workload, both fields populate as the literal sentinel `'n/a'`. For clinician-only approvals where upstream AI workload was `protocol_execution` at `action_with_confirm`, the envelope INHERITS the action_id's preceding workload/autonomy values. `protocol_authorized_prescribing` is the Mode 2 execution path with `actor_type=ai_workload`. The two paths share `medication_request.approved.v1` as the canonical downstream domain event. |
+
+### State machine count post-P-011
+
+Active state machines: **18 (post-v1.10) + 1 MedicationRequest = 19**. Reserved-future transitions unchanged at 4.
+
+### Cross-machine interactions added by P-011
+
+| Trigger | Source machine | Target machine | Data passed |
+|---|---|---|---|
+| MedicationRequest activated (clinician_approve OR protocol_authorized_prescribing) | MedicationRequest | Subscription (binding for new active rows) + Notification (patient + clinician notifications) | medication_request_id, approval_pathway, patient_id, prescriber_id (or protocol_id + protocol_version), medication snapshot, dosing snapshot |
+| MedicationRequest interaction safety hold | MedicationRequest | Med Interaction Engine (closes override loop) + Notification (clinician alert) | medication_request_id, interaction_signals[], patient_id, prescriber_id |
+| MedicationRequest discontinued | MedicationRequest | Subscription (cancel binding) + Notification + Adverse Events | medication_request_id, discontinued_reason, patient_id, occurred_at |
+| MedicationRequest superseded | MedicationRequest | Subscription (rebind to new) + Notification | old + new medication_request_ids, patient_id |
+| MedicationRequest expired | MedicationRequest | Subscription + Notification | medication_request_id, expired_at |
 
 ---
 

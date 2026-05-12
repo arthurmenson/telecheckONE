@@ -1,10 +1,20 @@
 # Telecheck — Canonical Data Model
 
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Canonical for development
 **Owner:** Engineering Lead
-**Supersedes:** Canonical Data Model v1.0
-**Parent documents:** System Architecture v1.2, Master Platform PRD v1.10, Contracts Pack v5.1 (filenames retain v5_00 convention; headers govern), ADR Addendum 020–025 (with ADR-025 superseded by ADR-026)
+**Supersedes:** Canonical Data Model v1.2 (which supersedes v1.0)
+**Parent documents:** System Architecture v1.2, Master Platform PRD v1.10, Contracts Pack v5.2 (AUDIT_EVENTS at v5.3 post-P-011; filenames retain v5_00 convention; headers govern), ADR Addendum 020–025 (with ADR-025 superseded by ADR-026), ADR-027/028/029
+
+---
+
+## Change log from v1.2 (added at v1.3 per P-011 / SI-001 closure 2026-05-11)
+
+1. **§4.16 MedicationRequest** added as the canonical record of a prescribing decision. Path 1 shape: NO `interaction_override_id` column; Med Interaction Engine integration is via the `medication_request.interaction_safety_hold_triggered` domain event with clean module-boundary separation per ADR-001.
+2. **`audit_events.audit_i012_workload_evidence_required` CHECK constraint amended** — `'prescribing.protocol_authorization_granted'` added to the `action NOT IN (...)` list per the AUDIT_EVENTS v5.3 §I-012 closure rule amendment. This is the database-level enforcement that prevents the new I-012 clinician confirmation action from bypassing the non-null `ai_workload_type` + `autonomy_level` requirement.
+3. Companion changes ship under the same P-011: State Machines v1.1 → v1.2 (§19 MedicationRequest lifecycle); AUDIT_EVENTS v5.2 → v5.3 (7 net-new Category A action IDs + I-012 closure-rule amendment); DOMAIN_EVENTS v5.2 in-place (4 net-new event types).
+
+Total entity count rises from 41 to 42 (inventory in §3.5 entity #18 footnote pointer updated to canonical §4.16 expansion).
 
 ---
 
@@ -44,9 +54,9 @@ Engineering implements migrations against this model. Slice PRDs reference these
 
 ---
 
-## 3. The 41 entities — overview
+## 3. The 42 entities — overview
 
-v1.2 expands to 41 entities: 6 tenant-management entities (introduced in v1.1), 27 inherited from v1.0 (now tenant-scoped), and 8 NEW ecom entities (introduced in v1.2 per CRITICAL-02 remediation; schemas in §4-bis).
+v1.3 expands to 42 entities: 6 tenant-management entities (introduced in v1.1), 27 inherited from v1.0 (now tenant-scoped), 8 NEW ecom entities (introduced in v1.2 per CRITICAL-02 remediation; schemas in §4-bis), and **1 NEW prescribing entity added at v1.3 (MedicationRequest §4.16 per P-011 / SI-001 closure 2026-05-11)**.
 
 ### 3.1 Tenant management (NEW in v1.1) — 6 entities
 
@@ -786,6 +796,190 @@ CREATE POLICY tenant_isolation ON affiliate_conversions
 
 ---
 
+### 4.16 MedicationRequest
+
+**Added at CDM v1.3 under P-011 / SI-001 closure 2026-05-11.** The canonical record of a prescribing decision (or a draft thereof) within an operating tenant. Renamed from "Prescription" per Contracts Pack v5.2 GLOSSARY. Append-only via supersession (discontinuation creates a new `superseded` row with `supersedes_id` pointing back; the original row's `status` flips to `superseded` only via a controlled UPDATE that the I-003 hash-chain audit picks up). Same discipline as consent_versions per Slice 3 PRD v1.0 §7.1.
+
+**v1.10 brand-structure note:** `tenant_id` is the operating-tenant identifier (`Telecheck-{country}`); patient-facing surfaces source `tenant.consumer_dba` for any rendering that displays "your prescriber's pharmacy" branding, per Master PRD v1.10 §17 + Glossary v5.2 C3.
+
+```sql
+CREATE TABLE medication_requests (
+  -- Identity
+  id                                  VARCHAR(26) PRIMARY KEY,           -- ULID (§2 conventions)
+  tenant_id                           VARCHAR(26) NOT NULL REFERENCES tenants(id),
+
+  -- Patient anchor (composite FK enforces same-tenant binding per PROJECT_CONVENTIONS r5 §1.1)
+  patient_account_id                  VARCHAR(26) NOT NULL,
+
+  -- Catalog anchor
+  product_catalog_id                  VARCHAR(26) NOT NULL,              -- FK to product_catalog (CDM §4.9)
+  medication_name                     VARCHAR(200) NOT NULL,             -- denormalized snapshot at prescribe-time
+  strength                            VARCHAR(80)  NOT NULL,             -- '500mg', '10mg/ml', etc.
+  formulation                         VARCHAR(40)  NOT NULL,             -- 'tablet', 'injection', 'topical', ...
+
+  -- Clinical detail (denormalized snapshot — does not mutate when product_catalog updates)
+  dose_instructions                   TEXT         NOT NULL,             -- '1 tablet twice daily with meals'
+  quantity                            INTEGER      NOT NULL,             -- units per dispense
+  quantity_unit                       VARCHAR(20)  NOT NULL,             -- 'tablet', 'ml', 'patch', ...
+  refills_allowed                     INTEGER      NOT NULL,             -- 0 .. N
+  indication                          VARCHAR(200),                      -- clinical indication; nullable
+  clinical_notes                      TEXT,                              -- prescriber notes; nullable
+
+  -- Lifecycle status (see State Machines v1.2 §19 — enum is the authoritative state set)
+  status                              VARCHAR(30)  NOT NULL,             -- see §19 enum
+
+  -- Lifecycle timestamps
+  prescribed_at                       TIMESTAMPTZ,                       -- set on draft → active transition
+  activated_at                        TIMESTAMPTZ,                       -- alias for prescribed_at retained for clarity
+  discontinued_at                     TIMESTAMPTZ,
+  discontinued_reason                 VARCHAR(60),                       -- enum below; nullable
+  expires_at                          TIMESTAMPTZ,                       -- prescription-validity window end
+
+  -- Authorship (clinician anchor; nullable only while status='draft')
+  prescribed_by_clinician_account_id  VARCHAR(26),                       -- composite FK to accounts when set
+  prescribing_consult_id              VARCHAR(26),                       -- composite FK to consults when set
+
+  -- Safety integration (Med Interaction Engine slice — Path 1 per ratification 2026-05-11:
+  -- NO `interaction_override_id` column. MedicationRequest emits the
+  -- `medication_request.interaction_safety_hold_triggered` domain event
+  -- when interaction_signals_status flips to 'safety_hold'; the Med Interaction
+  -- Engine slice subscribes + owns its own override workflow + override table.
+  -- Clean module-boundary separation per ADR-001.)
+  interaction_signals_evaluated_at    TIMESTAMPTZ,                       -- last engine evaluation timestamp
+  interaction_signals_status          VARCHAR(20)  NOT NULL DEFAULT 'pending',  -- 'pending' | 'clean' | 'caution' | 'safety_hold'
+
+  -- I-012 reject-unless three-clause envelope fields (per AUDIT_EVENTS v5.3 §I-012 closure rule — carries forward v5.2 line 66 prose plus P-011 amendment adding prescribing.protocol_authorization_granted; live emission MUST resolve against v5.3 or later)
+  ai_workload_type                    VARCHAR(40),                       -- per WORKLOAD_TAXONOMY v5.2; nullable if no AI participation
+  autonomy_level                      VARCHAR(40),                       -- per AUTONOMY_LEVELS v5.2; nullable if no AI participation
+  protocol_id                         VARCHAR(26),                       -- when protocol-authorized: which protocol; FK to protocols (future entity)
+  protocol_version                    VARCHAR(20),                       -- frozen protocol version at prescribe-time
+
+  -- Append-only via supersession
+  supersedes_id                       VARCHAR(26),                       -- self-FK (composite); nullable; points back at the row this one supersedes
+  superseded_by_id                    VARCHAR(26),                       -- self-FK (composite); nullable; points forward at the row that superseded this one
+
+  -- CCR linkage (denormalized; matches Slice 4 country_of_care threading rule per Tenant Threading Addendum v1.0 §3.4)
+  country_of_care                     CHAR(2)      NOT NULL,             -- ISO 3166-1 alpha-2
+
+  -- Standard timestamps
+  created_at                          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at                          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+
+  -- Composite UNIQUE for downstream composite-FK pattern (subscriptions.prescription_id, refills.medication_request_id, dispensings.medication_request_id, etc.)
+  CONSTRAINT medication_requests_tenant_id_id_unique UNIQUE (tenant_id, id),
+
+  -- Composite FK: patient must belong to same tenant
+  CONSTRAINT medication_requests_tenant_patient_fk
+    FOREIGN KEY (tenant_id, patient_account_id) REFERENCES accounts (tenant_id, account_id),
+
+  -- Composite FK: prescriber (when set) must belong to same tenant
+  CONSTRAINT medication_requests_tenant_clinician_fk
+    FOREIGN KEY (tenant_id, prescribed_by_clinician_account_id) REFERENCES accounts (tenant_id, account_id),
+
+  -- Composite FK: prescribing consult (when set) must belong to same tenant
+  CONSTRAINT medication_requests_tenant_consult_fk
+    FOREIGN KEY (tenant_id, prescribing_consult_id) REFERENCES consults (tenant_id, id),
+
+  -- Composite FK: product catalog item (when set) must belong to same tenant
+  CONSTRAINT medication_requests_tenant_product_fk
+    FOREIGN KEY (tenant_id, product_catalog_id) REFERENCES product_catalog (tenant_id, id),
+
+  -- Composite self-FKs for supersession chain
+  CONSTRAINT medication_requests_supersedes_fk
+    FOREIGN KEY (tenant_id, supersedes_id) REFERENCES medication_requests (tenant_id, id),
+  CONSTRAINT medication_requests_superseded_by_fk
+    FOREIGN KEY (tenant_id, superseded_by_id) REFERENCES medication_requests (tenant_id, id),
+
+  -- State enum validation
+  CONSTRAINT medication_requests_status_valid CHECK (
+    status IN ('draft', 'pending_interaction_check', 'pending_clinician_review', 'active', 'discontinued', 'superseded', 'expired', 'rejected')
+  ),
+
+  -- Discontinuation reason enum (nullable except when status='discontinued')
+  CONSTRAINT medication_requests_discontinued_reason_valid CHECK (
+    discontinued_reason IS NULL OR
+    discontinued_reason IN ('clinical_decision', 'adverse_event', 'patient_request', 'replaced_by_new_prescription', 'expired', 'safety_hold')
+  ),
+  CONSTRAINT medication_requests_discontinued_reason_set_when_discontinued CHECK (
+    (status = 'discontinued') = (discontinued_reason IS NOT NULL)
+  ),
+
+  -- Interaction signals enum validation
+  CONSTRAINT medication_requests_interaction_signals_status_valid CHECK (
+    interaction_signals_status IN ('pending', 'clean', 'caution', 'safety_hold')
+  ),
+
+  -- I-012 three-clause rule per AUDIT_EVENTS v5.3 §I-012 closure rule (carries forward v5.2 line 66 prose plus P-011 amendment) + INVARIANTS I-012 + WORKLOAD_TAXONOMY
+  -- v5.2 §2.1/§2.2:
+  --   (1) ai_workload_type must be canonical (WORKLOAD_TAXONOMY v5.2 active levels at v1.0)
+  --   (2) autonomy_level must be 'action_with_confirm' (the single I-012-permitted level at v1.0)
+  --   (3) reserved workload/autonomy values forbidden until ADR-030 + successor invariant
+  --   (4) workload x autonomy compatibility (WORKLOAD_TAXONOMY v5.2):
+  --       - conversational_assistant: autonomy_level_range = [advisory] ONLY
+  --       - protocol_execution: autonomy_level_range = [advisory, suggestion, action_with_confirm]
+  --       Therefore the AI-participating I-012 EXECUTION path (autonomy='action_with_confirm')
+  --       requires ai_workload_type='protocol_execution'. A 'conversational_assistant' row at
+  --       'action_with_confirm' is impossible by WORKLOAD_TAXONOMY and MUST be rejected here
+  --       so a Mode 1 workload cannot be falsely elevated to execution authority.
+  CONSTRAINT medication_requests_i012_envelope_active_check CHECK (
+    (status NOT IN ('active', 'discontinued', 'superseded', 'expired')
+     AND ai_workload_type IS NULL
+     AND autonomy_level IS NULL)
+    OR
+    (status IN ('active', 'discontinued', 'superseded', 'expired')
+     AND (
+       (ai_workload_type IS NULL AND autonomy_level IS NULL)
+       OR
+       (ai_workload_type = 'protocol_execution'
+        AND autonomy_level = 'action_with_confirm')
+     ))
+  ),
+
+  -- Protocol-authorized path: when autonomy_level set, protocol_id + protocol_version required.
+  CONSTRAINT medication_requests_i012_protocol_binding_check CHECK (
+    autonomy_level IS NULL
+    OR (autonomy_level = 'action_with_confirm' AND protocol_id IS NOT NULL AND protocol_version IS NOT NULL)
+  ),
+
+  -- Country-of-care must match tenant (denormalization invariant)
+  CONSTRAINT medication_requests_country_valid CHECK (country_of_care ~ '^[A-Z]{2}$')
+);
+
+-- RLS policy: tenant-scoped read+write per ADR-023 + PROJECT_CONVENTIONS r5 §2.X.
+-- Use the canonical `current_tenant_id()` helper from migration 003_rls_helpers.sql.
+ALTER TABLE medication_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE medication_requests FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY medication_requests_tenant_isolation
+  ON medication_requests
+  USING (tenant_id = current_tenant_id())
+  WITH CHECK (tenant_id = current_tenant_id());
+
+-- Indexes
+CREATE INDEX idx_medication_requests_tenant_patient
+  ON medication_requests (tenant_id, patient_account_id, status);
+CREATE INDEX idx_medication_requests_tenant_clinician
+  ON medication_requests (tenant_id, prescribed_by_clinician_account_id)
+  WHERE prescribed_by_clinician_account_id IS NOT NULL;
+CREATE INDEX idx_medication_requests_tenant_consult
+  ON medication_requests (tenant_id, prescribing_consult_id)
+  WHERE prescribing_consult_id IS NOT NULL;
+CREATE INDEX idx_medication_requests_tenant_status_active
+  ON medication_requests (tenant_id, status)
+  WHERE status = 'active';
+CREATE INDEX idx_medication_requests_supersession_chain
+  ON medication_requests (tenant_id, supersedes_id)
+  WHERE supersedes_id IS NOT NULL;
+```
+
+**Med Interaction Engine integration** is via the `medication_request.interaction_safety_hold_triggered` domain event (Path 1 ratification 2026-05-11). MedicationRequest does NOT carry a hard pointer to the InteractionOverride entity; the override workflow + override table are owned by the Med Interaction Engine slice.
+
+**State machine reference:** State Machines v1.2 §19 (added by the same P-011 promotion). Two prescribing-execution routes both terminate at `active`: `clinician_approve` and `protocol_authorized_prescribing`; both I-012-gated; both emit the canonical `medication_request.approved.v1` domain event with `approval_pathway` discriminating the route.
+
+**Audit references:** Lifecycle audit events live in AUDIT_EVENTS v5.3 §Category-A (also added by the same P-011 promotion). The I-012 confirmation event for the protocol-authorized route is `prescribing.protocol_authorization_granted` (clinician actor; v5.3 §I-012 closure rule authoritative set).
+
+---
+
 
 
 Every inherited entity from v1.0 receives `tenant_id` as a NOT NULL column with a foreign key to `tenants.id`. The standard pattern is:
@@ -905,15 +1099,19 @@ CREATE TABLE audit_events (
   -- for backfill. Per I-003 audit immutability, historical audit rows MUST NOT be retroactively updated to fabricate workload evidence;
   -- if an old action needs workload-evidence overlay for any reason, emit a NEW audit record (compensating event) at v1.10 schema_version
   -- with the workload evidence, never UPDATE the historical row.
-  -- Action-class set per AUDIT_EVENTS v5.2 (single source of truth):
-  --   prescribing.{initiated, approved, declined, modified, execution_rejected},
+  -- Action-class set per AUDIT_EVENTS v5.3 (single source of truth; v5.2 → v5.3 bump under P-011 / SI-001 closure 2026-05-11):
+  --   prescribing.{initiated, approved, declined, modified, execution_rejected, protocol_authorization_granted},
   --   refill.{approved, declined, execution_rejected},
   --   protocol_authorized_{prescribing, refill_renewal, dispensing_release},
   --   medication_order.execution_rejected.
+  -- prescribing.protocol_authorization_granted is the clinician I-012 confirmation event for the
+  -- protocol-authorized prescribing route (added at v5.3 under P-011); enforces non-null
+  -- workload/autonomy fields per the I-012 closure rule.
   CONSTRAINT audit_i012_workload_evidence_required CHECK (
     schema_version != 'v1.10'  -- legacy rows exempt
     OR action NOT IN ('prescribing.initiated', 'prescribing.approved', 'prescribing.declined', 'prescribing.modified',
-                   'prescribing.execution_rejected', 'refill.approved', 'refill.declined', 'refill.execution_rejected',
+                   'prescribing.execution_rejected', 'prescribing.protocol_authorization_granted',  -- added by P-011 / SI-001
+                   'refill.approved', 'refill.declined', 'refill.execution_rejected',
                    'protocol_authorized_prescribing', 'protocol_authorized_refill_renewal',
                    'protocol_authorized_dispensing_release', 'medication_order.execution_rejected')
     OR (ai_workload_type IS NOT NULL AND autonomy_level IS NOT NULL)
@@ -1118,12 +1316,15 @@ Schemas defined when their authorizing ADRs activate (per ADR-029 Decision §6).
 - `KnowledgeSource` (ADR-034)
 - `PolicyAuthorization` (ADR-030 — placeholder skeleton in TYPES v5.2 + GOVERNANCE_CONTROLS v5.2 §8)
 
-Total entity count post-v1.10: **41 (v1.2 baseline) + 6 (research) + 1 (AIExecution) = 48 active entities + 7 reserved-future names**.
+Total entity count post-v1.10: **41 (v1.2 baseline) + 6 (research, delta-only — not yet physically merged into §4) + 1 (AIExecution, delta-only — not yet physically merged into §4) = 48 active entities including delta-only entries + 7 reserved-future names**.
+
+**Post-P-011 / SI-001 closure 2026-05-11 update:** the body-resident §4 inventory of physically-expanded entities goes from 41 → 42 (MedicationRequest §4.16 added at v1.3 per P-011). The 48-count above includes the 6 research entities + 1 AIExecution entity that remain delta-only (defined in the v1.10 cycle delta artifact at `Telecheck_v1_10_PRD_Update/Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §CDM Rows 27/70/98 and incorporated by reference, but never physically merged into the §4 body during the v1.10.1 hygiene cycle — see §1.10 cycle additions Document Control entry below for context). **Body-resident count = 42 (v1.3 baseline)**; **delta-inclusive count = 49 (42 + 6 research + 1 AIExecution; research + AIExecution remain delta-only at P-011 / SI-001 closure)**; **reserved-future names = 7 (unchanged)**. CDM headers and Registry Decision 4 cite the body-resident **v1.3 / 42 entities** count as canonical. The delta-only entries will be physically merged in a future hygiene cycle; until then, downstream implementations consult both the §4 body and the delta artifact.
 
 ---
 
 ## Document control
 
+- **v1.3 (2026-05-11, P-011 / SI-001 closure)** — Adds §4.16 MedicationRequest as the canonical record of a prescribing decision (Path 1 shape; no `interaction_override_id` column; integration via `medication_request.interaction_safety_hold_triggered` domain event per ADR-001 clean module-boundary separation). Amends §audit_events `audit_i012_workload_evidence_required` CHECK constraint to add `'prescribing.protocol_authorization_granted'` to the I-012 action-list — lockstep with AUDIT_EVENTS v5.3 §I-012 closure-rule amendment. §3 Entity overview updated from "41 entities" to "42 entities". Body-resident entity count: 42. Delta-only research entities + AIExecution unchanged (still defined in `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §CDM rows 27/70/98 by reference). Ratified after 11 rounds of Codex pre-ratification adversarial-review convergence + 2 rounds of post-merge review (20 + 7 findings closed inline). Existing v1.2 schemas preserved without modification; v1.3 additions are net-additive (MedicationRequest) plus one in-place CHECK amendment on the existing audit_events table.
 - **v1.2** — Adds 8 ecom entities introduced by Pharmacy + Refill v2.1 and Admin Backend v1.1 slice PRDs: Subscription, SubscriptionEvent, ProductCatalog, Cart, CartItem, DiscountCode, DiscountCodeRedemption, AffiliateAccount, AffiliateConversion. New §4-bis (§4.7 through §4.15) carries full SQL DDL with tenant_id, RLS policies, indexes, constraints, and invariants for each. Total entity count: 41 (6 tenant-management + 27 inherited + 8 ecom). Pattern C remediation per Adversarial Counsel Review v1.0 finding CRITICAL-02 — schemas previously living in slice PRDs are now in canonical engineering spec; slice PRDs reference these by section number. Existing v1.1 content (tenant management entities, tenant scoping rules, audit envelope, encryption mapping) preserved without modification.
 - **v1.2 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §CDM rows 27, 70, 98)** — Additive content under "v1.10 cycle additions" section above. Tenant entity gains `consumer_dba`, `legal_entity`, `consumer_subdomain` columns (C3 brand-structure). 6 new research data entities (ResearchConsent, CohortDefinition, DataSharingAgreement, ResearchEthicsReviewBody, ResearchPartner, ResearchDataExport — all tenant-scoped per I-023; export carries country_of_care + audit at high_pii per I-031). 1 new AIExecution entity (normative, fully implemented at v1.0; unifies Mode 1 + Mode 2 under workload taxonomy with `ai_workload_type` discriminator + 5 orthogonal properties). 7 reserved-future entity names (Agent, AgentRun, Tool, ToolCall, AgentMemory, KnowledgeSource, PolicyAuthorization — non-normative at v1.0; activated under ADRs 030–034). Total entity count post-v1.10: **48 active + 7 reserved-future**. Per ADR-028 + ADR-029 + Master PRD v1.10 §10.5/§13.7/§15.3 + INVARIANTS v5.2 + TYPES v5.2 + AUDIT_EVENTS v5.2. Existing v1.2 entity schemas preserved without modification; v1.10 additions are purely additive. No version-number bump (entry-level refresh consistent with the engineering-spec discipline; CDM remains v1.2 in headers and references).
 - **v1.2 SPEC ISSUE resolution (2026-05-02 per Codex telecheck-app foundation-layer adversarial review SPEC ISSUE flagged at migrations/001_tenants.sql authorship)** — §4.1 Tenant SQL DDL physically updated to match the C3 brand-structure rule that the prior v1.10.1 hygiene cycle's doc-control entry promised but never merged into the body. Specifically: (1) `id` column comment changed from `tnt_01H...` (ULID) to `Telecheck-{country}` operating-tenant identifier per Master PRD v1.10 §17 — the SoT hierarchy resolution (Master PRD outranks engineering specs); column type retained as VARCHAR(26) (sufficient for `Telecheck-Ghana` = 15 chars, no FK-cascade across tenant_id references in other tables). (2) Three new columns physically added to the SQL DDL (the v1.10.1 hygiene cycle's Group 5B §CDM row-27 promise): `consumer_dba` (patient-facing brand, e.g., `Heros Health`); `legal_entity` (per-country incorporated subsidiary, e.g., `Telecheck Health LLC`); `consumer_subdomain` (country-instanced URL, e.g., `heroshealth.com`). (3) Three new CHECK constraints: `tenant_id_format_valid` (regex `^Telecheck-[A-Z][A-Za-z]+$`); `tenant_id_no_bare_heros` (`id NOT ILIKE 'Heros%'` per Glossary v5.2 anti-pattern); `consumer_dba_starts_heros_health` (`consumer_dba LIKE 'Heros Health%'` C3 invariant). (4) Canonical seed-value table for the two day-1 tenants added inline so engineering migrations can copy directly. (5) §2 Conventions updated with the `tenants.id` exception note explaining this is the single PK exception in the data model. **No version-number bump** (consistent with the engineering-spec discipline; CDM remains v1.2 in headers and references; this is a body-text reconciliation correcting a hygiene-cycle partial merge). Cross-references swept: AUDIT_EVENTS v5.2 + DOMAIN_EVENTS v5.2 + OpenAPI v0.2 + TYPES v5.2 + GOVERNANCE_CONTROLS v5.2 + Tenant Threading Addendum v1.0 example-value sweeps verified consistent with the canonical operating-tenant format.

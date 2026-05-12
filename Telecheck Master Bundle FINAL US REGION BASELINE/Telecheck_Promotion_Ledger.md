@@ -37,6 +37,57 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-011 — 2026-05-11 — SI-001 closure: MedicationRequest canonical schema (content-change promotion; 11-round Codex pre-ratification convergence)
+
+**Type:** Content-change promotion (per operating rule 6 — Registry version bump from v2.10 → v2.11; new entity + new state machine + new audit/domain IDs + AUDIT_EVENTS contract version bump). Distinct from P-009/P-010 reconciliation pattern: P-011 introduces new artifact content (not body↔doc-control alignment), so the Registry bump is mandatory per operating rule 4.
+
+**Status:** RATIFIED 2026-05-11 (succeeds the withdrawn 2026-05-11 ratification attempt; see `Telecheck_SI_Closure_Cycle_2026-05-11/Telecheck_SI_001_Codex_Withdraw_Ratification_Review_2026-05-11.md`).
+
+**Author:** Autonomous Claude (SI closure cycle workstream); reviewed by Codex adversarial-review across 11 rounds (sessions `019e1a34` withdraw + `019e1a46`, `019e1a4b`, `019e1a4f`, `019e1a52`, `019e1a5c`, `019e1a5f`, `019e1a62`, `019e1a65`, `019e1a67`, `019e1a6a`, `019e1a6b` pre-ratification gates); ratified by Evans 2026-05-11.
+
+**Trigger:** SI-001 (MedicationRequest schema gap; recorded in `docs/SI-001-MedicationRequest-Schema-Gap.md` in the telecheck-app code repo) blocked Slice 4 Pharmacy + Refill v2.1 implementation. CDM v1.2 §3.5 listed entity #18 MedicationRequest in inventory but provided no §4 field-level expansion. SI-001 DRAFT v0.1 was authored; the 2026-05-11 ratification attempt without a pre-ratification cross-artifact-consistency gate failed (Codex post-merge review returned `withdraw-ratification` with 5 substantive findings — see `Telecheck_SI_001_Codex_Withdraw_Ratification_Review_2026-05-11.md`). All ratification artifacts were reverted same-day; the DRAFT then went through 10 rounds of Codex pre-ratification adversarial review with 15 additional findings closed inline before re-ratification (total 20 findings closed; v0.2 → v0.13 trajectory).
+
+**Pattern established:** the v1.10.1 hygiene cycle's "iterate-to-asymptote" Codex convergence discipline (12 rounds, ~95 findings) is the correct pattern for ratification-class spec corpus changes. This P-011 cycle was a smaller-scope application of the same discipline.
+
+**Promotion class:** content-change. New entity expansion + new state machine + new audit/domain IDs + AUDIT_EVENTS §I-012 closure-rule prose amendment all require Registry version bump per operating rule 4.
+
+**Version bumps applied at P-011:**
+- Artifact Registry **v2.10 → v2.11** (this file's parent record; coverage counts updated: entities 41 → 42; state machines 18 → 19; Contracts Pack rows updated)
+- Canonical Data Model **v1.2 → v1.3** (added §4.16 MedicationRequest; amended §audit_events `audit_i012_workload_evidence_required` CHECK to add `prescribing.protocol_authorization_granted` to the I-012 action list in lockstep with AUDIT_EVENTS v5.3 §I-012 closure rule)
+- State Machines **v1.1 → v1.2** (added §19 MedicationRequest lifecycle: 8 states, 13 transitions, 2 I-012-gated execution routes into `active` — `clinician_approve` and `protocol_authorized_prescribing`, both emitting `medication_request.approved.v1` with discriminating `approval_pathway` field)
+- AUDIT_EVENTS Contracts Pack **v5.2 → v5.3** (7 net-new Category A action IDs + §I-012 closure-rule amendment adding `prescribing.protocol_authorization_granted` to the authoritative I-012 action-class set + broadening the future-extension carve-out to include `prescribing.*` confirmation actions added by an I-012-amending SI promotion. P-011 IS the I-012-amending act for this addition. The bump is the smallest semver step appropriate to a backward-compatible normative-prose amendment; pre-amendment baseline = v5.2 line 66/78/127 prose; post-amendment landing = v5.3.)
+- DOMAIN_EVENTS Contracts Pack **v5.2** (additive enum extension only — no normative-rule change; 4 net-new tenant-scoped event types added: `medication_request.{discontinued, superseded, expired, interaction_safety_hold_triggered}` — partition_key `tenant_id:medication_request_id`. The existing canonical `medication_request.approved.v1` is REUSED for the activation handoff in BOTH execution routes; no new event needed for activation.)
+
+**Changes:**
+
+1. **CDM v1.3 §4.16 — NEW entity expansion (MedicationRequest).** 34 columns (Path 1 — NO `interaction_override_id`; integration via the `medication_request.interaction_safety_hold_triggered` domain event). 6 composite FKs (PROJECT_CONVENTIONS r5 §1.1). 7 CHECK constraints. The state-dependent I-012 envelope check restricts the AI-participating EXECUTION path to `ai_workload_type='protocol_execution' AND autonomy_level='action_with_confirm'` ONLY (aligns with WORKLOAD_TAXONOMY v5.2 §2.1 which caps `conversational_assistant` at `autonomy_level_range=[advisory]`). Composite UNIQUE (tenant_id, id). RLS via canonical `current_tenant_id()` helper.
+
+2. **CDM v1.3 §audit_events `audit_i012_workload_evidence_required` CHECK constraint amended.** `'prescribing.protocol_authorization_granted'` added to the `action NOT IN (...)` list (database-level enforcement of the AUDIT_EVENTS v5.3 §I-012 closure rule's authoritative set amendment). Without this lockstep CHECK modification, a v1.10 audit row for the new confirmation action could pass the CHECK with null workload/autonomy fields, recreating the I-012 envelope gap.
+
+3. **State Machines v1.2 §19 — NEW state machine (MedicationRequest lifecycle).** Two prescribing-execution routes explicitly modeled: `clinician_approve` (clinician-only path) and `protocol_authorized_prescribing` (Mode 2 protocol-engine path) — both from `pending_clinician_review → active`, both I-012-gated, both emitting `medication_request.approved.v1` with the discriminating `approval_pathway` field. The §19.X subsection enumerates the protocol-authorized route's guard, actor envelope (canonical `actor_type=ai_workload`, NOT `protocol_engine` for new emissions), required evidence (`prescribing.protocol_authorization_granted` clinician confirmation event scoped by `action_id`), success audit emission, and distinction from `clinician_approve` (including the clinician-only n/a sentinel envelope per AUDIT_EVENTS v5.3 §I-012 closure rule).
+
+4. **AUDIT_EVENTS v5.3 — 7 net-new Category A action IDs:** `medication_request.{drafted, submitted_for_review, interaction_evaluation_completed, discontinued, superseded, expired}` (6 lifecycle events) + `prescribing.protocol_authorization_granted` (1 new I-012 confirmation event for the protocol-authorized prescribing route; clinician actor; canonical `actor_type='clinician'`; envelope populates as `'n/a'` for purely human-driven authorization OR inherits upstream values when upstream AI advice contributed). Existing `prescribing.{initiated, approved, declined, modified, execution_rejected}` + `protocol_authorized_prescribing` preserved as authoritative I-012 vocabulary, carried forward unchanged from v5.2 to v5.3.
+
+5. **DOMAIN_EVENTS v5.2 (amend in place) — 4 net-new event types:** `medication_request.{discontinued, superseded, expired, interaction_safety_hold_triggered}`. Existing canonical `medication_request.approved.v1` reused for the activation handoff in BOTH execution routes via its `approval_pathway: "clinician_reviewed | protocol_authorized"` field; no parallel `medication_request.activated` event was introduced (rejected per Codex v0.3→v0.4 Finding 3 closure — would have created duplicate subscriber workflows for the same business handoff).
+
+No removals. No envelope shape changes. No breaking changes to existing slices.
+
+**Unblocks:**
+- Slice 4 Pharmacy + Refill v2.1 (Sprint 35-36 in EHBG §10b) becomes implementable — pharmacy scaffold rebuild aligned to ratified spec.
+- Subscription slice (downstream FK target `medication_requests`) unblocks in parallel.
+- Med Interaction Engine slice unblocks for its core interaction-evaluation surface (signal-check against a medication list); Path 1 integration via domain event preserves clean module-boundary separation per ADR-001.
+
+**Lessons captured:**
+- **Pre-ratification cross-artifact-consistency gate is mandatory for content-change promotions.** The 2026-05-11 withdraw-ratification cycle was directly caused by skipping this gate. The 11-round Codex convergence trajectory (v0.2 → v0.13; 20 findings closed) demonstrates how much drift the gate catches when applied rigorously.
+- **`actor_type=ai_workload` is mandatory for new I-012 protocol-execution emissions** (the legacy `protocol_engine` actor_type is non-compliant per AUDIT_EVENTS v5.2 line 66 closure rule). Pharmacy scaffold rebuild must observe this mapping.
+- **DBMS-level CHECK constraints encoding canonical action-class sets must be amended in lockstep with the AUDIT_EVENTS prose authority** (CDM v1.3 `audit_i012_workload_evidence_required` lockstep with AUDIT_EVENTS v5.3 §I-012 closure rule).
+
+**Registry absorption:** Registry v2.10 → v2.11. Coverage counts updated: entities 41 → 42; state machines 18 → 19; Contracts Pack rows updated (AUDIT_EVENTS v5.3; DOMAIN_EVENTS in-place at v5.2 with 4 net-new event types); CDM row updated to v1.3 with the audit_events CHECK amendment noted; State Machines row updated to v1.2 with §19 noted.
+
+**Source-of-truth artifact:** the SI-001 DRAFT v0.13 at `Telecheck_SI_Closure_Cycle_2026-05-11/Telecheck_SI_001_MedicationRequest_Schema_DRAFT.md` is the workstream-canonical record of the cycle (20 findings closed inline; Codex `approve` verdict at v0.13). The bundle copies above ARE the canonical post-promotion state; the DRAFT itself is preserved as the audit-trail artifact for the cycle.
+
+---
+
 ### Entry P-010 — 2026-05-02 — CDM §4.1 SPEC ISSUE resolution (tenant.id format + columns the v1.10.1 cycle promised but never merged)
 
 **Type:** Reconciliation entry (per operating rule 6 — no Registry version bump; aligns body with already-canonical doc-control claims; precedent: P-009).

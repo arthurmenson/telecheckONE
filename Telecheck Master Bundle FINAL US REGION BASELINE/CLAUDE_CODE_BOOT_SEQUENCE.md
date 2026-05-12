@@ -25,7 +25,7 @@ Do NOT read every document upfront. Pull on demand.
 ## 2. Authority hierarchy (top wins on conflict)
 
 1. Active Document Index v1.0
-2. Artifact Registry v2.10
+2. Artifact Registry **v2.11** (P-011 / SI-001 closure 2026-05-11; supersedes v2.10)
 3. Project Upload Manifest
 4. Engineering Handoff & Build Guide v1.3
 5. All other documents
@@ -37,14 +37,14 @@ If two of (1)–(4) conflict: STOP. Report the conflict. Do not pick a winner.
 ## 3. Canonical versions (memorize)
 
 - Master Platform PRD: **v1.10** (v1.10 PRD Update Cycle promoted 2026-05-01)
-- Canonical Data Model: **v1.2** (41 entities; v1.10 cycle adds research entities + AIExecution per Phase 5 group 5B; substantive edits per `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md`)
-- State Machines: **v1.1** (14 state machines + ProtocolAuthorizedAction lifecycle for AI workload taxonomy per ADR-029; substantive edits per Phase 5 group 5B)
+- Canonical Data Model: **v1.3** (bumped v1.2 → v1.3 at P-011 / SI-001 closure 2026-05-11: §4.16 MedicationRequest added body-resident; audit_events CHECK amended for I-012 set; body-resident count 42 entities; delta-only research + AIExecution remain via Phase 5 group 5B delta artifact)
+- State Machines: **v1.2** (bumped v1.1 → v1.2 at P-011 / SI-001 closure 2026-05-11: §19 MedicationRequest lifecycle added body-resident; 19 active state machines + 4 reserved-future transitions on ProtocolAuthorizedAction)
 - OpenAPI: **v0.2** (178 endpoints + research endpoints per Phase 5 group 5B)
 - RBAC: **v1.1** (dual hierarchy + 3 new research roles per Phase 5 group 5B)
 - System Architecture: **v1.2** (15 modules; us-east-1 primary, us-west-2 cold DR per ADR-026; v1.10 cycle adds research data module per Phase 5 group 5B)
 - Engineering Handoff: **v1.3**
 - OR Tracker: **v1.5** (v1.10 cycle adds 3 marketing OR items + 5 research OR items per Phase 5 group 5D)
-- Contracts Pack: **v5.2** (filenames retain `v5_00` legacy pattern; headers govern. **11 files at v5.2** — 9 amended (INVARIANTS, AUDIT_EVENTS, DOMAIN_EVENTS, CCR_RUNTIME, GLOSSARY, TYPES, AI_LAYERING, FORMS_ENGINE, GOVERNANCE_CONTROLS) + 2 NEW (WORKLOAD_TAXONOMY, AUTONOMY_LEVELS); ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1; MARKET_LAUNCH v5.0 → v5.1)
+- Contracts Pack: **v5.2/v5.3** (filenames retain `v5_00` legacy pattern; headers govern. **12 files at v5.2/v5.3** — 9 amended at v5.2 (INVARIANTS, DOMAIN_EVENTS amend-in-place at v5.2 under P-011, CCR_RUNTIME, GLOSSARY, TYPES, AI_LAYERING, FORMS_ENGINE, GOVERNANCE_CONTROLS) + **AUDIT_EVENTS at v5.3** (bumped v5.2 → v5.3 at P-011 / SI-001 closure 2026-05-11: 7 net-new Category A action IDs + §I-012 closure-rule amendment; live-emission references for the new I-012 confirmation action MUST resolve against v5.3 or later) + 2 NEW at v5.2 (WORKLOAD_TAXONOMY, AUTONOMY_LEVELS); ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1; MARKET_LAUNCH v5.0 → v5.1)
 - Pharmacy + Refill: **v2.1**
 - Forms / Intake Engine: **v2.1**
 - Admin Backend: **v1.1**
@@ -53,8 +53,8 @@ If two of (1)–(4) conflict: STOP. Report the conflict. Do not pick a winner.
 - Ghana Launch Playbook: **v1.2**
 - Design System: **v1.1**
 - Design Implementation Contract: **v1.1 Canonical for development** (Patient mock v7 binding visual reference per Evans Option B 2026-04-28 fold-in into v1.10 cycle as Phase 5.6 / F49)
-- Artifact Registry: **v2.10**
-- Active Document Index: **v1.0** (refreshed 2026-05-01 for v1.10 PRD Update Cycle Phase 6)
+- Artifact Registry: **v2.11** (P-011 / SI-001 closure 2026-05-11; supersedes v2.10 of v1.10 PRD Update Cycle Phase 6 promotion 2026-05-01)
+- Active Document Index: **v1.0** (refreshed 2026-05-11 for P-011 / SI-001 closure; previously refreshed 2026-05-01 for v1.10 PRD Update Cycle Phase 6)
 
 **Architecture decision set (canonical, v1.10):** ADR Set v1.0 + ADR Addendum 016–019 + ADR Addendum 020–025 (with **ADR-025 superseded by ADR-026**) + ADR Addendum 026 (single-region us-east-1 primary, us-west-2 cold DR) + **ADR-027 Country-Conditional DTC Marketing Posture** (Accepted 2026-05-01) + **ADR-028 Research Data Partnership Posture A** (Accepted 2026-05-01) + **ADR-029 AI Workload Taxonomy** (Accepted 2026-05-01).
 
@@ -66,13 +66,13 @@ If a document references a version not on this list, treat the reference as hist
 
 ## 4. Schema authority (do NOT fork)
 
-All canonical schemas live in:
-- `Telecheck_Canonical_Data_Model_v1_2.md` §3, §4, §4-bis (+ v1.10 cycle research entities + AIExecution entity per Phase 5 group 5B)
-- `Telecheck_State_Machines_v1_1.md` §1–§16 (+ ProtocolAuthorizedAction lifecycle per Phase 5 group 5B + ADR-029)
-- `Telecheck_OpenAPI_v0_2.md` (endpoint shapes; v1.10 cycle adds research endpoints with `audit_sensitivity_level=high_pii` per I-031)
-- `Telecheck_Contracts_Pack_v5_00_*.md` (cross-cutting invariants, types, error model; v1.10 cycle bumps **9 amended files to v5.2** + adds **2 new contracts at v5.2** (WORKLOAD_TAXONOMY, AUTONOMY_LEVELS per ADR-029) = **11 at v5.2 total**; plus MARKET_LAUNCH v5.0 → v5.1; ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1)
+All canonical schemas live in (filenames retain `v1_2` / `v1_1` / `v5_00` legacy patterns per v1.10 cycle convention; headers govern):
+- `Telecheck_Canonical_Data_Model_v1_2.md` — **header v1.3** (bumped at P-011 / SI-001 closure 2026-05-11): §3, §4 (now includes §4.16 MedicationRequest added at v1.3), §4-bis, §audit_events (CHECK amended for I-012 set at v1.3), and v1.10 cycle research entities + AIExecution entity per Phase 5 group 5B delta artifact.
+- `Telecheck_State_Machines_v1_1.md` — **header v1.2** (bumped at P-011 / SI-001 closure 2026-05-11): §1–§16 + v1.10 cycle additions (research state machines + ProtocolAuthorizedAction lifecycle per Phase 5 group 5B + ADR-029) + **§19 MedicationRequest lifecycle** (added at v1.2 per P-011).
+- `Telecheck_OpenAPI_v0_2.md` (endpoint shapes; v1.10 cycle adds research endpoints with `audit_sensitivity_level=high_pii` per I-031).
+- `Telecheck_Contracts_Pack_v5_00_*.md` (cross-cutting invariants, types, error model). 11 files at v5.2 baseline (8 amended Phase 3 + 2 NEW WORKLOAD_TAXONOMY/AUTONOMY_LEVELS + DOMAIN_EVENTS amended in-place at v5.2 under P-011); **AUDIT_EVENTS at v5.3** (bumped v5.2 → v5.3 at P-011 / SI-001 closure 2026-05-11; live-emission references for the new I-012 confirmation action `prescribing.protocol_authorization_granted` MUST resolve against v5.3 or later); MARKET_LAUNCH v5.0 → v5.1; ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1.
 
-Slice PRDs reference these. If a slice PRD appears to define a schema that disagrees with CDM v1.2: **CDM wins.** Open a Spec Issue (per EHBG §12) — do not fork.
+Slice PRDs reference these. If a slice PRD appears to define a schema that disagrees with CDM v1.3: **CDM wins.** Open a Spec Issue (per EHBG §12) — do not fork.
 
 ---
 
@@ -80,7 +80,7 @@ Slice PRDs reference these. If a slice PRD appears to define a schema that disag
 
 - Every PHI-touching record carries `tenant_id`.
 - Every query filters by `tenant_id` (RLS + application + KMS — three layers).
-- Cross-tenant access requires break-glass per RBAC v1.1 + audit per AUDIT_EVENTS v5.2.
+- Cross-tenant access requires break-glass per RBAC v1.1 + audit per AUDIT_EVENTS **v5.3** (bumped at P-011 / SI-001 closure 2026-05-11; supersedes v5.2 for live emissions of the I-012 authoritative-set amendment).
 - Error envelopes do NOT leak cross-tenant existence (per I-025).
 - Read `Telecheck_Tenant_Threading_Addendum_v1_0.md` before implementing any v1.0 slice PRD.
 
@@ -123,9 +123,9 @@ If you encounter a `/mnt/project/Telecheck_*_v1_0.md` reference (or earlier vers
 | Conflict type | Resolution |
 |---|---|
 | Two control-plane docs disagree (ADI vs Registry vs Manifest vs EHBG) | STOP. Report. Do not pick. |
-| Slice PRD vs CDM v1.2 schema | CDM wins. Open Spec Issue. |
+| Slice PRD vs CDM v1.3 schema | CDM wins. Open Spec Issue. |
 | Slice PRD vs OpenAPI v0.2 endpoint shape | OpenAPI wins. Open Spec Issue. |
-| Slice PRD vs State Machines v1.1 transition | State Machines wins. Open Spec Issue. |
+| Slice PRD vs State Machines **v1.2** transition (bumped from v1.1 at P-011 / SI-001 closure 2026-05-11) | State Machines wins. Open Spec Issue. |
 | Tenant Threading Addendum vs slice PRD content | Threading Addendum extends — both apply; addendum binds for tenant-isolation semantics. |
 | Unified Admin Sidebar vs Admin Operator IA / Admin Configuration Surfaces / Admin Backend (sidebar layout) | Unified Admin Sidebar wins for sidebar layout only; predecessor docs win for substantive workflow content. |
 | Filename `v5_00` vs header `v5.2` (Contracts Pack) | Header wins (v5.2 is canonical for **11 files**: 9 amended + 2 new — WORKLOAD_TAXONOMY, AUTONOMY_LEVELS; ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1; MARKET_LAUNCH v5.0 → v5.1). |
@@ -136,7 +136,7 @@ If you encounter a `/mnt/project/Telecheck_*_v1_0.md` reference (or earlier vers
 | Older doc uses bare `Heros` as tenant/operator identifier | **C3 cycle wins.** Operating tenant naming `Telecheck-{country}`; consumer DBA `Heros Health` (country-instanced). "Heros" alone forbidden as tenant identifier per Master PRD §17. |
 | Older doc uses bare `workload_type` field name | **`ai_workload_type` is canonical** per Phase 3 EXIT MEDIUM cleanup. Master PRD §13.7 single source of truth. |
 | Older doc references DIC v1.0 PROVISIONAL | **DIC v1.1 Canonical for development wins** (Patient mock v7 binding visual reference per Evans Option B 2026-04-28 fold-in into v1.10 cycle Phase 5.6 / F49). |
-| Older doc references Contracts Pack v5.1 | **v5.2 wins** for the **11 v1.10-amended-or-new files** (9 amended in Phase 3: INVARIANTS, AUDIT_EVENTS, DOMAIN_EVENTS, CCR_RUNTIME, GLOSSARY, TYPES, AI_LAYERING, FORMS_ENGINE, GOVERNANCE_CONTROLS + 2 NEW: WORKLOAD_TAXONOMY, AUTONOMY_LEVELS); ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1; MARKET_LAUNCH v5.0 → v5.1. |
+| Older doc references Contracts Pack v5.1 or v5.2 for AUDIT_EVENTS live emissions | **v5.3 wins for AUDIT_EVENTS** (bumped at P-011 / SI-001 closure 2026-05-11; live-emission references for the new I-012 confirmation action `prescribing.protocol_authorization_granted` MUST resolve against v5.3 or later). **v5.2 wins** for the other v1.10-amended-or-new files (INVARIANTS, DOMAIN_EVENTS amended in-place at v5.2 under P-011, CCR_RUNTIME, GLOSSARY, TYPES, AI_LAYERING, FORMS_ENGINE, GOVERNANCE_CONTROLS, WORKLOAD_TAXONOMY, AUTONOMY_LEVELS); ERROR_MODEL + IDEMPOTENCY + SOURCE_OF_TRUTH preserved at v5.1; MARKET_LAUNCH v5.0 → v5.1. |
 | TBD / placeholder text remains in document | Do not invent. Open Spec Issue. |
 
 ---
@@ -147,8 +147,8 @@ Before writing code for a slice or feature:
 
 1. Read the slice PRD in full
 2. Read the corresponding Tenant Threading Addendum §3.X (if v1.0 slice)
-3. Read CDM v1.2 entity definitions for the entities in scope
-4. Read State Machines v1.1 §X for the state machines in scope
+3. Read CDM v1.3 entity definitions for the entities in scope
+4. Read State Machines **v1.2** §X for the state machines in scope (bumped from v1.1 at P-011 / SI-001 closure 2026-05-11; new §19 MedicationRequest lifecycle is the canonical reference for prescribing-decision workflows)
 5. Read OpenAPI v0.2 endpoints for the API surface in scope
 6. Read relevant Contracts Pack v5.2 invariants (especially I-003 audit append-only, I-024 break-glass, I-025 information-leak prevention, I-027 tenant isolation; v1.10 cycle adds I-029/030/031 research data partnership invariants — see INVARIANTS contract v5.2 + delta artifact `Phase3_INVARIANTS_v1_10_Edits_2026-05-01.md`)
 7. Check Operational Readiness Tracker v1.5 for any open Tier-1/Tier-2 items in scope (v1.10 cycle adds 3 marketing OR items per ADR-027 + 5 research OR items per ADR-028 — see Phase 5 group 5D delta artifact)

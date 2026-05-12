@@ -53,11 +53,11 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 **Mode 2 case prep AI:**
 - Mode 2 protocol selection is tenant-scoped via the tenant's protocol library. A tenant in Ghana uses the Ghana Protocol Library; a US tenant uses the US Protocol Library when available. Per Operations Truth artifacts.
 - Tenant Clinical Lead activates which protocols are available within their tenant via Admin Backend (per Admin Backend v1.1 §5).
-- Mode 2 evaluations are stored tenant-scoped per CDM v1.2 §3.6 (Mode2Evaluation entity inheritance).
+- Mode 2 evaluations are stored tenant-scoped per CDM v1.3 §3.6 (Mode2Evaluation entity inheritance).
 - Clinician sign-off on Mode 2 outputs is scoped to clinicians authorized for that tenant per RBAC v1.1.
 
 **Audit:**
-- Every AI action audited per AUDIT_EVENTS v5.1 with tenant_id (Category A for clinical decisions; Category C for purely conversational interactions without clinical recommendations).
+- Every AI action audited per AUDIT_EVENTS v5.3 (carries forward v5.1/v5.2 prose unchanged; live emissions resolve against v5.3 post-P-011 / SI-001 closure 2026-05-11) with tenant_id (Category A for clinical decisions; Category C for purely conversational interactions without clinical recommendations).
 
 ### 3.2 Async Consult Slice PRD v1.0
 
@@ -83,7 +83,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 - Room access tokens are issued for the specific consult and validate against tenant scope at room-join time.
 
 **Recording storage:**
-- If session recording is enabled (per tenant policy), recordings are stored tenant-scoped in the encryption-keyed-by-tenant S3 bucket structure per CDM v1.2 §7.
+- If session recording is enabled (per tenant policy), recordings are stored tenant-scoped in the encryption-keyed-by-tenant S3 bucket structure per CDM v1.3 §7.
 - Cross-tenant recording access requires break-glass per I-024.
 
 **Patient-facing UI:**
@@ -97,11 +97,11 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 ### 3.4 RPM/CCM Slice PRD v1.0
 
 **Monitoring data:**
-- RPMReading entity is tenant-scoped per CDM v1.2 §3.8. Patient readings in Tenant A are not visible in Tenant B even if the same human has readings in both.
+- RPMReading entity is tenant-scoped per CDM v1.3 §3.8. Patient readings in Tenant A are not visible in Tenant B even if the same human has readings in both.
 - Device pairing is tenant-scoped (a Bluetooth glucometer paired in Telecheck-Ghana doesn't appear in Telecheck-US).
 
 **Alerting:**
-- Critical alerts (per RPM Alert state machine in State Machines v1.1 §7) escalate to the tenant's clinician on-call roster, not platform-wide.
+- Critical alerts (per RPM Alert state machine in State Machines v1.2 §7) escalate to the tenant's clinician on-call roster, not platform-wide.
 - Alert thresholds may be tenant-customizable per protocol — Tenant Clinical Lead approval required.
 
 **Care plan:**
@@ -123,7 +123,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 ### 3.6 Adverse Event Reporting Slice PRD v1.0
 
 **AE records:**
-- Adverse Event entities are tenant-scoped per CDM v1.2 §3.10 (inherited entity tenant scoping).
+- Adverse Event entities are tenant-scoped per CDM v1.3 §3.10 (inherited entity tenant scoping).
 - Tenant Clinical Lead is responsible for reviewing and escalating AEs in their tenant.
 - Cross-tenant AE pattern detection (a defect appearing in multiple tenants — e.g., a GLP-1 product showing the same side effect across tenants) is performed at platform level by Platform Clinical Governance per GOVERNANCE_CONTROLS v5.1 §6.3.
 
@@ -143,7 +143,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 - Cross-tenant delegations (a single delegate managing one human's care across tenants) are not in launch scope.
 
 **Bridge supply on consent revocation:**
-- Per ADR-008 and I-021. When a patient revokes consent that affects an active subscription on an abrupt-discontinuation medication, the subscription transitions to SAFETY_HOLD per State Machines v1.1 §15, and a bridge supply is dispensed. This is tenant-scoped (the bridge supply originates from the same tenant's pharmacy adapter) but the invariant applies in every tenant identically.
+- Per ADR-008 and I-021. When a patient revokes consent that affects an active subscription on an abrupt-discontinuation medication, the subscription transitions to SAFETY_HOLD per State Machines v1.2 §15, and a bridge supply is dispensed. This is tenant-scoped (the bridge supply originates from the same tenant's pharmacy adapter) but the invariant applies in every tenant identically.
 
 ### 3.8 Medication Interaction Engine Slice PRD v1.0
 
@@ -153,10 +153,10 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 
 **Override authority:**
 - Clinician override of an interaction signal requires authorization for that tenant per RBAC v1.1.
-- Override audit is Category A per AUDIT_EVENTS v5.1.
+- Override audit is Category A per AUDIT_EVENTS v5.3 (carries forward v5.1/v5.2 prose unchanged; live emissions resolve against v5.3 post-P-011 / SI-001 closure 2026-05-11).
 
 **Tenant-specific configurations:**
-- A tenant may add tenant-specific medication formulary restrictions (e.g., a Ghana tenant whose preferred pharmacy doesn't carry brand-name GLP-1) via ProductCatalog per CDM v1.2 §4.9. The interaction engine still evaluates the medication chemistry; the formulary restriction is a separate prescribability check.
+- A tenant may add tenant-specific medication formulary restrictions (e.g., a Ghana tenant whose preferred pharmacy doesn't carry brand-name GLP-1) via ProductCatalog per CDM v1.3 §4.9. The interaction engine still evaluates the medication chemistry; the formulary restriction is a separate prescribability check.
 
 ### 3.9 Herb-Drug Interaction Engine Slice PRD v1.0
 
@@ -173,7 +173,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 ### 3.10 Labs Document Interpretation Slice PRD v1.0
 
 **Document scoping:**
-- Patient lab documents are tenant-scoped per CDM v1.2 §3.7 Document entity.
+- Patient lab documents are tenant-scoped per CDM v1.3 §3.7 Document entity.
 - AI Mode 1 lab interpretation per ADR-019 happens within tenant context — interpretation copy reflects tenant brand voice via tenant copy variants.
 
 **Provider integrations:**
@@ -202,7 +202,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 - Per-tenant marketing analytics dashboards per Admin Backend v1.1 §5.6.
 
 **Affiliate program:**
-- Affiliate accounts and conversions are tenant-scoped per CDM v1.2 §4.14-§4.15. Telecheck-US (Heros Health DBA scope) operates its own affiliate program; Telecheck-Ghana (Heros Health Ghana DBA scope) operates its own (manual reconciliation at launch).
+- Affiliate accounts and conversions are tenant-scoped per CDM v1.3 §4.14-§4.15. Telecheck-US (Heros Health DBA scope) operates its own affiliate program; Telecheck-Ghana (Heros Health Ghana DBA scope) operates its own (manual reconciliation at launch).
 
 **Cross-tenant marketing:**
 - The Telecheck platform itself (as marketed for tenant onboarding) is not addressed in this slice — that is platform-level Sales/BD function.
@@ -239,7 +239,7 @@ This addendum is canonical alongside the v1.0 slices it references. Until those 
 - Clinician portal renders the tenant brand the clinician is currently working in. Switching tenant context re-themes the portal.
 
 **Audit on tenant switch:**
-- Each tenant switch by a clinician is audited per AUDIT_EVENTS v5.1 Category C (operational); pattern detection on unusually frequent switches surfaces to Platform Privacy Officer.
+- Each tenant switch by a clinician is audited per AUDIT_EVENTS v5.3 (carries forward v5.1/v5.2 prose unchanged; live emissions resolve against v5.3 post-P-011 / SI-001 closure 2026-05-11) Category C (operational); pattern detection on unusually frequent switches surfaces to Platform Privacy Officer.
 
 ---
 
@@ -265,8 +265,8 @@ Future remediation cycles may bump individual v1.0 documents to v1.1 incorporati
 - **ADR-023 multi-tenancy Model A** — origin of this addendum's necessity
 - **ADR-024 country-driven config** — shapes tenant-country relationships
 - **Contracts Pack v5.1** (INVARIANTS, AUDIT_EVENTS, DOMAIN_EVENTS, GLOSSARY, etc.) — substrate for the threading
-- **CDM v1.2** — tenant-scoped entities
-- **State Machines v1.1** — tenant-scoped state transitions
+- **CDM v1.3** — tenant-scoped entities
+- **State Machines v1.2** — tenant-scoped state transitions
 - **OpenAPI v0.2** — tenant-scoped endpoint contracts
 - **RBAC v1.1** — dual hierarchy enforcement
 - **Tenant Configuration module** per System Architecture v1.2 §13 — runtime tenant resolution
@@ -296,7 +296,7 @@ The same sweep applies symmetrically to Telecheck-Ghana: bare `Heros-Ghana` or `
 **Cross-references:**
 - Master PRD v1.10 §17 (canonical brand-vs-identifier rule)
 - Glossary v5.2 §Brand and tenant terms
-- CDM v1.2 v1.10 cycle additions §Tenant entity (consumer_dba, legal_entity, consumer_subdomain columns)
+- CDM v1.3 v1.10 cycle additions §Tenant entity (consumer_dba, legal_entity, consumer_subdomain columns)
 - RBAC v1.1 v1.10 cycle additions §Tenant scoping examples (Row 29)
 - MARKET_LAUNCH v5.1 §Cross-reference to Master PRD §10.5 (program catalog architecture)
 
@@ -308,6 +308,6 @@ This sweep is **mechanical** (find-and-replace pattern with optional DBA qualifi
 
 - **v1.0 (refreshed 2026-04-26 per ADR-026, US Region Migration Cycle U-003)** — Added single Phase 2 media-routing note in §3.3 Sync Video Consult Slice Per-country adapter notes: optional LiveKit edge node in af-south-1 or eu-west-1 for Ghana media RTT reduction while data plane remains us-east-1. Explicitly Phase 2; not launch scope. No other §3.X content modified; no broader topology change. No version bump (single additive note within an existing subsection; consistent with this addendum's per-section additive structure).
 - **v1.0** — NEW addendum produced as remediation for Adversarial Counsel Review v1.0 finding CRITICAL-05. Threads multi-tenancy and country-driven configuration through 14 unchanged v1.0 slice PRDs and IA documents. Authoritative at the same tier as the documents it extends. May be superseded section-by-section as individual documents are bumped to v1.1 in future cycles.
-- **v1.0 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §Tenant_Threading row 31)** — Additive content under "v1.10 cycle additions" section above. Mechanical tenant-ID examples sweep per C3 brand structure: all `Heros-Health` US tenant ID examples → `Telecheck-US` with `Heros Health` DBA qualifier where consumer-brand context applies; symmetric refresh for Telecheck-Ghana / Heros Health Ghana. Sender display names sourced from `tenant.consumer_dba` per CDM v1.2 v1.10 cycle additions, never from `tenant.id`. No semantic change to tenant-threading model; example values only. Per Master PRD v1.10 §17 + Glossary v5.2 §Brand and tenant terms + CDM v1.2 v1.10 cycle additions + RBAC v1.1 v1.10 cycle additions. No version-number bump (entry-level refresh; addendum remains at v1.0).
+- **v1.0 (refreshed 2026-05-02 per v1.10.1 hygiene cycle physical merge of `Phase5_Slice_Engineering_Operations_Delta_2026-05-01.md` Group 5B §Tenant_Threading row 31)** — Additive content under "v1.10 cycle additions" section above. Mechanical tenant-ID examples sweep per C3 brand structure: all `Heros-Health` US tenant ID examples → `Telecheck-US` with `Heros Health` DBA qualifier where consumer-brand context applies; symmetric refresh for Telecheck-Ghana / Heros Health Ghana. Sender display names sourced from `tenant.consumer_dba` per CDM v1.3 v1.10 cycle additions, never from `tenant.id`. No semantic change to tenant-threading model; example values only. Per Master PRD v1.10 §17 + Glossary v5.2 §Brand and tenant terms + CDM v1.3 v1.10 cycle additions + RBAC v1.1 v1.10 cycle additions. No version-number bump (entry-level refresh; addendum remains at v1.0).
 - **Next review:** after the first individual v1.0 → v1.1 slice PRD bump completes, to verify the addendum's content was correctly absorbed and the §3.X subsection can be marked superseded.
 - **Change discipline:** per-document additions to this addendum require Engineering Lead + Tenant Clinical Lead sign-off where the addition affects clinical workflow.
