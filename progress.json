@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "revision": 35,
-  "updated": "2026-05-06",
+  "revision": 93,
+  "updated": "2026-05-14",
   "lifecycle": {
     "current": "foundation-build",
     "stages": [
@@ -285,14 +285,14 @@
       "id": "slice-pharmacy",
       "name": "Pharmacy + Refill",
       "category": "Slice PRD",
-      "status": "blocked",
-      "progress": 49,
+      "status": "in-dev",
+      "progress": 92,
       "owner": "Evans",
-      "notes": "fix(pharmacy): TLC-001 fix-forward — distinguish liveness vs readiness probes",
+      "notes": "feat(pharmacy): TLC-055 PRs C–K shipped 2026-05-13 — read surface (C), patient discontinue (D), clinician createDraft+submit (E), discontinue (F + platform idempotency-bypass fix), approve (G; first I-012-gated activation), decline (H), engine writeback service-callable (I), supersession (J), clinician_modify (K). /ready returns 200 for the first time since the module was scaffolded. Cap=92; final 8% awaits Refill sub-slice + cap clearance to shipped.",
       "docs": [
         "Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md"
       ],
-      "updatedAt": "2026-05-05T21:40:56.023Z",
+      "updatedAt": "2026-05-14T01:55:00.000Z",
       "stage": "slice-build"
     },
     {
@@ -527,14 +527,14 @@
       "name": "Operational Readiness",
       "category": "Operations",
       "status": "blocked",
-      "progress": 85,
+      "progress": 89,
       "owner": "",
-      "notes": "docs(sprint): Sprint 16 ACCEPTANCE FULL — TLC-029 matrix r3 clean (50% utilization; 4th env-blocked-pivot sprint)",
+      "notes": "docs(sprint): Sprint 21 PARTIAL ACCEPTANCE — TLC-040 §3a closed; §3b + TLC-041 share root-cause; Sprint 22 combined investigation",
       "docs": [
         "Telecheck_Operational_Readiness_Todo_v1_5.md",
         "Telecheck_Consolidated_Launch_Tracker_v1_0.md"
       ],
-      "updatedAt": "2026-05-06T04:43:31.369Z",
+      "updatedAt": "2026-05-06T07:33:31.691Z",
       "stage": "internal-alpha"
     },
     {
@@ -595,9 +595,9 @@
       "name": "Identity / Authentication",
       "category": "Implementation",
       "status": "in-dev",
-      "progress": 73,
+      "progress": 78,
       "owner": "",
-      "notes": "test(identity): TLC-002 cross-tenant isolation regression (8 cases)",
+      "notes": "feat(identity): TLC-058 clinician-role JWT claim + accounts.account_type widening merged 2026-05-13 — prerequisite for the pharmacy clinician write surface (PR E onward).",
       "docs": [
         "Telecheck_Identity_Authentication_Spec_v1_0.md"
       ],
@@ -632,6 +632,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-06T05:14:00.293Z",
-  "lastSyncedSha": "7ba2456"
+  "updatedAt": "2026-05-13T19:55:30.255Z",
+  "lastSyncedSha": "ca68403"
 }
