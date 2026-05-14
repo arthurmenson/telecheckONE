@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 95,
+  "revision": 96,
   "updated": "2026-05-14",
   "lifecycle": {
     "current": "foundation-build",
@@ -288,11 +288,12 @@
       "status": "in-dev",
       "progress": 92,
       "owner": "Evans",
-      "notes": "feat(pharmacy): TLC-055 PRs C–K shipped 2026-05-13 — read surface (C), patient discontinue (D), clinician createDraft+submit (E), discontinue (F + platform idempotency-bypass fix), approve (G; first I-012-gated activation), decline (H), engine writeback service-callable (I), supersession (J), clinician_modify (K). /ready returns 200 for the first time since the module was scaffolded. Cap=92; final 8% awaits Refill sub-slice + cap clearance to shipped.",
+      "notes": "feat(pharmacy): TLC-055 PRs C–K shipped 2026-05-13. /ready returns 200. Final 8% (Refill sub-slice) is now BLOCKED on SI-007 ratification (telecheck-app/docs/SI-007 v0.19, merged on main as 5ce0719 via PR #132 on 2026-05-14 after 18 Codex pre-ratification rounds; awaiting spec-corpus Engineering Lead + Clinical Lead + Pharmacy Lead sign-offs → Promotion Ledger P-013 → CDM v1.4 §4.17 Refill + §4.18 Dispensing + §4.19 Shipment + AUDIT_EVENTS v5.4 + DOMAIN_EVENTS in-place amendments). See AI_Service_Rollout_24h_Status_2026-05-14.md Addendum 3.",
       "docs": [
-        "Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md"
+        "Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md",
+        "Telecheck_v1_10_PRD_Update/AI_Service_Rollout_24h_Status_2026-05-14.md"
       ],
-      "updatedAt": "2026-05-14T01:55:00.000Z",
+      "updatedAt": "2026-05-14T22:12:39Z",
       "stage": "slice-build"
     },
     {
@@ -635,5 +636,5 @@
     }
   ],
   "updatedAt": "2026-05-14T05:35:30.541Z",
-  "lastSyncedSha": "74ea62d"
+  "lastSyncedSha": "5ce0719"
 }

@@ -359,3 +359,95 @@ The autonomous run is now genuinely complete. Evans wakes up to:
 - A clear next-step decision tree (review PRs → ratify SI-007 → start Refill implementation OR pivot to Forms/Intake)
 
 — Claude (Opus 4.7, 1M context), 2026-05-14 SI-007 v0.19 / R18-closed end-state
+
+---
+
+## Addendum 4 — PR #132 (SI-007) merged + Forms/Intake + Consent gap assessment
+
+After Addendum 3, Evans authorized continuing the recommended sequence. The next executable step in the recommended sequence (item 3: "Decide PR #132 merge timing") was resolved by following the SI-001 precedent (P-011): merge the SI doc on main pre-ratification so the spec-corpus team can pull from main during their ratification review.
+
+### 1. PR #132 merged
+
+**`5ce0719`** on `arthurmenson/telecheck-app` main (squash-merged 2026-05-14T22:12:39Z; branch `feat/si-007-refill-dispensing-shipment-schema-gap` deleted post-merge).
+
+Pre-merge state: PR was BEHIND main (PR F crisis-gate work merged in between SI-007 branch creation and CI run). Branch updated via merge-from-origin; CI re-ran on the up-to-date state (all 4 checks green: Build/lint/typecheck/test pass 1m33s, Dependency review pass, Benchmarks pass, verify-metadata pass).
+
+### 2. Forms/Intake (92%) — remaining 8% gap analysis
+
+Read of `telecheck-app/docs/FORMS_INTAKE_SLICE_STATUS_2026-05-05.md` "Known limitations / deferred work" §9:
+
+| Item | Blocking class |
+|---|---|
+| Domain-event emission alongside audit | ✅ Delivered (no gap) |
+| **Header-shim Tier 2 retirement** (migrate forms-intake tests from `x-actor-id`/`x-patient-id` headers to JWT-bearing requests) | **Substantive engineering work** — multi-file test migration + harness JWT-signing wiring; estimated 1-2 days |
+| **AUDIT_EVENTS v5.2 ratification of forms-intake action IDs** | **Spec-corpus blocked** — emitted via `formsIntakePlaceholder()`; awaits canonical IDs |
+| Crisis-detection escalation routing (operator alert → on-call clinician) | Blocked on Admin Backend slice + on-call rotation infra |
+| Multi-language template support | Schema-present; runtime + UX deferred until Market Rollout Cockpit |
+| Variant traffic-split runtime evaluation | Schema-present; runtime deferred until Acquisition & Engagement slice |
+| Codex review §1c rest-spread "false-confidence" finding | Deferred indefinitely (patient-safe) |
+
+**Autonomous-actionable item:** header-shim Tier 2 retirement. Bounded but substantial — would require migrating every forms-intake test file to construct JWTs via the test-harness signing infrastructure, then removing the `ALLOW_ACTOR_HEADER_AUTH` env-var gate. Roughly 10-15 test files, plus shared test-helper updates.
+
+### 3. Consent (72%) — remaining 28% gap analysis
+
+Read of `telecheck-app/docs/CONSENT_SLICE_STATUS_2026-05-05.md` "Known limitations / deferred work" §:
+
+| Item | Blocking class |
+|---|---|
+| HTTP integration tests for consent + delegation flows | ✅ Delivered (no gap) |
+| Service-layer direct integration tests | ✅ Delivered (no gap) |
+| Domain-event emission alongside audit | ✅ Delivered (no gap) |
+| Episode consent (Slice PRD §5.6) | Blocked on Care Delivery slice |
+| Healthcare-proxy legal documentation upload | Blocked on Documents slice |
+| Per-jurisdiction consent requirements | Blocked on Market Rollout Cockpit |
+| AUDIT_EVENTS v5.2 ratification of Consent action IDs | Spec-corpus blocked |
+
+**No autonomous-actionable item.** The 28% gap is entirely downstream-slice or spec-corpus dependencies. No engineering work to do in the Consent module itself.
+
+### 4. AI Service handler mount G/H — blocked
+
+Per `AI_Service_Rollout_24h_Status_2026-05-14.md` §"What's NOT live," handler mount requires 5 external dependencies (secrets-mgmt, clinical-grade NLP classifier, protocol-engine, CCR escalation resolver, delivery-outcome audit emission). Not autonomous-actionable.
+
+### 5. Convergence call on the recommended sequence
+
+After:
+- AI Service A–F merged (#126–#131)
+- SI-007 v0.19 authored + 18 Codex closures + merged to main (#132)
+- Pharmacy 92% blocked on SI-007 ratification
+- Forms/Intake 92% — gap is Tier 2 retirement (substantial) or AUDIT_EVENTS ratification (spec-corpus)
+- Consent 72% — gap is downstream-slice deps
+- AI handler G/H — blocked on external deps
+
+The autonomous-engineering surface is exhausted. The remaining work either:
+
+1. Blocks on **spec-corpus ratification** (SI-007 → P-013, AUDIT_EVENTS v5.4 forms-intake/consent IDs, etc.) — Evans + spec-corpus team
+2. Blocks on **downstream slices** (Care Delivery, Documents, Market Rollout Cockpit, Admin Backend, Acquisition & Engagement) — these need their own SI/slice work cycles
+3. Blocks on **external deps** (secrets-mgmt, NLP classifier, real LLM adapter) — Evans's call
+4. Is **substantive multi-day work** (Tier 2 retirement) — better with explicit user direction
+
+### 6. Final state on this commit
+
+**Implementation repo (`arthurmenson/telecheck-app`):**
+- main HEAD: `5ce0719` (SI-007 v0.19 merged)
+- All 7 PRs from the recommended sequence merged: #126 (PR A) → #127 (PR B) → #128 (PR C) → #129 (PR D) → #130 (PR E) → #131 (PR F crisis-gate) → #132 (SI-007 v0.19)
+
+**Spec repo (`arthurmenson/telecheckONE`):**
+- main HEAD: this commit (Addendum 4)
+- `progress.json` synced: revision 95 → 96; `lastSyncedSha` 74ea62d → 5ce0719; `slice-pharmacy.notes` updated to reflect SI-007 on main
+
+**Open PRs from this autonomous run:** zero. Everything Evans-actionable is now either merged or open for spec-corpus team review off main.
+
+### 7. What Evans wakes up to (recommended-order continuation final state)
+
+1. **Review-ready merges on main:** SI-007 v0.19 + AI Service A–F. Spec-corpus team can pull from main for SI-007 ratification.
+2. **Ratification gates pending:** SI-007 → P-013 (Engineering Lead + Clinical Lead + Pharmacy Lead). AUDIT_EVENTS v5.2 ratification for forms-intake/consent/identity placeholder IDs (separate spec-corpus cycle).
+3. **External-dep gates pending:** secrets-mgmt for AI provider, clinical-grade NLP for crisis detector, protocol-engine slice, CCR escalation resolver, delivery-outcome audit emission.
+4. **Next-slice direction (Evans's call):**
+   - Forms/Intake Tier 2 retirement (engineering work; 1-2 days, autonomous-actionable with explicit direction)
+   - Forms/Intake/Consent/Identity AUDIT_EVENTS ratification (spec-corpus + autonomous SI-007-style author cycle)
+   - Pivot to a slice not yet started (Adverse Event Reporting, Labs, RPM/CCM, etc.)
+   - Protocol-engine slice (unblocks AI handler G/H, Subscription period_end, Refill route_protocol)
+
+**Autonomous run genuinely complete. No further wake-ups scheduled.**
+
+— Claude (Opus 4.7, 1M context), 2026-05-14 recommended-sequence final state (PR #132 merged; all slice gaps catalogued and routed)
