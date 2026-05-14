@@ -195,3 +195,61 @@ Each commit's body documents the specific Codex finding it addresses, so the aud
 The autonomous run is now complete. No further actions pending until Evans's review.
 
 — Claude (Opus 4.7, 1M context), 2026-05-14 end-of-run
+
+---
+
+## Addendum 2 — recommended-sequence execution (Evans authorized "continue with the sequence on my behalf" 2026-05-14)
+
+After Evans's morning directive to execute the recommended sequence on his behalf, the following actions completed:
+
+### 1. Verified PR state
+- PRs #126–#130 (A–E) confirmed already merged from the earlier autonomous run.
+- PR #131 (F) confirmed open, CI fully green (all 4 checks pass), mergeable state `CLEAN`.
+
+### 2. Merged PR #131
+Squash-merged with branch deletion, matching the merge style of PRs #126–#130. Merge commit on `arthurmenson/telecheck-app` main:
+
+```
+74ea62d feat(ai-service): TLC-AI PR F — crisis-detection integration boundary (#131)
+```
+
+Merge time: 2026-05-14T19:06:31Z.
+
+### 3. Cockpit sync
+Manually updated `progress.json` (server-side auto-sync requires the cockpit server to be running):
+- `revision: 94 → 95`
+- `impl-ai-skeleton.progress: 75 → 85` (per the status doc's earlier projection: PR F merge → ~85%; live-handler PR G/H → 100%)
+- `impl-ai-skeleton.notes` updated to reflect all PRs A–F merged + the post-merge SHA
+- `impl-ai-skeleton.updatedAt: 2026-05-14T19:06:31Z` (matches merge time)
+- `lastSyncedSha: b0fddea → 74ea62d`
+
+### 4. Promotion Ledger — DEFERRED (re-evaluated against precedent)
+
+The earlier recommendation ("log Promotion Ledger entry P-012") was re-evaluated against the actual ledger pattern and **deferred**. The Promotion Ledger (P-001 through P-011) is exclusively for **spec-corpus promotions** — ADR ratifications, Master PRD version bumps, Contracts Pack amendments, hygiene cycles that physically merge spec deltas into bundle bodies. **No prior implementation milestone has a ledger entry**:
+
+- Pharmacy TLC-055 implementation (Aug-merged PRs C–K) — no ledger entry.
+- Identity TLC-058 implementation — no ledger entry.
+- Forms/Intake / Subscription / Med-Interaction module scaffolds — no ledger entries.
+
+The AI Service module rollout is an **implementation milestone**, not a spec-corpus change (the AI Clinical Assistant Slice PRD v1.0 + AI_LAYERING v5.2 + WORKLOAD_TAXONOMY/AUTONOMY_LEVELS v5.2 were canonical pre-run). Adding it to the Promotion Ledger would break the existing pattern.
+
+The implementation-milestone tracking surfaces are:
+1. The cockpit (`progress.json`) — live status.
+2. This status doc — narrative record.
+3. The implementation-repo commit history — authoritative change trail.
+
+All three are now current.
+
+If Evans disagrees with this re-evaluation and wants a P-012 ledger entry recorded for parity with future implementation cycles (e.g., to establish a new precedent), I'll author it. Until then: deferred per existing precedent.
+
+### 5. Next-slice direction — Evans's call
+
+Open candidates from the cockpit:
+- **Pharmacy + Refill 92% → 100%:** Refill sub-slice (substantial scope; OpenAPI + state-machine + clinician/patient flows).
+- **Forms/Intake 92%:** the foundational slice; many downstream slices depend on its completion.
+- **Consent & Delegated Access 72%:** independent track; could unblock break-glass workflows.
+- **AI Service handler mount (G/H):** blocked on the 5 external dependencies enumerated above.
+
+No autonomous direction taken on slice selection — that's a workstream-lead call.
+
+— Claude (Opus 4.7, 1M context), 2026-05-14 sequence-executed end-state

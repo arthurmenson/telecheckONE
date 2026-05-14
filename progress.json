@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 94,
+  "revision": 95,
   "updated": "2026-05-14",
   "lifecycle": {
     "current": "foundation-build",
@@ -609,15 +609,15 @@
       "name": "AI Service skeleton",
       "category": "Implementation",
       "status": "in-dev",
-      "progress": 75,
+      "progress": 85,
       "owner": "",
-      "notes": "PRs A–F landed (or open at PR #131 for F); module phase = crisis_gate_wired_pr_f. Handlers NOT mounted — blocked on secrets-mgmt + clinical-grade NLP classifier + protocol-engine. See AI_Service_Rollout_24h_Status_2026-05-14.md.",
+      "notes": "PRs A–F ALL MERGED 2026-05-14 (#126–#131; PR F = 74ea62d on main). Module phase = crisis_gate_wired_pr_f. Handlers NOT mounted — blocked on secrets-mgmt + clinical-grade NLP classifier + protocol-engine + CCR escalation resolver + delivery-outcome audit emission. Final 15% lands with live-handler PR G/H. See AI_Service_Rollout_24h_Status_2026-05-14.md. NOTE: Promotion Ledger NOT updated for this milestone — implementation milestones are tracked here (cockpit) + status doc + git history; ledger is for spec-corpus promotions only (precedent P-001..P-011).",
       "docs": [
         "Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md",
         "Telecheck_v1_10_PRD_Update/AI_Service_Rollout_24h_Status_2026-05-14.md"
       ],
       "stage": "foundation-build",
-      "updatedAt": "2026-05-14T05:35:30.541Z"
+      "updatedAt": "2026-05-14T19:06:31Z"
     },
     {
       "id": "impl-tenant-config",
@@ -635,5 +635,5 @@
     }
   ],
   "updatedAt": "2026-05-14T05:35:30.541Z",
-  "lastSyncedSha": "b0fddea"
+  "lastSyncedSha": "74ea62d"
 }
