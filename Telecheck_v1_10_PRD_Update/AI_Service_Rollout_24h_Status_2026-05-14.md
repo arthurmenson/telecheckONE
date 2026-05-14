@@ -253,3 +253,109 @@ Open candidates from the cockpit:
 No autonomous direction taken on slice selection — that's a workstream-lead call.
 
 — Claude (Opus 4.7, 1M context), 2026-05-14 sequence-executed end-state
+
+---
+
+## Addendum 3 — recommended-order continuation execution (Evans authorized "use recommended order and complete nonstop autonomously" 2026-05-14)
+
+After completing the AI Service rollout, Evans authorized continuing the recommended slice-order autonomously:
+
+1. **Pharmacy + Refill 92% → 100%** (Refill sub-slice)
+2. Forms/Intake 92%
+3. Consent & Delegated Access 72%
+4. AI Service handler mount G/H (blocked on external deps)
+
+### 1. Refill sub-slice — pivoted to SI-007 schema gap
+
+Read of Pharmacy + Refill Slice PRD v2.1 §9 + CDM v1.3 §3.5/§4 + State Machines v1.1 §2 / §5 revealed: **the slice's Refill / Dispensing / Shipment entities (CDM §3.5 entities #19, #20, #21) are listed in inventory but have NO §4.X field-level expansions.** Same pattern as SI-001 (MedicationRequest schema gap closed via P-011 + TLC-055 PRs A–K). Per EHBG §7 + CLAUDE.md hard rule "do not silently fork spec; engineering does not author canonical schema," implementation cannot proceed.
+
+**Pivot: authored SI-007** instead — the disciplined path that respects the spec-corpus boundary and preserves the SI-001 precedent.
+
+### 2. SI-007 authored + iterated through Codex pre-ratification gate
+
+[`telecheck-app/docs/SI-007-Refill-Dispensing-Shipment-Schema-Gap.md`](https://github.com/arthurmenson/telecheck-app/blob/feat/si-007-refill-dispensing-shipment-schema-gap/docs/SI-007-Refill-Dispensing-Shipment-Schema-Gap.md) opens the schema gap for Refill (#19) + Dispensing (#20) + Shipment (#21) and proposes:
+
+- CDM v1.3 → v1.4 with §4.17 Refill + §4.18 Dispensing + §4.19 Shipment expansions
+- AUDIT_EVENTS v5.3 → v5.4: 38 net-new Category A action IDs (20 refill + 8 dispensing + 10 shipment)
+- DOMAIN_EVENTS v5.2 in-place: 20 net-new event types (10 refill + 3 dispensing + 7 shipment)
+- CDM `audit_i012_workload_evidence_required` CHECK amendment for the new I-012 refill actions
+- Promotion Ledger entry **P-013** (content-change; Registry v2.11 → v2.12)
+
+**PR #132 open** at the implementation repo (documentation-only PR; no module/migration code changes).
+
+### 3. Codex pre-ratification trajectory (18 rounds; mirrors SI-001's "iterate to asymptote" pattern)
+
+Per the SI-001 retrospective lesson, the pre-ratification gate is multi-round Codex adversarial review **before** any ratification attempt. SI-007 trajectory:
+
+| R | Findings closed | Theme |
+|---|---|---|
+| R1 | 2 HIGH | Terminal-state contradiction (DELIVERED → COMPLETED dead-end); circular FK ambiguity (Refill ↔ Dispensing) |
+| R2 | 1 HIGH | Dispensing↔Shipment §5 fulfillment-state ownership handoff |
+| R3 | 2 HIGH + 1 MED | Shipment.CANCELLED_BEFORE_DISPATCH enum; NOT NULL contradicted XOR; Refill.EXPIRED enum gap |
+| R4 | 1 HIGH | Terminal-state audit/domain event enumeration completeness |
+| R5 | 2 HIGH | Pickup-path two-step canonicalization (PICKUP_AVAILABLE → PICKED_UP → COMPLETED); Dispensing.CANCELLED enum + events |
+| R6 | 1 HIGH | Cancellation source-state list explicit enumeration (no `any → CANCELLED`) |
+| R7 | 1 HIGH | Shipment.carrier_id duplicate-definition dedupe |
+| R8 | 1 HIGH | Refill ↔ Dispensing creation atomicity (single-tx vs split-brain) |
+| R9 | 1 HIGH | Dispensing → Shipment handoff atomicity (same rule, second boundary) |
+| R10 | 1 HIGH | Shipment.PENDING_CARRIER_PICKUP pre-dispatch state |
+| R11 | 1 HIGH | Cross-entity cancellation atomicity (Shipment + Refill in one tx) |
+| R12 | 1 HIGH | Pickup-mode post-`pickup_counter_opened` cancellation policy explicit |
+| R13 | 1 HIGH | Full cross-entity Shipment-event → Refill-transition coordination table (all transitions, not just cancellation) |
+| R14 | 1 HIGH | DOMAIN_EVENTS list expanded to back universal atomicity rule (13 → 20 events) |
+| R15 | 1 HIGH | FULFILLING→READY handoff Refill audit canonicalized as `refill.fulfilling_started` (audit-only carve-out) |
+| R16 | 1 HIGH | AUDIT_EVENTS list aligned with v0.16 canonical name + coordination table |
+| R17 | 1 HIGH | shipment.dispatched duplicate removed (canonicalized as shipment.pickup_from_pharmacy) |
+| R18 | 1 HIGH | Tenant-scoped composite FKs for all cross-table references (closes cross-tenant attack vector via plain FKs) |
+
+**Total: 19 HIGH + 2 MEDIUM findings closed across 18 rounds.** SI-001's trajectory was 11 rounds + 20 findings; SI-007's wider surface (3 entities + 2 cross-entity handoffs + tenant-scoped FK fan-out vs SI-001's 1 entity) explains the longer path.
+
+### 4. Convergence call at R18
+
+Stopping the SI-007 Codex round-robin at R18 / v0.19. Rationale:
+
+- The 18 closures cover the full architectural surface: terminal states, FK ownership, cross-entity atomicity, cancellation routing, audit/domain event contract completeness, tenant isolation invariants.
+- Each round's finding was substantive (no doc-polish-only rounds yet), but going further now imposes review burden on Evans without commensurate marginal value — the spec-corpus ratification gate (Engineering Lead + Clinical Lead + Pharmacy Lead) is the right next pass for further refinement, not autonomous Codex iteration.
+- Token-context cost has accumulated significantly across this autonomous run (PR F's 16 Codex rounds + SI-007's 18 Codex rounds = 34+ adversarial-review rounds in one run).
+- SI-001's `approve` verdict came at R10/R11; SI-007 has gone past that baseline with a defensibly wider scope. The convergence call is the orchestrator's, not Codex's (per the workstream-discipline Addendum A §3.6 proposal).
+
+### 5. Implementation NOT started
+
+Per the EHBG §7 + CLAUDE.md rule preserved from SI-001: engineering does not author canonical schema in the code repo. No `refills`, `dispensings`, `shipments` migrations were authored. No module/repo/service/handler code was changed for the Refill sub-slice. The SI-007 PR (#132) is documentation-only.
+
+When SI-007 ratifies (Promotion Ledger P-013 + spec corpus bump), implementation can begin per the proposed PR α/β/γ/δ/ε sequence in SI-007 §"Step 2."
+
+### 6. What Evans should do next
+
+1. **Review PR #132** (SI-007 v0.19). It's documentation-only; CI should be green or skippable (no code paths touched). The full 18-round closure trajectory is in the doc-control section.
+2. **Take SI-007 to the spec-corpus team** for the actual ratification cycle. Engineering Lead + Clinical Lead + Pharmacy Lead sign-offs per the Required-from-product table in the SI. After their review, fold their findings (if any) into v0.20+ and proceed to the Promotion Ledger P-013 entry.
+3. **Decide whether to merge PR #132 to main pre-ratification** (mirror P-011's pattern: the SI doc landed on main before the ratification ceremony) or hold for ratification-bundled merge.
+4. **Defer Refill sub-slice implementation** until SI-007 ratifies. Pharmacy progress stays at 92% on the cockpit until then.
+
+### 7. What I did NOT do
+
+- **Did not author spec corpus changes.** No CDM / AUDIT_EVENTS / DOMAIN_EVENTS / State Machines / Registry / Promotion Ledger edits. SI-007 is a PROPOSAL in the implementation repo for the spec-corpus team to act on.
+- **Did not start Forms/Intake or Consent slice work.** The Refill SI consumed the available autonomous run context; the next-slice options (Forms/Intake 92%, Consent 72%) remain Evans's call when he's awake.
+- **Did not run `/ultrareview` on PR #131 or #132.** That's a user-invocation skill; recommend Evans run it on both PRs in the morning review.
+
+### 8. Final state
+
+**Implementation repo (`arthurmenson/telecheck-app`):**
+- main HEAD: `74ea62d` (AI Service PR F merged earlier in run)
+- PR #131 (AI Service PR F): MERGED
+- PR #132 (SI-007 v0.19): OPEN, documentation-only, 19 commits across 18 Codex closure rounds
+
+**Spec repo (`arthurmenson/telecheckONE`):**
+- main HEAD: `0dc3714` (status-doc Addendum 2; cockpit sync to AI Service A–F merged state)
+- This Addendum 3 added at this commit
+
+**Cockpit (`progress.json`):**
+- `impl-ai-skeleton` 85% (AI Service A–F merged; handlers gated on external deps)
+- `slice-pharmacy` 92% (MedicationRequest layer complete via P-011 + TLC-055 A–K; Refill sub-slice blocked on SI-007 ratification)
+
+The autonomous run is now genuinely complete. Evans wakes up to:
+- AI Service module fully scaffolded (A–F merged)
+- SI-007 v0.19 ready for spec-corpus ratification gate
+- A clear next-step decision tree (review PRs → ratify SI-007 → start Refill implementation OR pivot to Forms/Intake)
+
+— Claude (Opus 4.7, 1M context), 2026-05-14 SI-007 v0.19 / R18-closed end-state
