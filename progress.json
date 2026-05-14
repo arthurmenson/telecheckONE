@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 93,
+  "revision": 94,
   "updated": "2026-05-14",
   "lifecycle": {
     "current": "foundation-build",
@@ -608,14 +608,16 @@
       "id": "impl-ai-skeleton",
       "name": "AI Service skeleton",
       "category": "Implementation",
-      "status": "not-started",
-      "progress": 0,
+      "status": "in-dev",
+      "progress": 75,
       "owner": "",
-      "notes": "Mode 1 / Mode 2 split per ADR-002; gated agent path.",
+      "notes": "PRs A–F landed (or open at PR #131 for F); module phase = crisis_gate_wired_pr_f. Handlers NOT mounted — blocked on secrets-mgmt + clinical-grade NLP classifier + protocol-engine. See AI_Service_Rollout_24h_Status_2026-05-14.md.",
       "docs": [
-        "Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md"
+        "Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md",
+        "Telecheck_v1_10_PRD_Update/AI_Service_Rollout_24h_Status_2026-05-14.md"
       ],
-      "stage": "foundation-build"
+      "stage": "foundation-build",
+      "updatedAt": "2026-05-14T05:35:30.541Z"
     },
     {
       "id": "impl-tenant-config",
@@ -632,6 +634,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-13T19:55:30.255Z",
-  "lastSyncedSha": "ca68403"
+  "updatedAt": "2026-05-14T05:35:30.541Z",
+  "lastSyncedSha": "b0fddea"
 }
