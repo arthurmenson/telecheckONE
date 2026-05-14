@@ -162,3 +162,36 @@ Each commit's body documents the specific Codex finding it addresses, so the aud
 **Status:** Run complete. 17 PRs merged or open (15 merged + PR #131 awaiting review; pharmacy K + identity + cockpit fixes already merged). All blocked items above are non-engineering (decisions, secrets, classifier procurement).
 
 — Claude (Opus 4.7, 1M context)
+
+---
+
+## Addendum — PR F ready-to-merge state (2026-05-14, end of run)
+
+**PR #131 is fully green and ready to merge.** Final state at run close:
+
+| Check | Status | Latest run |
+|---|---|---|
+| Build, lint, typecheck, test | ✅ pass (1m46s) | run 25875197203 |
+| Dependency review (security + license) | ✅ pass (5s) | run 25875197206 |
+| Run benchmarks + threshold check + baseline comparison | ✅ pass (32s) | run 25875197200 |
+| verify-metadata | ✅ pass (3s) | run 25875197276 |
+
+**Final commit:** `34cf59e` (`docs(ai-service): refresh module README to reflect PRs A–F`).
+
+**Total PR F commit count: 19.** Composition:
+- 1 initial implementation commit (`275c677`)
+- 16 Codex adversarial-review closure commits (R1 → R16)
+- 1 test-string fix (`9e33a8b` — R2 dedupe test used a phrase `'hurting yourself'` the v1.0 keyword-stub crisis detector doesn't match; updated to a phrase the existing patterns catch; flagged the second-person AI-output detection gap for the future clinical-grade NLP classifier work)
+- 1 README refresh (`34cf59e` — replaced PR-A-era forward-looking skeleton text with the current state of the module, module layout tree, hard-rules block referencing the actual implementations, worked-example usage block, and the 16-round Codex trajectory note)
+
+**R16 convergence point holds.** No new HIGH findings raised post-R16; the trajectory cleanly hit the long-tail asymptote predicted by the v1.10.1 hygiene cycle precedent. Subsequent edges would be documented caller-side expectations (e.g., "callers SHALL pass non-PHI identifiers") that don't justify another full round.
+
+**Recommended merge sequence for Evans's morning:**
+1. Review PR #131 (consider `/ultrareview` — the marginal value over Codex's review is the breadth check across security/architecture/perf perspectives).
+2. Merge PRs #126–131 (AI Service A→F) in order — A through F.
+3. After merge, log Promotion Ledger entry P-012 in the spec bundle (suggested title: *AI Service module scaffolded (PR A–F); handlers gated until secrets-mgmt + clinical-grade NLP + protocol-engine ready*).
+4. Confirm cockpit auto-sync rolls `impl-ai-skeleton` from 75 → ~85 on PR F merge (final 100 requires the live-handler PR G).
+
+The autonomous run is now complete. No further actions pending until Evans's review.
+
+— Claude (Opus 4.7, 1M context), 2026-05-14 end-of-run
