@@ -144,5 +144,113 @@ If the project later decides to use multi-agent orchestration *inside* the platf
 ## 8. Document control
 
 - **v0.1 — 2026-05-02** — Initial draft authored mid-v1.10.1 hygiene cycle Phase D dispatch. Captures the pattern as adopted; pilot in progress. Status: workstream discipline note; not ADR-tier yet. Awaiting pilot exit metrics for graduation decision.
+- **v0.1-addendum-A — 2026-05-14** — Empirical data appended from the AI Service rollout 24-hour autonomous run (Pharmacy TLC-055 closure + AI Service PRs A–F + 16-round Codex cycle on PR F). See §9.
 - **Next:** v0.2 after Phase D returns and reconciliation completes; adopt or roll back per measured outcome.
-- **Cross-reference:** ADR-029 (AI workload taxonomy — product-side; orthogonal to this note); WORKLOAD_TAXONOMY contract; AUTONOMY_LEVELS contract; v1.10.1 hygiene cycle status doc.
+- **Cross-reference:** ADR-029 (AI workload taxonomy — product-side; orthogonal to this note); WORKLOAD_TAXONOMY contract; AUTONOMY_LEVELS contract; v1.10.1 hygiene cycle status doc; AI_Service_Rollout_24h_Status_2026-05-14.md.
+
+---
+
+## 9. Addendum A — empirical findings from the 2026-05-14 AI Service rollout run
+
+This addendum captures lessons from the second large autonomous run after the v1.10.1 hygiene cycle Phase D pilot. The run is a complementary data point: it exercised the **sequential** orchestration pattern (not multi-agent fan-out), with Codex round-robin as the adversarial loop. This addendum is appended as input to v0.2; it does NOT modify the pattern documented in §3.
+
+### 9.1 Scope of the run
+
+- **Pharmacy TLC-055 closure**: PRs C–K merged sequentially (9 PRs). Sequential because each PR's diff sequences a state-machine transition that the next PR's tests assume.
+- **AI Service module rollout**: PRs A–F. PRs A–E merged sequentially (each PR adds primitives the next assumes). PR F (crisis-detection gate) extended to 19 commits across 16 Codex adversarial-review rounds before convergence.
+- **Cross-repo work**: cockpit auto-sync self-heal, platform-wide idempotency preHandler auth-bypass fix.
+
+Total: 17 PRs merged or open at run close.
+
+### 9.2 When sequential outperformed fan-out (this run's pattern)
+
+The run stayed sequential for these reasons:
+
+1. **Each PR's tests depended on the prior PR's state-machine writeback.** TLC-055 PR G (clinician_approve) tests assume PR F's clinician_discontinue + PR E's createDraft are durable. Fan-out would have required rolling test fixtures across agent boundaries — overhead exceeds parallelism benefit.
+2. **AI Service primitive layering.** PR D's `BaseLLMProvider` fail-soft wrap is consumed by PR E's guardrail validator's `validatePlatformFloorCompliance`, which is consumed by PR F's gate. Fan-out across the layer boundary would have required interface stubs that the dispatching sub-agent would need to author, which is itself orchestrator work.
+3. **One-thread narrative coherence.** Each PR's body + commit message refers to the prior PR's closure. The run produced 7 dovetailed PR descriptions; a multi-thread author pool would have re-derived the cross-references repeatedly.
+
+The v0.1 §3.3 "stay sequential when" guidance correctly anticipated this. The PR-sequence cadence is in the same category as "canonical authoring" — single-thread.
+
+### 9.3 The Codex round-robin's long-tail asymptote
+
+PR F passed through 16 rounds of Codex adversarial review (R1 → R16), each closing exactly one or two `HIGH` findings before merge. Round-by-round closure summary:
+
+| Round | HIGH(s) closed | Surface |
+|---|---|---|
+| R1 | 2 | FLOOR-020 envelope correctness; audit-dedupe wiring |
+| R2 | 1 | Input vs output scan dedupe collision |
+| R3 | 1 | Tenant-equality on dedupe marker |
+| R4 | 1 | `externalTx` parameter removed (rollback durability) |
+| R5 | 1 + 1M | Multi-resource dedupe; structured `audit_error` |
+| R6 | 2 | `response_provided: null`; multi-segment discriminator |
+| R7 | 1 | Case-prep discriminator fail-closed when missing |
+| R8 | 1 | Discriminator shape regex |
+| R9 | 1 | `response_provided` semantics (null vs false vs true) |
+| R10 | 1 | Safety-first envelope (sentinel ALWAYS returns) |
+| R11 | 1 | Unavoidable ops log on audit failure |
+| R12 | 1 | Wiring errors fall through to fallback emit |
+| R13 | 1 + 1M | Required-field validation; rollback test harness limitation |
+| R14 | 1 | PHI leak into audit detail via rejected discriminator |
+| R15 | 1 | Audit-emit-safe field substitution placeholders |
+| R16 | 1 | Log-stream PHI leak via raw caller-supplied identifiers |
+
+**Trajectory observation.** Round content evolved from structural correctness (R1–R5: envelope, dedupe, durability) through semantic correctness (R6–R9: observation timing, validation strictness) through safety-vs-audit ordering (R10–R13: who fails when) to PHI-leak surface narrowing (R14–R16: shape-metadata-only validation messages).
+
+**Asymptote characteristics.** Each round in R10–R16 closed real, citable safety boundaries, but the marginal patient-impact of each closure narrowed: R10 (programmer wiring bug denying patient crisis-resource) → R16 (PHI in log fields a triager would see). All real; none patient-blocking on the canonical path. The pattern matches the v1.10.1 hygiene cycle's observation that "each round addresses real issues but yields diminishing returns; converge somewhere in the 10–15 range" — except the AI Service run extended to R16 because PR F covers a higher-risk surface (mandatory Category A audit with crisis-write exception) than typical Phase D row work.
+
+**Convergence call.** R16 was a defensible stopping point because:
+- Each subsequent edge would have been documented caller-side expectations (e.g., "callers SHALL pass non-PHI identifiers for ai_actor_id"), not API-shape guarantees.
+- The Codex Verdict text in R16 explicitly framed the next-tier concern as a "caller responsibility" rather than a gate-side defense.
+- The PR had grown to 19 commits + 700 test lines + a refreshed README; further commit churn was approaching review-burden negative-utility.
+
+### 9.4 Recommended additions to §3 (for v0.2 consideration)
+
+These are proposed additions, not commitments; v0.2 should decide whether to adopt them.
+
+#### 9.4.1 PR-sequence cadence is single-thread (extends §3.3)
+
+Add to v0.1 §3.3 "When NOT to fan out":
+
+> - **PR-sequence cadence within a single module** where each PR builds on the prior PR's writeback / state machine / primitive layer. The narrative coherence + cross-PR test fixtures + commit-message cross-references make fan-out cost exceed parallelism benefit. This is the same category as "canonical authoring" already documented.
+
+#### 9.4.2 Codex round-robin self-termination criteria (new §3.6)
+
+Add a new section:
+
+> **§3.6 Codex round-robin convergence criteria.** When the per-PR Codex adversarial-review loop becomes self-pacing (no human-driven phase boundary), convergence is signaled by ANY of:
+>
+> 1. **Caller-responsibility framing.** Codex's next-round verdict frames the next finding as "caller SHALL ..." rather than as a gate-side or API-surface defense.
+> 2. **Diminishing patient-impact.** Each subsequent closure's worst-case is increasingly removed from the patient (PHI in log fields a triager sees > PHI in audit chain a compliance review sees > patient denied service). When the trajectory crosses "log-stream PHI" into pure log-field hardening with no observable patient-impact, convergence is reached.
+> 3. **Trajectory asymptote.** Plot rounds 1..N's marginal patient-impact (subjective; on a 1–10 scale). When three consecutive rounds score < 3, convergence is reached.
+> 4. **Review-burden negative utility.** When the diff size + commit-churn crosses the threshold where the marginal closure costs the reviewer more attention than the marginal patient-safety gain, convergence is reached.
+>
+> The convergence call is the **orchestrator's** decision, not Codex's. The orchestrator documents the convergence in the PR's status doc + the closing commit's body. Subsequent R17+ findings (if Codex is invoked again post-merge) become tickets for a successor PR rather than blocking the current PR.
+
+#### 9.4.3 Codex autoinvocation scope clarification (extends §3.1 "Adversarial reviewer")
+
+Add to v0.1 §3.1 row "Adversarial reviewer (Codex)":
+
+> Autoinvocation scope per Evans 2026-04-28 directive: every v1.10 workstream phase/milestone exit. The 2026-05-14 AI Service rollout run applied this **by analogy** to implementation-repo PR exits, since each PR functioned as a workstream milestone in the same multi-agent orchestration pattern. The orchestrator should explicitly note in run-close documentation when autoinvocation is applied by analogy rather than per literal directive; v0.2 should clarify whether the directive's scope extends to all implementation-repo PRs going forward.
+
+### 9.5 Metrics from the run (for v0.2 §7.b "metrics")
+
+The v0.1 §7 open question proposes: "(a) wall-clock improvement vs sequential baseline; (b) zero invariant relaxations in reconciled output; (c) zero cross-file conflicts requiring human resolution; (d) Codex adversarial review HIGH/MEDIUM count not increased relative to sequential baseline."
+
+Data point from this run (sequential pattern, not multi-agent):
+
+- **(b) Invariant relaxations**: zero. All 16 R-closures on PR F preserved I-003, I-019, I-023..I-027, FLOOR-007..FLOOR-013, FLOOR-020. The R-closures *tightened* enforcement (e.g., R12 ensured I-019 audit emission holds across wiring-error paths it previously skipped).
+- **(c) Cross-file conflicts**: zero (sequential pattern; not exercised).
+- **(d) Codex HIGH count per round**: averaged 1.06 across 16 rounds (17 HIGHs + ~2 MEDIUMs / 16 rounds). Baseline TBD when a multi-agent fan-out run produces comparable data.
+
+The (a) wall-clock metric is not applicable to a sequential run by definition. The Pharmacy TLC-055 run + AI Service A–F run took approximately one work-day of autonomous orchestrator time across both repos. A multi-agent fan-out comparison would need the same workload partitioned across sub-agents — left for a future cycle.
+
+### 9.6 Carry-forwards for the next cycle
+
+When the next major workstream cycle activates (v1.10.x hygiene; or the v1.11 cycle, whichever lands first), v0.2 should be ready with:
+
+1. The §3.6 convergence-criteria text (above) so future orchestrators have an explicit shut-off signal for the Codex round-robin.
+2. The §3.3 "PR-sequence cadence single-thread" guidance (above) so future code-repo cycles don't speculatively fan out cross-PR work.
+3. Resolved §7 open question on ADR-035 graduation: defer until at least one full multi-agent fan-out run produces a wall-clock metric.
+
+— Orchestrator (Claude Opus 4.7, 1M context) on the 2026-05-14 autonomous run
