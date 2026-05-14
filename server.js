@@ -222,9 +222,24 @@ async function runSync(){
   if (!commits.length) return { ok:true, processed:0, perArea:{}, note:"no telecheck-app clone" };
 
   const lastSha = doc.lastSyncedSha;
-  const newCommits = lastSha
-    ? commits.slice(0, Math.max(0, commits.findIndex(c => c.sha === lastSha)))
-    : commits.slice(0, 30); // first run: only consider latest 30 to avoid bulk over-bumping
+  // Find the anchor. If lastSha is missing OR not in the 100-commit window
+  // (typically because the original feature-branch SHA didn't survive
+  // squash-merge), fall back to the same conservative path as first-run:
+  // consider only the latest 30. The per-area cap (SYNC_CAP=92) bounds
+  // any over-counting, and the warning surfaces the stuck-SHA condition
+  // so it doesn't fail silently forever (caught 2026-05-14: PR-C feature
+  // SHA 242abd0 wasn't on main after squash, so 10 days of pharmacy
+  // commits silently no-op'd).
+  const lastShaIdx = lastSha ? commits.findIndex(c => c.sha === lastSha) : -1;
+  if (lastSha && lastShaIdx < 0) {
+    console.warn(
+      `[sync] lastSyncedSha ${lastSha} not in latest 100 commits — falling back to last 30 (likely squash-dropped feature-branch SHA)`,
+    );
+  }
+  const newCommits =
+    lastShaIdx >= 0
+      ? commits.slice(0, lastShaIdx)
+      : commits.slice(0, 30); // first run OR stuck-SHA fallback
   if (!newCommits.length) return { ok:true, processed:0, perArea:{}, lastSyncedSha:lastSha };
 
   const re = /^(\w+)\(([\w-]+)\):\s*(.*)$/;
