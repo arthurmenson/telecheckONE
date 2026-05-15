@@ -451,3 +451,101 @@ The autonomous-engineering surface is exhausted. The remaining work either:
 **Autonomous run genuinely complete. No further wake-ups scheduled.**
 
 — Claude (Opus 4.7, 1M context), 2026-05-14 recommended-sequence final state (PR #132 merged; all slice gaps catalogued and routed)
+
+---
+
+## Addendum 5 — 72-hour autonomous run continuation (Forms/Intake Tier 2 retirement Phase 1 + SI-002 v0.5)
+
+Evans directive: "start autonomous run for 72 hrs non stop" / "continue non stop" 2026-05-14.
+
+After PR #132 (SI-007) merged, the recommended-sequence options remaining were:
+1. Forms/Intake Tier 2 retirement (header-shim → JWT migration; bounded engineering)
+2. AUDIT_EVENTS placeholder ratification (SI-002 already at v0.1; needed pre-ratification Codex gate)
+3. Other slices (Adverse Event, Labs, RPM/CCM — all blocked on downstream/spec-corpus)
+
+### What landed in this continuation
+
+#### Phase 1: Forms/Intake Tier 2 retirement — patient-endpoint migrations
+
+| PR | Subject | State | Refs migrated |
+|---|---|---|---|
+| **#133** | JWT test-fixtures helper + snapshot-http migration | **MERGED** (`5ce0719..a280f8a`) | 5 refs |
+| **#134** | submissions-http migration | OPEN | 28 refs |
+| **#135** | resume-http migration | OPEN | 24 refs |
+
+New helper: `tests/helpers/jwt-fixtures.ts` — `mintTestJwt()` + `bearerAuthHeader()` using `issueAccessToken` from `src/lib/jwt.ts`. Trust-boundary documentation (synthetic session_id parity with production `authContextPlugin`) added per Codex R1 closure on PR #133.
+
+**Total patient-endpoint refs migrated:** 57 (= 5 + 28 + 24) across 3 files. The handler-side Tier 1 path (`req.actorContext`) is now exercised by all 3 patient-endpoint test files.
+
+#### Phase 2: Admin-role JWT widening — DEFERRED
+
+The remaining 4 forms-intake http test files use admin role headers (`x-actor-roles: tenant_admin`, `x-actor-admin-tenant`). Current `AccessTokenRole` = `'patient' | 'clinician'` doesn't include admin roles. Extending the JWT requires a TLC-058-scale PR (~30 files; mirrors the clinician-role widening that landed at commit `c8e375f`).
+
+Deferred to a dedicated session — too large for a single-message-stream continuation.
+
+#### Phase 5: SI-002 (AUDIT_EVENTS placeholder ratification) — advanced through Codex pre-ratification gate
+
+| PR | Subject | State | Codex rounds |
+|---|---|---|---|
+| **#136** | SI-002 v0.5 — pre-ratification Codex gate | OPEN | R1–R3 closed (HIGH ×3 + MEDIUM ×1) |
+
+SI-002 had been OPEN at v0.1 since 2026-05-05 with open questions on naming convention, category assignment, and detail-shape. Advanced through 3 Codex pre-ratification rounds:
+
+| Round | HIGH/MED closed | Theme |
+|---|---|---|
+| R1 | HIGH ×1 + MEDIUM ×1 | (HIGH) Authentication-proof events misclassified as operational — promoted `identity.{session.issued, otp.issued, otp.consumed}` C → B. (MEDIUM) `forms.submission.*` detail-shape conflated state-transition vs non-transition events — split per-event with `event_attempt_id` / `transition_id` correlation IDs. |
+| R2 | HIGH ×1 | Placeholder→canonical rename had no transition contract — added atomic per-slice cutover rule, no dual-write window, mapping artifact at `docs/AUDIT_ACTION_ID_CANONICALIZATION_MAP_P_014.md`, compliance-query bridge via two-element `IN` list. |
+| R3 | HIGH ×1 | Auth-proof C → B promotion lacked category-canonicalization bridge — pre-P-014 rows stored as Category C would be missed by Category B compliance queries. Added `effective_category` override in mapping artifact + compliance-query contract `COALESCE(m.effective_category, a.category) = 'B'`. |
+
+Concrete proposals now ratification-ready:
+- **Naming convention:** dot-namespaced (consistency with Category A precedent from P-011 + SI-007).
+- **Per-event categorization:** 17 Category B (governance) + 14 Category C (operational); zero Category A.
+- **Detail-shape proposals:** 14 action-prefix mandatory minimum field sets with PHI-by-ID + hashed-when-necessary discipline.
+- **Promotion Ledger target:** P-014 (P-013 claimed by SI-007 merged 2026-05-14).
+- **AUDIT_EVENTS version target:** v5.4 → v5.5 (semver-minimal additive Category B+C enumeration).
+- **Transition contract:** atomic per-slice cutover; no dual-write; static mapping artifact for compliance-query bridge.
+- **Category bridge:** auth-proof events C→B promotion includes effective-category override for historical-row compliance review.
+
+### State of all open + deferred work
+
+| Item | State | Notes |
+|---|---|---|
+| PR #134 (submissions-http) | OPEN | Awaiting CI + Codex; ready to merge after green |
+| PR #135 (resume-http) | OPEN | Awaiting CI + Codex; ready to merge after green |
+| PR #136 (SI-002 v0.5) | OPEN | Codex pre-ratification continues at R4+; spec-corpus ratification team review when v0.X stabilizes |
+| Phase 2: admin-role JWT widening | DEFERRED | TLC-058-scale; needs dedicated session |
+| Phase 3: admin-endpoint test migrations (templates/variants/deployments/idempotency-replay; 52 refs) | BLOCKED on Phase 2 | |
+| Phase 4: remove ALLOW_ACTOR_HEADER_AUTH + Tier 2 fallback | BLOCKED on Phase 3 | |
+| SI-003 (DOMAIN_EVENTS placeholder ratification) | OPEN at v0.1 since 2026-05-05 | Same pattern as SI-002; needs same pre-ratification cycle |
+| SI-004 (Async-Consult audit events) | OPEN at v0.1 since 2026-05-05 | Downstream consumer of SI-002 v5.5; closure depends on SI-002 P-014 |
+| Protocol-engine slice | NO PRD | Substantial spec-corpus authoring; unblocks AI handler G/H + Refill protocol route + Subscription period_end |
+| Adverse Event / Labs / RPM/CCM / etc. | Not started | Same blocker patterns as Forms/Intake / Consent — spec-corpus ratification + downstream-slice dependencies |
+
+### Recommended Evans morning sequence
+
+1. **Review + merge PRs #134, #135** (forms-intake patient-endpoint migrations; mechanical pattern from PR #133).
+2. **Review PR #136** (SI-002 v0.5) — take to spec-corpus ratification team. Continue Codex pre-ratification at R4+ if findings remain substantive, or call convergence and route to ratification.
+3. **Decide on Phase 2 (admin-role JWT widening)** — schedule as a dedicated TLC-058-style PR cycle. The Forms/Intake admin endpoints (templates/variants/deployments) remain on Tier 2 until this lands.
+4. **SI-003 + SI-004 pre-ratification** — same cycle pattern as SI-002. Could be batched after SI-002 P-014 lands so the AUDIT_EVENTS / DOMAIN_EVENTS canonicalization is coherent.
+5. **Protocol-engine slice authoring** — substantial spec-corpus work; unblocks the most downstream. Likely needs a multi-day Engineering Lead + Clinical Lead authoring cycle.
+
+### Repository state at this point
+
+**Implementation repo (`arthurmenson/telecheck-app`):**
+- main HEAD: `a280f8a` (PR #133 merged)
+- Open PRs from this continuation: #134 (submissions-http) + #135 (resume-http) + #136 (SI-002 v0.5)
+
+**Spec repo (`arthurmenson/telecheckONE`):**
+- main HEAD: this commit (Addendum 5)
+
+**Cumulative autonomous-run productivity (across the multi-day 2026-05-13 → 2026-05-14 cycle):**
+- 6 AI Service module PRs (#126–#131) merged
+- 1 SI-007 spec-corpus PR (#132) merged after 18 Codex pre-ratification rounds
+- 1 JWT-helper + 1 patient-endpoint migration PR (#133) merged
+- 2 additional patient-endpoint migration PRs (#134 + #135) open
+- 1 SI-002 v0.1 → v0.5 advancement PR (#136) open
+- 5 status doc addenda + cockpit syncs across 3 days
+
+The autonomous run has now produced substantive deliverables across (a) AI Service module rollout (PR F crisis-gate with 16 Codex closures), (b) SI-007 spec-corpus closure (18 Codex closures), (c) Forms/Intake Tier 2 retirement (3 patient-endpoint PRs), (d) SI-002 pre-ratification advancement (3 Codex closures). The pace is sustainable; the discipline (per-PR Codex review, status-doc continuity, cockpit sync) has held across all PRs.
+
+— Claude (Opus 4.7, 1M context), 2026-05-14 72-hr-run mid-state (Phase 1 patient migrations + SI-002 v0.5)
