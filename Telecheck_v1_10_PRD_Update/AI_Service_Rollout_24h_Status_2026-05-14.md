@@ -648,3 +648,70 @@ The SI-007 precedent (18 rounds / 21 closures over a single SI) is now matched b
 The 72-hr autonomous run has now produced substantive deliverables across (a) AI Service module rollout, (b) SI-007 spec-corpus closure, (c) Forms/Intake Tier 2 retirement for 3 patient endpoints, (d) SI-002/SI-003/SI-004 pre-ratification advancement totaling 12 HIGH + 2 MEDIUM Codex closures across 13 rounds, (e) Phase 1 forms-intake migration now COMPLETE for the patient surface (admin-side blocked on Phase 2). The pace is sustainable; the discipline (per-PR Codex review, status-doc continuity, cockpit sync, three-registry CI-guardrail design pattern emerging across SI-003/SI-004) has held across all PRs.
 
 — Claude (Opus 4.7, 1M context), 2026-05-14 72-hr-run advancing-state (Phase 1 complete + SI-003 + SI-004 ratification-ready)
+
+---
+
+## Addendum 7 — SI-005 pre-ratification advancement (2026-05-15)
+
+Continuing the 72-hr autonomous run from Addendum 6.
+
+### SI-005 advancement (PR #139 OPEN)
+
+Advanced **SI-005 (Consult/ConsultEvent schema gap)** from v0.1 (OPEN since 2026-05-05) through 5 versions across 3 Codex pre-ratification rounds:
+
+- **v0.2:** 9 concrete proposals (ratify 10+9 placeholder columns verbatim as CDM v1.3 §4.16+§4.17 baseline; Sprint 10+ column additions; cross-tenant safety FKs as PERMANENT; CONSULT_STATES 17-value enum; CONSULT_EVENT_TYPES 5-value vocabulary; cross-entity coordination table; SI-001/002/003/004/007 cross-alignment; migration discipline; reserved column-name registry).
+- **v0.3 (R1 MEDIUM x2):** Column count reconciliation (prose vs tables) + KMS envelope ratified explicitly (7 columns: encrypted blob + kms_key_id + key_version + nonce + AAD + schema_version + encrypted_at). Removed "NOT a column" contradiction.
+- **v0.4 (R2 MEDIUM x3):** Decision 2 header reconciled to +14/total 24 (was +7/total 16). Decision 8 enumerates all 14 ADD COLUMN statements + 5 CHECK constraints + 1 immutability trigger. CONSULT_EVENT_TYPES adds `kms_rotation` (6th value) because Decision 2 rotation semantics required emitting it.
+- **v0.5 (R3 HIGH + MEDIUM):** Added column 25 `clinician_decision_dek_ciphertext BYTEA` (encrypted DEK bytes — without this, envelope-encryption decrypt is impossible). All-or-none CHECK expanded to 8 columns. Replaced session-variable rotation bypass with DB-enforced stored procedure `rotate_consult_clinician_decision_kms(...)` that atomically updates columns 18-25 + inserts the kms_rotation consult_event + inserts the paired audit_records row. GRANT-model enforcement: application role has NO direct UPDATE privilege on columns 18-25.
+
+**SI-005 ratification-ready** at v0.5 (`docs/SI-005-Consult-ConsultEvent-Schema-Gap.md` on `feat/si-005-consult-schema-codex-pre-ratification` branch, PR #139 OPEN). 3 Codex rounds; 1 HIGH + 6 MEDIUM closures.
+
+### Pattern observations across SI-002 / SI-003 / SI-004 / SI-005 pre-ratification
+
+| SI | Rounds | HIGH closures | MEDIUM closures | Final version |
+|---|---|---|---|---|
+| SI-002 | 3 | 3 | 1 | v0.5 (merged P-014) |
+| SI-003 | 7 | 6 | 0 | v0.9 (ratification-ready) |
+| SI-004 | 3 | 3 | 1 | v0.5 (ratification-ready) |
+| SI-005 | 3 | 1 | 6 | v0.5 (ratification-ready) |
+
+**Cumulative findings closed across 4 SIs: 13 HIGH + 8 MEDIUM = 21 substantive architectural / correctness gaps closed before ratification handoff.** Now matches SI-007 single-SI precedent (18 rounds / 21 closures).
+
+### SI-005 substantive architectural advances during Codex pre-ratification
+
+1. **Full KMS envelope ratified** — 8 columns (encrypted + dek_ciphertext + key_id + key_version + nonce + AAD + schema_version + encrypted_at) instead of the v0.1 placeholder "encrypted-blob column". Closes a real envelope-encryption gap (key id alone is not enough to decrypt).
+2. **Stored-procedure-only KMS rotation** with GRANT-model enforcement — eliminates the session-variable bypass class of vulnerability. Any rotation MUST produce the paired consult_event + audit_records row in the same transaction.
+3. **All-or-none nullability CHECK** on encryption columns prevents partial-encryption rows.
+4. **AES-256-GCM 12-byte nonce + AAD binding** prevents ciphertext-relocation attacks (a copied ciphertext to a different consult fails AAD verification at decrypt).
+5. **CONSULT_EVENT_TYPES kms_rotation** event ensures every re-encryption is observable in compliance audits.
+6. **Cross-tenant safety FKs (4 baseline + 3 v0.2 additions)** are PERMANENT constraints, not placeholders.
+
+### Repository state at Addendum 7
+
+**Implementation repo (`arthurmenson/telecheck-app`):**
+- main HEAD: 212dd69 (unchanged since Addendum 6)
+- Open PRs: #137 (SI-003 v0.9), #138 (SI-004 v0.5), #139 (SI-005 v0.5) — all ratification-ready
+
+**Spec repo (`arthurmenson/telecheckONE`):**
+- main HEAD: this commit (Addendum 7)
+
+### Recommended Evans morning sequence (updated)
+
+1. **Spec-corpus ratification ceremonies** for SI-002 (P-014; merged but needs formal ratification) + SI-003 PR #137 (P-015) + SI-004 PR #138 (P-016) + SI-005 PR #139 (P-017). Four canonical-spec promotions to schedule.
+2. **Decide on Phase 2** (admin-role JWT widening) — schedule as TLC-058-style PR cycle.
+3. **Protocol-engine slice authoring** — substantial spec-corpus work; unblocks the most downstream slices.
+
+### Cumulative autonomous-run productivity (across 2026-05-13 → 2026-05-15 cycle)
+
+- 6 AI Service module PRs (#126–#131) merged
+- 1 SI-007 spec-corpus PR (#132) merged after 18 Codex pre-ratification rounds (21 closures)
+- 1 JWT-helper + 3 patient-endpoint Tier 2 retirement PRs (#133 + #134 + #135) merged
+- 1 SI-002 v0.1 → v0.5 advancement PR (#136) merged
+- 1 SI-003 v0.1 → v0.9 advancement PR (#137) open ratification-ready
+- 1 SI-004 v0.1 → v0.5 advancement PR (#138) open ratification-ready
+- 1 SI-005 v0.1 → v0.5 advancement PR (#139) open ratification-ready
+- 7 status doc addenda + cockpit syncs across 3 days
+
+The 72-hr autonomous run has now produced ratification-ready advancement on FOUR open SIs (SI-002 merged + SI-003/004/005 ratification-ready) totaling 21 Codex pre-ratification closures across 16 rounds. The cadence is healthy and the discipline (per-PR Codex review, status-doc continuity, cockpit sync, three-registry CI-guardrail pattern, KMS envelope ratification) has held across all PRs.
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (Phase 1 complete + SI-003/004/005 ratification-ready; SI-002 merged)
