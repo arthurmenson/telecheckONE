@@ -1143,3 +1143,55 @@ Combined Phase 2 deferred-followon work: **4+ Codex rounds per PR, 9+ HIGH closu
 4. Adverse Event Reporting slice authoring (spec-corpus work; multi-week)
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (F-1/F-2 MERGED; F-4 ratification-ready)
+
+---
+
+## Addendum 14 — F-4 deep-integrity closure (11 Codex rounds; ratification-ready)
+
+PR #149 F-4 platform_admin audit attribution work — final state.
+
+### Trajectory: 11 Codex pre-ratification rounds across 12 commits
+
+| Round | Findings closed | Topic |
+|---|---|---|
+| R1 | 1 HIGH | Helper unused — wired into forms-intake admin handlers + service signatures |
+| R2 | 1 HIGH | DB persistence — migration 029 adds actor_tenant_id column + emitAudit INSERT |
+| R3 | 1 HIGH | Hash chain coverage — canonical_hash includes actor_tenant_id; trigger updated |
+| R4 | 1 CRITICAL + 1 HIGH | Trigger name + rollback restoration — fixes migration sequencing |
+| R5 | 1 HIGH + 1 MEDIUM | Legacy header-shim platform_admin path rejected + runtime non-null gate |
+| R6 | 2 HIGH | Deny-by-default actor_tenant_id (incl. platform_admin) + verifier reads column |
+| R7 | 1 HIGH (hash version) + 1 HIGH (break-glass bypass) | v1/v2 hash schema versioning + set_break_glass_context F-4 attribution + DB CHECK |
+| R8 | 1 MEDIUM | Blank/whitespace actor_tenant_id rejection at both runtime + DB |
+| R9 | 1 HIGH | CHECK constraint split into migration 030 for rolling-deploy safety |
+| R10 | 1 HIGH | 4-arg set_break_glass_context tombstone preserved with actionable error |
+| R11 | 1 HIGH + 1 MEDIUM | Operational concerns documented in F4_DEPLOY_RUNBOOK.md |
+
+**Total: ~14 substantive findings closed (1 CRITICAL + 10 HIGH + 3 MEDIUM) across 11 rounds.**
+
+### Layered integrity model (post-F-4)
+
+For a US platform_admin acting on a Telecheck-Ghana resource:
+
+1. **Application helper (`resolveActorTenantId`)**: returns adminHomeTenantId for platform_admin, tenantId for tenant-scoped roles
+2. **Handler thread**: `resolveActorTenantIdForAudit(req, ctx.tenantId)` plumbs through; rejects legacy header-shim platform_admin (R5)
+3. **Service signature**: `FormsIntakeActor { actorId, actorTenantId }` standardized across 6 admin-mutating paths
+4. **Audit envelope**: emitAudit runtime guard requires non-blank actor_tenant_id for non-system actor types (deny-by-default)
+5. **DB persistence**: migration 029 adds `audit_records.actor_tenant_id` column; emitAudit INSERT projects it
+6. **Tamper-evidence**: canonical hash v2 includes actor_tenant_id + version discriminator; verifier dispatches v1/v2 by hash_schema_version column
+7. **DB backstop**: migration 030 NOT VALID CHECK rejects direct-SQL inserts that omit attribution for non-system actor types
+8. **Break-glass coverage**: `set_break_glass_context` 5-arg signature requires actor_home_tenant_id; 4-arg tombstone provides actionable error
+9. **Rolling deploy safety**: migrations 029 + 030 split; 029 nullable column + new emitter (safe), 030 CHECK only after app rollout completes
+10. **Forensic queries**: cross-tenant platform_admin action produces `tenant_id`=Telecheck-Ghana (resource) + `actor_tenant_id`=Telecheck-US (admin's home); both tamper-evident via hash chain
+
+End-to-end audit attribution is now durable, tamper-evident, and rolling-deploy-safe.
+
+### Phase 2 deferred-followon final status
+
+| Followon | Status |
+|---|---|
+| F-1 production admin minting | MERGED PR #147 |
+| F-2 active-tenant DB validation | MERGED PR #148 |
+| F-3 JWT session-liveness check | DEFERRED (Identity/RBAC slice; pre-existing JWT design property) |
+| F-4 platform_admin audit attribution | **Ratification-ready PR #149** |
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (F-4 ratification-ready: 11 Codex rounds; ~14 substantive closures; 10-layer integrity model)
