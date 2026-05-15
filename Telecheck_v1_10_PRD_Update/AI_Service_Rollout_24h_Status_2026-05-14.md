@@ -867,3 +867,68 @@ Continuing the 72-hr autonomous run from Addendum 8. The SI placeholder-ratifica
 **Combined Phase 1+2+SI work this 72-hr cycle: 21+5 = 26 Codex pre-ratification HIGH closures + 8 MEDIUM closures across 23+ Codex rounds.**
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (Phase 2 admin-role JWT widening PR #140 in flight; 5 HIGH closures across 5 Codex rounds)
+
+---
+
+## Addendum 10 — Phase 2 templates-http migration + scope doc (2026-05-15)
+
+Continuing the 72-hr autonomous run from Addendum 9.
+
+### Phase 2 scope-doc landed (PR #140 commit 89a2cd7)
+
+`docs/PHASE_2_ADMIN_JWT_SCOPE_AND_FOLLOW_ONS.md` enumerates:
+- 5 in-PR HIGH closures (R1+R2+R3+R4-HIGH-2+R5-HIGH-1)
+- 4 explicitly-deferred HIGH findings with named follow-on PRs (F-1 through F-4)
+
+This document is the durable reference for future sessions resuming Phase 2 work — explicit scope discipline so the follow-on PRs can be opened without re-rediscovering the architectural plan.
+
+### PR #141 templates-http migration (NEW)
+
+Opened as a STACKED PR off `feat/phase-2-admin-role-jwt-widening` (Phase 2 base). Migrates 31 admin header references in `forms-intake-templates-http.test.ts` from the 3-header shim (`x-actor-id` + `x-actor-roles` + `x-actor-admin-tenant`) to JWT bearer tokens.
+
+**Pattern established:**
+- `adminAuth(accountId)` — standard tenant_admin (US tenant) shorthand
+- `platformAdminAuth(accountId)` — platform_admin (global) shorthand
+- Explicit `bearerAuthHeader({...})` for cross-tenant / non-admin / Ghana cases
+
+**Semantic change documented in PR:** cross-tenant tenant_admin test changed from `403` (header shim insufficient-scope) to `401` (JWT fail-closed at authContextPlugin). This matches the Phase 2 R1+R2 closures' fail-closed JWT model.
+
+The pattern is now well-established — variants-http (28 refs) + deployments-http (39 refs) follow-on PRs will use identical patterns.
+
+### Codex R6 on PR #140 (post v0.5 commits)
+
+Codex R6 found 2 additional HIGH findings (R6 HIGH-1 session-liveness; R6 HIGH-2 audit attribution). Both explicitly deferred to follow-on PRs (F-3 + F-4 in the scope doc):
+- F-3: JWT-revocation / session-denylist mechanism — pre-existing JWT-design property; Identity/RBAC slice deliverable
+- F-4: platform_admin audit attribution — cross-cutting audit-emission change; paired with admin-endpoint test migration PRs
+
+### CI status
+
+PR #140: Test CI flagged the **i003-audit-append-only.test.ts** UPDATE-revoke flake (also failed PR #136 earlier). Rerun in progress; failure is environmental (DB role-permissions setup race), not Phase 2 content. PR #141 CI not yet run (just opened).
+
+### Repository state at Addendum 10
+
+**Implementation repo (`arthurmenson/telecheck-app`):**
+- main HEAD: 212dd69 (unchanged since Addendum 9)
+- Open PRs: #137 (SI-003 v0.9), #138 (SI-004 v0.5), #139 (SI-005 v0.7) — placeholder-ratification ratification-ready
+- Open PR #140 (Phase 2 admin-role JWT widening) — 7 commits; 5 HIGH closures in-PR; 4 HIGH deferred
+- Open PR #141 (templates-http admin migration) — stacked on #140; 31 header refs migrated
+
+**Spec repo (`arthurmenson/telecheckONE`):**
+- main HEAD: this commit (Addendum 10)
+
+### Cumulative 72-hr productivity (across 2026-05-13 → 2026-05-15 cycle)
+
+- 6 AI Service module PRs (#126–#131) merged
+- 1 SI-007 spec-corpus PR (#132) merged (18 Codex rounds; 21 closures)
+- 1 JWT-helper + 3 patient-endpoint Tier 2 retirement PRs (#133/#134/#135) merged
+- 1 SI-002 v0.1 → v0.5 advancement PR (#136) merged
+- 1 SI-003 v0.1 → v0.9 advancement PR (#137) open ratification-ready
+- 1 SI-004 v0.1 → v0.5 advancement PR (#138) open ratification-ready
+- 1 SI-005 v0.1 → v0.7 advancement PR (#139) open ratification-ready
+- 1 Phase 2 admin-role JWT widening PR (#140) open advancing (5 HIGH closures)
+- 1 Phase 2 templates-http migration PR (#141) open advancing
+- 10 status doc addenda + cockpit syncs across 3 days
+
+**Combined Phase 1+2+SI work this 72-hr cycle:** 26 Codex pre-ratification HIGH closures + 8 MEDIUM closures across 23+ Codex rounds, plus 4 explicitly-deferred HIGH findings with documented follow-on PR plan.
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (Phase 2 + templates-http migration in flight)
