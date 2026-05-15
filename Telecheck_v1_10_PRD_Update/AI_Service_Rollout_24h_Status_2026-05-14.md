@@ -795,3 +795,75 @@ SI-006 (Idempotency Reserve-Then-Execute Redesign) was confirmed RESOLVED 2026-0
 **Placeholder-ratification series COMPLETE from implementation-repo perspective.** 24 Codex pre-ratification closures across 18 rounds + 4 SIs simultaneously matched the SI-007 single-SI precedent in cumulative depth.
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (SI placeholder-ratification series COMPLETE; awaiting spec-corpus ratification ceremonies)
+
+---
+
+## Addendum 9 — Phase 2 admin-role JWT widening (PR #140) (2026-05-15)
+
+Continuing the 72-hr autonomous run from Addendum 8. The SI placeholder-ratification series is complete; this addendum captures Phase 2 (admin-role JWT widening) advancement.
+
+### What landed
+
+**PR #140** opened — `feat/phase-2-admin-role-jwt-widening`. Widens `AccessTokenRole` from `{patient, clinician}` to `{patient, clinician, tenant_admin, platform_admin}` so forms-intake admin handlers (templates / variants / deployments) can resolve admin identity from JWT instead of the legacy `x-actor-roles` header shim.
+
+### Commits + Codex pre-ratification rounds
+
+| # | Commit | Codex closure |
+|---|---|---|
+| 1 | `994623a` Phase 2 initial widening | (initial PR) |
+| 2 | `8401420` JWT path fail-closed | **R1 HIGH** — verified non-admin JWT could elevate via forged x-actor-roles header |
+| 3 | `254040f` bearerTokenPresented flag | **R2 HIGH** — presented-but-rejected JWT could elevate via forged x-actor-roles header |
+| 4 | `d52f5f4` platform_admin tenant-scope semantics | **R3 HIGH** — global platform_admin JWTs were tenant-pinned by the auth hook |
+| 5 | `b970c58` validate platform_admin home tenant + prettier | **R4 HIGH-2** — platform_admin home tenant accepted any string |
+| 6 | `41658de` case-insensitive Bearer parsing | **R5 HIGH-1** — lowercase `bearer` skipped the JWT rejection flag |
+
+**5 substantive HIGH security findings closed across 5 Codex pre-ratification rounds.**
+
+### Substantive architectural advances
+
+1. **Type-system widening:** `AccessTokenRole` now includes admin roles. JWT verify path enforces role enum at decode time.
+2. **admin_tenant_binding claim:** tenant_admin MUST carry the binding (verify-rejected otherwise); platform_admin + patient + clinician MUST NOT.
+3. **Cross-tenant defense:** authContextPlugin enforces tenant-scoped vs global semantics per role. tenant-scoped roles require `claims.tenant_id === resolved tenant`; platform_admin is global with KNOWN_TENANT_IDS home-tenant validation.
+4. **Fail-closed JWT boundary:** `req.bearerTokenPresented` flag distinguishes "no JWT attempted" from "JWT attempted but rejected"; the latter blocks the legacy header shim path.
+5. **Case-insensitive Bearer parsing:** RFC 7235 §2.1 compliance — case-mismatch attacks blocked.
+6. **Role-gate helpers:** `requireTenantAdminActorContext`, `requirePlatformAdminActorContext`, `requireAdminActorContext` provide typed-narrow guards; `UnauthorizedRoleError` accepts single role or array.
+7. **Tier-1 JWT admin authorization:** `requireAdminRole` accepts JWT-resolved admin identity automatically; existing admin handlers don't need handler-side changes.
+8. **ActorContext schema:** added `adminTenantBinding` + `adminHomeTenantId` for tenant_admin scoping + platform_admin home-tenant audit attribution.
+
+### Explicitly-deferred findings (out-of-scope for Phase 2 PR)
+
+- **R1 MEDIUM / R4 HIGH-1:** session-service.ts production session issuer cannot mint admin JWTs. Admin tokens minted via test fixtures only. Deferred to Identity-slice extension PR for admin account-type provisioning (RBAC v1.1).
+- **R5 HIGH-2:** KNOWN_TENANT_IDS is a static set, not DB-driven. Active-tenant DB validation deferred to the production admin issuance follow-on PR. No path exists today to mint a platform_admin token whose home tenant is in KNOWN_TENANT_IDS but DB-inactive.
+
+### Phase 2 next-steps queue
+
+1. **PR #140 → merge** after Codex convergence + CI green
+2. **Admin-endpoint test migrations** (templates/variants/deployments/idempotency-replay; ~54 refs from `x-actor-roles` → JWT bearer)
+3. **Phase 2 follow-on PR:** session-service.ts admin account-type provisioning + active-tenant DB validation (R1 MEDIUM + R4 HIGH-1 + R5 HIGH-2 closures)
+4. **Remove `ALLOW_ACTOR_HEADER_AUTH` env flag + Tier 2 fallback code** once all admin endpoints migrated
+
+### Repository state at Addendum 9
+
+**Implementation repo (`arthurmenson/telecheck-app`):**
+- main HEAD: 212dd69 (unchanged since Addendum 8)
+- Open PRs: #137 (SI-003 v0.9), #138 (SI-004 v0.5), #139 (SI-005 v0.7) — placeholder-ratification ratification-ready
+- Open PR: #140 (Phase 2 admin-role JWT widening) — 6 commits; 5 Codex HIGH closures
+
+**Spec repo (`arthurmenson/telecheckONE`):**
+- main HEAD: this commit (Addendum 9)
+
+### Cumulative autonomous-run productivity (across 2026-05-13 → 2026-05-15 cycle)
+
+- 6 AI Service module PRs (#126–#131) merged
+- 1 SI-007 spec-corpus PR (#132) merged (18 Codex rounds; 21 closures)
+- 1 JWT-helper + 3 patient-endpoint Tier 2 retirement PRs (#133/#134/#135) merged
+- 1 SI-002 v0.1 → v0.5 advancement PR (#136) merged
+- 1 SI-003 v0.1 → v0.9 advancement PR (#137) open ratification-ready
+- 1 SI-004 v0.1 → v0.5 advancement PR (#138) open ratification-ready
+- 1 SI-005 v0.1 → v0.7 advancement PR (#139) open ratification-ready
+- 1 Phase 2 admin-role JWT widening PR (#140) open advancing (5 HIGH closures)
+- 9 status doc addenda + cockpit syncs across 3 days
+
+**Combined Phase 1+2+SI work this 72-hr cycle: 21+5 = 26 Codex pre-ratification HIGH closures + 8 MEDIUM closures across 23+ Codex rounds.**
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (Phase 2 admin-role JWT widening PR #140 in flight; 5 HIGH closures across 5 Codex rounds)
