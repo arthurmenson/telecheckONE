@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 98,
+  "revision": 99,
   "updated": "2026-05-14",
   "lifecycle": {
     "current": "foundation-build",
@@ -219,7 +219,7 @@
       "status": "in-dev",
       "progress": 92,
       "owner": "Evans",
-      "notes": "feat(tests): Tier 2 (x-patient-id) retirement migration in flight — PR #133 (snapshot-http) + PR #134 (submissions-http) MERGED; PR #135 (resume-http) pushed handler-side JWT fix; PRs in tests/ + helpers/jwt-fixtures.ts",
+      "notes": "feat(tests): Phase 1 Tier 2 retirement COMPLETE for patient endpoints — PRs #133/#134/#135 all MERGED (snapshot + submissions + resume = 57 header refs retired + resolveResumeOwnership Tier-1 JWT fix). Admin endpoints (~54 refs) blocked on Phase 2 (TLC-058-scale admin-role JWT widening).",
       "docs": [
         "Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md",
         "Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md"
@@ -636,5 +636,5 @@
     }
   ],
   "updatedAt": "2026-05-14T05:35:30.541Z",
-  "lastSyncedSha": "602e73c"
+  "lastSyncedSha": "212dd69"
 }

@@ -549,3 +549,102 @@ Concrete proposals now ratification-ready:
 The autonomous run has now produced substantive deliverables across (a) AI Service module rollout (PR F crisis-gate with 16 Codex closures), (b) SI-007 spec-corpus closure (18 Codex closures), (c) Forms/Intake Tier 2 retirement (3 patient-endpoint PRs), (d) SI-002 pre-ratification advancement (3 Codex closures). The pace is sustainable; the discipline (per-PR Codex review, status-doc continuity, cockpit sync) has held across all PRs.
 
 — Claude (Opus 4.7, 1M context), 2026-05-14 72-hr-run mid-state (Phase 1 patient migrations + SI-002 v0.5)
+
+---
+
+## Addendum 6 — Phase 1 completion + SI-003 + SI-004 pre-ratification advancement (2026-05-14)
+
+Continuing the 72-hr autonomous run from Addendum 5 mid-state.
+
+### What landed since Addendum 5
+
+**Merged PRs:**
+- **PR #134** (forms-intake-submissions-http JWT migration; CI: green; 28 header→bearer references)
+- **PR #135** (forms-intake-resume-http JWT migration + handler-side resolveResumeOwnership Tier-1 JWT fix; CI: green after 2 retries for unrelated flakes; 24 header→bearer references + a real production fix where the resume handler ignored req.actorContext)
+- **PR #136** (SI-002 v0.5; 3 Codex pre-ratification HIGH closures: R1 auth-proof Category B promotion + submission detail shape, R2 placeholder→canonical transition contract, R3 category-canonicalization bridge for C→B effective-category overrides)
+
+All three landed on telecheck-app main; main HEAD advanced from a280f8a → 212dd69.
+
+**Phase 1 forms-intake JWT migration complete for the 3 patient endpoints** (snapshot + submissions + resume, totaling 57 header references retired). The remaining admin endpoints (templates/variants/deployments/idempotency-replay; ~54 refs) remain BLOCKED on Phase 2 admin-role JWT widening (TLC-058-scale; deferred to a dedicated session).
+
+### SI-003 advancement (PR #137 OPEN)
+
+Advanced **SI-003 (DOMAIN_EVENTS placeholder ratification)** from v0.1 (OPEN since 2026-05-05) through 9 versions across 7 Codex pre-ratification rounds:
+
+- **v0.2:** 9 concrete proposals (naming, aggregate-type mapping, 28 canonical strings, payload shapes, atomic per-slice cutover discipline, SI-002 cross-alignment, schema_version bump).
+- **v0.3 (R1 HIGH):** subscriber-compat protocol — replace "no dual-write" with 5-step gating (inventory + dual-read + alias map + observability + producer cutover).
+- **v0.4 (R2 HIGH):** dispatcher-side observability for stranded canonical events (outbox.published_canonical_event_type metric + subscriber_registry table + merge-time CI check).
+- **v0.5 (R3 HIGH):** SPLIT protocol into Decision 7A (v1.0; dispatcher-free; grep-based) vs Decision 7B (v1.X+; dispatcher-gated). Decision 7B prerequisites (P-1 through P-5) EXPLICITLY deferred from SI-003 ratification.
+- **v0.6 (R4 HIGH):** v1.0 CI guardrail (G-1 CODEOWNERS + G-2 grep block) blocks unregistered consumers from bypassing Decision 7B activation observability.
+- **v0.7 (R5 HIGH):** Replaced unsupported CODEOWNERS extglob syntax with valid path-based syntax + concrete CI script + 8-case test suite + outbox-consumer-registry.yaml manifest + G-4 Promotion Ledger discipline for out-of-monorepo consumers.
+- **v0.8 (R6 HIGH):** G-2 logic inverted — scans ALL changed files regardless of manifest coverage; manifest purpose:emits-only field becomes a positive constraint blocking reader-code addition under emitter directories.
+- **v0.9 (R7 HIGH):** G-5 single-API-surface fail-closed (src/lib/outbox-reader.ts) backed by AST-level enforcement workflow. Closes the indirect-consumer-via-helper-import / dynamic-selector / query-builder gap.
+
+**SI-003 ratification-ready** at v0.9 (docs/SI-003-DOMAIN_EVENTS-Placeholder-Ratification.md on feat/si-003-domain-events-codex-pre-ratification branch, PR #137 OPEN). 7 Codex rounds; 6 HIGH closures.
+
+### SI-004 advancement (PR #138 OPEN)
+
+Advanced **SI-004 (Async-Consult audit events ratification)** from v0.1 (OPEN since 2026-05-05) through 5 versions across 3 Codex pre-ratification rounds:
+
+- **v0.2:** 7 concrete proposals (naming, aggregate-type = consult, 13-string canonical table with Category B/C, detail shapes, SI-001/002/003/005/007 cross-alignment, reserved-name registry, cutover discipline).
+- **v0.3 (R1 HIGH + MEDIUM):** Split consult.prescription_created into prescription_creation_attempted (gate-entry) + prescription_created (terminal-success); removed interaction_check_outcome=blocked-override (eliminates contradictory audit facts). Separated reserved_name_registry from emit allowlist with per-entry gating_spec_pointer.
+- **v0.4 (R2 HIGH):** Three IMMUTABLE events (gate-entry + terminal-success + terminal-failure) replace the v0.3 mutable attempt_outcome field (which violated I-003 audit append-only). Chain reconstructed via gate_correlation_id join.
+- **v0.5 (R3 HIGH + MEDIUM):** Split registries again — canonical_emitted_set (gate landed; CI permits emission) vs deferred_emit_set (canonical name ratified but gate not landed; CI blocks emission with gating_milestone pointer) vs reserved_name_registry (namespace reserved, no slice owns emission; CI blocks until gating spec closes). Reconciled Category B count from "3" to 5 explicitly.
+
+**SI-004 ratification-ready** at v0.5 (docs/SI-004-Async-Consult-Audit-Events-Ratification.md on feat/si-004-async-consult-codex-pre-ratification branch, PR #138 OPEN). 3 Codex rounds; 3 HIGH + 1 MEDIUM closures.
+
+### Pattern observations across SI-002 / SI-003 / SI-004 pre-ratification
+
+The Codex adversarial-review-per-round cadence has produced:
+
+| SI | Rounds | HIGH closures | MEDIUM closures | Net new content |
+|---|---|---|---|---|
+| SI-002 | 3 | 3 | 1 | Category-canonicalization bridge for C→B promotion |
+| SI-003 | 7 | 6 | 0 | Three-registry CI guardrail (G-1 to G-5) + dispatcher-prerequisite split protocol (7A/7B) + AST-level single-reader-API enforcement |
+| SI-004 | 3 | 3 | 1 | Three-immutable-event prescription gate split + three-registry deferred-vs-emitted enforcement |
+
+**Cumulative findings closed across 3 SIs: 12 HIGH + 2 MEDIUM = 14 substantive architectural / correctness gaps closed before ratification handoff.**
+
+The SI-007 precedent (18 rounds / 21 closures over a single SI) is now matched by the COMBINED SI-002/003/004 pre-ratification work (13 rounds / 14 closures over 3 SIs). The cadence is healthy — Codex is finding genuine HIGH-severity gaps in the doc proposals and closures land cleanly without regression.
+
+### State of all open + deferred work after Addendum 6
+
+| Item | State | Notes |
+|---|---|---|
+| PR #137 (SI-003 v0.9) | OPEN; ratification-ready | 7 Codex rounds; 6 HIGH closures; spec-corpus team review when ratification is scheduled |
+| PR #138 (SI-004 v0.5) | OPEN; ratification-ready | 3 Codex rounds; 3 HIGH + 1 MEDIUM closures; downstream of SI-002 v5.5 |
+| Phase 2: admin-role JWT widening | DEFERRED | TLC-058-scale; needs dedicated session |
+| Phase 3: admin-endpoint test migrations (~54 refs) | BLOCKED on Phase 2 | |
+| Phase 4: remove ALLOW_ACTOR_HEADER_AUTH + Tier 2 fallback | BLOCKED on Phase 3 | |
+| Protocol-engine slice | NO PRD | Substantial spec-corpus authoring; unblocks AI handler G/H + Refill protocol route + Subscription period_end |
+| Adverse Event / Labs / RPM/CCM / Sync-Consult / Notifications / Messaging | Not started | Same blocker patterns; spec-corpus ratification + downstream-slice dependencies |
+
+### Recommended Evans morning sequence (updated)
+
+1. **Schedule SI-002 spec-corpus ratification ceremony** for AUDIT_EVENTS v5.5 promotion (P-014).
+2. **Review SI-003 PR #137** at v0.9 (ratification-ready) + schedule spec-corpus ratification ceremony (P-015 / DOMAIN_EVENTS v5.3).
+3. **Review SI-004 PR #138** at v0.5 (ratification-ready; downstream of SI-002) + schedule ratification (P-016 / AUDIT_EVENTS v5.6).
+4. **Decide on Phase 2** (admin-role JWT widening) — schedule as a dedicated TLC-058-style PR cycle.
+5. **Protocol-engine slice authoring** — substantial spec-corpus work; unblocks the most downstream slices.
+
+### Repository state at this point
+
+**Implementation repo (arthurmenson/telecheck-app):**
+- main HEAD: 212dd69 (PR #135 merged after handler-side JWT fix)
+- Open PRs from this continuation: #137 (SI-003 v0.9) + #138 (SI-004 v0.5)
+
+**Spec repo (arthurmenson/telecheckONE):**
+- main HEAD: this commit (Addendum 6)
+
+**Cumulative autonomous-run productivity (across 2026-05-13 → 2026-05-14 cycle):**
+- 6 AI Service module PRs (#126–#131) merged
+- 1 SI-007 spec-corpus PR (#132) merged after 18 Codex pre-ratification rounds (21 closures)
+- 1 JWT-helper + 3 patient-endpoint Tier 2 retirement PRs (#133 + #134 + #135) merged
+- 1 SI-002 v0.1 → v0.5 advancement PR (#136) merged
+- 1 SI-003 v0.1 → v0.9 advancement PR (#137) open ratification-ready (6 HIGH closures)
+- 1 SI-004 v0.1 → v0.5 advancement PR (#138) open ratification-ready (3 HIGH + 1 MEDIUM closures)
+- 6 status doc addenda + cockpit syncs across 3 days
+
+The 72-hr autonomous run has now produced substantive deliverables across (a) AI Service module rollout, (b) SI-007 spec-corpus closure, (c) Forms/Intake Tier 2 retirement for 3 patient endpoints, (d) SI-002/SI-003/SI-004 pre-ratification advancement totaling 12 HIGH + 2 MEDIUM Codex closures across 13 rounds, (e) Phase 1 forms-intake migration now COMPLETE for the patient surface (admin-side blocked on Phase 2). The pace is sustainable; the discipline (per-PR Codex review, status-doc continuity, cockpit sync, three-registry CI-guardrail design pattern emerging across SI-003/SI-004) has held across all PRs.
+
+— Claude (Opus 4.7, 1M context), 2026-05-14 72-hr-run advancing-state (Phase 1 complete + SI-003 + SI-004 ratification-ready)
