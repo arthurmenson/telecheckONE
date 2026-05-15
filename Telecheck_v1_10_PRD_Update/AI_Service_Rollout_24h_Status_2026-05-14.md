@@ -715,3 +715,83 @@ Advanced **SI-005 (Consult/ConsultEvent schema gap)** from v0.1 (OPEN since 2026
 The 72-hr autonomous run has now produced ratification-ready advancement on FOUR open SIs (SI-002 merged + SI-003/004/005 ratification-ready) totaling 21 Codex pre-ratification closures across 16 rounds. The cadence is healthy and the discipline (per-PR Codex review, status-doc continuity, cockpit sync, three-registry CI-guardrail pattern, KMS envelope ratification) has held across all PRs.
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (Phase 1 complete + SI-003/004/005 ratification-ready; SI-002 merged)
+
+---
+
+## Addendum 8 — SI-005 R4+R5 closure + SI-006 status verification (2026-05-15)
+
+Continuing the 72-hr autonomous run from Addendum 7.
+
+### SI-005 advancement v0.5 → v0.7 (R4+R5; 2 additional Codex rounds)
+
+- **v0.6 (R4 HIGH):** initial-write path symmetric with rotation. v0.5 scoped the stored-procedure-only requirement to UPDATEs on already-encrypted rows; v0.6 adds `record_consult_clinician_decision(...)` definer-rights procedure as the ONLY path to transition columns 18-25 NULL → non-NULL. GRANT model revokes application-role direct UPDATE on columns 18-25 for BOTH initial-write AND rotation.
+
+- **v0.7 (R5 HIGH x2):**
+  - **HIGH-1:** `decision_class='request_more_data'` was accepted by the procedure but the to_state was only {PRESCRIBED, DECLINED, ESCALATED_TO_SYNC}. v0.7 adds an explicit 4-row mapping: `request_more_data → AWAITING_DATA` (non-terminal; terminal_state remains NULL). Procedure enforces via SQL CASE + parameter CHECK.
+  - **HIGH-2:** The procedure sketch generated consult_event_id BEFORE audit_id; consult_events INSERT omitted audit_id + correlation_id columns. This satisfied nominal same-tx but lost the durable audit-pairing join. v0.7 reorders: generate audit_id FIRST, INSERT consult_events with audit_id + correlation_id populated, then INSERT audit_records with the same audit_id. Adds NOT VALID composite FK on (tenant_id, audit_id) + trigger enforcing non-NULL audit_id for state_transition + kms_rotation events.
+
+**SI-005 ratification-ready** at v0.7. 5 Codex pre-ratification rounds; 4 HIGH + 6 MEDIUM closures.
+
+### SI-006 status verification
+
+SI-006 (Idempotency Reserve-Then-Execute Redesign) was confirmed RESOLVED 2026-05-08 (Sprint 33-34). Implementation landed across 9 PRs (#43-#49 + #51) with 18 substantive Codex findings closed (11 HIGH + 7 MEDIUM). The spec-corpus IDEMPOTENCY contract bump (v5.1 → v5.2) is documented as deferred to the spec-corpus governance cycle — not in this app repo's scope.
+
+**SI-006 placeholder-ratification series is COMPLETE.** No advancement required.
+
+### Updated cumulative SI pre-ratification productivity
+
+| SI | Rounds | HIGH closures | MEDIUM closures | Final state |
+|---|---|---|---|---|
+| SI-002 | 3 | 3 | 1 | MERGED P-014 |
+| SI-003 | 7 | 6 | 0 | v0.9 ratification-ready (PR #137) |
+| SI-004 | 3 | 3 | 1 | v0.5 ratification-ready (PR #138) |
+| SI-005 | 5 | 4 | 6 | v0.7 ratification-ready (PR #139) |
+
+**Cumulative findings closed across 4 SIs: 16 HIGH + 8 MEDIUM = 24 substantive architectural / correctness gaps closed across 18 Codex rounds.** Exceeds SI-007's single-SI precedent (21 closures in 18 rounds; 4-SI distributed gate matched + exceeded).
+
+### Placeholder-ratification series state
+
+| SI | State |
+|---|---|
+| SI-001 (MedicationRequest schema) | CLOSED P-011 |
+| SI-002 (AUDIT_EVENTS placeholder) | MERGED P-014 |
+| SI-003 (DOMAIN_EVENTS placeholder) | ratification-ready PR #137 (P-015 pending) |
+| SI-004 (Async-Consult audit events) | ratification-ready PR #138 (P-016 pending) |
+| SI-005 (Consult/ConsultEvent schema) | ratification-ready PR #139 (P-017 pending) |
+| SI-006 (Idempotency reserve-then-execute) | CLOSED Sprint 33-34 (implementation; spec v5.2 bump deferred) |
+| SI-007 (Refill/Dispensing/Shipment schema) | MERGED P-013 |
+
+**Result: all 7 SIs in the placeholder-ratification queue are either MERGED, CLOSED, or ratification-ready.** The series is now complete from the implementation-repo perspective; remaining work is the spec-corpus team's ratification ceremonies for P-015, P-016, P-017.
+
+### Next-phase queue post-Addendum 8
+
+1. **Spec-corpus ratification ceremonies** for P-015 (SI-003), P-016 (SI-004), P-017 (SI-005)
+2. **Spec-corpus IDEMPOTENCY v5.1 → v5.2 bump** (SI-006 deferred follow-on; lightweight doc change)
+3. **Phase 2 admin-role JWT widening** (TLC-058-scale; ~54 admin-endpoint test refs blocked)
+4. **Protocol-engine slice authoring** (substantial spec-corpus work)
+5. **Sync-Consult slice authoring** (would unblock SI-005 deferred FK 7)
+6. **AI-Workflow-Executions table** (would unblock SI-005 deferred FK 6)
+
+### Repository state at Addendum 8
+
+**Implementation repo (`arthurmenson/telecheck-app`):**
+- main HEAD: 212dd69 (unchanged since Addendum 6/7)
+- Open PRs: #137 (SI-003 v0.9), #138 (SI-004 v0.5), #139 (SI-005 v0.7) — all ratification-ready
+
+**Spec repo (`arthurmenson/telecheckONE`):**
+- main HEAD: this commit (Addendum 8)
+
+### Cumulative autonomous-run productivity (across 2026-05-13 → 2026-05-15 cycle)
+
+- 6 AI Service module PRs (#126–#131) merged
+- 1 SI-007 spec-corpus PR (#132) merged (18 Codex rounds; 21 closures)
+- 1 JWT-helper + 3 patient-endpoint Tier 2 retirement PRs (#133/#134/#135) merged
+- 1 SI-002 v0.1 → v0.5 advancement PR (#136) merged
+- 1 SI-003 v0.1 → v0.9 advancement PR (#137) open ratification-ready
+- 1 SI-004 v0.1 → v0.5 advancement PR (#138) open ratification-ready
+- 1 SI-005 v0.1 → v0.7 advancement PR (#139) open ratification-ready
+- 8 status doc addenda + cockpit syncs across 3 days
+
+**Placeholder-ratification series COMPLETE from implementation-repo perspective.** 24 Codex pre-ratification closures across 18 rounds + 4 SIs simultaneously matched the SI-007 single-SI precedent in cumulative depth.
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (SI placeholder-ratification series COMPLETE; awaiting spec-corpus ratification ceremonies)
