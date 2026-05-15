@@ -1081,3 +1081,65 @@ Plus PR #146 adds 11 new JWT-path unit tests to admin-role.test.ts (which intent
 5. Spec-corpus work: Sync-Consult slice authoring OR AI-Workflow-Executions slice (would unblock SI-005 deferred FK 6/7)
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (Tier 2 retirement scope: 166 refs migrated + 11 new JWT-path unit tests)
+
+---
+
+## Addendum 13 — Phase 2 F-1/F-2/F-4 deferred-followon closures (2026-05-15)
+
+Continuing the 72-hr autonomous run. After Phase 1+2 Tier 2 retirement landed (Addendums 1–12), this addendum captures the systematic closure of the four Phase 2 deferred-followon items documented in PHASE_2_ADMIN_JWT_SCOPE_AND_FOLLOW_ONS.md.
+
+### Closures shipped
+
+| Followon | PR | Codex rounds | Highest finding closed | Status |
+|---|---|---|---|---|
+| F-1 production admin minting | #147 | 1 | R1 MEDIUM (rollback hardening) | MERGED |
+| F-2 active-tenant DB validation | #148 | 4 | R3 HIGH (auth-boundary fail-closed on lookup exceptions) | MERGED |
+| F-3 JWT session-liveness check | — | — | — | DEFERRED (Identity/RBAC slice; pre-existing JWT design property) |
+| F-4 platform_admin audit attribution | #149 | 4+ | R3 HIGH (hash-chain integrity for actor_tenant_id) | RATIFICATION-READY |
+
+### F-1 PR #147 (MERGED) — production admin minting
+
+- migration 028: widens `accounts.account_type` CHECK to include tenant_admin + platform_admin
+- AccountType union widened with full JSDoc spec-refs
+- `sessionRoleForAccountType` adds 2 admin cases
+- NEW `adminTenantBindingForAccountType` resolves the JWT's `admin_tenant_binding` claim from account_type + ctx.tenantId (home-tenant model)
+- `issueSession` passes admin_tenant_binding to issueAccessToken when non-null
+- Rollback 028 hardened with admin-rows DO-precheck (mirrors 027 pattern)
+
+### F-2 PR #148 (MERGED) — active-tenant DB validation
+
+4 Codex rounds; 4 HIGH closures total:
+- R1 HIGH: DB outage fallback re-authorized inactive home tenants → fail closed on every uncertainty
+- R1 MEDIUM: Whitespace tenant IDs hit DB → format validator before lookup
+- R2 HIGH: Country binding missing → bind country_of_care to validated tenant DB row
+- R3 HIGH: Schema/SQL errors escaped auth hook as 500 → try/catch + fail-closed-with-log
+- R4 APPROVED: ship
+
+`lookupActiveTenantById` returns tagged union `{ kind: 'active' | 'inactive_or_unknown' | 'unreachable', country_of_care? }`. authContextPlugin for platform_admin: format validation → DB lookup → fail closed on any non-'active' OR any thrown error.
+
+### F-4 PR #149 (RATIFICATION-READY) — platform_admin audit attribution
+
+4+ Codex rounds; deep-dive integrity work:
+
+- Initial: helper-only `resolveActorTenantId(req)` returning adminHomeTenantId for platform_admin, tenantId for tenant-scoped roles
+- R1: Codex flagged "helper unused" → wired through forms-intake admin handlers + service signatures (6 admin-mutating paths in template-service)
+- R2 HIGH: actor_tenant_id wasn't persisted in DB (migration 002 lacked column) → **migration 029 adds nullable `audit_records.actor_tenant_id` + updates emitAudit INSERT to project it**
+- R3 HIGH: actor_tenant_id wasn't in the hash chain → **canonical_hash function signature widened with `p_actor_tenant_id`; trigger updated to pass NEW.actor_tenant_id; test helper recompute SELECT + 2 audit-walker test fixtures updated**
+- R4 CRITICAL+HIGH: trigger name mismatch + rollback didn't restore pre-029 contract → **forward migration drops both possible trigger names + rebinds under canonical migration-002 name; rollback fully restores pre-029 canonical_hash + trigger function bodies before dropping the column**
+
+End-to-end attribution semantics for US platform_admin acting on Telecheck-Ghana resource: `audit_records.tenant_id` = Telecheck-Ghana (resource), `audit_records.actor_tenant_id` = Telecheck-US (admin's home), both tamper-evident via hash chain.
+
+### Cumulative 72-hr productivity (updated)
+
+PRs merged in this cycle: 16+ (Phase 1+2 + F-1 + F-2 + supporting infrastructure). F-4 PR #149 ratification-ready awaiting one more Codex round (R5).
+
+Combined Phase 2 deferred-followon work: **4+ Codex rounds per PR, 9+ HIGH closures across F-2 + F-4 alone, 2 new migrations (028 + 029), 1 audit-chain integrity update, end-to-end cross-tenant attribution durable + tamper-evident.**
+
+### Next-phase queue post-Addendum 13
+
+1. F-4 PR #149 merge after Codex R5 + CI green
+2. F-3 follow-on PR (JWT session-liveness check) — Identity/RBAC slice deliverable; would also benefit clinician role
+3. Remove ALLOW_ACTOR_HEADER_AUTH env flag (cleanup; gated on confidence all admin endpoints have JWT coverage)
+4. Adverse Event Reporting slice authoring (spec-corpus work; multi-week)
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (F-1/F-2 MERGED; F-4 ratification-ready)
