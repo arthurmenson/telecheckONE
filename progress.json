@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 97,
+  "revision": 98,
   "updated": "2026-05-14",
   "lifecycle": {
     "current": "foundation-build",
@@ -219,7 +219,7 @@
       "status": "in-dev",
       "progress": 92,
       "owner": "Evans",
-      "notes": "feat(forms-intake): TLC-006 governance event emitters + tests",
+      "notes": "feat(tests): Tier 2 (x-patient-id) retirement migration in flight — PR #133 (snapshot-http) + PR #134 (submissions-http) MERGED; PR #135 (resume-http) pushed handler-side JWT fix; PRs in tests/ + helpers/jwt-fixtures.ts",
       "docs": [
         "Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md",
         "Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md"
@@ -636,5 +636,5 @@
     }
   ],
   "updatedAt": "2026-05-14T05:35:30.541Z",
-  "lastSyncedSha": "a280f8a"
+  "lastSyncedSha": "602e73c"
 }
