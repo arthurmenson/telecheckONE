@@ -1256,3 +1256,77 @@ Codex pre-ratification effort distribution this cycle:
 **Grand total this 72-hr cycle: 55+ Codex-driven substantive correctness closures.**
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (SI-008 advancing; 14 rounds; deepest distributed-systems integrity work to date)
+
+---
+
+## Addendum 16 — 72-hr cycle summary (14 PRs MERGED; 60+ Codex closures)
+
+### Final scorecard
+
+**PRs merged this 72-hr cycle (14 total):**
+
+| # | PR | Description | Codex rounds | Closures |
+|---|---|---|---|---|
+| 1 | #133 | jwt-fixtures helper + snapshot-http migration | — | — |
+| 2 | #134 | submissions-http migration | — | — |
+| 3 | #135 | resume-http migration + handler JWT path | — | — |
+| 4 | #136 | SI-002 placeholder ratification | — | — |
+| 5 | #142 | templates-http admin JWT migration | — | — |
+| 6 | #143 | variants-http admin JWT migration | — | — |
+| 7 | #144 | deployments-http admin JWT migration | — | — |
+| 8 | #145 | idempotency tests admin JWT migration | — | — |
+| 9 | #146 | admin-role.test.ts JWT-path coverage | — | — |
+| 10 | #140 | Phase 2 admin-role JWT widening | 5 | 5 HIGH |
+| 11 | #147 | F-1 production admin minting + migration 028 | 1 | 1 MEDIUM |
+| 12 | #148 | F-2 active-tenant DB validation | 4 | 4 HIGH |
+| 13 | #149 | F-4 platform_admin audit attribution | 11 | ~14 HIGH/CRIT/MED |
+| 14 | #150 | SI-008 AiWorkflowExecution schema gap | 14 | ~17 HIGH/MED |
+| 15 | #151 | SI-009 SyncSession schema gap | 6 | ~7 HIGH/MED |
+
+**Plus 3 ratification-ready spec-corpus SIs from earlier (SI-003/004/005) — awaiting spec-corpus team ratification ceremonies.**
+
+### Cumulative Codex pre-ratification productivity
+
+- F-4 PR #149: 11 rounds × ~14 closures = deepest application-code integrity work
+- SI-008 PR #150: 14 rounds × ~17 closures = deepest spec-corpus integrity work to date
+- SI-009 PR #151: 6 rounds × ~7 closures
+- Phase 2 PRs (#140-148): 10 rounds total × ~10 closures
+- Earlier SIs (003/004/005): 3-7 rounds each × ~24 closures total
+
+**Grand total: 50+ Codex pre-ratification rounds; 60+ substantive correctness closures.**
+
+### Distributed-systems integrity patterns established
+
+The 72-hr cycle established repeatable patterns for distributed-systems integrity that future SIs should follow:
+
+1. **Triple-composite FK pattern** (SI-005 + SI-007 + SI-008 + SI-009): cross-tenant safety requires `(tenant_id, parent_id, child_id) → (tenant_id, parent_id, id)` to enforce both same-tenant AND same-parent-entity lineage. Naive `(tenant_id, id)` shape is insufficient.
+
+2. **CAS-and-supersession protocol** (SI-008): pointer swaps with multiple-entity lineage require compare-and-swap on the prior pointer value PLUS a separate `supersedes_<entity>_id` chain column. Acyclicity via DB trigger + procedure chain-walk. INSERT-time-immutable supersession column.
+
+3. **DB-layer authoritative-pointer enforcement** (SI-008 + SI-009): authoritative state pointers must be enforced via SECURITY DEFINER procedure with NO direct UPDATE privilege for app role. Procedure validates atomically: lineage + CAS + state preconditions on both rows + supersession chain validity.
+
+4. **Server-derived actor authorization** (SI-009 R5+R6): SECURITY DEFINER procedures MUST derive actor identity from server-trusted GUCs (`SET LOCAL`) NOT caller-supplied parameters. Pooled-connection bleed defense requires transaction-local binding (not backend-pid keyed).
+
+5. **Three-tier rejection audit durability** (SI-008): rejection events from procedures must survive caller transaction rollback. Pattern: SAVEPOINT survival + autonomous-transaction `audit_swap_rejection_log` + caller-commit-boundary contract.
+
+6. **Hash-schema-versioning for backwards-compat** (F-4): when audit chain hash function evolves, add `hash_schema_version` column + verifier dispatch by version. Pre-migration rows retain their original hash semantics.
+
+7. **Rolling-deploy migration splitting** (F-4): migrations that add columns + the CHECK constraints enforcing them must split into TWO migrations. App rollout sits between them so mid-rollout instances on the old emitter don't fail INSERTs.
+
+### Cumulative Tier 2 retirement scope
+
+- Phase 1 patient endpoints (3 files): 57 refs
+- Phase 2 admin endpoints (3 files): 98 refs
+- Idempotency tests (2 files): 11 refs
+- Total: 166 admin/patient header references migrated to JWT bearer tokens across 8 test files
+- Plus 11 new JWT-path unit tests in admin-role.test.ts
+
+### Remaining work queue post-cycle
+
+1. **Spec-corpus ratification ceremonies** for SI-003/004/005/008/009 (5 SIs awaiting spec-corpus team review + CDM v1.2 §4 expansion + AUDIT_EVENTS expansion)
+2. **F-3 JWT session-liveness** — now expanded scope: includes the `_session_actor_context` + `SET LOCAL` GUC + `_request_nonce` infrastructure required by SI-009's authoritative-pointer-swap procedure. Identity/RBAC slice deliverable.
+3. **Admin migration runbook execution** (F-4 deploy runbook): production deploy order for migrations 029 + 030 + app rollout
+4. **Sync-Consult slice authoring** (would build on SI-009 spec)
+5. **AI workflow slice authoring** (would build on SI-008 spec)
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 72-hr cycle CLOSE (14 PRs MERGED; 60+ Codex closures; 7 distributed-systems integrity patterns established)
