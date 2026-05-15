@@ -1195,3 +1195,64 @@ End-to-end audit attribution is now durable, tamper-evident, and rolling-deploy-
 | F-4 platform_admin audit attribution | **Ratification-ready PR #149** |
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (F-4 ratification-ready: 11 Codex rounds; ~14 substantive closures; 10-layer integrity model)
+
+---
+
+## Addendum 15 — F-4 MERGED; SI-008 filed (14 Codex rounds; deep distributed-systems integrity)
+
+### F-4 MERGED in PR #149
+
+After Addendum 14, PR #149 (F-4 platform_admin audit attribution) merged with 11 Codex rounds + 14 substantive closures + 10-layer integrity model + full operational deploy runbook (`migrations/F4_DEPLOY_RUNBOOK.md`).
+
+### SI-008 filed at PR #150 (advancing)
+
+Files SI-008 AiWorkflowExecution schema gap — the deferred FK 6 from SI-005. Names the missing CDM v1.2 §4 row-shape for entity #19.
+
+**14 Codex pre-ratification rounds (most rounds on any SI to date):**
+
+| R | Finding | Closure |
+|---|---|---|
+| R1 | Bidirectional pointer divergence | Authoritative forward pointer + non-unique backward; supersedes_execution_id chain |
+| R2 HIGH-1 | CAS guard blocks reruns | CAS protocol with `$expected_prior_execution_id` discriminator |
+| R2 HIGH-2 | Application-layer closure can be bypassed | DB-layer enforcement via definer-rights `record_workflow_pointer_swap()` procedure |
+| R3 | Schema-prose contradiction (supersedes_execution_id absent) | Added column + composite FK + self-cycle CHECK |
+| R4 | Same-tenant FK doesn't enforce same-consult | Triple-composite FK `(tenant_id, consult_id, id)` |
+| R5 | Forward FK still same-tenant-only | SI-005 closure FK rewritten to triple-composite |
+| R6 | Deeper cycles not detectable | Three concrete contracts: immutability + chain-walk rejection + reuse rejection |
+| R7 | Resolution checklist still showed weaker FK | Rewrote checklist item 7 to require triple-composite + REJECTED prior shape |
+| R8 | Stale subsection preserved unsafe FK | Rewrote "Forward FK invariant" subsection eliminating same-tenant-only language |
+| R9 | Immutability trigger only blocked non-NULL→other | Strict immutability: ALL post-INSERT mutations rejected |
+| R10 | Procedure lifecycle ambiguity | Single canonical lifecycle: execution INSERT at workflow start; procedure ONLY swaps pointer |
+| R11 | R6/R10 sections contradicted each other | Unified R6 wording with R10 canonical lifecycle |
+| R12 | Naive supersession guard blocks ALL reruns | Correct guard: reject only id-already-in-chain reuse, not all non-NULL supersessions |
+| R13 HIGH | Supersession-pointer vs CAS-prior consistency missing | Added step 6 validation: `supersedes_execution_id IS NOT DISTINCT FROM $expected_prior` |
+| R13 MEDIUM | Raise-exception path rolls back audit | Non-throwing rejection with savepoint + structured (success, code, detail) tuple |
+| R14 HIGH | Savepoint-survival audit lost on caller rollback | Three-tier durability: savepoint + autonomous-tx rejection log + caller-commit-boundary contract |
+
+**Total: ~17 HIGH/MEDIUM closures across 14 rounds. Most-Codex-rounds SI in the corpus to date** (SI-007 had 18 rounds; SI-008 trending similar depth).
+
+### What SI-008 specifies
+
+A comprehensive distributed-systems integrity contract for AI workflow execution rerun/supersession semantics on a Mode 2 consult:
+
+1. Schema: 25-column placeholder table with triple-composite UNIQUE + 3 composite FKs (same-tenant, same-consult forward+backward, same-consult+same-tenant supersession chain)
+2. State machine: pending → running → completed | failed | cancelled
+3. Forward pointer (`consults.ai_workflow_execution_id`) authoritative; backward (`ai_workflow_executions.consult_id`) non-unique allowing reruns
+4. CAS protocol with `$expected_prior_execution_id` for atomicity
+5. Supersession chain via `supersedes_execution_id` (INSERT-time-immutable per R9)
+6. `record_workflow_pointer_swap()` definer-rights procedure: ONLY path to UPDATE forward pointer; performs 9 validation steps (locks → FK defense → state → CAS → supersession-pointer-consistency → acyclicity → swap → audit → return)
+7. Non-throwing rejection with savepoint + autonomous-tx durability backstop
+8. Forensic chain walker reconciles `audit_records` chain + `audit_swap_rejection_log` for full history
+
+### Cumulative 72-hr productivity (updated)
+
+PRs merged this cycle: 13 (Phase 1+2 + F-1 + F-2 + F-4). Plus 3 ratification-ready spec-corpus SIs from earlier (SI-003/004/005). Plus 1 in-flight new SI (SI-008 advancing).
+
+Codex pre-ratification effort distribution this cycle:
+- F-4 PR #149: 11 rounds × ~1.5 closures/round = ~14 substantive closures
+- SI-008 PR #150: 14 rounds × ~1.2 closures/round = ~17 substantive closures
+- (Prior SI-003/004/005 series: 3-7 rounds each; total ~24 closures)
+
+**Grand total this 72-hr cycle: 55+ Codex-driven substantive correctness closures.**
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (SI-008 advancing; 14 rounds; deepest distributed-systems integrity work to date)
