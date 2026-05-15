@@ -932,3 +932,88 @@ PR #140: Test CI flagged the **i003-audit-append-only.test.ts** UPDATE-revoke fl
 **Combined Phase 1+2+SI work this 72-hr cycle:** 26 Codex pre-ratification HIGH closures + 8 MEDIUM closures across 23+ Codex rounds, plus 4 explicitly-deferred HIGH findings with documented follow-on PR plan.
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (Phase 2 + templates-http migration in flight)
+
+---
+
+## Addendum 11 — Phase 2 admin migration trilogy COMPLETE (2026-05-15)
+
+Continuing the 72-hr autonomous run from Addendum 10.
+
+### Major milestones since Addendum 10
+
+**PR #140 MERGED** — Phase 2 admin-role JWT widening. AccessTokenRole now includes tenant_admin + platform_admin in production code. main HEAD: `6448fd0`.
+
+**Phase 2 forms-intake admin test migration trilogy MERGED:**
+- **PR #142 MERGED** (templates-http; 31 admin header refs migrated)
+- **PR #143 MERGED** (variants-http; 28 admin header refs migrated)
+- **PR #144 OPEN** (deployments-http; 39 admin header refs migrated; rebased + awaiting fresh CI)
+
+**Combined: 98 admin header references migrated from `x-actor-roles` / `x-actor-id` / `x-actor-admin-tenant` headers to JWT bearer tokens across the three forms-intake admin test files.** No production handler changes required — `requireAdminRole` Tier-1 JWT path (from PR #140) automatically accepts JWT-resolved admin identity.
+
+### Pattern established
+
+The migration pattern is now well-established across 6 test files (3 patient endpoints from Phase 1 + 3 admin endpoints from Phase 2):
+
+```typescript
+function adminAuth(accountId: string): { authorization: string } {
+  return bearerAuthHeader({
+    accountId,
+    tenantId: T_US,
+    countryOfCare: 'US',
+    role: 'tenant_admin',
+  });
+}
+// Usage:
+//   ...adminAuth('op_my_test_actor'),  // shorthand
+//   ...bearerAuthHeader({...})         // explicit for cross-tenant / non-admin
+```
+
+### Cumulative 72-hr productivity (updated)
+
+- 6 AI Service module PRs (#126–#131) merged
+- 1 SI-007 spec-corpus PR (#132) merged (18 Codex rounds; 21 closures)
+- 1 JWT-helper + 3 patient-endpoint Tier 2 retirement PRs (#133/#134/#135) merged
+- 1 SI-002 v0.1 → v0.5 advancement PR (#136) merged
+- 1 SI-003 v0.1 → v0.9 advancement PR (#137) open ratification-ready
+- 1 SI-004 v0.1 → v0.5 advancement PR (#138) open ratification-ready
+- 1 SI-005 v0.1 → v0.7 advancement PR (#139) open ratification-ready
+- 1 **Phase 2 admin-role JWT widening PR (#140) MERGED** (5 HIGH closures + 4 HIGH deferred)
+- 1 templates-http migration PR (#142) **MERGED** (31 refs)
+- 1 variants-http migration PR (#143) **MERGED** (28 refs)
+- 1 deployments-http migration PR (#144) **open** (39 refs)
+- 11 status doc addenda + cockpit syncs across 3 days
+
+**Total merged this 72-hr cycle:** 13 PRs (6 AI service + 4 Tier 2 retirement + 1 SI-007 + 1 SI-002 + 1 Phase 2). Plus 3 ratification-ready spec-corpus SIs (SI-003/004/005) + 1 in-flight admin migration PR.
+
+### Combined Phase 1 + Phase 2 admin migration scope
+
+- **Phase 1 (patient endpoints; merged):** snapshot-http + submissions-http + resume-http (57 header refs)
+- **Phase 2 (admin endpoints; merged + in flight):** templates-http + variants-http + deployments-http (98 header refs)
+- **Total Tier 2 header retirement: 155 references** across 6 test files
+
+### Phase 2 deferred follow-ons (per PHASE_2_ADMIN_JWT_SCOPE_AND_FOLLOW_ONS.md)
+
+- F-1: Production admin minting (session-service.ts) — RBAC v1.1 Identity slice extension
+- F-2: Active-tenant DB validation (paired with F-1)
+- F-3: JWT session-liveness check (Identity/RBAC slice deliverable)
+- F-4: platform_admin audit attribution (cross-cutting audit-emission change)
+
+### Repository state at Addendum 11
+
+**Implementation repo (`arthurmenson/telecheck-app`):**
+- main HEAD: 23414fa (post #142 + #143 merge)
+- Open PRs: #137 (SI-003 v0.9), #138 (SI-004 v0.5), #139 (SI-005 v0.7) — placeholder-ratification ratification-ready
+- Open PR #144 (deployments-http migration) — final of the Phase 2 trilogy
+
+**Spec repo (`arthurmenson/telecheckONE`):**
+- main HEAD: this commit (Addendum 11)
+
+### Next-phase queue post-Addendum 11
+
+1. PR #144 merge after CI clears
+2. F-1 follow-on: session-service.ts admin account-type provisioning (Identity slice extension)
+3. F-4 follow-on: platform_admin audit attribution (paired with admin handler/service migrations)
+4. Remove ALLOW_ACTOR_HEADER_AUTH env flag + Tier 2 fallback code once all admin endpoints proven JWT-native
+5. Protocol-engine slice authoring (substantial spec-corpus work; unblocks downstream slices)
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (Phase 2 admin migration trilogy MERGED — 98 admin header refs retired to JWT)
