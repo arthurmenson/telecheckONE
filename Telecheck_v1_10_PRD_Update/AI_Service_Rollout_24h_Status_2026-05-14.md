@@ -1017,3 +1017,67 @@ function adminAuth(accountId: string): { authorization: string } {
 5. Protocol-engine slice authoring (substantial spec-corpus work; unblocks downstream slices)
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (Phase 2 admin migration trilogy MERGED — 98 admin header refs retired to JWT)
+
+---
+
+## Addendum 12 — Phase 2 Tier 2 retirement complete; admin-role JWT path coverage (2026-05-15)
+
+Continuing the 72-hr autonomous run.
+
+### Major milestones since Addendum 11
+
+**PR #144 MERGED** — deployments-http admin migration (39 refs). Completes the Phase 2 admin migration trilogy.
+
+**PR #145 MERGED** — idempotency-http + forms-intake-idempotency-replay admin JWT migration (11 refs across 2 files). Threads accountId through JWT sub claim → idempotency 4-tuple PK actor_id.
+
+**PR #146 OPEN** — admin-role.test.ts Phase 2 JWT-path coverage. 11 new tests across §7 (Tier 1 JWT) + §8 (Tier 1b bearerTokenPresented fail-closed):
+- platform_admin same-tenant + cross-tenant (global scope per R3 closure)
+- tenant_admin matching + mismatched binding
+- patient + clinician JWT rejection (no admin escalation)
+- R1 HIGH closure: forged x-actor-roles header cannot elevate verified non-admin JWT
+- R2 HIGH closure: presented-but-rejected JWT cannot fall through to header shim
+- Tier 2 fallback preserved when no JWT presented at all
+
+### Cumulative Tier 2 header retirement scope
+
+**Migrated test files (8 total):**
+- Phase 1 patient endpoints (3 files): snapshot + submissions + resume (57 refs)
+- Phase 2 admin endpoints (3 files): templates + variants + deployments (98 refs)
+- Idempotency tests (2 files): idempotency-http + forms-intake-idempotency-replay (11 refs)
+
+**Total: 166 admin/patient header references migrated to JWT bearer tokens.**
+
+Plus PR #146 adds 11 new JWT-path unit tests to admin-role.test.ts (which intentionally retains its 54 legacy header-path test refs to validate the Tier 2 fallback).
+
+### Remaining Tier 2 header surface
+
+- `tests/integration/admin-role.test.ts` (54 refs) — intentionally tests Tier 2 legacy header path; NOT a migration target
+- `src/lib/admin-role.ts` Tier 2 fallback code — preserved for handlers that may receive non-JWT requests during transition; removal gated on confidence the Identity slice has fully migrated all production callers
+- `src/modules/forms-intake/internal/handlers/*.ts` `resolveActorId` Tier 2 fallback — same gating
+
+### Cumulative 72-hr productivity (updated)
+
+- 6 AI Service module PRs (#126–#131) merged
+- 1 SI-007 spec-corpus PR (#132) merged (18 Codex rounds; 21 closures)
+- 1 JWT-helper + 3 patient-endpoint Tier 2 retirement PRs (#133/#134/#135) MERGED
+- 1 SI-002 advancement PR (#136) MERGED
+- SI-003 ratification-ready PR (#137)
+- SI-004 ratification-ready PR (#138)
+- SI-005 ratification-ready PR (#139)
+- **Phase 2 admin-role JWT widening PR (#140) MERGED** (5 HIGH closures)
+- 3 Phase 2 admin migration PRs (#142, #143, #144) ALL MERGED
+- Idempotency tests admin JWT migration PR (#145) MERGED
+- admin-role.test.ts JWT-path coverage PR (#146) OPEN
+- 12 status doc addenda + cockpit syncs across 3 days
+
+**Total PRs merged in this 72-hr cycle: 16 PRs.** Plus 3 ratification-ready spec-corpus SIs + 1 in-flight unit-test coverage PR.
+
+### Next-phase queue post-Addendum 12
+
+1. PR #146 merge after CI clears
+2. F-1 follow-on PR: session-service.ts admin account-type provisioning (Identity slice extension)
+3. F-4 follow-on PR: platform_admin audit attribution (audit emission service-layer changes)
+4. ALLOW_ACTOR_HEADER_AUTH cleanup PR (gated on F-1)
+5. Spec-corpus work: Sync-Consult slice authoring OR AI-Workflow-Executions slice (would unblock SI-005 deferred FK 6/7)
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 72-hr-run advancing-state (Tier 2 retirement scope: 166 refs migrated + 11 new JWT-path unit tests)
