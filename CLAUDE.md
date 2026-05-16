@@ -204,3 +204,40 @@ There are no commands to build, test, lint, or run anything. Validation of this 
 - Rebuild manifest from filesystem listing (not prose) when files change.
 - Append (never overwrite) Promotion Ledger entries per cycle.
 - Verify cross-references resolve to current canonical versions.
+
+## Autonomous-work authorization (Evans standing directive, 2026-05-16+)
+
+When the Master Completion Plan v1.0 has open Phase A / Phase B items (see `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Master_Completion_Plan_v1_0.md`), Claude is **authorized to work continuously** through the Codex-per-PR adversarial-review cycle without per-action confirmation prompts.
+
+### What this authorization covers
+
+- **Build:** author new modules / handlers / migrations / specs against the Plan's tracks (Track 1 Clinical Care, Track 2 AI Service, Track 3 Consent + Forms-Intake, Track 4 Mobile + UI, Track 5 Infra & Ops, Track 6 Spec-corpus ratification).
+- **Per-PR adversarial review:** autoinvoke Codex (`codex@openai-codex` plugin via the companion script — see "Codex adversarial-review cadence" above) at every PR open; iterate through findings round-by-round until APPROVE.
+- **Merge:** squash-merge any PR with Codex APPROVE + green CI without asking.
+- **Document:** append an Addendum to `Telecheck_v1_10_PRD_Update/AI_Service_Rollout_24h_Status_2026-05-14.md` and bump `progress.json` revision per merged PR.
+- **Schedule next iteration:** when running under `/loop` with dynamic pacing, self-pace the next firing via `ScheduleWakeup` to continue picking up the next critical-path item.
+
+### Hard floor — STOP and surface
+
+The authorization does NOT cover, and these still require explicit user input mid-cycle:
+
+1. **Codex CRITICAL findings that turn on a policy / regulatory / architectural judgment** (security posture, FDA / HIPAA classification, novel ADR-class decisions, multi-tenant isolation invariants).
+2. **Prohibited actions per the global safety rules** — financial transactions, permission / access-control changes, deletions, secret handling, sharing data with external systems.
+3. **Spec-corpus ratification ceremonies** — Track 6 work that requires the spec-corpus ratifier (Evans + Engineering Lead + CDM owner) to sign off on a Promotion Ledger entry. Claude can file SIs and propose row shapes for ratification; Claude CANNOT execute the ratification unilaterally.
+4. **Production deploys** — F-4 deploy runbook execution requires explicit operator action on the AWS / DB side.
+5. **Cross-tenant break-glass operations** — I-024 platform-floor; always operator-gated.
+
+### Discipline floor (always-on, even under loop)
+
+- **Codex APPROVE is mandatory before any merge.** No exceptions for time pressure.
+- **Spec ratification leads implementation by ≥1 sprint.** Do not author canonical schemas; file an SI and route to Track 6.
+- **Audit invariants (I-003 append-only, I-019 crisis-floor, I-023 tenancy, I-025 tenant-blind errors, I-027 audit attribution) are platform-floor.** Bare suppression on audit failure forbidden.
+- **Glossary terms canonical** (`medication_request` not `prescription`, `Mode 1` / `Mode 2` not `chatbot`, `tenant` not `customer`).
+- **Addendum-trail discipline:** every merged PR gets an Addendum + cockpit bump. The Addendum-trail in the status doc is the cross-session continuity mechanism that lets future sessions (or new instances under `/schedule`) reconstruct "where we are."
+
+### Loop / schedule operating modes
+
+- **`/loop` (dynamic pacing)** is the canonical in-session mechanism for autonomous work. Pass the same prompt back via `ScheduleWakeup`; the loop continues until stopped or until the Plan's Phase F (multi-tenant launch) ships.
+- **`/schedule` (cron)** is the canonical cross-session mechanism. Each firing reads the latest Addendum, picks the next critical-path item, ships through Codex, appends the next Addendum.
+
+The combination is what operationalizes "work nonstop until the project is completed." Stop conditions: explicit user "stop" / "pause," a hard-floor item from above firing, or Plan completion.
