@@ -1330,3 +1330,94 @@ The 72-hr cycle established repeatable patterns for distributed-systems integrit
 5. **AI workflow slice authoring** (would build on SI-008 spec)
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 72-hr cycle CLOSE (14 PRs MERGED; 60+ Codex closures; 7 distributed-systems integrity patterns established)
+
+---
+
+## Addendum 17 — SI-010 MERGED; Phase 2 deferred-followon set CLOSED (16 PRs total)
+
+After Addendum 16, two more PRs landed:
+
+### PR #151 SI-009 SyncSession schema gap MERGED (6 Codex rounds)
+
+R1 added triple-composite UNIQUE + guarded forward-pointer update with state precondition. R2 atomic target-session lifecycle validation. R3 DB-layer enforcement via SECURITY DEFINER procedure. R4 actor authorization guard. R5 server-derived actor identity (the R5 finding triggered SI-010 as the prerequisite). R6 transaction-local binding via SET LOCAL (Codex caught the backend-pid bleed risk on pooled connections).
+
+### PR #152 SI-010 Session Actor Context DB Binding MERGED (5 Codex rounds)
+
+SI-010 is the new follow-on filed AFTER SI-009 R5 identified that the SECURITY DEFINER procedures in SI-005, SI-008, and SI-009 ALL need a DB-side actor-context infrastructure to safely derive caller identity from server-trusted state instead of caller-supplied parameters.
+
+Codex review trajectory:
+- R1 HIGH: original DDL was a permanent table with no cleanup → moved to TEMPORARY ON COMMIT DELETE ROWS
+- R2 HIGH-1: duplicate nonce-helper definition with expiry omitted → deduplicated
+- R2 HIGH-2: migration-created temp table doesn't provision pool connections → resolution path corrected
+- R3 HIGH-1: helpers reading current_setting() trust caller-settable GUCs → helpers now self-authenticate from `_session_actor_context` keyed by `(pg_backend_pid, txid, nonce)`
+- R3 HIGH-2: `return` from Fastify onRequest doesn't terminate request → fail-closed via `throw UnauthenticatedError()`
+- **R4 HIGH (critical pivot):** TEMPORARY caller-writable table is broken — any app SQL on the same backend could INSERT a fabricated row to spoof identity → REPLACED with permanent locked-down table + `bind_actor_context()` SECURITY DEFINER function + GRANT model restricting EXECUTE to `bind_actor_context_role` only
+- R5 HIGH x2: trust-anchor section + resolution path still referenced the rejected temp-table design → rewrote both to match R4 permanent-table closure end-to-end
+
+### Phase 2 deferred-followon set ALL CLOSED
+
+| Followon | Outcome |
+|---|---|
+| F-1 production admin minting | ✅ MERGED PR #147 |
+| F-2 active-tenant DB validation | ✅ MERGED PR #148 |
+| F-3 JWT session-liveness check | ✅ MERGED PR #152 (folded into SI-010 wiring as Step 2 of authContextPlugin) |
+| F-4 platform_admin audit attribution | ✅ MERGED PR #149 |
+
+### Final autonomous-cycle scorecard
+
+**16 PRs MERGED** (was 14 at Addendum 16; +SI-009 #151 + SI-010 #152):
+
+| Category | PRs |
+|---|---|
+| Phase 1 Tier 2 retirement (patient endpoints) | #133, #134, #135 |
+| SI-002 placeholder ratification | #136 |
+| Phase 2 admin widening | #140 |
+| Phase 2 admin trilogy (templates/variants/deployments) | #142, #143, #144 |
+| Idempotency tests admin JWT migration | #145 |
+| admin-role.test.ts JWT-path coverage | #146 |
+| F-1 production admin minting | #147 |
+| F-2 active-tenant DB validation | #148 |
+| F-4 platform_admin audit attribution | #149 |
+| SI-008 AiWorkflowExecution schema gap | #150 |
+| SI-009 SyncSession schema gap | #151 |
+| SI-010 Session Actor Context DB Binding (F-3 successor) | #152 |
+
+**Plus 3 ratification-ready spec-corpus SIs from earlier (SI-003/004/005)** awaiting spec-corpus team ceremonies.
+
+### Cumulative Codex pre-ratification effort
+
+- F-4 PR #149: 11 rounds, ~14 closures
+- SI-008 PR #150: 14 rounds, ~17 closures (most-rounds SI to date)
+- SI-009 PR #151: 6 rounds, ~7 closures
+- SI-010 PR #152: 5 rounds, ~7 closures
+- Phase 2 admin widening: 5 rounds, 5 closures
+- F-2 PR #148: 4 rounds, 4 closures
+- F-1 PR #147: 1 round, 1 closure
+- Prior SI series (SI-002/003/004/005/007): ~25 closures
+
+**Grand total: 55+ Codex pre-ratification rounds; 80+ substantive correctness closures.**
+
+### Distributed-systems integrity patterns established (final set)
+
+The 72-hr cycle established 8 repeatable patterns for future SI work:
+
+1. **Triple-composite FK pattern** — `(tenant_id, parent_id, child_id) → (tenant_id, parent_id, id)` enforces both same-tenant AND same-parent-entity lineage
+2. **CAS-and-supersession protocol** — pointer swaps require CAS on prior pointer + separate `supersedes_<entity>_id` chain column with INSERT-time-immutable + acyclicity walk
+3. **DB-layer authoritative-pointer enforcement** — SECURITY DEFINER procedure with NO direct UPDATE for app role
+4. **Server-derived actor authorization** — SECURITY DEFINER procedures derive identity from server-trusted DB context, never from caller parameters
+5. **Three-tier rejection audit durability** — savepoint + autonomous-transaction log + caller-commit-boundary
+6. **Hash-schema-versioning for migration backwards-compat** — version column + verifier dispatch
+7. **Rolling-deploy migration splitting** — schema additions in migration N; CHECK constraints in migration N+1 after app rollout
+8. **GRANT-locked permanent table as trust anchor** (NEW from SI-010) — app role has zero access to identity-binding table; only privileged SECURITY DEFINER binding function can write
+
+### Next-phase queue post-cycle
+
+1. **Spec-corpus ratification ceremonies** for SI-003/004/005/008/009/010 (6 SIs awaiting spec-corpus team review + CDM v1.2 §4 expansion + AUDIT_EVENTS / DOMAIN_EVENTS expansion)
+2. **F-4 deploy runbook execution** — production deploy order for migrations 029 + 030 + app rollout
+3. **Substantive new slice work** when prerequisites land:
+   - Sync-Consult slice authoring (builds on SI-009 spec)
+   - AI workflow slice authoring (builds on SI-008 spec)
+   - SECURITY DEFINER procedure implementations (builds on SI-010 infrastructure)
+4. **Identity slice extension** — SI-010 implementation; `bind_actor_context_role` + `_session_actor_context` migration + authContextPlugin wiring update
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 autonomous cycle FINAL CLOSE (16 PRs MERGED; 80+ Codex closures; 8 distributed-systems integrity patterns; Phase 2 deferred-followon set fully closed)
