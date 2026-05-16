@@ -1857,3 +1857,52 @@ Per the Plan + Implementation State Audit, the highest-leverage code-only items 
 4. **Crisis-detection clinical-grade NLP classifier** — currently keyword-stub per crisis-detection.ts; clinical-grade classifier is documented follow-up
 
 — Claude (Opus 4.7, 1M context), 2026-05-16 R7 follow-up close (26 PRs MERGED; 119+ Codex closures; Mode 1 chat handler now has full HTTP-level regression coverage; deferred R7 finding from PR #160 closed)
+
+---
+
+## Addendum 25 — Mode 1 chat audit-failure injection harness + R4 H1 round-trip regression merged 2026-05-16
+
+**PR #163** — `test(ai-service): Mode 1 chat audit-failure injection harness + R4 H1 round-trip regression` — **MERGED** 2026-05-16. 2 rounds Codex (R1 H1 closed: H2 now uses crisis payload + counts Category A audits; R2 clean APPROVE).
+
+### What landed
+
+Reusable audit-failure injection harness at `tests/helpers/mode-1-chat-audit-injection.ts` (Mode1AuditFailureMode + get/set/reset + consumeMode1AuditFailureOrThrow + Mode1AuditInjectedFailure sentinel). vi.mock factory in `tests/integration/ai-service-mode-1-chat-audit-injection.test.ts` wraps `emitMode1ChatResponseAudit` with the injecting stub.
+
+**Test coverage (2 cases):**
+
+- **H1** fail-always → POST /v0/ai/chat → 503 with canonical error envelope (code `ai_chat.audit_emission_unavailable`)
+- **H2** fail-once round-trip with CRISIS payload:
+  - Attempt 1 → 503 (audit throws, cache rolls back)
+  - Attempt 2 with same Idempotency-Key + body → 200 crisis sentinel
+  - Returned `session_id` + `message_id` match `deriveDeterministicId` output from reconstructed `IdempotencyCtx`
+  - **Exactly ONE Category A `crisis_detection_trigger` audit row across both attempts** (crisis gate's dedupe marker survives the outer transaction rollback because markers commit independently)
+
+### Pattern reinforced
+
+**Two-layer audit dedupe across rollback boundaries:**
+- The Mode 1 chat handler's idempotent transaction protects the FLOOR-020 Category C audit (rolls back on failure → retry attempt re-emits).
+- The crisis gate's `audit_dedupe_markers` table is INDEPENDENT of the outer transaction (dedupe markers commit even when the outer tx rolls back).
+- Net: Category A crisis audit emits at most once per Idempotency-Key, regardless of how many lifecycle retries happen. Category C response audit emits exactly once when the lifecycle eventually succeeds.
+
+This is the cross-attempt audit correctness invariant for ANY handler that combines a per-request transactional audit (FLOOR-020 style) with a safety-floor independent-commit audit (I-019 / crisis-gate style). Generalizable to:
+- Mode 2 case-prep when it lands
+- Any future protocol-execution surface
+- Any handler that emits both operational AND safety-floor audits
+
+### Cycle tally (post-PR #163)
+
+- **PRs merged this autonomous run: 27** (+1 since Addendum 24)
+- **Codex pre-ratification rounds: 92+** (PR #163 adds 2)
+- **Substantive Codex closures: 120+** (PR #163 adds 1 high)
+- **Mode 1 chat handler test surface: COMPLETE** — 7 groups × 21 test cases across 2 test files cover happy path / crisis bypass / validation / auth / idempotency / deterministic IDs / audit-failure round-trip
+
+### Next natural entry points
+
+The Mode 1 chat surface is now fully tested end-to-end. Next non-ratifier-blocked code-only items per the Plan + Audit:
+
+1. **CCR crisis-helpline key ratification** — small SI to add `crisis.helpline_e164` + `crisis.helpline_label` to the canonical CCR key namespace; unblocks resolving real helpline numbers in the crisis sentinel response (currently hardcoded "your care team has been alerted").
+2. **Crisis-detection clinical-grade NLP classifier** — currently keyword-stub per `src/lib/crisis-detection.ts`; documented v1.1 follow-up.
+3. **Async-Consult Sprint 10 — clinician decision endpoints** (claim/prescribe/advise/etc.) — depends on SI-005 ratification, but the route scaffolding could be authored alongside the ratification artifact.
+4. **Mode 2 case-prep handler scaffolding** — wire contract published; depends on protocol-engine integration which has its own dependency on I-012 audit chain canonicalization.
+
+— Claude (Opus 4.7, 1M context), 2026-05-16 R4 H1 round-trip regression close (27 PRs MERGED; 120+ Codex closures; audit-failure injection harness is reusable infrastructure for any future handler with combined operational + safety-floor audit emission)
