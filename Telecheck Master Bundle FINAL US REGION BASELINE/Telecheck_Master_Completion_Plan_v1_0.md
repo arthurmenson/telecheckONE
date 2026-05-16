@@ -194,13 +194,58 @@ This plan is operationalized through the existing autonomous-cycle pattern prove
 
 ## Status pointer
 
-Current Phase: **A — Foundation closeout**.
+Current Phase: **A → B transition** (Phase A engineering items complete 2026-05-15; Phase B fan-out begins next session).
 
-Active work:
-- authContextPlugin wiring for SI-010 (CRITICAL PATH).
-- Spec-corpus ratification ceremony (Track 6 starting in parallel).
-- Identity slice scoping (Phase A item 2, scheduled after authContextPlugin wiring lands).
+### Phase A status (closing summary 2026-05-15)
 
-Tracks 1–5 are STAGED — owners identified, scope locked, scaffolding allowed, but production work BLOCKED on Phase A exit.
+| Item | Status | Notes |
+|---|---|---|
+| 1. SI-010 authContextPlugin wiring | **DONE** | PRs #157 + #158; Codex APPROVE; production fail-fast + boot probe + per-request bind + fail-closed |
+| 2. Identity slice routes | **DONE** | Audit found slice already built; PR #159 doc-sync; 16 integration test files; full pilot-viable surface mounted |
+| 3. Tenant-Config CCR resolver | **DONE** | Production-ready resolver + admin read surface; 6 integration test files; admin write 503-stubbed pending Admin Backend v1.1 |
+| 4. Spec-corpus ratification ceremony | **STAGED** | 7 pending SIs (SI-003/004/005/008/009/010/011) + CDM §4 + FORMS_ENGINE §I-030; human-led, requires ratifier sign-off; cannot be autonomously completed |
 
-— Claude (Opus 4.7, 1M context), 2026-05-15
+### Phase B entry — re-scoped against implementation audit 2026-05-15
+
+The 2026-05-15 implementation-state audit (`Telecheck_Implementation_State_Audit_2026-05-15.md`) found the codebase is meaningfully further along than the Plan's original baseline:
+
+- 9 of 17 slices have substantive implementation (5 MATURE, 2 DEVELOPING, 2 SKELETON)
+- Foundation layer ~85% (up from estimated 70%)
+- 81 of 187 OpenAPI v0.2 endpoints mounted (~43%)
+- Overall completion ~45–55% (up from estimated 20–25%)
+
+### Re-scoped per-track effort (post-audit)
+
+| Track | Original estimate | Audited estimate | Reason |
+|---|---:|---:|---|
+| 1 — Clinical Care | 4 sprints | **2–3 sprints** | Pharmacy MATURE; Async-Consult DEVELOPING (~40%); only Med-Interaction is skeleton |
+| 2 — AI Service | 4 sprints | **3–4 sprints** | DEVELOPING (~25%); multi-provider abstraction + Mode 1 wire-up is bulk of remaining |
+| 3 — Consent + Forms-Intake completion | 4 sprints | **2 sprints** | Both slices MATURE; remaining work is publish-gate sub-SIs (ratification-gated) |
+| 4 — Mobile + Clinician UI | 4 sprints | **4 sprints** | No change — mobile + design team velocity, not backend-blocked |
+| 5 — Infra & Ops | runs ahead | runs ahead | Independent of code completion |
+| 6 — Spec-corpus ratification | continuous | continuous | Human ratifier; depends on Evans + Engineering Lead + Contracts Pack owner availability |
+
+### Pilot-viable scope (Ghana revenue anchor)
+
+Strictly to first revenue:
+1. **Med-Interaction** (drug-drug/condition/allergy checks) — only skeleton among pilot-required slices; **new critical path**
+2. **Async-Consult** clinician decision loop completion (depends on SI-005 ratification)
+3. **AI Service Mode 1** conversational scaffolding (Mode 2 deferred; pilot is clinician-driven)
+4. **Crisis Response** slice (resource lookup + escalation routing; I-019 detection already wired at foundation)
+5. **Admin Backend** basics (operator monitoring + manual template review)
+
+**Realistic pilot launch: 8–12 sprints, not 18.** US multi-tenant launch adds: pharmacy portal UI design + impl, US regulatory module (FDA/DEA/state PMPs), Sync-Consult slice, full Admin Backend, billing slice. **+8–10 sprints beyond pilot.**
+
+### Recommended next-session fan-out
+
+Now that Phase A engineering items 1+2+3 are done, Phase B starts with:
+
+1. **Track 6 first sprint (CRITICAL — Evans-led):** batched ratification ceremony for the 7 pending SIs + CDM §4 MarketingCopy + FORMS_ENGINE §I-030 detection rules. Unblocks Tracks 1 + 3.
+2. **Track 1 anchor (Med-Interaction first):** Med-Interaction is the new critical path. The slice PRD itself needs drafting + ratification before implementation work can begin per the "spec ratification leads implementation by ≥1 sprint" rule.
+3. **Track 5 parallel (Infra/Ops):** AWS / KMS / LiveKit / SIEM setup + F-4 deploy runbook execution to staging. Operates ahead; no code dependency.
+4. **Track 2 (AI Service Mode 1):** Mode 1 chat handler wire-up (existing guardrails + NullLLMProvider + crisis gate are in place; just needs HTTP handler + FLOOR-020 audit emission). Buildable now without ratification gates.
+5. **Track 4 (Mobile mock-first):** patient app against OpenAPI v0.2 mocks. ~43% of routes are real for fallback binding.
+
+Tracks 1–5 are STAGED in priority order; one named owner per track. Track 6 runs continuously parallel.
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 (Phase A → B transition; revised against implementation audit)
