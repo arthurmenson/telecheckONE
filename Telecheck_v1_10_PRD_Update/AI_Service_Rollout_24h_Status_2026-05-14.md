@@ -1623,3 +1623,54 @@ The Codex review cycle iteratively deepened the trust model across 4 rounds:
 5. **SI-011 sub-SIs** (SI-011a/b/c/d) as their respective spec-corpus prerequisites unblock.
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 autonomous cycle SI-010 migration close (19 PRs MERGED; 103+ Codex closures; 11 distributed-systems integrity patterns; SI-010 DB-side trust anchor in place — authContextPlugin wiring is the next bounded slice)
+
+---
+
+## Addendum 21 — Master Completion Plan v1.0 FILED + Phase A item 1 COMPLETE (PRs #157 + #158) 2026-05-15
+
+**Master Completion Plan v1.0** filed at `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Master_Completion_Plan_v1_0.md` (spec-repo commit `e1ce8ce`). Six-track parallel strategy; 18-sprint timeline; Phase A is the sequential critical-path gate before fan-out. Codex per-PR adversarial review discipline preserved.
+
+**PR #157** — `feat(lib): SI-010 actor-context-binding helpers + request.actorNonce` — **MERGED** 2026-05-15. Codex APPROVE at R1 (no findings). Helper module + type augmentation scaffold.
+
+**PR #158** — `feat(auth): SI-010 dedicated bind-pool + authContextPlugin onRequest wiring` — **MERGED** 2026-05-15. Codex APPROVE at R5 after 4 rounds of substantive findings closed:
+
+| Round | Findings | Severity | Status |
+|---|---|---|---|
+| R1 | 2 | 1 high + 1 medium | Production fail-fast on missing URL; remove global bind-pool test override |
+| R2 | 1 | 1 high | Bind-pool boot probe added (session_user + has_function_privilege) |
+| R3 | 1 | 1 high | Probe tightened to require EXACT bind_actor_context_role + SUPERUSER/BYPASSRLS rejection |
+| R4 | 1 | 1 medium | Probe regression tests + obsolete GRANT-membership test guidance rewritten |
+| R5 | 0 | — | **APPROVE** |
+
+### Phase A item 1 — final state
+
+SI-010 authContextPlugin wiring is end-to-end:
+
+- **Config layer:** optional `BIND_ACTOR_CONTEXT_DATABASE_URL` + `BIND_ACTOR_CONTEXT_POOL_MAX`. Production fail-fast at `loadConfig()` if the URL is missing.
+- **DB layer:** `getBindActorContextPool()` lazily constructs the dedicated pool from a connection string authenticating directly as `bind_actor_context_role` (no SET ROLE from main app pool). `verifyBindActorContextPoolOrThrow()` startup probe validates session_user == `bind_actor_context_role` AND role is NOT SUPERUSER/BYPASSRLS AND `bind_actor_context()` exists AND role has EXECUTE — runs before `buildApp()` accepts traffic.
+- **Plugin layer:** authContextPlugin `onRequest` hook generates UUIDv4 nonce, calls `bindActorContextForRequest()` on the dedicated bind pool, stores nonce on `request.actorNonce`. Fail-closed on any error (clears `actorContext` + leaves `actorNonce` undefined + logs shallow context without the nonce value). PoolClient released in try/finally.
+- **Helper layer (from PR #157):** `bindActorContextForRequest()` + `withActorContext()` helpers + `BindActorRole` type mirroring the migration's CHECK constraint.
+- **Test infrastructure:** bind-pool test override is NOT installed globally (would break every JWT-authenticated test). SI-010-specific tests opt in with a separate pg.Pool authenticated as `bind_actor_context_role`. Probe rejection branches covered by fixture-based unit tests in `src/lib/db.probe.test.ts`.
+
+### What unblocks now
+
+With Phase A item 1 done, SI-005 / SI-008 / SI-009 SECURITY DEFINER procedures can begin implementation against real server-derived identity. The next Phase A items are sequential:
+
+- **Item 2:** Identity slice routes (register/login/session/device) — depends on item 1 wiring being end-to-end.
+- **Item 3:** Tenant-Config CCR resolver completion.
+- **Item 4:** Spec-corpus ratification ceremony for 7 pending SIs + CDM §4 MarketingCopy + FORMS_ENGINE §I-030 detection rules.
+
+Phase A exit gate (Identity slice authenticating a real request end-to-end against real DB; SI-010 helpers returning correct identity from inside a SECURITY DEFINER procedure) remains the fan-out trigger before Tracks 1–6 spin up.
+
+### Cycle final tally (post-PR #158)
+
+- **PRs merged this autonomous run: 21**
+- **Codex pre-ratification rounds: 80+**
+- **Substantive Codex closures: 109+**
+- **SIs filed this cycle: 4** (SI-008, SI-009, SI-010, SI-011)
+- **SIs with implementation landed: 2.5** (SI-011 layers 1+2+3 production-ready; SI-010 DB migration + authContextPlugin wiring production-ready; sub-SIs of SI-011 still pending spec ratification)
+- **Distributed-systems integrity patterns: 11** (no new pattern this PR; reinforced session_user gate + boot probe + nonce-as-secret)
+- **Phase 2 deferred-follow-ons closed: 4 of 4**
+- **Master Completion Plan: FILED + Phase A item 1 COMPLETE**
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 Phase A item 1 close (21 PRs MERGED; 109+ Codex closures; Phase A 25% done — items 2/3/4 staged for sequential execution)
