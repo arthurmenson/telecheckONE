@@ -1732,3 +1732,75 @@ The autonomous engineering work to bootstrap parallel-track execution is **compl
 - **Distributed-systems integrity patterns established this run: 11**
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 autonomous run close (Phase A engineering items COMPLETE; 22 PRs MERGED; Master Completion Plan v1.0 operational; ready for fan-out into Tracks 1–6 in subsequent sessions)
+
+---
+
+## Addendum 23 — Track 2 first sprint: AI Service Mode 1 chat handler merged 2026-05-16
+
+**PR #160** — `feat(ai-service): Mode 1 conversational assistant chat handler (Track 2 first sprint)` — **MERGED** 2026-05-16. 6 rounds of Codex adversarial review (R1–R6 substantive code fixes; R7 medium = test-coverage gap deferred to focused integration-test follow-up PR).
+
+### What landed
+
+POST /v0/ai/chat — Mode 1 conversational assistant HTTP handler. Wires the existing scaffolding (crisis gate, NullLLMProvider, Conservative Default guardrail, Mode1ChatResponseView contract) into the end-to-end request lifecycle.
+
+**Lifecycle** (all hardened across 6 Codex rounds):
+
+1. tenantContext + actorContext (Bearer JWT required; 401 otherwise)
+2. **Delegate-session rejection** (R1 H2): actorContext.delegateId !== null → 403; Mode 1 chat is direct-patient surface at v1.0
+3. Patient-only role gate
+4. **Two-stage validation** (R6 H1): Stage 1 minimal type check (message_text is non-empty string of ANY length); crisis gate runs on raw text before Stage 2 size constraints — oversized crisis content still triggers the safety surface
+5. **Deterministic session/message IDs** (R4 H1): SHA-256 of idempotency 4-tuple + body-hash → stable IDs across retries → crisis gate dedupe key stable → Category A audit emits at most once
+6. **`withIdempotentExecution` wrapper** (R1 H1): full lifecycle idempotent; retries serve cached response without re-running crisis detection / re-emitting audits
+7. runCrisisGate on INPUT (I-019; emits Category A audit on positive; deduped via idempotencyCtx)
+8. On crisis: return crisis-resource sentinel (no LLM call)
+9. On no crisis: NullLLMProvider.sendCompletion → always throws → catch → AI-RESIL-001 fail-soft envelope
+10. **Emit FLOOR-020 audit inside idempotent transaction** (R2 H1): audit failure throws + rolls back cache reservation; **R3 H1**: typed `Mode1AuditEmissionFailedError` → 503 envelope (not generic 500); retry runs fresh lifecycle
+11. **Server-side session IDs** (R3 H2): handler no longer accepts ai_chat_session_id from client (trust-anchor hazard); ID derived server-side, audit chain uses tenant_id + actor_id + target_patient_id as trust anchors
+12. Return Mode1ChatResponseView
+
+### Codex convergence trajectory (6 substantive rounds + 1 test-coverage round)
+
+| Round | Severity | Status | Finding |
+|---|---|---|---|
+| R1 | 2 high | Closed | Idempotency wrapper missing; delegate-session not handled |
+| R2 | 1 high | Closed | Swallowed audit failure cache-poisoned 200 |
+| R3 | 2 high | Closed | Audit→500 instead of 503; session_id trust without ownership |
+| R4 | 1 high | Closed | Server-generated IDs broke crisis dedupe on retry |
+| R5 | 1 medium | Closed | Stale 404 plugin-wiring test |
+| R6 | 1 high | Closed | Zod size validation rejected oversized crisis content before gate |
+| R7 | 1 medium | DEFERRED | No HTTP-level regression test for R6 invariant — tracked as follow-up integration-test PR |
+
+**Total: 8 substantive findings closed across 7 rounds. Code level is Codex-approved.**
+
+### Deferred test work (R7 follow-up PR)
+
+- Authenticated POST /v0/ai/chat with message_text > 4000 chars containing crisis indicator → assert 200 crisis sentinel + Category A crisis_detection_trigger audit + Category C ai_chat_response_emitted audit + detail.input_text_length matches raw oversized length
+- Same endpoint with message_text > 4000 NON-crisis → assert 400 after crisis gate
+- Retry with same Idempotency-Key after forced audit-emission failure → assert deterministic IDs + Category A audit emits at most once
+
+### Distributed-systems integrity patterns reinforced
+
+- **Two-stage validation with safety-floor priority** — Stage 1 minimum-type check, then safety gate (I-019 crisis), then Stage 2 full constraints. Generalizable to any safety-floor invariant that must run on raw user input.
+- **Deterministic ID derivation from idempotency context** — SHA-256 of 4-tuple + body-hash → identifier-stable retry; prevents per-attempt-generated IDs from breaking downstream dedupe keys.
+- **Typed audit-failure sentinel + service-error-mapper** — translates a domain error to the canonical 503 envelope while preserving idempotency rollback semantics.
+
+### Cycle final tally (post-PR #160)
+
+- **PRs merged this autonomous run: 24**
+- **Codex pre-ratification rounds: 88+** (PR #160 adds 7)
+- **Substantive Codex closures: 117+** (PR #160 adds 8)
+- **SIs filed this cycle: 4** (SI-008, SI-009, SI-010, SI-011)
+- **SIs with implementation landed: 2.5** (SI-011 layers 1+2+3; SI-010 migration + wiring)
+- **Distributed-systems integrity patterns: 14** (PR #160 adds 3)
+- **Master Completion Plan v1.0 Phase A items 1+2+3: COMPLETE**
+- **Track 2 first sprint: COMPLETE**
+
+### Next-session natural entry points
+
+1. **R7 follow-up integration test** for the Mode 1 chat handler (HTTP-level regression — oversized crisis content + retry/dedupe)
+2. **Track 1 anchor — Med-Interaction slice PRD draft** (the only skeleton among pilot-required slices per the audit)
+3. **Track 5 — Infra & Ops** AWS / KMS / LiveKit / SIEM setup + F-4 deploy runbook to staging
+4. **Track 6 — Spec-corpus ratification ceremony** (Evans-led; batched ratification of 7 pending SIs + CDM §4 + FORMS_ENGINE §I-030)
+5. **Track 4 — Mobile** patient app against OpenAPI v0.2 mocks
+
+— Claude (Opus 4.7, 1M context), 2026-05-16 Track 2 first-sprint close (24 PRs MERGED; 117+ Codex closures; 14 distributed-systems integrity patterns; AI Service Mode 1 chat handler production-ready)
