@@ -1490,3 +1490,67 @@ SI-011 reinforced and extended several patterns established earlier in the cycle
 - **Phase 2 deferred-follow-ons closed: 4 of 4** (F-1, F-2, F-3 via SI-010, F-4)
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 autonomous cycle SI-011 close (17 PRs MERGED; 90+ Codex closures; 9 distributed-systems integrity patterns; Forms-Intake publish-gate governance umbrella filed + Codex-approved)
+
+---
+
+## Addendum 19 — SI-011 publish-gates bypass kill-switch IMPLEMENTATION (layers 1+2+3) merged 2026-05-15
+
+**PR #155** — `feat(forms-intake): SI-011 publish-gates bypass kill-switch (layers 1+2)` — **MERGED** 2026-05-15.
+
+### Implementation scope
+
+SI-011 specified a four-layer defense-in-depth kill-switch. PR #155 implements layers 1, 2 (split into 2a + 2b), and 3 — three of the four. Layer 4 (deploy smoke validation + auto-rollback) remains deferred to deploy-runbook work since it's a deploy-pipeline concern, not an app-repo concern.
+
+- **Layer 1 — boot-hook** (`assertNoPublishGateBypassAtBoot` invoked from `buildApp()`): scans `process.env` BEFORE Fastify is constructed. Throws canonical sentinel `forms.publish.bypass_in_production` if any `FORMS_PUBLISH_GATES_BYPASS` or `FORMS_PUBLISH_GATES_TEST_OVERRIDE_*` env var is present in `NODE_ENV !== 'test'`. Listener never binds; process exits non-zero. Every bypass attempt visible in boot logs before serving any request.
+
+- **Layer 2a — early request guard** (Fastify `onRequest` hook registered BEFORE `tenantContextPlugin` in `buildApp()`): scoped to publish URL pattern via `isPublishRouteUrl()`. On forbidden detection, emits structured pino error-level log with forensic detail (forbidden vars, NODE_ENV observed, URL, layer marker), then throws via `req.server.httpErrors.serviceUnavailable(...)` so `errorEnvelopePlugin` serializes the canonical ERROR_MODEL v5.1 envelope. Fires BEFORE tenant resolution → no DB read.
+
+- **Layer 2b — runtime check** (`checkPublishGateBypassAtRuntime` invoked from `publishVersionHandler` BEFORE `withIdempotentExecution`): on forbidden detection emits `forms_publish_bypass_attempt_in_production` Category B audit in a dedicated micro-transaction (durable forensic record), then throws 503. Reached only when layer 2a missed (NODE_ENV=test allow-branch OR future bypass path).
+
+- **Layer 3 — CI static check** (`tests/contracts/publish-gates-bypass-reference-lockdown.test.ts` contract test under existing `npm test` / vitest pipeline): source-greps for forbidden env-var-name patterns; any `.ts` reference outside the SANCTIONED_FILES set (9 files) fails CI. Stale-entry check + layer-1 + layer-2 call-expression canaries; canaries operate on executable source only (comments + string + template literals stripped before counting), with mutation-style regression tests proving non-executable mentions don't pass.
+
+### New module + audit emitter
+
+- `src/modules/forms-intake/internal/services/publish-gates-killswitch.ts` — pure-function predicate (`scanPublishGateBypassEnv`), boot-hook (`assertNoPublishGateBypassAtBoot`), runtime check (`checkPublishGateBypassAtRuntime`), publish URL pattern matcher (`isPublishRouteUrl`), constants for the enumerated forbidden vars + prefix glob + canonical error code.
+- `emitFormsPublishBypassAttemptInProduction` in `src/modules/forms-intake/audit.ts` — Category B audit emitter; new placeholder action ID added to `FormsAuditActionPlaceholder` closed union (now 12 unratified IDs; ratification request appended to existing AUDIT_EVENTS v5.2 amendment).
+
+### Audit detail (I-025-safe)
+
+The bypass-attempt audit detail captures `attempted_version_id` (path param, NOT dereferenced — cross-tenant existence not leaked), `forbidden_vars` (canonical-sorted list of detected env-var NAMES, which are well-known kill-switch sentinels — not secrets), `node_env_observed`, `detector_layer`. VALUES of the forbidden vars are explicitly NOT captured because they could plausibly carry sensitive data (copy-pasted from internal env files).
+
+### Codex convergence trajectory (8 rounds)
+
+| Round | Findings | Severity | Status |
+|---|---|---|---|
+| R1 | 2 | 2 high | (H1) Layer 2 placed too late — fired inside `withIdempotentExecution`; (H2) audit emission missing + sentinel code mismatch |
+| R2 | 1 | 1 high | Layer 2 still ran after tenant-context plugin's DB lookup |
+| R3 | 1 | 1 medium | Layer 2a returned non-canonical error envelope |
+| R4 | 1 | 1 high | Four-layer claim missing the CI static check (layer 3) |
+| R5 | 1 | 1 medium | Layer-1 + layer-2 canaries merged, allowing silent single-layer deletion |
+| R6 | 1 | 1 medium | Canaries counted textual mentions (comments / docstrings), not executable code |
+| R7 | 1 | 1 medium | String + template literal mentions still satisfied the canary |
+| R8 | 0 | — | **APPROVE** |
+
+**Total: 8 findings closed across 8 rounds; clean approve at R8.**
+
+The most iteration-heavy concern was layer 2 ordering: each round surfaced a deeper requirement (move before idempotency → move before tenant-context → use canonical envelope → wire CI static check → split canaries → strip comments → strip strings). The final design has the kill-switch firing at four distinct points (boot, pre-tenant-context onRequest hook, post-tenant-context handler check, CI static contract) with each layer covering a distinct failure mode of the others.
+
+### Distributed-systems integrity patterns reinforced
+
+- **Pure-function predicate that takes env as parameter** (not reading `process.env` internally) — enables fuzzing without mutating real env, prevents parallel-test interference.
+- **Deny-list glob over allow-list** — future bypass vars added without updating the enumerated list still fail closed.
+- **Canonical-envelope discipline on every code path** — error-envelope plugin serializes ALL throws; no path returns one-off response shapes, even on the highest-signal forensic tripwires.
+- **AST/source-aware contract tests** — instead of regex over raw source, strip comments + strings + templates before counting executable identifiers; mutation-style regression tests prove the stripping is sound.
+- **Layer-independent CI canaries** — layer-1 and layer-2 test coverage asserted separately so deletion of one doesn't silently break the other.
+
+### Cycle final tally (post-SI-011 killswitch impl)
+
+- **PRs merged this cycle: 18** (SI-011 impl brings the count to 18)
+- **Codex pre-ratification rounds: 71+** (SI-011 impl adds 8)
+- **Substantive Codex closures: 98+** (SI-011 impl adds 8)
+- **SIs filed this cycle: 4** (SI-008, SI-009, SI-010, SI-011)
+- **SIs with implementation landed: 1** (SI-011 layers 1+2+3)
+- **Distributed-systems integrity patterns: 10** (SI-011 impl adds the layer-independent CI canary pattern)
+- **Phase 2 deferred-follow-ons closed: 4 of 4** (F-1, F-2, F-3 via SI-010, F-4)
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 autonomous cycle SI-011 killswitch impl close (18 PRs MERGED; 98+ Codex closures; 10 distributed-systems integrity patterns; Forms-Intake publish-gates kill-switch layers 1+2+3 production-ready)
