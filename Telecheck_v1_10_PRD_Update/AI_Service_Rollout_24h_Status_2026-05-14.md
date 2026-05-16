@@ -1421,3 +1421,72 @@ The 72-hr cycle established 8 repeatable patterns for future SI work:
 4. **Identity slice extension** — SI-010 implementation; `bind_actor_context_role` + `_session_actor_context` migration + authContextPlugin wiring update
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 autonomous cycle FINAL CLOSE (16 PRs MERGED; 80+ Codex closures; 8 distributed-systems integrity patterns; Phase 2 deferred-followon set fully closed)
+
+---
+
+## Addendum 18 — SI-011 (Forms-Intake publish-time governance gates umbrella) merged 2026-05-15
+
+**PR #154** — `docs(SI-011): file Forms-Intake publish-time governance gates SI (umbrella)` — **MERGED** 2026-05-15.
+
+### What landed
+
+Umbrella SI documenting the four publish-time governance gates currently TODO-deferred behind the `FORMS_PUBLISH_GATES_BYPASS='unsafe-test-only'` sentinel in `templateService.publishVersion()`. Each gate protects a distinct patient-safety / regulatory floor; together they form the safety floor for self-service template authoring beyond v1.0 pilot.
+
+**Sub-SIs scoped as independent deliverables (P-022 through P-025; umbrella is P-021):**
+
+- **SI-011a — I-015 L3 dual-control gate** (depends on SI-010 actor-context infrastructure). Edit-log table with append-only enforcement (parity with I-003 audit_records pattern: SELECT+INSERT only, SECURITY DEFINER trigger). Per-edit 1:1 approval artifact with INSERT-time set-equality CHECK on changed_path_set and value_fingerprint_map. Publish-time revalidation (belt-and-suspenders on top of INSERT CHECKs). Explicit supersession model: tombstone-append with `supersedes_edit_log_id` FK + corrective-row coverage CHECK + own paired approval requirement. Active-row publish predicate excludes superseded rows + paired approvals. **State-validating gate** requires every live `eligibility_logic` leaf to trace to an active approved edit-log row's value_fingerprint_map at that path. **Baseline provenance:** CDC covers INSERT events with `edit_type='baseline_insert'` for initial non-empty eligibility_logic; import/migration/clone paths MUST emit baseline-insert row.
+- **SI-011b — I-030 six-category static analysis gate**. Deterministic AST walker over `presentation_content` + `branching_logic` + `eligibility_logic` + `approval_governance` JSON detecting research_consent_status coupling across six categories. **One-to-many exemption binding** via `forms_template_i030_exemption_binding` table; exact set-match publish predicate (every finding has paired exemption; every binding maps to current finding; stale exemptions rejected). Narrow exemption row scope (tenant_id, template_id, draft_revision_id, category, jsonpath, finding_fingerprint, expiry ≤ 90d, separation of duty, role snapshot). Issuance/consumption/rejection emitted as Category B audits separately.
+- **SI-011c — L4 MarketingCopy approval gate** (depends on CDM §4 MarketingCopy entity row-shape ratification). Tenant-scoped MarketingCopy lookup (cross-tenant references categorically forbidden) with `content_fingerprint` provenance persisted on published template + runtime fingerprint-drift detection at render time.
+- **SI-011d — Mode 2 input contract conformance gate** (depends on SI-008 AiWorkflowExecution schema gap closure). Five-condition validation: schema well-formed + form-field cross-walk + handler resolves @ active in `ai_workflow_handler_registry` + handler_signature_hash compatibility + structural-subset compatibility with handler's runtime validator. Provenance persisted on published template; runtime dispatch verifies hash hasn't drifted; handler deprecation lifecycle forces re-publish to re-bind.
+
+**Cross-cutting production safety:** defense-in-depth bypass kill-switch at four independent layers — (1) Fastify boot-hook fails fast if any `FORMS_PUBLISH_GATES_BYPASS` or `FORMS_PUBLISH_GATES_TEST_OVERRIDE_*` env var is present in `NODE_ENV !== 'test'`; (2) `publishVersion()` re-checks before any gate runs and emits `forms.publish.bypass_attempt_in_production` Category B audit on detection; (3) CI static-check fails on any reference outside templateService + kill-switch + test-helper file; (4) post-deploy smoke validation hits diagnostic endpoint confirming no bypass env vars; auto-rollback if non-clean.
+
+### Codex convergence trajectory (8 rounds)
+
+| Round | Findings | Severity | Status |
+|---|---|---|---|
+| R1 | 4 | 2 high + 2 medium | All addressed |
+| R2 | 1 | 1 high | L3 approval superset → exact 1:1 binding |
+| R3 | 1 | 1 high | Edit-log append-only + publish-time revalidation |
+| R4 | 1 | 1 high | Supersession model + active-row predicate |
+| R5 | 1 | 1 high | State-validating gate (live leaves trace to approved rows) |
+| R6 | 1 | 1 high | Baseline provenance for initial eligibility_logic |
+| R7 | 1 | 1 medium | I-030 exemption one-to-many binding |
+| R8 | 0 | — | **APPROVE** |
+
+**Total: 10 findings closed across 8 rounds; clean approve at R8.**
+
+The L3 gate (SI-011a) absorbed the most rounds (R2 through R6, all high-severity) because the path-set + fingerprint model is the deepest part of the design — each round surfaced a new attack surface (broad-superset approval, mutable edit-log, undefined supersession, live state vs lineage drift, missing baseline provenance) that the prior round's fix made visible. R7 closed a cardinality mismatch in SI-011b that had been latent since R1; R8 confirmed convergence.
+
+### Distributed-systems integrity patterns reinforced
+
+SI-011 reinforced and extended several patterns established earlier in the cycle, adding a new one:
+
+- **Append-only with role-grant lockdown + SECURITY DEFINER trigger** (parity with I-003 audit_records) — now extended to `forms_template_l3_edit_log`.
+- **INSERT-time CHECK + publish-time revalidation** — belt-and-suspenders against future schema-layer bypasses.
+- **State-validating predicates over lineage-only predicates** (NEW pattern #9) — gate requires every live observable state (eligibility_logic leaves) to trace to approved provenance, not just that all edits have been approved. Generalizable to any "every observable state must have a paired approval" governance gate.
+- **One-to-many binding tables with set-match predicates** — cleaner than singular-FK scope fields when N is variable.
+- **Tombstone-append supersession with coverage CHECK** — the corrective row must cover every path the original touched; prevents narrow correctives from rubber-stamping live malicious state.
+- **Four-layer defense-in-depth env-var kill-switch** (boot guard + path guard + CI static + deploy smoke + auto-rollback) — generalizable to any "this env var must never appear in production" pattern.
+
+### Next-phase queue (refreshed)
+
+1. **Spec-corpus ratification ceremonies** for SI-003/004/005/008/009/010/011 (7 SIs awaiting spec-corpus team review).
+2. **F-4 deploy runbook execution** — production deploy order for migrations 029 + 030 + app rollout.
+3. **Substantive new slice work** when prerequisites land:
+   - Sync-Consult slice authoring (builds on SI-009 spec)
+   - AI workflow slice authoring (builds on SI-008 spec)
+   - SECURITY DEFINER procedure implementations (builds on SI-010 infrastructure)
+   - Forms-Intake gate-replacement work (SI-011a/b/c/d as sub-SIs unlock per their prerequisites)
+4. **Identity slice extension** — SI-010 implementation; `bind_actor_context_role` + `_session_actor_context` migration + authContextPlugin wiring update.
+
+### Cycle final tally (post-SI-011)
+
+- **PRs merged this cycle: 17** (SI-011 brings the count to 17)
+- **Codex pre-ratification rounds: 63+** (SI-011 adds 8)
+- **Substantive Codex closures: 90+** (SI-011 adds 10)
+- **SIs filed this cycle: 4** (SI-008, SI-009, SI-010, SI-011)
+- **Distributed-systems integrity patterns: 9** (SI-011 adds the state-validating-predicate pattern)
+- **Phase 2 deferred-follow-ons closed: 4 of 4** (F-1, F-2, F-3 via SI-010, F-4)
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 autonomous cycle SI-011 close (17 PRs MERGED; 90+ Codex closures; 9 distributed-systems integrity patterns; Forms-Intake publish-gate governance umbrella filed + Codex-approved)
