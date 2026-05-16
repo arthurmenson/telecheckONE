@@ -1554,3 +1554,72 @@ The most iteration-heavy concern was layer 2 ordering: each round surfaced a dee
 - **Phase 2 deferred-follow-ons closed: 4 of 4** (F-1, F-2, F-3 via SI-010, F-4)
 
 — Claude (Opus 4.7, 1M context), 2026-05-15 autonomous cycle SI-011 killswitch impl close (18 PRs MERGED; 98+ Codex closures; 10 distributed-systems integrity patterns; Forms-Intake publish-gates kill-switch layers 1+2+3 production-ready)
+
+---
+
+## Addendum 20 — SI-010 DB-side actor-context infrastructure (migration 031) merged 2026-05-15
+
+**PR #156** — `feat(migrations): SI-010 session actor context DB-binding infrastructure` — **MERGED** 2026-05-15.
+
+### What landed
+
+Migration 031 creates the DB-side trust anchor SI-005/008/009 SECURITY DEFINER procedures need to verify authenticated actor identity WITHOUT trusting caller-supplied parameters or GUC values:
+
+- **`bind_actor_context_role`** — LOGIN role with no migration-set password; operators provision credentials out of band (Vault / AWS Secrets Manager / cert auth). Migration-time membership guard fails the apply if `telecheck_app_role` is found to be a member.
+- **`_session_actor_context`** — permanent table keyed solely on `nonce` (UUID PK; 122 bits of entropy). REVOKE ALL from `telecheck_app_role`. Schema enforces (5-role enum CHECK) + (iff-platform_admin admin_home_tenant_id CHECK) + (FK to tenants for both tenant columns).
+- **`bind_actor_context(...)`** — SECURITY DEFINER write function. Defensive validation (session_user ≠ telecheck_app_role; non-null/role-enum/positive-TTL params), lazy expired-row sweep (LIMIT 100 per call), UPSERT-on-conflict-nonce with WHERE-clause guard against same-nonce-different-identity (raises `nonce_collision_with_different_identity` instead of silent overwrite). EXECUTE granted only to `bind_actor_context_role`.
+- **`_current_actor_context_row()`** — SECURITY DEFINER read helper. Returns trusted identity row or raises `actor_context_unbound`. Lookup is nonce-only (no pid/txid affinity) so the binder pool's writes are readable by the app pool.
+- **Public helpers**: `current_actor_account_id()`, `current_actor_account_tenant_id()`, `current_actor_role()`, `current_actor_admin_home_tenant_id()`.
+- **`assert_request_nonce_bound()`** — defensive helper procedures call as their FIRST validation step.
+- **`_session_actor_context_cleanup()`** — background sweep for orphaned rows.
+
+### Trust model evolution
+
+The Codex review cycle iteratively deepened the trust model across 4 rounds:
+
+1. **R1 critical:** original design had `telecheck_app_role` SET ROLE into `bind_actor_context_role` for the bind. R1 fixed with session_user gate + dedicated bind role.
+2. **R1 high:** PK was `(pg_backend_pid, txid)` — same-tx duplicate binds silently overwrote. R1 fix added nonce to PK.
+3. **R1 medium:** cleanup was only documented for future migration. R1 fix added lazy sweep in `bind_actor_context()`.
+4. **R2 critical:** R1 had bind role as NOLOGIN, contradicting the dedicated-pool requirement. R2 fix made it LOGIN with out-of-band credential provisioning + migration-time membership guard.
+5. **R3 critical:** R2 design required bind on auth pool, read on app pool — but `(pg_backend_pid, txid, nonce)` PK relied on same-connection identity, which DIFFERS across pools. R3 fix redesigned to nonce-only PK; nonce is now the trust anchor (high-entropy UUID, treated as request-bound shared secret with strict logging discipline).
+6. **R4 approve:** clean sign-off after threat-model audit confirmed nonce-knowledge attack surface is bounded.
+7. **CI fixes:** PG plpgsql doesn't accept `||` concatenation in `RAISE EXCEPTION ... USING HINT` clauses — inlined all multi-line message strings. Also fixed `(p_ttl_seconds || ' seconds')::INTERVAL` mixed-type concat → `p_ttl_seconds * INTERVAL '1 second'`.
+
+### Codex convergence trajectory (4 rounds + 2 CI fixes)
+
+| Round | Findings | Severity | Status |
+|---|---|---|---|
+| R1 | 3 | 1 critical + 1 high + 1 medium | All addressed |
+| R2 | 1 | 1 critical | LOGIN + membership guard |
+| R3 | 1 | 1 critical | Nonce-only PK + cross-pool design |
+| R4 | 0 | — | **APPROVE** |
+| CI-1 | — | — | INTERVAL syntax fix |
+| CI-2 | — | — | RAISE EXCEPTION concat fix |
+
+**Total: 5 substantive correctness findings closed + 2 SQL-syntax CI fixes; clean approve at R4 + green CI.**
+
+### Distributed-systems integrity patterns reinforced
+
+- **Migration-time membership guard** — fail-fast at DDL apply if a forbidden privilege chain exists; surfaces config errors at the latest-possible-still-safe checkpoint.
+- **Nonce-as-shared-secret design** — high-entropy UUID per-request becomes the trust anchor; eliminates the need for connection-identity binding while preserving anti-spoof guarantees.
+- **session_user gate in SECURITY DEFINER functions** — defense-in-depth even when GRANT chain is correct; catches future config mistakes that add membership.
+
+### Cycle final tally (post-SI-010 migration)
+
+- **PRs merged this cycle: 19** (SI-010 migration brings the count to 19)
+- **Codex pre-ratification rounds: 75+** (SI-010 migration adds 4)
+- **Substantive Codex closures: 103+** (SI-010 migration adds 5)
+- **SIs filed this cycle: 4** (SI-008, SI-009, SI-010, SI-011)
+- **SIs with implementation landed: 2** (SI-011 layers 1+2+3 + SI-010 DB-side migration)
+- **Distributed-systems integrity patterns: 11** (SI-010 adds the migration-time membership guard pattern)
+- **Phase 2 deferred-follow-ons closed: 4 of 4** (F-1, F-2, F-3 via SI-010 infrastructure now in place, F-4)
+
+### Next-phase queue (refreshed)
+
+1. **authContextPlugin wiring** for SI-010 — add dedicated bind-pool + per-request `bind_actor_context()` invocation + `SET LOCAL app.request_nonce` on main app connection. This is the next bounded slice; unblocks SI-005/008/009 procedures.
+2. **AFTER COMMIT/ROLLBACK trigger** for SI-010 — per-tx cleanup as additional defense alongside the lazy sweep + cron sweep.
+3. **Spec-corpus ratification ceremonies** for SI-003/004/005/008/009/010/011 (7 SIs awaiting spec-corpus team review).
+4. **F-4 deploy runbook execution** — production deploy order for migrations 029 + 030 + 031 + app rollout.
+5. **SI-011 sub-SIs** (SI-011a/b/c/d) as their respective spec-corpus prerequisites unblock.
+
+— Claude (Opus 4.7, 1M context), 2026-05-15 autonomous cycle SI-010 migration close (19 PRs MERGED; 103+ Codex closures; 11 distributed-systems integrity patterns; SI-010 DB-side trust anchor in place — authContextPlugin wiring is the next bounded slice)
