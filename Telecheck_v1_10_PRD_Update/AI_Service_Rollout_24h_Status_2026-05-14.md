@@ -1804,3 +1804,56 @@ POST /v0/ai/chat — Mode 1 conversational assistant HTTP handler. Wires the exi
 5. **Track 4 — Mobile** patient app against OpenAPI v0.2 mocks
 
 — Claude (Opus 4.7, 1M context), 2026-05-16 Track 2 first-sprint close (24 PRs MERGED; 117+ Codex closures; 14 distributed-systems integrity patterns; AI Service Mode 1 chat handler production-ready)
+
+---
+
+## Addendum 24 — R7 follow-up: Mode 1 chat handler HTTP integration tests merged 2026-05-16
+
+**PR #162** — `test(ai-service): Mode 1 chat handler HTTP-level integration tests (R7 closure from PR #160)` — **MERGED** 2026-05-16. 2 rounds Codex: R1 findings closed (deriveDeterministicId properly unit-tested via direct import; tenant-leak guard + response-shape whitelist applied across all success-path responses); APPROVE at R2.
+
+### What landed
+
+Closes the R7 medium finding deferred from PR #160 — HTTP-level regression coverage for the Mode 1 conversational assistant. Test file at `tests/integration/ai-service-mode-1-chat-http.test.ts`.
+
+**Coverage groups (7 groups, 19 test cases):**
+
+- **A** Happy-path / AI-RESIL-001 fail-soft (1 case): valid patient JWT + non-crisis → 200, full FLOOR-020 envelope, `provider_unavailable=true`
+- **B** I-019 crisis-bypass (2 cases): short crisis-content + **oversized crisis-content** (R6 H1 two-stage validation: crisis gate runs before Zod size constraints; safety surface always-on)
+- **C** Body validation (4 cases): missing/empty/non-string/oversized-non-crisis
+- **D** Auth + role gates (4 cases): no-JWT 401, clinician 403, platform_admin 403, **delegate-session 403** (R1 H2 closure)
+- **E** Idempotency (2 cases): cached replay, body-mismatch 409
+- **F** `deriveDeterministicId` unit-level proof (7 cases): same-ctx→same-id; different idempotencyKey/actorId/bodyHash→different-id; variant parameter distinct; idempotence; prefix+length contract
+- **G** HTTP-level cached replay key independence (1 case)
+
+### Codex iteration
+
+R1 surfaced two real gaps:
+
+- **H1** (high): The original Group F was just exercising the idempotency cache replay path — the second response is served verbatim before the handler runs, so the test would still pass even if `deriveDeterministicId` returned random values. **Fix:** Export the helper from `chat.ts`, replace Group F with 7 direct unit tests of the derivation function. Move HTTP-level key independence to new Group G.
+- **M1** (medium): Success-path tests didn't pin the patient-surface no-tenant-leak contract. A future refactor adding `tenant_id` to `Mode1ChatResponseView` would have silently survived; the idempotency cache would have replayed the leaky body verbatim. **Fix:** `expectNoTenantLeak()` + `expectMode1ResponseShape()` helpers applied to every success-path response (original AND cached replay).
+
+R2: clean APPROVE.
+
+### Pattern reinforced
+
+- **Test what the invariant says, not what you can observe from outside.** Cache replay made Group F1 look like determinism coverage but was actually only cache coverage. The fix: export the underlying derivation helper and unit-test it directly. The HTTP path can't prove the invariant — only the function can.
+- **Cached replay extends every output-side invariant to the cache.** If your success body must not leak X, the replay must not leak X. Apply leak guards to BOTH original and replayed bodies.
+
+### Cycle tally (post-PR #162)
+
+- **PRs merged this autonomous run: 26** (+2 since Addendum 23: SI-012 + R7 tests)
+- **Codex pre-ratification rounds: 90+** (PR #162 adds 2)
+- **Substantive Codex closures: 119+** (PR #162 adds 2)
+- **Master Completion Plan Phase A items 1+2+3: COMPLETE**
+- **Track 2 first sprint + R7 follow-up: COMPLETE**
+
+### Next natural cycle entry point
+
+Per the Plan + Implementation State Audit, the highest-leverage code-only items still available (not blocked on ratifier):
+
+1. **AI Service Mode 1 audit-emission injection harness** — unblocks the full R4 H1 retry-after-rollback regression test (currently deferred at "deferred to future PR with injection harness")
+2. **Async-Consult slice completion** (Track 1) — pre-existing slice, may have unfinished handler / state-machine items not blocked by Track 6 ratifier
+3. **CCR resolver edge-case coverage** (Track 1 dependency) — already production-ready but expanded test surface possible
+4. **Crisis-detection clinical-grade NLP classifier** — currently keyword-stub per crisis-detection.ts; clinical-grade classifier is documented follow-up
+
+— Claude (Opus 4.7, 1M context), 2026-05-16 R7 follow-up close (26 PRs MERGED; 119+ Codex closures; Mode 1 chat handler now has full HTTP-level regression coverage; deferred R7 finding from PR #160 closed)
