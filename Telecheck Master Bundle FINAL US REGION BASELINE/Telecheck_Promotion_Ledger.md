@@ -37,11 +37,11 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
-### Entry P-013 — 2026-05-17 — SI-007 closure: Refill + Dispensing + Shipment canonical schemas (content-change promotion; 18-round Codex pre-ratification convergence; sub-ceremony 1 of Q2 2026 ratifier ceremony)
+### Entry P-013 — 2026-05-17 — SI-007 ratification-intent: Refill + Dispensing + Shipment canonical schemas (sub-ceremony 1 of Q2 2026 ratifier ceremony; 18-round Codex pre-ratification convergence on workstream-canonical source SI-007 v0.19)
 
-**Type:** Content-change promotion (per operating rule 6 — Registry version bump from v2.11 → v2.12; three new entity expansions + AUDIT_EVENTS contract version bump + DOMAIN_EVENTS in-place additive extension + CDM §audit_events CHECK constraint amendment).
+**Type:** Content-change promotion — **ratification-intent recorded in PR-A1 commit; physical content + Registry v2.11 → v2.12 bump land together in PR-A2 + PR-A3** on the same branch `spec/p012-p013-si012-si007-ratification-2026-05-17` per the lockstep invariant (Registry bumps in the same commit that lands the underlying canonical content; this entry records ratifier sign-off only). Final canonical state (after PR-A2/A3): three new entity expansions in CDM v1.4 (§4.17 Refill + §4.18 Dispensing + §4.19 Shipment) + AUDIT_EVENTS v5.3 → v5.4 contract version bump + DOMAIN_EVENTS v5.2 in-place additive extension + CDM §audit_events CHECK constraint amendment.
 
-**Status:** RATIFIED 2026-05-17 (workstream lead sign-off; sub-ceremony 1 of the Q2 2026 ratifier ceremony per `arthurmenson/telecheck-app:docs/Ratifier-Ceremony-Agenda-Q2-2026.md`).
+**Status:** **RATIFIED IN INTENT 2026-05-17** (workstream lead chat-message sign-off; sub-ceremony 1 of the Q2 2026 ratifier ceremony per `arthurmenson/telecheck-app:docs/Ratifier-Ceremony-Agenda-Q2-2026.md`). **CANONICAL** after PR-A2 + PR-A3 land on this branch (which is when the canonical CDM/AUDIT_EVENTS/DOMAIN_EVENTS content physically lands in bundle + the Registry v2.12 bump is applied in the same commit).
 
 **Author:** Autonomous Claude (SI-007 v0.1 → v0.19 cycle 2026-05-14; 18 rounds of Codex pre-ratification adversarial-review convergence; the asymptote-class iteration discipline established by P-011); ratified by Evans (workstream lead) 2026-05-17 in chat-message ratification with explicit "I ratify" sign-off after review of the Ratifier Packet — Sub-Ceremony 1 (SI-012 + SI-007) artifact authored 2026-05-17.
 
@@ -102,19 +102,23 @@ No removals. No envelope shape changes. No breaking changes to existing slices.
 - **Atomic cross-entity tx discipline** applies universally to every Shipment-event → Refill-transition pair (R13 closure). Not just cancellation paths.
 - **Audit-only carve-outs are the right pattern for high-volume internal lifecycle events** that have no external subscriber business meaning (R14/R15 carve-outs).
 
-**Registry absorption:** Registry v2.11 → v2.12. Coverage counts updated: entities 42 → 45; state machines 19 → 19 (no new SMs — §2 + §5 already canonical); Contracts Pack rows updated (AUDIT_EVENTS v5.4 with 38 net-new Category A action IDs + §I-012 closure-rule amendment; DOMAIN_EVENTS in-place at v5.2 with 20 net-new event types); CDM row updated to v1.4 with §4.17 + §4.18 + §4.19 + audit_events CHECK amendment noted.
+**Registry absorption (PENDING PR-A2/A3 lockstep landing):** Registry remains at **v2.11** in PR-A1 (this commit). The Registry v2.11 → v2.12 bump applies in the same commit that physically lands the canonical CDM §4.17 + §4.18 + §4.19 content + AUDIT_EVENTS v5.4 + DOMAIN_EVENTS amend-in-place — that lockstep commit is PR-A2/A3 on this branch. Final-state coverage counts (after PR-A2/A3): entities 42 → 45 (this entry adds Refill #19, Dispensing #20, Shipment #21); state machines 19 → 19 (no new SMs — §2 + §5 already canonical); AUDIT_EVENTS v5.3 → v5.4; DOMAIN_EVENTS in-place at v5.2.
 
-**Source-of-truth artifact:** the SI-007 DRAFT v0.19 at `arthurmenson/telecheck-app:docs/SI-007-Refill-Dispensing-Shipment-Schema-Gap.md` is the workstream-canonical record of the cycle (18 findings closed inline; Codex APPROVE on the Ratifier Packet sub-ceremony 1 review track). The bundle copies above ARE the canonical post-promotion state; the DRAFT itself is preserved as the audit-trail artifact for the cycle.
+**Source-of-truth artifact (PR-A1 — ratification-intent commit):** the SI-007 DRAFT v0.19 at `arthurmenson/telecheck-app:docs/SI-007-Refill-Dispensing-Shipment-Schema-Gap.md` is the **workstream-canonical record** for the schema content until PR-A2 physically lands it as CDM §4.17 + §4.18 + §4.19. Engineers consulting Refill/Dispensing/Shipment row shapes in the window between PR-A1 (this commit) and PR-A2/A3 landing MUST reference the SI-007 source file. The 18 Codex findings closed inline (R1 → R18) on the SI-007 DRAFT trajectory establish the pre-ratification convergence baseline. **After PR-A2 lands:** the bundle copies in CDM §4.17 + §4.18 + §4.19 become the canonical post-promotion state; the SI-007 DRAFT is preserved as the audit-trail artifact for the cycle.
 
 ---
 
-### Entry P-012 — 2026-05-17 — SI-012 closure: Med Interaction Engine CDM expansion — InteractionSignal + InteractionOverride + InteractionRuleset (content-change promotion; sub-ceremony 1 of Q2 2026 ratifier ceremony)
+### Entry P-012 — 2026-05-17 — SI-012 ratification-intent: Med Interaction Engine CDM expansion — InteractionSignal + InteractionOverride + InteractionRuleset (sub-ceremony 1 of Q2 2026 ratifier ceremony)
 
-**Type:** Content-change promotion (per operating rule 6 — Registry version bump consolidated with P-013 v2.11 → v2.12; three new entity expansions in CDM v1.4).
+**Sub-ceremony 1 batch note:** P-012 + P-013 ratify together in sub-ceremony 1 as the "Cluster E batch" (pilot-launch standalone blockers). Both entries record ratification-intent in PR-A1 (this commit); both share the lockstep PR-A2/A3 commit that physically lands canonical content + applies the consolidated Registry v2.11 → v2.12 bump. **For entity-count accounting purposes, P-012 + P-013 use a SHARED post-P-011 baseline of 42 entities** — both entries add to that baseline independently (P-012 adds 3 new entity numbers #46/#47/#48; P-013 adds 3 new entity numbers #19/#20/#21). The consolidated post-sub-ceremony-1 entity count is therefore 42 + 3 + 3 = **48 entities** post-PR-A2/A3 landing. The §3 inventory will be updated to reflect this in the same PR-A2/A3 commit that lands the CDM content.
+
+**Type:** Content-change promotion — **ratification-intent recorded in PR-A1 commit; physical content + Registry v2.11 → v2.12 bump consolidated with P-013 in PR-A2 + PR-A3** on the same branch per the lockstep invariant. Final canonical state (after PR-A2/A3): three new entity expansions in CDM v1.4 (§4.20 InteractionSignal + §4.21 InteractionOverride + §4.22 InteractionRuleset).
 
 **P-012 slot repurposing note:** Per Addendum 4 (2026-05-14) of `arthurmenson/telecheck-app:Telecheck_v1_10_PRD_Update/AI_Service_Rollout_24h_Status_2026-05-14.md`, the originally-proposed P-012 use (AI Service module implementation-milestone logging) was deferred because the Promotion Ledger is exclusively for spec-corpus promotions, not implementation milestones (per the P-001..P-011 precedent inventory). The P-012 slot was therefore unused but reserved. Repurposing P-012 for SI-012 (spec-corpus CDM expansion — fits the Ledger's actual purpose) is the cleanest move per Evans's 2026-05-17 ratifier choice ("P-012 (uses the deferred slot)" — symmetry bonus: SI-012 → P-012; cleanest sequencing — no downstream cascade shift of SI-002 P-014 / SI-005 P-017 / SI-008 P-018 / SI-009 P-019 / SI-010 P-020 / SI-011 P-021 etc.).
 
-**Status:** RATIFIED 2026-05-17 (workstream lead sign-off; sub-ceremony 1 of the Q2 2026 ratifier ceremony per `arthurmenson/telecheck-app:docs/Ratifier-Ceremony-Agenda-Q2-2026.md`).
+**Append-only ledger ordering note:** P-012 is appended in this commit AFTER P-013 in reverse-chronological top position (both same-date 2026-05-17 sub-ceremony 1 ratifications). The append-only invariant is preserved — neither entry edits a prior entry. The ordering choice (P-013 above P-012) reflects the sub-ceremony's discussion order in the Ratifier Packet (SI-007 listed first); both entries' content is independent and either order is valid per the append-only rule.
+
+**Status:** **RATIFIED IN INTENT 2026-05-17** (workstream lead chat-message sign-off; sub-ceremony 1 of the Q2 2026 ratifier ceremony per `arthurmenson/telecheck-app:docs/Ratifier-Ceremony-Agenda-Q2-2026.md`). **CANONICAL** after PR-A2 + PR-A3 land on this branch (which is when the canonical CDM/AUDIT_EVENTS/DOMAIN_EVENTS content physically lands in bundle + the Registry v2.12 bump is applied in the same commit).
 
 **Author:** Autonomous Claude (SI-012 v1.0 authored 2026-05-16; Med-Interaction module audit + Track 1 critical-path identification); ratified by Evans (workstream lead) 2026-05-17 in chat-message ratification with explicit "I ratify" sign-off after review of the Ratifier Packet — Sub-Ceremony 1 (SI-012 + SI-007) artifact authored 2026-05-17.
 
@@ -122,11 +126,12 @@ No removals. No envelope shape changes. No breaking changes to existing slices.
 
 **Promotion class:** content-change. Three new entity expansions require Registry version bump per operating rule 4 (consolidated with P-013's bump in the same sub-ceremony — Registry v2.11 → v2.12 covers both).
 
-**Version bumps applied at P-012:**
-- Artifact Registry **v2.11 → v2.12** (consolidated with P-013; coverage counts updated: entities 45 → 48 (added InteractionSignal #46, InteractionOverride #47, InteractionRuleset #48 — three NEW entity numbers beyond the §3.5 inventory which previously stopped at 45 post-P-013); CDM row updated to v1.4 with §4.20 + §4.21 + §4.22 added).
+**Version bumps applied at PR-A2/A3 landing (P-012 portion):**
+- Artifact Registry **v2.11 → v2.12** (consolidated with P-013 in the same PR-A2/A3 commit; P-012 contributes 3 new entity expansions in CDM v1.4 §4.20/§4.21/§4.22 to the shared sub-ceremony 1 bundle).
 - Canonical Data Model **v1.3 → v1.4** (consolidated with P-013; adds §4.20 InteractionSignal + §4.21 InteractionOverride + §4.22 InteractionRuleset).
-- AUDIT_EVENTS Contracts Pack **v5.4** (no version bump for P-012; audit event canonicalization for `interaction_signal_emitted`, `interaction_override_authorized`, etc. is explicitly **out of scope** per the SI-012 §"What this SI does NOT propose" decision approved by Evans 2026-05-17 — separate AUDIT_EVENTS v5.5+ amendment when the Med Interaction Engine impl needs concrete audit IDs).
-- DOMAIN_EVENTS Contracts Pack **v5.2** (no version bump for P-012; same rationale — separate event canonicalization deferred to impl-time SI).
+- AUDIT_EVENTS Contracts Pack **v5.4** (no version bump contribution from P-012; audit event canonicalization for `interaction_signal_emitted`, `interaction_override_authorized`, etc. is explicitly **out of scope** per the SI-012 §"What this SI does NOT propose" decision approved by Evans 2026-05-17 — separate AUDIT_EVENTS v5.5+ amendment when the Med Interaction Engine impl needs concrete audit IDs).
+- DOMAIN_EVENTS Contracts Pack **v5.2** (no version bump contribution from P-012; same rationale — separate event canonicalization deferred to impl-time SI).
+- **Post-PR-A2/A3 entity counts (consolidated for sub-ceremony 1):** post-P-011 baseline = 42 entities; P-012 contributes #46 InteractionSignal + #47 InteractionOverride + #48 InteractionRuleset (3 new); P-013 contributes #19 Refill + #20 Dispensing + #21 Shipment (3 new); consolidated post-sub-ceremony-1 entity count = 48. State machines unchanged at 19.
 
 **Changes:**
 
@@ -156,9 +161,9 @@ No removals. No envelope shape changes. No breaking changes to existing slices.
 - **Sub-ceremony batching works:** two ratifier-independent SIs (SI-012 + SI-007) ratified together in sub-ceremony 1 of the Q2 2026 ceremony with shared quorum (Evans + Engineering Lead + CDM v1.2 owner). Saves ratifier time; both Promotion Ledger entries land same-day with shared Registry bump v2.11 → v2.12.
 - **Pilot-launch standalone blockers ratify first:** the agenda §3 sub-ceremony 1 framing (SI-012 + SI-007 as the "Cluster E batch" — pilot-launch standalone blockers with no inter-cluster dependencies) is the right ratification-order leverage: highest single-sub-ceremony LOC unblock + Track 1 Telecheck-Ghana pilot launch.
 
-**Registry absorption:** Registry v2.11 → v2.12 (consolidated with P-013). Coverage counts updated: entities 45 → 48 (post-P-013 + P-012 additions); CDM row updated to v1.4 with §4.20 + §4.21 + §4.22 added.
+**Registry absorption (PENDING PR-A2/A3 lockstep landing):** Registry remains at **v2.11** in PR-A1 (this commit). The Registry v2.11 → v2.12 bump applies consolidated with P-013 in the same PR-A2/A3 commit that physically lands the canonical CDM §4.20 + §4.21 + §4.22 content. Final-state coverage counts (after PR-A2/A3, consolidated with P-013): entities 42 → 48 (P-012 contributes #46/#47/#48; P-013 contributes #19/#20/#21); state machines 19 → 19; AUDIT_EVENTS v5.3 → v5.4 (entirely from P-013 — no P-012 contribution); DOMAIN_EVENTS in-place at v5.2 (entirely from P-013).
 
-**Source-of-truth artifact:** the SI-012 v1.0 at `arthurmenson/telecheck-app:docs/SI-012-Med-Interaction-CDM-Expansion.md` is the workstream-canonical record. The bundle copies above ARE the canonical post-promotion state; the source SI itself is preserved as the audit-trail artifact.
+**Source-of-truth artifact (PR-A1 — ratification-intent commit):** the SI-012 v1.0 at `arthurmenson/telecheck-app:docs/SI-012-Med-Interaction-CDM-Expansion.md` is the **workstream-canonical record** for the schema content until PR-A2 physically lands it as CDM §4.20 + §4.21 + §4.22. Engineers consulting InteractionSignal/Override/Ruleset row shapes in the window between PR-A1 (this commit) and PR-A2/A3 landing MUST reference the SI-012 source file. **After PR-A2 lands:** the bundle copies in CDM §4.20 + §4.21 + §4.22 become the canonical post-promotion state; the SI-012 source is preserved as the audit-trail artifact for the cycle.
 
 ---
 
