@@ -2214,3 +2214,74 @@ Pure code-only items still available:
 5. **Implementation State Audit update** — the 2026-05-15 audit predates all the new SIs filed in this cycle; an updated audit reflecting SI-008/009/010/011/012/013/014 + their dependency implications would be valuable groundwork for Evans's ratification ceremony planning
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 ratifier-agenda close (31 PRs MERGED; 150+ Codex closures; 9-round single-doc convergence on the constraint-gradation pattern class; Q2 2026 ratification ceremony pre-staged with full dependency awareness)
+
+---
+
+## Addendum 30 — Implementation State Audit 2026-05-17 merged 2026-05-17 (5-round Codex convergence; novel grep-the-actual-code pattern)
+
+**PR #168** — `docs(audit): file 2026-05-17 Implementation State Audit for Q2 2026 ratifier ceremony` — **MERGED** 2026-05-17. **5 rounds Codex (R1 → R5 APPROVE)** — convergence trajectory dominated by Codex grepping the actual SI source files + the actual `routes.ts` files to catch source-of-truth drift the audit had assumed from sibling-doc summaries.
+
+### What landed
+
+Companion to PR #167's Ratifier Ceremony Agenda. Materializes the previously-referenced "Implementation State Audit" as a concrete artifact + updates it to reflect the post-v1.10 build run state. Structure: §1 Per-module implementation state (9 modules across 5 status classes) + §2 Per-SI implementation impact (LOC-leverage analysis) + §3 Effectively-closed SIs (2: SI-001 + SI-006) + §4 Pilot-launch pathway (3 axes) + §5 Recommended ceremony posture + agenda-patch list + §6 Non-goals + §7 Cross-references.
+
+**Final corrected picture:**
+- 9 v1.0 modules: 3 COMPLETE (identity, consent, tenant-config) + 1 COMPLETE-EXCEPT-PUBLISH-GATES (forms-intake, R1 reclassification) + 2 SUBSTANTIAL (async-consult Sprint 9 partial; pharmacy prescribe surface implemented post-SI-001 per R4 grep of `routes.ts`) + 1 IN-PROGRESS (ai-service Mode 1) + 2 SKELETON (med-interaction, subscription)
+- 14 SIs filed: 2 effectively CLOSED (SI-001 + SI-006) + 12 OPEN (SI-002/003/004/005/007/008/009/010/011/012/013/014)
+- ~4800-7700 LOC of estimated post-ratification IMPL surface across 5 modules
+
+### Codex convergence (R1 → R5): the grep-the-actual-code pattern
+
+| Round | Verdict | Severity → Closure |
+|---|---|---|
+| R1 | needs-attention | 2 high + 1 medium: SI-014 Option D mischaracterized as a closure path; SI-002/007 wrongly listed as closed (Codex grepped the SI source files and found OPEN Status); forms-intake mis-classified as COMPLETE despite publish-gate sentinel |
+| R2 | needs-attention | 1 high + 1 medium: audit overstated agenda convergence; incomplete agenda-patch recommendation (missing SI-002 stale-dependency in SI-003 row) |
+| R3 | needs-attention | 1 high: pharmacy row underreported SI-007 dependency; §2 omitted both SI-002 and SI-007 from the impact table; total-LOC undercounted |
+| R4 | needs-attention | 1 high: pharmacy still classified as SKELETON despite Codex grepping `routes.ts` and finding 11 routes including 8 mutation routes (the MedicationRequest/prescribe surface is fully implemented post-SI-001) |
+| R5 | **APPROVE** | No findings; module classifications align with both the SI source files and the actual repo |
+
+### Novel patterns reinforced
+
+1. **Audit docs that classify modules MUST grep the actual code, not assume from sibling-doc summaries.** R4 was the keystone finding: my audit said pharmacy was a SKELETON because that's how the BUILD_VS_SPEC_TRACEABILITY_MATRIX r6 had framed it pre-SI-001-ratification (Sprint 35). But SI-001 had ratified 2026-05-12 + the prescribe-surface implementation had landed alongside the ratification, and the matrix's r6 framing was stale. Codex caught this by directly grepping `src/modules/pharmacy/routes.ts` and counting 11 routes. Pattern: when consolidating cross-module state, the source-of-truth precedence is (1) actual code files, (2) actual SI source files, (3) sibling-doc summaries that may be stale. Reverse this precedence and you reproduce stale framings.
+
+2. **Cross-doc validation surfaces drift in sibling docs.** R2 H1 caught that the Ratifier Ceremony Agenda (PR #167, just merged 2026-05-17) still had unqualified Rule 5 audit-surface language for SI-014 — language that didn't reflect the Closure path A vs B split SI-014's source explicitly carries. The Ceremony Agenda was Codex-approved on its own surfaces in 9 rounds, but the Agenda + Audit cross-validation only happened when this PR landed. Pattern: cross-doc validation is a distinct review surface from per-doc validation — even a Codex-approved doc can have drift relative to its siblings that's only visible when a successor doc tries to align with it.
+
+3. **Corrected counts must propagate to every derived table.** R3 H1 caught that the R1 closure correctly fixed the headline OPEN-SI count (10 → 12 SIs) but didn't propagate the addition (SI-007) into the §2 per-SI impact table or the pharmacy module row or the total-LOC summary. Pattern reinforcement (extends Addendum 29 pattern 1 + the agenda-PR's own R6/R7/R8 corrections): when a corrected count surfaces in a primary section, EVERY table/row/summary that derives from the count must be updated in the same closure round. Partial propagation is itself a regression class.
+
+4. **Agenda-patch recommendation must enumerate ALL drifts found, not just the first.** R2 M1 caught that my R1 agenda-patch recommendation only covered the missing SI-002 + SI-007 inventory entries — but Codex found a SECOND agenda drift (the SI-003 row says "independent (SI-002 closed earlier)" while SI-002 is OPEN). Pattern: when one doc discovers drift in a sibling, the cross-doc recommendation must run a complete grep across the sibling, not just patch the first item found.
+
+5. **5-round trajectory on a docs-only PR is acceptable when each round closes substantive source-of-truth verification.** The cycle pattern was disciplined: each Codex round did a deeper grep into a source file (SI texts in R1, agenda text in R2, SI-007 source + the §2 inventory in R3, `routes.ts` in R4) that the audit had not directly verified. Convergence completed in <1 hour with each round taking ~5 minutes of edits + 1-2 minutes of Codex re-review. Pattern: consolidation docs that aggregate from many source files MUST be Codex-verified against each source file directly — assuming the source-of-truth precedence from a sibling consolidation doc reproduces that doc's drifts.
+
+### Cycle tally (post-PR #168)
+
+- **PRs merged this autonomous run: 32** (+1 since Addendum 29)
+- **Codex pre-ratification rounds: 125+** (PR #168 adds 5)
+- **Substantive Codex closures: 156+** (PR #168 adds 6: 2H + 1M (R1), 1H + 1M (R2), 1H (R3), 1H (R4))
+- **SIs filed this cycle: 7** (unchanged; this PR adds zero new SIs — it's a consolidation snapshot)
+- **Pending-ratifier SI queue: 12** (this audit surfaced that the ratifier queue is actually 12, not 10 as the agenda had claimed — agenda-patch recommendation included in §5)
+- **Distributed-systems / safety-surface / governance integrity patterns: 38** (PR #168 adds 5 above)
+- **Reusable autonomous-scope documentary artifacts: 3** (audit-failure injection harness from PR #165 + Ratifier Ceremony Agenda from PR #167 + Implementation State Audit from PR #168)
+
+### What this enables next
+
+With both the Ratifier Ceremony Agenda (PR #167) AND the Implementation State Audit (PR #168) merged, Evans now has TWO complementary pre-ratification artifacts: the agenda answers "what ceremonies in what order"; the audit answers "what implementation state does each ratification unlock." The audit also explicitly flags the agenda-patch list (3 drift items) that should land in a small follow-on PR before the ceremony convenes.
+
+The pair of artifacts together materially reduces ratifier-ceremony overhead: a chair scanning the audit can immediately see which sub-ceremony has the highest LOC-leverage (SI-012 → 2000-3000 LOC of med-interaction), which has the largest downstream-IMPL surface (SI-010 → SI-005/008/011 SECURITY DEFINER procedures), and which require careful clinical-safety judgment (SI-014's Option A/B/C/D decision).
+
+### Next natural entry points
+
+With PR #168 merged, the autonomous-scope consolidation work now includes:
+- 7 new SIs filed (the ratifier-blocked backlog)
+- 1 reusable test-infrastructure module (PR #165)
+- 2 reusable cross-SI navigation docs (PR #167 + #168)
+- Multiple agenda-patch items surfaced for follow-on cleanup
+
+Pure code-only items still available:
+
+1. **Apply the 3 agenda-patch items** to PR #167's Ratifier Ceremony Agenda (inventory completeness + SI-014 A/B scoping + SI-002 stale-dependency in SI-003 row). Small, bounded — could land as a single follow-on PR before the ceremony convenes
+2. **Integration test for parallel injection across two emitters in one test file** (deferred from Addendum 27 / 29's entry-point lists — exercise the closure-per-instance property end-to-end at the HTTP boundary)
+3. **AI Service module structure expansion** — current handlers/* tree may need refactoring for Mode 2 case-prep landing
+4. **Mode 2 case-prep handler scaffolding** — wire contract published; depends on protocol-engine + I-012 audit chain canonicalization
+5. **A third cross-SI navigation doc** — the audit + agenda pair could be extended with a per-Track view (Track 1/2/3/4/5/6 from the Master Completion Plan) showing how the SI queue maps to the plan's tracks
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 implementation-state-audit close (32 PRs MERGED; 156+ Codex closures; 5-round trajectory on the grep-the-actual-code pattern class; 3 reusable autonomous-scope artifacts now staged for the Q2 2026 ratifier ceremony; agenda-patch list of 3 items surfaced for follow-on cleanup)
