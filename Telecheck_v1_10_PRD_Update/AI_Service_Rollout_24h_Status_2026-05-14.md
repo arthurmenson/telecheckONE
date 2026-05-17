@@ -2730,3 +2730,79 @@ With PR #174 merged + the matrix r6 r7-amendment surfaced for follow-on:
 4. **Loop pause / status reflection** — given 38 PRs merged across this run + the matrix r6 → r7 sweep being the natural "all autonomous-scope drift items audited + ready-to-patch" milestone, an explicit pause to surface "what's done + what's pending + what the next ratifier ceremony unlocks" to Evans may be higher-leverage than continuing the loop.
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 3rd-cross-validation-audit close (38 PRs MERGED; 175+ Codex closures; 2-round trajectory matched the audit-doc class precedent from PR #168 + PR #172; 19 drift items surfaced; r7 matrix-amendment + 3 banner patches staged for follow-on).
+
+---
+
+## Addendum 37 — Matrix r6 → r7 amendment + 3 banners + 2 SI source-file P-NUM patches merged 2026-05-17 (4-round Codex convergence)
+
+**Date:** 2026-05-17 (Sprint 38, autonomous turn)
+**PR:** `arthurmenson/telecheck-app#175` (MERGED `deaac51` 2026-05-17 10:23 UTC)
+**Branch:** `docs/matrix-r7-amendment-follow-on-pr-174-2026-05-17` (deleted post-merge)
+**Codex rounds:** 4 (r1 → 1 HIGH closed → r2 → 1 HIGH + 1 MEDIUM closed → r3 → 1 MEDIUM closed → r4 APPROVE clean)
+
+### Entry point
+
+Per Addendum 36 closure-debt list option 1: execute the 11 recommended patches enumerated in PR #174 §5 (`docs/Sibling-Doc-Cross-Validation-Audit-Round-3-2026-05-17.md`). This is the PR #174 follow-on patch PR — the second half of the surface-then-patch staging pattern established by PR #168 + PR #172 + PR #174.
+
+A stale wake-up prompt firing alongside this cycle (describing PR #173-era state) was acknowledged + pivoted to the actual current next entry point.
+
+### What shipped (PR #175 — 6 files post-Codex)
+
+**Matrix r6 → r7 amendment** (`docs/BUILD_VS_SPEC_TRACEABILITY_MATRIX.md` — 8 patches):
+
+1. r7 revision-history block at top documenting all 8 matrix changes + PR #174 evidence pointer
+2. §1 I-012 row: "functional BLOCKED on SI-001" → "functional path active post-P-011" + cite to `src/modules/pharmacy/internal/state-machine.ts`
+3. §2 split: new "Partially-implemented slices" subsection for Pharmacy MedicationRequest/prescribe surface (12 routes); Pharmacy removed from BLOCKED-aware skeletons (Subscription + Med Interaction remain there with refined blocker citations)
+4. §3 Async Consult row: replaced miscited "(start-intake gated on Payment SI-006, process gated on AI Service SI-007)" with accurate "(start-intake branch depends on Payment integration not-yet-filed as SI; process branch depends on Mode 2 AI surface not-yet-filed)"
+5. §3 Pharmacy state-machine row: split into MedicationRequest (IMPLEMENTED at State Machines v1.2 §19 post-P-011) + Refill/Dispensing/Shipment (BLOCKED on SI-007)
+6. §4 OPEN list: 2 rows → 12 rows; per-SI P-NUM targets cited per source-file Status blocks (SI-002 → P-014; SI-005 → P-017; SI-007 → P-013; SI-008 → P-018; SI-009 → P-019; SI-010 → P-020; SI-011 → P-021 umbrella + P-022..P-025; SI-012/013/014 → P-022; SI-003 → next-available after P-018; SI-004 → next-available)
+7. §4 CLOSED list: SI-004 + SI-005 removed (both OPEN per source files); SI-001 RATIFIED/P-011 + SI-006 CLOSED retained
+8. §6 cumulative-metrics: "Closed Spec Issues" line corrected
+
+**3 historical-vs-current banners** (`docs/AUTONOMOUS_TURN_SUMMARY_2026-05-{05,08,11}.md`): added at top of each, bodies preserved unedited, per the PR #173 banner pattern.
+
+**2 SI source-file P-NUM patches** (added during Codex r2/r3 closure):
+- `docs/SI-005-Consult-ConsultEvent-Schema-Gap.md`: added explicit "Target Promotion Ledger entry: P-017" line so matrix can cite SI-005's own Status block as authoritative (vs inferring from SI-008's dependency note)
+- `docs/SI-003-DOMAIN_EVENTS-Placeholder-Ratification.md`: retired stale P-013 target in both Resolution-expectations block + Step 1 close-out instruction; documented full chain (P-013 → SI-007; P-014 → SI-002; P-017 → SI-005; P-018 → SI-008; SI-003 effective slot = next-available after P-018)
+
+### Codex closure trajectory
+
+| Round | Findings | Resolution |
+| --- | --- | --- |
+| r1 | 1 HIGH: §4 OPEN list assigned wrong P-NUM targets to SI-005/008/009/010 (audit doc had collapsed into "alongside other 7 pending SIs" framing) | Verified each SI's own Status block; corrected SI-005 → P-017, SI-008 → P-018, SI-009 → P-019, SI-010 → P-020; rewrote summary paragraph |
+| r2 | 1 HIGH: SI-005 → P-017 still inferred (from SI-008 dependency note, not SI-005's own Status block); 1 MEDIUM: SI-003 row contradicts SI-003 source-file P-013 target | Patched SI-005 source file to add explicit P-017 target line; patched SI-003 Resolution-expectations block to retire P-013 + document chain |
+| r3 | 1 MEDIUM: SI-003 Step 1 bullet 5 still references stale "P-013 closes this SI" — contradicts updated Resolution-expectations block | Rewrote Step 1 bullet 5 to reference retargeted chain |
+| r4 | APPROVE clean | — |
+
+Cumulative findings closed inline: 1 HIGH + 1 HIGH + 1 MEDIUM + 1 MEDIUM = 4 findings across 3 rounds; r4 clean.
+
+### Drift-closure milestone
+
+**All 19 drift items surfaced by PR #174 R3-class audit are now closed:**
+- 3 HIGH: matrix §4 OPEN-list missing 10 OPEN SIs ✅; §4 CLOSED-list SI-004/005 misclassified ✅; §3 Async Consult miscited SIs ✅
+- 3 MEDIUM: §2 Pharmacy row stale ✅; §1 I-012 row self-contradiction ✅; §6 cumulative-metrics line ✅
+- 13 LOW: 3 banner patches absorb all 13 line-level historical-record stale claims via per-doc enumeration in the banners ✅
+
+**Plus 4 additional findings Codex surfaced during r1/r2/r3 closures** (P-NUM allocation precision + SI source-file consistency) — bonus closure depth.
+
+### Patterns reinforced
+
+- **Surface-then-patch R3-class pattern complete:** PR #168 → PR #172 → PR #174 (surface) → PR #175 (patch). The pattern is now codified across 4 PRs; the matrix r6 → r7 sweep is the natural drift-closure milestone for the autonomous-scope cluster.
+- **Codex-cited "per-source-file authoritative" discipline:** R2 + R3 closures applied the principle that the matrix cannot cite a target inferred from a sibling SI's dependency note — it must cite the SI's own Status block. When the source file is stale, patch the source first. This raises the bar for future SI-citation hygiene.
+- **Source-file P-NUM allocation discipline:** The R2/R3 closures revealed that the SI source-file inventory had become internally inconsistent — multiple SIs claimed P-013; SI-005 had no explicit target; SI-003's stale P-013 contradicted the chain. PR #175 closed these inconsistencies as a side effect of the matrix r7 amendment.
+
+### Cockpit
+
+- `progress.json` r132 → r133 (matched bump for PR #175 merge)
+
+### Closure-debt heading into Sprint 38+
+
+With PR #175 merged + all autonomous-scope code-doc-drift items from PR #168/172/174 R3 audits closed:
+
+1. **Loop pause / status reflection** — given 39 PRs merged + the matrix r6 → r7 sweep being the natural "all autonomous-scope drift items audited + closed" milestone, an explicit pause to surface "what's done + what's pending + what the next ratifier ceremony unlocks" to Evans may be the highest-leverage next item. Recommended if Evans is reachable.
+2. **AI Service module structure expansion** for Mode 2 case-prep scaffolding — depends on SI-008 ratification (ratifier-blocked but scaffolding could be pre-staged behind a feature flag).
+3. **Crisis-detection classifier-adapter scaffolding pre-staging** — STOP condition territory; depends on SI-014 ADR-030.
+4. **4th cross-validation pass** — extend audit pattern to a different sibling-doc cluster (e.g., PROJECT_CONVENTIONS.md + SCRUM_OPERATING_MODEL.md + the per-slice STATUS docs not refreshed in PR #173). Diminishing marginal value warning may apply.
+5. **Spec-corpus Plan-patch PR** — STOP condition territory; requires ratifier sign-off.
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 matrix-r7-amendment close (39 PRs MERGED; 179+ Codex closures; 4-round trajectory on this PR; r7 amendment + 3 banners + 2 SI source-file P-NUM patches all merged; all 19 drift items from PR #174 R3 audit closed; surface-then-patch R3-class pattern codified across PRs #168/172/174/175).
