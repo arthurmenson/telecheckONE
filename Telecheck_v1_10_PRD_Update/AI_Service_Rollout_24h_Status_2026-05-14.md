@@ -2053,3 +2053,84 @@ With PR #165 merged, the test-infrastructure backlog item is closed. Pure code-o
 5. **Integration test for Mode 1 chat handler PARALLEL injection** — exercise two injectors in the same test file (today's tests prove they're isolated via unit-level construction, but a real handler integration with two emitters would prove it at the HTTP boundary)
 
 — Claude (Opus 4.7, 1M context), 2026-05-16 harness-generalization close (29 PRs MERGED; 133+ Codex closures; first reusable test-infrastructure module in the repo; SI-013 downstream impl unblocked on the test-harness axis)
+
+---
+
+## Addendum 28 — SI-014 crisis-detection clinical-grade NLP classifier upgrade SI merged 2026-05-16 (6-round Codex convergence; novel option-D-defers-not-closes pattern)
+
+**PR #166** — `docs(SI-014): file crisis-detection clinical-grade NLP classifier upgrade SI` — **MERGED** 2026-05-16. **6 rounds Codex (R1 → R6 APPROVE)** — driven by the unusual interaction between a SI that presents four ratifier options where one of them (Option D defer) has fundamentally different closure semantics than the other three.
+
+### What landed
+
+SI-014 frames the I-019 platform-floor crisis-detection classifier upgrade as a ratifier-decision SI with no engineering recommendation. The current `src/lib/crisis-detection.ts` is a regex-keyword stub explicitly flagged in its own docstring as "REQUIRED before patient-facing deployment" — EN-only, no paraphrase coverage, no Twi (Ghana market) / pidgin coverage.
+
+**Four ratifier-decision options presented (no recommendation):**
+- A — Anthropic Claude as the classifier
+- B — On-prem fine-tuned classifier (e.g., DistilBERT + crisis-trained dataset)
+- C — Hybrid (regex floor + Claude primary, parallel execution)
+- D — Defer Mode 1 chat patient launch until classifier ratifies
+
+**Six hard rules + two audit surfaces:**
+1. Always-on contract preserved
+2. Failure mode fail-CLOSED, SCOPED BY COVERAGE CLASS (three postures — (a) bounded fall-through in-coverage only, (b) hard-fail out-of-coverage, (c) uniform hard-fail; ratifier picks)
+3. PHI handling encoded in INVARIANTS I-022 row per chosen deployment posture
+4. Latency floor sub-500ms P95 platform-floor
+5. Audit detail captures classifier provenance on TWO surfaces — Cat A `crisis_detection_trigger` (existing, extended with 4 provenance fields) + NEW Cat B `crisis.classifier_invocation` (fires on EVERY invocation regardless of outcome; fail-soft per SI-013 PR #164 Rule 4 pattern; captures `fail_closed_posture` + `coverage_class` enums so bounded fall-through is auditable)
+6. Twi (or chosen non-EN language) IN-SCOPE at first launch (or SI stays open; Ghana stays on Option D)
+
+**Split closure paths:**
+- **Closure path A (Options A/B/C ship classifier)** — SI-014 CLOSES; ADR-030 + AUDIT_EVENTS Surface 1+2 amendments + I-022 amendment + impl + Tier 1+2 tests + Promotion Ledger entry
+- **Closure path B (Option D defers)** — SI-014 DOES NOT CLOSE, it's RESCOPED to "open / deferred behind patient-access gate"; successor SI-014.1 filed in the same ratification ceremony; patient-Mode-1 re-enable gated by SI-014.1 closure; Phase B I-019 verification CONDITIONALLY satisfied while all THREE conditions hold
+
+### Codex convergence (R1 → R6): the option-D-defers-not-closes pattern
+
+The 6-round trajectory had a distinct character compared to PR #164's 10-round convergence on SI-013: where SI-013's rounds chased adjacent defect classes across four contracts, SI-014's rounds chased a SINGLE structural mismatch — how to handle an option that has different closure semantics than its siblings without creating contradictions across the document's normative sections.
+
+| Round | Verdict | Severity → Closure |
+|---|---|---|
+| R1 | needs-attention | 1 high + 1 medium: Rule 2 fail-closed allowed silent regression to regex for out-of-coverage inputs; regression-test obligations conflated CI plumbing with clinical-acceptance gates → Rule 2 scoped by coverage class with three postures; tests split Tier 1 (deterministic CI) + Tier 2 (clinical promotion gate) |
+| R2 | needs-attention | 2 high + 1 medium: engineering checklist allowed blanket regex fallback contradicting Rule 2; Cat A audit alone couldn't prove fail-closed posture for no-crisis paths; Tier 1 test 2 hard-coded one of two valid ADR-030 postures → checklist requires whichever posture ratified; added NEW Cat B `crisis.classifier_invocation` always-emitted audit; Tier 1 tests split conditional on ADR-030 posture |
+| R3 | needs-attention | 1 medium: single-track Resolution path forced AUDIT_EVENTS amendments under Option D where they'd have no producer → Resolution path split by option family (Closure path A for A/B/C; Closure path B for D) |
+| R3 H1 | needs-attention (after re-review) | 1 high: Option D framed as clean closure contradicted Cross-cutting "Phase B requires non-stub classifier" → Option D reframed as DEFERRAL (not closure); successor SI-014.1 required; patient-Mode-1 re-enable gated by SI-014.1 closure |
+| R4 | needs-attention | 1 high: Cross-cutting + Status Blocks bullets still unqualified, contradicting Closure path B → option-scoped Phase B semantics with three explicit conditions for Option D conditional satisfaction |
+| R5 | needs-attention | 1 high: Closure-semantics Option D bullet summarized Phase B as "patient-access gate alone" dropping two of three conditions → bullet now lists all three conditions verbatim |
+| R6 | **APPROVE** | No findings; option-scoped semantics fully reconciled across the document |
+
+### Novel patterns reinforced
+
+1. **An SI option that "defers" must explicitly RESCOPE the SI, not CLOSE it.** When one of an SI's options is "don't ship the thing this SI scopes," that option cannot have the same closure semantics as the build-it options. SI-014's Option D is now a deferral posture: SI-014 stays OPEN, a successor SI-014.1 is filed, and the deferral's "gate" mechanism (patient-access denial for Mode 1) is itself gated by a Promotion Ledger entry that cannot be silently lifted. This avoids the failure mode where governance marks "SI closed under Option D" while the same SI's Cross-cutting section says "Phase B verification requires the artifact Option D didn't ship." Generalizable to any future SI with a "defer / don't build" option.
+
+2. **Option-scoped normative wording prevents document-level contradictions.** When an SI's options have different deliverable surfaces, EVERY normative section that mentions deliverables (Cross-cutting impact, Status Blocks, Resolution path, regression-test preamble, Status Closure-semantics) MUST explicitly enumerate the option-conditional split. A "Phase B requires non-stub classifier" sentence is ambiguous because under Option D no non-stub classifier exists — the sentence must be "Phase B under A/B/C requires X; Phase B under D requires Y." Three rounds (R3 H1 + R4 + R5) were spent finding all the places where unqualified language crept back in. The discipline pattern: when an option-conditional split is introduced, GREP the document for every mention of the affected deliverable and rewrite each occurrence.
+
+3. **Conditional satisfaction with explicit lapse-revert semantics.** Option D's Phase B verification is satisfied "while AND ONLY WHILE all three conditions hold; if any lapses, verification reverts to not-satisfied." This pattern is necessary for any conditional governance state because without explicit lapse semantics, the conditional state is ambiguous (does the satisfaction persist if the gate is removed without SI-014.1? probably not, but the document must say so). Generalizable to any future SI that grants a conditional verification while a gate is in force.
+
+4. **Status-block summaries that drop conditions are a regression class.** R5 caught a Status > Closure semantics bullet that summarized Option D Phase B as "patient-access gate alone" — dropping conditions (b) SI-014.1 governance block and (c) no other patient surface routing free-text through `crisisDetector.detect()`. A Status-block-only reader would have seen the gate as sufficient and missed the other two requirements. The fix: Status block enumerates conditions verbatim, no summary form. Pattern: when a normative requirement has N conditions, ANY occurrence of the requirement in the document that drops conditions is a regression — full enumeration everywhere, even if verbose.
+
+5. **TWO audit surfaces for "fires on confirmation" + "fires on every invocation" splits.** The original Rule 5 single-surface design attached `fail_closed_posture` only to the Cat A `crisis_detection_trigger` row, which only fires on confirmed crisis. Most fail-closed paths return no-crisis (no row emitted), so the bounded-fall-through couldn't be proven from the audit chain. Closure: add a NEW Cat B `crisis.classifier_invocation` that fires on EVERY invocation regardless of outcome (linked to Cat A if Cat A fired) — the always-emitted surface that makes Rule 2's coverage-class enforcement auditable. Mirrors SI-013 PR #164's Cat B forensic-correlation pattern. Generalizable to any safety surface where the failure-mode is "silently return safe-default" — that failure mode demands an always-emit audit, not a fires-on-confirmation audit.
+
+### Cycle tally (post-PR #166)
+
+- **PRs merged this autonomous run: 30** (+1 since Addendum 27)
+- **Codex pre-ratification rounds: 111+** (PR #166 adds 6)
+- **Substantive Codex closures: 140+** (PR #166 adds 7: 1H + 1M (R1), 2H + 1M (R2), 1M (R3), 1H (R3 re-review), 1H (R4), 1H (R5))
+- **SIs filed this cycle: 7** (SI-008, SI-009, SI-010, SI-011, SI-012, SI-013, SI-014)
+- **Pending-ratifier SI queue: 10** (SI-003/004/005/008/009/010/011/012/013/014)
+- **Distributed-systems / safety-surface / governance integrity patterns: 28** (PR #166 adds 5 above)
+
+### Why this matters for the v1.0 → v1.1 cycle planning
+
+SI-014 IS the gate on the Telecheck-Ghana Mode 1 chat patient surface. Until the ratifier picks A/B/C/D, the Ghana pilot's Mode 1 surface posture is undetermined. The SI's "Why this matters for pilot launch" section makes the cost of waiting visible: every week without ratification is a week the Ghana pilot's safety surface stays on a stub explicitly documented as inadequate.
+
+The four-option framing also makes the ratifier-evaluation timeline visible: Options A and C can be evaluated in ~4-6 weeks (the work is wiring Claude into the adapter + clinical-corpus validation against pinned model versions); Option B is 6-12 months (the labeled corpus does not exist; must be created with clinical + linguistic + legal partner); Option D is a same-day decision but pushes the gate into permanent technical debt. The SI does not push the ratifier toward any option but makes the timeline trade visible.
+
+### Next natural entry points
+
+With PR #166 merged, the pending-ratifier SI queue now stands at 10 items. Pure code-only items still available for autonomous work:
+
+1. **Integration test for parallel injection** (the deferred item from Addendum 27's next-entry-point list — exercise two injectors in the same test file at the HTTP boundary; today only unit-level isolation is proven)
+2. **AI Service module structure expansion** — current handlers/* tree may need refactoring for Mode 2 case-prep landing
+3. **Async-Consult Sprint 10 route scaffolding** — depends on SI-005 ratification but route scaffolding could be authored alongside
+4. **Mode 2 case-prep handler scaffolding** — wire contract published; depends on protocol-engine + I-012 audit chain canonicalization
+5. **Spec-corpus ratifier briefing doc** — given 10 pending SIs, a single "ratifier ceremony agenda" doc surfacing the decision matrix + interdependencies + recommended ordering could materially reduce ratifier overhead. This is documentary autonomous-scope work.
+
+— Claude (Opus 4.7, 1M context), 2026-05-16 SI-014 close (30 PRs MERGED; 140+ Codex closures; 7 SIs filed this cycle; 28 distributed-systems / safety-surface / governance integrity patterns; novel option-D-defers-not-closes governance pattern documented)
