@@ -37,6 +37,118 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-019 — 2026-05-17 — SI-009 ratification-intent: SyncSession canonical schema (sub-ceremony 2 of Q2 2026 ratifier ceremony; Cluster B HARD-sequenced sibling of P-018; original-scope only — scaffold expansion split to SI-009.1 P-020 per Evans's ratifier choice)
+
+**Type:** Content-change promotion — **ratification-intent recorded in PR-A1′ commit; physical content + Registry v2.11 → v2.13 bump land together in a future PR-A2′/A3′-class lockstep commit** per the lockstep invariant (Registry bumps in the same commit that lands the underlying canonical content; this entry records ratifier sign-off only). Final canonical state (after sub-ceremony 2 PR-A2′/A3′ lands): new entity expansion in CDM v1.5 (§4.24 SyncSession) + AUDIT_EVENTS amendment (7 net-new Category C action IDs sync_session.*) + DOMAIN_EVENTS v5.2 in-place additive extension (3 net-new event types sync_session.{scheduled, started, completed}).
+
+**Sub-ceremony 2 batch note:** P-018 + P-019 ratify together in sub-ceremony 2 as the **Cluster B HARD-sequenced batch** (SI-008 + SI-009 MUST ratify BEFORE SI-005 because SI-005's FK 6 (`consults.ai_workflow_execution_id`) + FK 7 (`consults.escalation_target_sync_session_id`) row shapes reference SI-008's `ai_workflow_executions` + SI-009's `sync_sessions` row shapes). Both entries record ratification-intent in PR-A1′ (this commit); both share the future lockstep PR-A2′/A3′ commit that physically lands canonical content + applies the consolidated Registry v2.11 → v2.13 bump. **Scope split per Evans's 2026-05-17 ratifier choice:** P-019 ratifies ORIGINAL-scope SI-009 (entity #17 SyncSession with 13-column schema + four-predicate atomic UPDATE + `record_consult_escalation_target_swap()` SECURITY DEFINER procedure + KMS-encrypted `livekit_room_id` per sub-decision #5 + 4-value cancellation_reason enum per sub-decision #8). The scaffold expansion (multi-participant + recording entities per Evans's overrides on sub-decisions #6 + #7) is split to **SI-009.1 v0.1 DRAFT** at `arthurmenson/telecheck-app:docs/SI-009.1-SyncSession-Scaffold-Expansion-Multi-Participant-Recording.md` (target P-020 after Codex pre-ratification gate completes; estimated 3-6 rounds per SI-008/009 precedent).
+
+**Status:** **RATIFIED IN INTENT 2026-05-17** (workstream lead chat-message sign-off; sub-ceremony 2 of the Q2 2026 ratifier ceremony per `arthurmenson/telecheck-app:docs/Ratifier-Ceremony-Agenda-Q2-2026.md`). Evans's verbatim ratifier instruction at the Sub-Ceremony 2 chat-message digest: *"dont defer 6 and 7...scaffold and include now. use recommendation for the rest"* + *"ratify"* (defaulted per the brief to "all 9 sub-decisions as recommended" + "SI-009.1 successor packaging"). **CANONICAL** after future PR-A2′/A3′ lockstep commit lands SyncSession §4.24 in the bundle.
+
+**Author:** Autonomous Claude (Sub-Ceremony 2 Ratifier Packet authored 2026-05-17 in PR `arthurmenson/telecheck-app#177` merged `895131d` 2026-05-17 19:00 UTC; 3-round Codex convergence on the packet artifact); ratified by Evans (workstream lead) 2026-05-17 in chat-message ratification.
+
+**Trigger:** SI-009 (SyncSession schema gap; recorded in `arthurmenson/telecheck-app:docs/SI-009-SyncSessions-Schema-Gap.md` v0.X) blocks the LiveKit-backed sync video consultation session durability + the async→sync escalation path per ADR-012. CDM v1.4 §3 entity inventory names #17 SyncSession at the entity-roster level but provides no §4 field-level expansion. This PR-A1′ commit records ratifier sign-off; future PR-A2′/A3′ will physically port SI-009 v0.X row shapes into CDM §4.24 as canonical content. Until PR-A2′/A3′ lands, no SyncSession row shape is canonical — implementation work MUST WAIT.
+
+**Promotion class:** content-change. New entity expansion + new audit/domain IDs require Registry version bump per operating rule 4 — bump deferred to PR-A2′/A3′ lockstep landing (consolidated with P-018).
+
+**Version bumps deferred to PR-A2′/A3′ landing (NOT applied in this PR-A1′ commit; P-019 portion):**
+- Artifact Registry **v2.11 → v2.13** will apply in the same lockstep PR-A2′/A3′ commit (consolidated with P-018). Coverage counts will update to: entities 42 → 44 (P-019 adds #17 SyncSession; P-018 adds #19 AiWorkflowExecution; both new in CDM v1.5).
+- Canonical Data Model **v1.4 → v1.5** will apply in PR-A2′ (§4.24 SyncSession to be added).
+- AUDIT_EVENTS Contracts Pack **v5.4 → v5.5** will apply in PR-A3′ (7 net-new Cat C action IDs sync_session.{scheduled, started, completed, no_show, cancelled, escalation_target_swapped, escalation_target_swap_failed}). Cat C because sync-session state is patient-visible operational metadata, not Cat A clinical-decision-evidence.
+- DOMAIN_EVENTS Contracts Pack **v5.2** (additive enum extension only — no version bump; will apply in PR-A3′: 3 net-new tenant-scoped event types `sync_session.{scheduled, started, completed}.v1` partition_key `tenant_id:sync_session_id`).
+
+**Changes (ratified at sub-ceremony 2 2026-05-17; will physically land in PR-A2′/A3′ per lockstep):**
+
+1. **CDM v1.5 §4.24 — NEW entity expansion (SyncSession) will be added in PR-A2′.** 13 columns per SI-009 v0.X §"Decision (placeholder schema gated on SI-009 closure)". Triple-composite UNIQUE `(tenant_id, originating_consult_id, id)` — required so SI-005's FK 7 forward pointer can REFERENCE this entity. Same-tenant + same-originating-consult lineage enforced via composite FK `(tenant_id, originating_consult_id) → consults(tenant_id, id)` + SI-005's FK 7 triple-composite forward pointer. **NO supersession chain** (sync sessions transition via human action; multiple per consult legitimate; forward pointer tracks current scheduled/in-progress session).
+2. **Four-predicate atomic UPDATE** for forward-pointer swaps (CAS + consult-state + new-session-existence + new-session-state-actionable). Inactive sessions (cancelled/no_show/completed) cannot become the current forward pointer.
+3. **`record_consult_escalation_target_swap()` SECURITY DEFINER procedure** is the ONLY write path to `consults.escalation_target_sync_session_id` (R3 closure mirrors SI-008's DB-boundary discipline). Same GRANT model: app-role has NO direct UPDATE privilege. **DEFERRED to SI-010 landing** per IMPL-readiness gate (the procedure cannot reference `_session_actor_context` helpers that don't exist; SI-010 sub-ceremony 7 in Evans's ordering provides the infrastructure).
+4. **Server-trusted actor identity** via `SET LOCAL`-bound `_session_actor_context` (R5 + R6 closures): caller-supplied actor identity REMOVED; procedure derives from `current_actor_account_id()` / `current_actor_account_tenant_id()` / `current_actor_role()` / `current_actor_admin_home_tenant_id()`. Tx-scoped binding via `SET LOCAL` prevents cross-request bleed on pooled connections. **DEFERRED to SI-010 landing.**
+5. **Three-tier audit durability** (mirrors SI-008 / per sub-ceremony 2 ratification at P-018): savepoint + `audit_swap_rejection_log` autonomous-transaction backstop + caller-commit-boundary contract. Shared `audit_swap_rejection_log` table with SI-008 (discriminator column `target_table` says `consults`).
+6. **`livekit_room_id` encrypted at rest via KMS envelope** (per Evans's ratified sub-decision #5 at sub-ceremony 2 2026-05-17 — privacy judgment call). Adds ~7 envelope columns (`livekit_room_id_encrypted`, `livekit_room_id_kms_key_id`, `livekit_room_id_kms_key_version`, `livekit_room_id_nonce`, `livekit_room_id_aad`, `livekit_room_id_schema_version`, `livekit_room_id_encrypted_at`) mirroring SI-005 + SI-008 pattern. The combination `livekit_room_id + patient_id + clinician_account_id` is effectively a session correlation key — encrypting preserves operational PHI minimization even if rows are exposed via a future query path. **Final SyncSession column count: 13 base + 7 livekit_room_id envelope = 20 columns** (revised from the original "13-column" framing in SI-009 v0.X to reflect sub-decision #5 ratification at P-019).
+7. **Cancellation reason 4-value enum** (per Evans's ratified sub-decision #8 at sub-ceremony 2 2026-05-17): `cancellation_reason VARCHAR(40) NULL CHECK (cancellation_reason IS NULL OR cancellation_reason IN ('patient_initiated', 'clinician_initiated', 'system_cancellation', 'regulatory_hold'))`. Required NOT NULL when `state='cancelled'` (enforced via state-machine consistency CHECK).
+8. **AUDIT_EVENTS v5.5 — 7 net-new Cat C action IDs:** `sync_session.{scheduled, started, completed, no_show, cancelled, escalation_target_swapped, escalation_target_swap_failed}`.
+9. **DOMAIN_EVENTS v5.2 in-place — 3 net-new event types:** `sync_session.{scheduled, started, completed}.v1`.
+
+**Sub-decisions explicitly DEFERRED to SI-009.1 P-020 (NOT in P-019 scope):**
+- Sub-decision #6 multi-participant scaffold (entity #25 SyncSessionParticipants) — Evans's override at sub-ceremony 2 ("scaffold and include now"); split to SI-009.1 for Codex pre-ratification gate
+- Sub-decision #7 recording retention scaffold (entity #26 SyncSessionRecordings + 3 new CCR keys + 4 Cat A audit events) — Evans's override at sub-ceremony 2 ("scaffold and include now"); split to SI-009.1
+
+**Ratifier sub-decisions explicitly approved IN P-019 scope at sub-ceremony 2 (4 of 4):**
+- Sub-decision #5 `livekit_room_id` encrypted at rest via KMS envelope: **APPROVED** (privacy call; recorded as the 7-column envelope addition above)
+- Sub-decision #8 4-value cancellation enum: **APPROVED** (mirrors operational distinctions Tier 1 reviewers need)
+- (Sub-decisions #6 and #7 split to SI-009.1 per Evans's ratifier choice — see "DEFERRED" block above)
+- Multi-participant deferral REJECTED → scaffold now per Evans's override (split to SI-009.1)
+- Recording retention deferral REJECTED → scaffold now per Evans's override (split to SI-009.1)
+
+**Unblocks:**
+- **SI-005 ratification** (Cluster B sub-ceremony 3) — FK 7 (`consults.escalation_target_sync_session_id`) row shape now references a ratified target (SyncSession §4.24 once PR-A2′ lands). SI-005's other Cluster B dependency (FK 6 to AiWorkflowExecution) is unblocked by P-018 sibling entry.
+- The async→sync escalation path per ADR-012 becomes implementable at the data-model level once SI-009 canonical content lands.
+
+**Lessons captured:**
+- **Sub-ceremony batching works for Cluster B HARD-sequenced pairs.** SI-008 + SI-009 ratify together at sub-ceremony 2 with shared quorum (Evans + Engineering Lead + CDM v1.2 owner); P-018 + P-019 land same-commit with shared Registry bump v2.11 → v2.13.
+- **SI successor pattern (SI-009.1) preserves original-scope ratification velocity.** When a ratifier expands scope beyond what the original SI's Codex pre-ratification cycle covered, the cleanest move is to ratify the original at the planned slot + spawn a successor SI for the expansion. This unblocks downstream Cluster B work (SI-005) on the original's schedule while letting the expansion iterate at its own pace.
+- **Privacy judgment calls flagged ⚠️ in ratifier packets carry forward into Promotion Ledger.** The `livekit_room_id` encryption decision is recorded as a 7-column envelope addition + explicit "privacy judgment call" provenance in Changes block #6 — future readers can see WHY the envelope was added without re-deriving the analysis.
+
+**Registry absorption (PENDING PR-A2′/A3′ lockstep landing):** Registry remains at **v2.11** in PR-A1′ (this commit). The Registry v2.11 → v2.13 bump applies consolidated with P-018 in the same PR-A2′/A3′ commit that physically lands canonical CDM §4.23 (P-018) + §4.24 (P-019) content + AUDIT_EVENTS v5.5 + DOMAIN_EVENTS amend-in-place. Final-state coverage counts (after PR-A2′/A3′, consolidated with P-018): entities 42 → 44 (P-019 contributes #17 SyncSession; P-018 contributes #19 AiWorkflowExecution); AUDIT_EVENTS v5.4 → v5.5; DOMAIN_EVENTS in-place at v5.2.
+
+**Ratifier-input + audit-trail artifact (PR-A1′ — ratification-intent commit):** the SI-009 source file at `arthurmenson/telecheck-app:docs/SI-009-SyncSessions-Schema-Gap.md` is the **ratifier-input artifact** Evans reviewed at sub-ceremony 2 + the **audit-trail evidence** for the 6 Codex pre-ratification rounds closed on the original-scope SI-009 v0.X trajectory. It is **NOT implementation-authoritative** — implementation work against SyncSession row shapes MUST wait for PR-A2′/A3′ landing because no canonical bundle content exists for this entity in PR-A1′. **After PR-A2′/A3′ lands:** the bundle copies in CDM §4.24 become the canonical post-promotion state + the consolidated Registry v2.13 bump applies in the same lockstep commit with P-018; the SI-009 source thereafter is the historical audit-trail artifact.
+
+---
+
+### Entry P-018 — 2026-05-17 — SI-008 ratification-intent: AiWorkflowExecution canonical schema (sub-ceremony 2 of Q2 2026 ratifier ceremony; Cluster B HARD-sequenced sibling of P-019; 14-round Codex pre-ratification convergence on ratifier-input source SI-008 v0.3)
+
+**Type:** Content-change promotion — **ratification-intent recorded in PR-A1′ commit; physical content + Registry v2.11 → v2.13 bump land together in a future PR-A2′/A3′-class lockstep commit** per the lockstep invariant (Registry bumps in the same commit that lands the underlying canonical content; this entry records ratifier sign-off only). Final canonical state (after sub-ceremony 2 PR-A2′/A3′ lands): new entity expansion in CDM v1.5 (§4.23 AiWorkflowExecution) + AUDIT_EVENTS amendment (7 net-new Category A action IDs ai_workflow_execution.*) + DOMAIN_EVENTS v5.2 in-place additive extension (2 net-new event types ai_workflow_execution.{completed, failed}).
+
+**Sub-ceremony 2 batch note:** P-018 + P-019 ratify together in sub-ceremony 2 as the Cluster B HARD-sequenced batch — see P-019 entry above for the full batch framing. Same shared Registry bump v2.11 → v2.13 in the future PR-A2′/A3′ lockstep commit; both entries use the shared post-P-013 baseline of 42 entities (P-018 adds #19 AiWorkflowExecution; P-019 adds #17 SyncSession).
+
+**Status:** **RATIFIED IN INTENT 2026-05-17** (workstream lead chat-message sign-off; sub-ceremony 2 of the Q2 2026 ratifier ceremony). Evans's verbatim ratifier instruction at the Sub-Ceremony 2 chat-message digest: *"ratify"* (defaulted to "all 4 SI-008 decisions as recommended" per the brief). **CANONICAL** after future PR-A2′/A3′ lockstep commit lands AiWorkflowExecution §4.23 in the bundle.
+
+**Author:** Autonomous Claude (Sub-Ceremony 2 Ratifier Packet authored 2026-05-17 in PR `arthurmenson/telecheck-app#177` merged `895131d` 2026-05-17 19:00 UTC; 3-round Codex convergence on the packet artifact); ratified by Evans (workstream lead) 2026-05-17 in chat-message ratification.
+
+**Trigger:** SI-008 (AiWorkflowExecution schema gap; recorded in `arthurmenson/telecheck-app:docs/SI-008-AiWorkflowExecutions-Schema-Gap.md` v0.3) blocks the Async-Consult Mode 2 case-prep AI workflow durability + the clinician-review queue authority (the SINGLE current authoritative AI recommendation per consult). CDM v1.4 §3 entity inventory names #19 AiWorkflowExecution at the entity-roster level but provides no §4 field-level expansion. This PR-A1′ commit records ratifier sign-off; future PR-A2′/A3′ will physically port SI-008 v0.3 row shapes into CDM §4.23 as canonical content. Until PR-A2′/A3′ lands, no AiWorkflowExecution row shape is canonical — implementation work MUST WAIT.
+
+**Pre-ratification gate (per P-011 + P-013 retrospective):** 14 rounds of Codex adversarial-review convergence on the SI-008 v0.1 → v0.3 DRAFT trajectory closed 11 substantive findings inline (R1 bidirectional pointer invariant → R2 CAS-and-supersession protocol + closure-procedure GRANT model → R3 + R4 triple-composite self-referential FK + acyclicity → R5 declarative same-consult enforcement for forward pointer → R6 supersession chain acyclicity enforcement → R7 transitional GRANT model → R8 atomic Refill↔Dispensing tx → R9 Dispensing↔Shipment atomicity → R10 R10 SECURITY DEFINER procedure single canonical lifecycle → R11 R11 caller-trust elimination via SET LOCAL → R12 R12 reused-execution-id-already-in-chain rejection → R13 supersession-pointer-vs-CAS consistency → R14 three-tier audit durability).
+
+**Promotion class:** content-change. New entity expansion + new audit/domain IDs require Registry version bump per operating rule 4 — bump deferred to PR-A2′/A3′ lockstep landing (consolidated with P-019).
+
+**Version bumps deferred to PR-A2′/A3′ landing (NOT applied in this PR-A1′ commit; P-018 portion):**
+- Artifact Registry **v2.11 → v2.13** will apply in the same lockstep PR-A2′/A3′ commit (consolidated with P-019). Coverage counts will update to: entities 42 → 44 (P-018 contributes #19 AiWorkflowExecution; P-019 contributes #17 SyncSession).
+- Canonical Data Model **v1.4 → v1.5** will apply in PR-A2′ (§4.23 AiWorkflowExecution to be added).
+- AUDIT_EVENTS Contracts Pack **v5.4 → v5.5** will apply in PR-A3′ (7 net-new Cat A action IDs `ai_workflow_execution.{started, completed, failed, cancelled, current_pointer_swapped, swap_rejected, race_lost}`).
+- DOMAIN_EVENTS Contracts Pack **v5.2** (additive enum extension only — no version bump; will apply in PR-A3′: 2 net-new tenant-scoped event types `ai_workflow_execution.{completed, failed}.v1` partition_key `tenant_id:ai_workflow_execution_id`).
+
+**Changes (ratified at sub-ceremony 2 2026-05-17; will physically land in PR-A2′/A3′ per lockstep):**
+
+1. **CDM v1.5 §4.23 — NEW entity expansion (AiWorkflowExecution) will be added in PR-A2′.** **23-column schema** (15 base columns + 8-column KMS envelope including `recommendation_dek_ciphertext` per Evans's ratified sub-decision #4 at sub-ceremony 2 — mirrors SI-005 Decision 8 8-column-envelope precedent). Triple-composite UNIQUE `(tenant_id, consult_id, id)` — required so SI-005's FK 6 forward pointer (triple-composite) can REFERENCE this entity.
+2. **State vocabulary** (per Evans's ratified sub-decision #1): **5-state set** `pending | running | completed | failed | cancelled`. Clinician-decision states stay on Consult entity (SI-005's `clinician_decision_class` column set). Clean separation: `ai_workflow_executions.state` = AI lifecycle; `consults.state` = clinician lifecycle.
+3. **Protocol versioning** (per Evans's ratified sub-decision #2): **Pattern A pin** — `protocol_version` captured at workflow START + INSERT-time-immutable (mirrors `supersedes_execution_id` immutability via BEFORE UPDATE trigger). Re-execution against newer protocol creates a NEW workflow row with new version pinned; supersession chain links them.
+4. **Recommendation storage** (per Evans's ratified sub-decision #3): **TOAST-stored BYTEA at v1.0** (defer S3-pointer to future SI if recommendations exceed ~1 MB regularly). KMS envelope semantics straightforward; TOAST handles multi-MB cleanly.
+5. **KMS envelope** (per Evans's ratified sub-decision #4): **8-column flat layout** mirroring SI-005 Decision 8 precedent verbatim: `recommendation_encrypted` + `recommendation_kms_key_id` + `recommendation_kms_key_version` + `recommendation_nonce` + `recommendation_aad` + `recommendation_schema_version` + `recommendation_encrypted_at` + `recommendation_dek_ciphertext`. Defer composite-type refactor to future housekeeping SI when other entities adopt the same envelope.
+6. **Bidirectional pointer invariant** — non-unique backward pointer (consult can have multiple workflow rows over time) + supersession-aware forward pointer (consult's forward pointer points at the CURRENT authoritative execution; `supersedes_execution_id` links the chain).
+7. **CAS-and-supersession protocol** for forward-pointer updates: `consults.ai_workflow_execution_id = $expected_prior_execution_id` guard in UPDATE; `new_execution.supersedes_execution_id = $expected_prior_execution_id` set at INSERT-time-immutable.
+8. **`record_workflow_pointer_swap()` SECURITY DEFINER procedure** is the ONLY write path to `consults.ai_workflow_execution_id`. App-role has NO direct UPDATE privilege. **DEFERRED to SI-010 landing** per IMPL-readiness gate.
+9. **`supersedes_execution_id` IMMUTABLE post-INSERT** via BEFORE UPDATE trigger.
+10. **Three-tier audit durability** (Tier 1 SAVEPOINT-rollback-then-INSERT; Tier 2 `audit_swap_rejection_log` autonomous-transaction backstop survives caller rollback; Tier 3 caller-required-commit-boundary contract).
+11. **5 rejection codes**: `cas_mismatch | supersession_pointer_mismatch | chain_cycle | state_invalid | unauthenticated`.
+12. **AUDIT_EVENTS v5.5 — 7 net-new Cat A action IDs:** `ai_workflow_execution.{started, completed, failed, cancelled, current_pointer_swapped, swap_rejected, race_lost}`.
+13. **DOMAIN_EVENTS v5.2 in-place — 2 net-new event types:** `ai_workflow_execution.{completed, failed}.v1`.
+
+**Ratifier sub-decisions explicitly approved IN P-018 scope at sub-ceremony 2 (4 of 4):**
+- Sub-decision #1 5-state vocab: **APPROVED**
+- Sub-decision #2 Pattern A pin protocol versioning: **APPROVED**
+- Sub-decision #3 TOAST-BYTEA at v1.0 (defer S3-pointer): **APPROVED**
+- Sub-decision #4 8-column flat KMS envelope (defer composite-type refactor): **APPROVED**
+
+**Unblocks:**
+- **SI-005 ratification** (Cluster B sub-ceremony 3) — FK 6 (`consults.ai_workflow_execution_id`) row shape now references a ratified target (AiWorkflowExecution §4.23 once PR-A2′ lands). SI-005's other Cluster B dependency (FK 7 to SyncSession) is unblocked by P-019 sibling entry.
+- Async-Consult Mode 2 case-prep AI workflow implementation becomes possible at the data-model level once SI-008 canonical content lands.
+
+**Registry absorption (PENDING PR-A2′/A3′ lockstep landing):** Registry remains at **v2.11** in PR-A1′ (this commit). The Registry v2.11 → v2.13 bump applies consolidated with P-019 — see P-019 entry for full lockstep details.
+
+**Ratifier-input + audit-trail artifact (PR-A1′ — ratification-intent commit):** the SI-008 v0.3 DRAFT at `arthurmenson/telecheck-app:docs/SI-008-AiWorkflowExecutions-Schema-Gap.md` is the **ratifier-input artifact** Evans reviewed at sub-ceremony 2 + the **audit-trail evidence** for the 14 Codex pre-ratification rounds closed (R1 → R14; 11 substantive findings closed inline). It is **NOT implementation-authoritative** — implementation work against AiWorkflowExecution row shapes MUST wait for PR-A2′/A3′ landing.
+
+---
+
 ### Entry P-013 — 2026-05-17 — SI-007 ratification-intent: Refill + Dispensing + Shipment canonical schemas (sub-ceremony 1 of Q2 2026 ratifier ceremony; 18-round Codex pre-ratification convergence on ratifier-input source SI-007 v0.19)
 
 **Type:** Content-change promotion — **ratification-intent recorded in PR-A1 commit; physical content + Registry v2.11 → v2.12 bump land together in PR-A2 + PR-A3** on the same branch `spec/p012-p013-si012-si007-ratification-2026-05-17` per the lockstep invariant (Registry bumps in the same commit that lands the underlying canonical content; this entry records ratifier sign-off only). Final canonical state (after PR-A2/A3): three new entity expansions in CDM v1.4 (§4.17 Refill + §4.18 Dispensing + §4.19 Shipment) + AUDIT_EVENTS v5.3 → v5.4 contract version bump + DOMAIN_EVENTS v5.2 in-place additive extension + CDM §audit_events CHECK constraint amendment.
