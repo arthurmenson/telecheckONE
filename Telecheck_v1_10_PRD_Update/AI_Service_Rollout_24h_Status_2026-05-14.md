@@ -2134,3 +2134,83 @@ With PR #166 merged, the pending-ratifier SI queue now stands at 10 items. Pure 
 5. **Spec-corpus ratifier briefing doc** — given 10 pending SIs, a single "ratifier ceremony agenda" doc surfacing the decision matrix + interdependencies + recommended ordering could materially reduce ratifier overhead. This is documentary autonomous-scope work.
 
 — Claude (Opus 4.7, 1M context), 2026-05-16 SI-014 close (30 PRs MERGED; 140+ Codex closures; 7 SIs filed this cycle; 28 distributed-systems / safety-surface / governance integrity patterns; novel option-D-defers-not-closes governance pattern documented)
+
+---
+
+## Addendum 29 — Ratifier Ceremony Agenda Q2 2026 merged 2026-05-17 (9-round Codex convergence; novel constraint-gradation pattern)
+
+**PR #167** — `docs(ratifier): file Q2 2026 ratifier ceremony agenda for the 10 pending SIs` — **MERGED** 2026-05-17. **9 rounds Codex (R1 → R9 APPROVE)** — distinctive convergence trajectory: each round closed real findings of a SINGLE structural class (source-of-truth drift between summary forms and detailed sections when the constraint set has gradations).
+
+### What landed
+
+Single decision-matrix doc surfacing all 10 pending Spec Issues (SI-003/004/005/008/009/010/011/012/013/014) with:
+
+- **§1 SI inventory at a glance** — one-row-per-SI table covering severity, target spec docs, new-ADR requirement, unconditional-vs-conditional artifacts, dependency relationships
+- **§2 Dependency clusters** — 5 clusters labeled per a three-class framing:
+  - Cluster B HARD ratification-correctness (SI-008+009 must ratify before SI-005; only HARD class in the doc)
+  - Cluster C IMPLEMENTATION-readiness gates (SI-011's four prereqs gate IMPL only, NOT SI-011 ratification meeting)
+  - Cluster D RECOMMENDED batching (SI-013+SI-014 pairing saves re-test cost but splitting is allowed)
+  - Clusters A + E independent (SI-003, SI-004, SI-010, SI-012)
+- **§3 Recommended ratification order** — 8 sub-ceremonies, 5-9 hours total ratifier time, parallel scheduling possibilities flagged per signatory availability
+- **§4 Per-SI ratifier-judgment dimensions** — signatory requirements + decision dimensions per SI; SI-014 flagged as the largest single judgment in the queue requiring quorum from Engineering Lead + Platform Clinical Governance + Platform AI Safety + Privacy Officer + CCR_RUNTIME owner + AUDIT_EVENTS owner
+- **§5 What this doc is NOT** — explicit preservation of SI-014 classifier-choice neutrality + three-class framing reminder + cross-references
+
+### Codex convergence (R1 → R9): the constraint-gradation pattern
+
+The 9-round trajectory was driven by ONE structural class of finding — source-of-truth drift between summary forms and detailed sections when the constraint set has gradations:
+
+| Round | Verdict | Severity → Closure |
+|---|---|---|
+| R1 | needs-attention | 2 high + 1 medium: SI-011 dep graph omitted MarketingCopy CDM + I-030 prereqs; SI-014 Option D dropped one of three Phase B conditions; SI-004 overstated as 11-event ratification (Sprint 9 actually emits 4 of 11) |
+| R2 | needs-attention | 1 high + 1 medium: TL;DR + Cluster A + §5 closing still preserved pre-R1 wording in summary forms |
+| R3 | needs-attention | 1 medium: TL;DR collapsed "SI-013+SI-014 pairing" into "hard rules" contradicting Cluster D's "CAN ratify independently" |
+| R4 | needs-attention | 1 medium: SI-011's four prereqs framed as "hard ratification-order" — actually IMPLEMENTATION-readiness gates that don't block SI-011 ratification itself |
+| R5 | needs-attention | 1 medium: §2 cluster headings still used "Ratification order constraint" uniformly contradicting three-class TL;DR/§5 |
+| R6 | needs-attention | 1 medium (×3): SI-011 references outside §2/§5 still used "EARLIER in same calendar window" + "depends on" ordering language |
+| R7 | needs-attention | 1 medium: TL;DR dependency-depth arrow-chain notation conflated ratification-order with IMPL-readiness |
+| R8 | needs-attention | 1 medium: SI-011 inventory row's "Net new artifacts" cell listed MarketingCopy CDM + I-030 as unconditional artifacts when they're conditional (chair option a vs b) |
+| R9 | **APPROVE** | No findings; doc internally consistent on three-class constraint framing across all surfaces |
+
+### Novel patterns reinforced
+
+1. **Constraint gradations must be preserved in every doc occurrence.** This is the dominant pattern across all 9 rounds. When a constraint set has gradations (HARD vs IMPL-readiness vs RECOMMENDED batching; or in SI-013/014 R5: required-condition-list with N items), every textual occurrence of the constraint across the document must enumerate the gradations explicitly. Flattening any single occurrence into "hard rules" or "the only constraint is X" recreates the over-constraint or under-constraint regression the gradation was added to prevent. The cycle pattern: introduce gradation in primary section (TL;DR) → secondary section drifts back to ungradient form → fix → tertiary section drifts → fix → ... → exhaust all secondary surfaces.
+
+2. **Inventory tables are heavily-consulted navigation surfaces, not "secondary" docs.** R5/R6/R7/R8 all caught drift in §1 inventory table cells, §2 cluster headings, §3 sub-ceremony rows, and §4 judgment-dimension subsections. A document reviewer would naturally update TL;DR + §5 closing first because those are most-visible — but inventory tables are scanned MORE often than narrative sections because their density is high. Pattern: when a constraint changes class, update inventory + table cells FIRST, then narrative.
+
+3. **Arrow-chain shorthands collapse gradations.** R7 caught "SI-010 → SI-005/SI-008/SI-009/SI-011 → SI-012/SI-013/SI-014" — a dependency-depth notation that conflated ratification-order with IMPL-readiness. Visual shorthands designed for one type of dependency must be carefully replaced when a second type is introduced, or readers will infer the more restrictive (ratification-order) interpretation by default.
+
+4. **Conditional artifacts must be labeled conditional in summary forms.** R8 caught the inventory cell listing MarketingCopy CDM + I-030 as unconditional SI-011 artifacts when they're conditional (chair option a/b). Summary forms that list artifacts MUST distinguish the unconditional ratifications from artifacts conditional on a chair decision. Otherwise a chair using the inventory table will record P-022 incorrectly.
+
+5. **A 9-round trajectory on a docs-only PR is acceptable when each round closes a real defect class.** The cycle pattern was discipline, not toil — each Codex round identified a genuine source-of-truth drift that a chair would have hit. The convergence completed in <1 calendar day with each round taking ~5-10 minutes of edits + Codex re-review. The alternative (ship the doc earlier with known drift) would have caused governance regression at ratification time — much higher cost than the iteration time. Pattern: docs-only PRs that touch many normative surfaces benefit from extended Codex iteration even when no code is changing.
+
+### Cycle tally (post-PR #167)
+
+- **PRs merged this autonomous run: 31** (+1 since Addendum 28)
+- **Codex pre-ratification rounds: 120+** (PR #167 adds 9 — second-longest convergence after PR #164's 10-round SI-013)
+- **Substantive Codex closures: 150+** (PR #167 adds 10: 2H + 1M (R1), 1H + 1M (R2), 1M (R3), 1M (R4), 1M (R5), 1M (R6), 1M (R7), 1M (R8))
+- **SIs filed this cycle: 7** (SI-008/009/010/011/012/013/014; ratifier queue at 10 pending)
+- **Distributed-systems / safety-surface / governance integrity patterns: 33** (PR #167 adds 5 above)
+- **Reusable autonomous-scope documentary artifacts: 1** (the Ratifier Ceremony Agenda is the first cross-SI navigation doc in the repo; future autonomous runs that file new SIs can extend this template)
+
+### What this enables next
+
+The Ratifier Ceremony Agenda is the workflow-efficiency enabler for the Q2 2026 ratification ceremony. With it in hand, Evans + the signatories can plan the 8 sub-ceremonies with full dependency awareness and per-SI judgment-dimension pre-staging — no ceremony time spent re-deriving dependencies from each SI's full text. The doc explicitly preserves SI-014 classifier-choice neutrality (Option A/B/C/D is a CRITICAL clinical-safety judgment the agenda does NOT recommend) and the three-class constraint framing (HARD ratification-correctness vs IMPLEMENTATION-readiness vs RECOMMENDED batching) that materially reduces over-constraint risk.
+
+If ratification of even SI-012 (Track 1 pilot blocker — recommended first sub-ceremony) lands in the next 1-2 weeks per the agenda's recommended order, the Med Interaction Engine slice is unblocked for implementation, materially accelerating the Telecheck-Ghana pilot launch timeline.
+
+### Next natural entry points
+
+With PR #167 merged, the autonomous-scope work has now covered:
+- 7 new SIs filed (the ratifier-blocked backlog)
+- 1 reusable test-infrastructure module (PR #165 audit-failure injection harness)
+- 1 reusable cross-SI navigation doc (PR #167 Ratifier Ceremony Agenda)
+
+Pure code-only items still available:
+
+1. **Integration test for parallel injection across two emitters in one test file** (deferred from Addendum 27's entry-point list — exercise the closure-per-instance property end-to-end at the HTTP boundary; today only unit-level isolation is proven from PR #165)
+2. **AI Service module structure expansion** — current handlers/* tree may need refactoring for Mode 2 case-prep landing
+3. **Mode 2 case-prep handler scaffolding** — wire contract published; depends on protocol-engine + I-012 audit chain canonicalization
+4. **A second cross-SI navigation doc** for the Cluster B Async Consult schema family (similar to the Ratifier Ceremony Agenda but focused on the SI-005+008+009 deferred-FK semantics + downstream Sprint 9/10 impl impact)
+5. **Implementation State Audit update** — the 2026-05-15 audit predates all the new SIs filed in this cycle; an updated audit reflecting SI-008/009/010/011/012/013/014 + their dependency implications would be valuable groundwork for Evans's ratification ceremony planning
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 ratifier-agenda close (31 PRs MERGED; 150+ Codex closures; 9-round single-doc convergence on the constraint-gradation pattern class; Q2 2026 ratification ceremony pre-staged with full dependency awareness)
