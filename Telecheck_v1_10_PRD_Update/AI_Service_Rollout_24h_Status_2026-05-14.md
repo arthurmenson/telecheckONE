@@ -2574,3 +2574,76 @@ With PR #172 merged + 5 reusable artifacts now staged + pending closure debt enu
 5. **5th meta-navigation artifact** — diminishing marginal value warning still applies; 5 reusable artifacts is already a lot
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 sibling-doc-cross-validation-audit close (36 PRs MERGED; 166+ Codex closures; 3-round trajectory on the new-pattern-application class; 5th reusable autonomous-scope artifact landed; 4 drift items surfaced for the next follow-on patch PR)
+
+---
+
+## Addendum 35 — Per-slice STATUS doc refresh merged 2026-05-17 (7-round Codex convergence; novel grep-the-actual-code-three-times-per-PR pattern)
+
+**PR #173** — `docs(per-slice-status): refresh stale Pharmacy + Forms-Intake STATUS docs + fix Tenant-Config downstream-slice SI reference` — **MERGED** 2026-05-17. **7 rounds Codex (R1 → R7 APPROVE)** — convergence trajectory dominated by repeated grep-the-actual-code precision findings: 3 separate findings (R1 / R2 / R6) where my doc claims didn't match the actual source files when verified via `grep -E "app\.(get|post|...)"` or `grep -r resolveCcrKey`.
+
+### What landed
+
+Closes 3 of 4 drift items surfaced by PR #172 + 3 additional drift items Codex caught during this PR's review:
+
+- **Item 1 (HIGH, R1 M1)**: Pharmacy STATUS doc 12 days stale → 2026-05-17 post-SI-001-ratification amendment at top with 12-route enumeration (probes/reads/mutations) + State Machines v1.2 §19 + migration 025 + AUDIT_EVENTS v5.3 + DOMAIN_EVENTS v5.2 amendments
+- **Item 2 (MEDIUM, R2 M1)**: Forms-Intake STATUS doc misses publish-gate sentinel + body had pre-existing 19-route / phantom-/health drift → 2026-05-17 publish-gate-disclosure amendment + route count fix 19→18 + phantom /health row removed
+- **Item 4 (LOW, R3 M1)**: Tenant-Config line 162 stale SI-001 downstream reference → fix + line 44 narrative rewrite distinguishing implementation state vs CCR integration state (Pharmacy doesn't yet consume `resolveCcrKey`; grep-verified per R6 M1)
+- **R4 M1**: Pharmacy preserved body still read as v0.1 skeleton present-tense → historical-vs-current banner with 6 specific before/after corrections
+- **R5 M1**: Forms-Intake preserved Summary still read as implementation-complete present-tense → mirrored Pharmacy banner pattern with test-env-vs-prod-deploy distinction
+- **R6 M1**: Tenant-Config line 44 overstated current integration state → distinguished Pharmacy implementation state from Pharmacy↔Tenant-Config CCR integration state
+
+### Codex iteration (R1 → R7)
+
+| Round | Verdict | Severity → Closure |
+|---|---|---|
+| R1 | needs-attention | 1 medium: Pharmacy 11→12 route count + wrong clinician-discontinue endpoint name |
+| R2 | needs-attention | 1 medium: Forms-Intake 19→18 route count + phantom /health row |
+| R3 | needs-attention | 1 medium: Tenant-Config line 44 still future-tense "After Slice 4 unblocks" |
+| R4 | needs-attention | 1 medium: Pharmacy preserved body present-tense skeleton claims |
+| R5 | needs-attention | 1 medium: Forms-Intake preserved Summary present-tense "implementation-complete" |
+| R6 | needs-attention | 1 medium: Tenant-Config line 44 overstated Pharmacy as current CCR consumer |
+| R7 | **APPROVE** | No findings; all 3 STATUS docs converged on grep-verified state |
+
+### Novel patterns reinforced
+
+1. **Grep-the-actual-code drift propagates across MULTIPLE claims in a single PR.** Codex caught THREE independent grep-the-actual-code findings in this PR alone (R1 = Pharmacy route count; R2 = Forms-Intake route count; R6 = Pharmacy CCR-consumer state). Pattern: a docs PR that touches multiple source-file-cited claims should run those greps PROACTIVELY at write-time, not reactively per Codex round. If I'd run `grep -E "app\.(get|...)" src/modules/{pharmacy,forms-intake}/routes.ts | wc -l` + `grep -r 'resolveCcrKey' src/modules/pharmacy` at the start of this PR, all 3 findings would have been caught pre-Codex.
+
+2. **Historical-vs-current banner pattern at the layering boundary.** R4 + R5's keystone: the established Sprint-amendment layering pattern in this repo works ONLY when the historical body is written in past-tense or self-evidently dated. When the historical body uses present-tense current-state claims, an EXPLICIT historical-vs-current banner is required at the layering boundary, with per-claim before/after corrections enumerated. Tenant-Config didn't need a banner (body was self-evidently dated); Pharmacy + Forms-Intake both needed banners with concrete before/after enumerations.
+
+3. **Pre-existing drift in modified files is the right scope to close in the same PR.** R2 M1 caught Forms-Intake body drift that PR #172's original audit didn't surface (19→18 route count) — pre-existing drift, not introduced by this PR's amendments. Codex flagged it as part of the same review because the same grep-the-actual-code methodology applies to all modified files. Pattern: when a docs PR touches a file, Codex naturally examines the full file for drift, not just the lines the PR amends. Closing pre-existing drift items in the same PR is the right scope (vs filing a separate cleanup) because the file is already being modified + the discovery cost is amortized.
+
+4. **Source-of-truth grep commands belong in the doc itself.** R1 M1's Pharmacy fix landed with the explicit verification command embedded in the doc: `grep -E "app\.(get|post|put|patch|delete)" src/modules/pharmacy/routes.ts | wc -l`. R2 M1's Forms-Intake fix did the same. R6 M1's Tenant-Config fix embedded `grep -r 'resolveCcrKey' src/modules/pharmacy`. Pattern: when correcting a grep-verifiable claim, embedding the verification command IN THE DOC lets future readers (or future Codex passes) re-verify the claim with a one-liner. The command becomes the operational definition of the claim.
+
+5. **7-round trajectory holds for docs that touch multiple source-file-cited claims across multiple files.** Comparison: PR #170 (2-round, mirroring an existing pattern); PR #173 (7-round, surfacing grep-the-actual-code findings across 3 STATUS docs). The 3.5× round-count differential isn't a failure — each round caught a real concrete drift that would have shipped otherwise. Pattern: when a PR touches multiple source-file-cited claims, expect ~1 round per ~3-4 claims as Codex naturally enumerates the grep verifications. Plan budget accordingly.
+
+### Cycle tally (post-PR #173)
+
+- **PRs merged this autonomous run: 37** (+1 since Addendum 34)
+- **Codex pre-ratification rounds: 143+** (PR #173 adds 7)
+- **Substantive Codex closures: 172+** (PR #173 adds 6: R1 M1 + R2 M1 + R3 M1 + R4 M1 + R5 M1 + R6 M1)
+- **SIs filed this cycle: 7** (unchanged)
+- **Pending-ratifier SI queue: 12** (unchanged)
+- **Distributed-systems / safety-surface / governance integrity patterns: 63** (PR #173 adds 5 above)
+- **Reusable autonomous-scope artifacts: 5** (unchanged; PR #173 closes drift in existing artifacts rather than adding a new one)
+- **Cross-doc-drift items closed this run total: 11** (3 from PR #168 + 1 SI-014 from PR #169 + 4 from PR #172 covered by PR #173's items 1+2+4; PR #171's 2 Plan-patch items still pending separate spec-corpus PR)
+- **Pre-existing drift items closed in same-touched-file scope: 3** (Forms-Intake 19→18 route count + phantom /health row + Tenant-Config line 44 narrative — all caught by Codex during PR #173 review)
+
+### Pending closure debt
+
+After PR #173:
+
+| Source PR | Items pending | Closure path |
+|---|---|---|
+| PR #171 (Per-Track nav) | 2 Plan-patch items (Drift 1: 7→12 SI scope; Drift 2: Track 2 sub-bullet split) | Separate spec-corpus PR cycle requiring ratifier sign-off per Promotion Ledger discipline (STOP condition; not autonomous-scope) |
+| PR #172 (Cross-validation audit) | 0 (all 4 items closed in this PR — items 1+2+4 directly; item 3 was intentional no-action) | — |
+
+### Next natural entry points
+
+With PR #173 merged + the closure-debt list reduced to just the ratifier-blocked Plan-patch items:
+
+1. **AI Service module structure expansion** for Mode 2 case-prep scaffolding — depends on SI-008 ratification (ratifier-blocked but the scaffolding pattern could be pre-staged behind a feature flag)
+2. **3rd cross-validation pass** — extend the audit pattern to validate AUTONOMOUS_TURN_SUMMARY docs + BUILD_VS_SPEC_TRACEABILITY_MATRIX against current state (diminishing marginal value warning still applies)
+3. **Crisis-detection classifier-adapter scaffolding pre-staging** — STOP condition territory; depends on SI-014 ADR-030
+4. **Loop pause / status reflection** — given 37 PRs merged across this run + 5 reusable artifacts + 12 SIs in the ratifier queue, an explicit pause to surface "what's done + what's pending + what the next ratifier ceremony unlocks" to Evans might be higher-leverage than another PR
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 per-slice-STATUS-refresh close (37 PRs MERGED; 172+ Codex closures; 7-round trajectory on the grep-the-actual-code-three-times-per-PR class; 3 of 4 PR #172 audit-surfaced drift items closed + 3 pre-existing drift items closed in same-touched-file scope; closure-debt list reduced to ratifier-blocked Plan-patch items only)
