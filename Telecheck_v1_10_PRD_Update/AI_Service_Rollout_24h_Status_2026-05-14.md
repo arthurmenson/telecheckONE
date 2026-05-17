@@ -1906,3 +1906,81 @@ The Mode 1 chat surface is now fully tested end-to-end. Next non-ratifier-blocke
 4. **Mode 2 case-prep handler scaffolding** — wire contract published; depends on protocol-engine integration which has its own dependency on I-012 audit chain canonicalization.
 
 — Claude (Opus 4.7, 1M context), 2026-05-16 R4 H1 round-trip regression close (27 PRs MERGED; 120+ Codex closures; audit-failure injection harness is reusable infrastructure for any future handler with combined operational + safety-floor audit emission)
+
+---
+
+## Addendum 26 — SI-013 CCR crisis-helpline key ratification merged 2026-05-16 (10-round Codex convergence; novel 4-state forensic audit pattern)
+
+**PR #164** — `docs(SI-013): file CCR crisis-helpline key ratification SI with 4-state forensic audit` — **MERGED** 2026-05-16. **10 rounds Codex (R1 → R10 APPROVE)** — longest convergence trajectory of the autonomous run by 3x, driven by the cross-cutting nature of the change (safety surface + audit forensics + ops triage + TypeScript compile-time enforcement intersect in one SI).
+
+### What landed
+
+SI-013 ratifies three CCR keys for crisis-resource resolution + a NEW Category B audit event for forensic correlation, with four explicit safety/forensic rules constraining the downstream impl:
+
+**CCR keys (purely additive — `crisis` is a new domain):**
+- `crisis.helpline_e164` — country-of-care-driven crisis helpline (E.164 validated)
+- `crisis.helpline_label` — display string for sentinel localization
+- `crisis.emergency_number` — country emergency-services number (dialable string, NOT E.164 — short codes like 911/112 don't fit E.164, per R1 M1)
+
+**Four rules constraining the impl:**
+
+1. **Crisis gate runs FIRST, unconditional.** I-019 platform-floor; cannot be gated behind CCR lookup. Handler passes `escalationDestination: null` to gate (same as today); CCR resolution happens AFTER gate fires.
+2. **CCR resolution is FAIL-SOFT.** Wrapped in try/catch; failure → generic-sentinel fallback, NOT 503. Patient always gets a safety surface.
+3. **Country-profile defaults require TYPED resolvers** (three of them: `resolveCrisisHelpline`, `resolveCrisisHelplineLabel`, `resolveCrisisEmergencyNumber`). The generic `resolveCcrKey` doesn't walk country_profiles (per its own docstring) — using it would silently miss country defaults.
+4. **Paired Category B audit `crisis.escalation_destination_resolved`** with `linked_events` to the Category A audit + 4-state `resolution_status` enum + FAIL-SOFT emission policy (divergent from FLOOR-020 / Category C — never blocks the crisis sentinel response).
+
+### Codex convergence (R1 → R10): novel patterns surfaced each round
+
+The 10-round trajectory was driven by adversarial scrutiny tightening successive layers of the design as new contradictions surfaced. Each round closed a real defect class:
+
+| Round | Verdict | Severity → Closure |
+|---|---|---|
+| R1 | needs-attention | 2 high + 1 medium: safety ordering, typed resolvers required, E.164 naming drift on emergency_number → Rules 1+2+3 + key rename to `crisis.emergency_number` |
+| R2 | needs-attention | 1 high: engineering checklist contradicted Rules 1+3 → rewrote step-by-step to preserve all three rules |
+| R3 | needs-attention | 1 medium: destination never populated into audit chain → added Rule 4 (paired Category B audit) |
+| R4 | needs-attention | 1 medium: status-derivation null-only heuristic mis-classified unmapped as `ccr_unavailable` → added `ccrThrew` boolean to checklist |
+| R5 | needs-attention | 1 high: FLOOR-020 503 policy would suppress crisis sentinel → fail-soft callsite, intentionally divergent from Category C; added safety-surface guarantee tests |
+| R6 | needs-attention | 1 high + 1 medium: checklist said 9-case list (item 10 omittable) + Rule 3 listed only 2 of 3 typed resolvers → 10-case mandatory list + 3 typed resolvers named |
+| R7 | needs-attention | 1 medium: audit-says-resolved-but-patient-saw-generic on partial defaults → 4-state enum with `partial_defaults` + patient-surface-agreement contract |
+| R8 | needs-attention | 1 high: AUDIT_EVENTS ratification step + audit.ts emitter description still used 3-state enum → aligned with 4-state + discriminated-union TS typing |
+| R9 | needs-attention | 1 medium: one stale 3-state enum reference remained in sample-code comment → final closure |
+| R10 | **APPROVE** | No findings; document internally consistent on the 4-state contract |
+
+### Novel patterns reinforced
+
+1. **Audit must agree with what the patient saw.** Category B `resolved_destination` is non-null ONLY when status is `resolved` (full localization rendered). For `partial_defaults` / `unmapped_country` / `ccr_unavailable`, the renderer fell back to the generic sentinel and the audit records null to match. A pure null-check-on-helpline derivation would silently report "resolved" while the patient got "your care team has been alerted." This is a patient-surface-agreement invariant that generalizes to ANY audit recording state derived from a multi-input rendering pipeline.
+
+2. **Safety-floor commit path stays single-source.** The Category A `crisis_detection_trigger` audit remains on the synchronous safety-floor commit path (cannot be skipped, cannot be deferred, cannot accept callbacks). The new Category B `crisis.escalation_destination_resolved` rides a softer SLA (fail-soft on its own try/catch) so we can guarantee Category A delivery without coupling crisis-response delivery to a second blocking audit. This is the pattern for adding forensic enrichment to ANY existing safety-floor surface without weakening the original commit guarantee.
+
+3. **TypeScript discriminated-union argument types enforce contracts at compile time.** The emitter's signature MUST require `resolution_status` literal as a 4-value union AND `resolved_destination` is typed so the compiler rejects callsites that pass a non-null destination alongside any non-`resolved` state. Shifts the patient-surface-agreement contract from "engineer must remember" to "build fails if violated." Generalizable to ALL audit emitters where a detail field's nullability depends on a sibling enum value.
+
+4. **4-state config-quality enum > 3-state binary-failure enum.** `resolved` / `partial_defaults` / `unmapped_country` / `ccr_unavailable` provides distinct ops-triage classes: `resolved` → no action; `partial_defaults` → "ratifier, backfill missing field(s) for country X"; `unmapped_country` → "add full helpline defaults for country X"; `ccr_unavailable` → "fix CCR connectivity / investigate transient cause". A 3-state enum would collapse the first two (or first three) into one undifferentiated class and lose ops-triage precision. Generalizable to ANY configuration-resolution surface where partial-success states matter operationally.
+
+5. **Divergent failure policies are legitimate within the same module.** Mode 1 Category C (`ai_chat_response_emitted`) DOES return 503 on emission failure (operational audit; no in-flight safety event). Mode 1 Category B (`crisis.escalation_destination_resolved`) does NOT return 503 on emission failure (in-flight crisis; safety surface must reach patient). The divergence is explicit in the SI text, the engineering checklist, AND a regression-test obligation (item 10) so it can't silently regress. Generalizable to any handler where a "uniform audit failure policy" would actually be wrong.
+
+### Cycle tally (post-PR #164)
+
+- **PRs merged this autonomous run: 28** (+1 since Addendum 25)
+- **Codex pre-ratification rounds: 102+** (PR #164 adds 10 — longest convergence of the run)
+- **Substantive Codex closures: 131+** (PR #164 adds 11: 2H + 1M (R1), 1H (R2), 1M (R3), 1M (R4), 1H (R5), 1H + 1M (R6), 1M (R7), 1H (R8), 1M (R9))
+- **SIs filed this cycle: 6** (SI-008, SI-009, SI-010, SI-011, SI-012, SI-013)
+- **Pending-ratifier SI queue: 9** (SI-003/004/005/008/009/010/011/012/013)
+- **Distributed-systems / safety-surface integrity patterns: 19** (PR #164 adds 5 novel patterns above)
+
+### Why this took 10 rounds
+
+The SI is a single document but it sits at the intersection of FOUR contracts: I-019 (crisis-detection platform-floor), FLOOR-020 (Mode 1 audit envelope), I-003 (audit append-only — can't backfill Category A's destination), and I-027 (audit attribution). Codex methodically probed each intersection. The convergence pattern was: each round closed a defect class AND surfaced an adjacent defect class made visible by the previous closure. R3 added the Category B audit, which revealed R4's status-derivation gap, which revealed R5's blocking-503 contradiction, which revealed R6's incomplete typed-resolver enumeration, which revealed R7's partial-defaults audit-vs-patient-surface disagreement, which revealed R8's stale contract surface, which revealed R9's last sample-code comment drift. Each fix was conservative and bounded; convergence required surfacing every contradiction independently rather than rewriting the SI top-to-bottom.
+
+This is the discipline pattern: the SI started as a "small CCR key addition" (R1's framing) and emerged as a 261-line forensic-audit spec with compile-time invariant enforcement (R10's APPROVE). The 10 rounds bought defense-in-depth across four contracts that would have otherwise been impossible to detect via human review alone.
+
+### Next natural entry points
+
+With PR #164 merged, the pending-ratifier SI queue at 9 items is now the largest single bottleneck. Pure code-only items still available:
+
+1. **Crisis-detection clinical-grade NLP classifier** — currently keyword-stub per `src/lib/crisis-detection.ts`; documented v1.1 follow-up; doesn't depend on any ratifier work
+2. **Audit-emission injection harness extension** — the PR #163 pattern could be generalized into a reusable test-helper module for other handlers that need both operational + safety-floor audit emission paths (Mode 2 will need this; protocol-execution surfaces will need this)
+3. **AI Service module structure expansion** — current handlers/* tree may need refactoring for Mode 2 case-prep landing; planning could happen alongside ratification work
+4. **Async-Consult Sprint 10 route scaffolding** (clinician decision endpoints) — depends on SI-005 ratification but the route scaffolding could be authored alongside
+5. **Mode 2 case-prep handler scaffolding** — wire contract published; depends on protocol-engine + I-012 audit chain canonicalization
+
+— Claude (Opus 4.7, 1M context), 2026-05-16 SI-013 close (28 PRs MERGED; 131+ Codex closures; 10-round Codex convergence on a single SI; 5 novel forensic-audit + safety-surface patterns reinforced)
