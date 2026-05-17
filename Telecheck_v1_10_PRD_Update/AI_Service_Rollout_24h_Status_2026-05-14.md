@@ -2425,3 +2425,77 @@ With PR #170 merged + the deferred entry-point closed, the test-infrastructure w
 5. **Crisis-detection clinical-grade NLP classifier scoping work** — the SI-014 spec is filed; the implementation depends on ADR-030 ratification but the engineering team could pre-stage the classifier-adapter scaffolding behind a feature flag for any of A/B/C options
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 parallel-injection-integration close (34 PRs MERGED; 160+ Codex closures; 2-round trajectory on the new-test-that-mirrors-existing-pattern class; 4-times-deferred entry-point closed; audit-failure injection harness now proven at every relevant boundary)
+
+---
+
+## Addendum 33 — Per-Track SI Navigation doc merged 2026-05-17 (4-round Codex convergence; novel Plan-mandate-vs-post-Plan-refinement distinction pattern)
+
+**PR #171** — `docs(per-track): file 4th cross-SI navigation artifact — SI → Track → Cluster mapping` — **MERGED** 2026-05-17. **4 rounds Codex (R1 → R4 APPROVE)** — convergence trajectory dominated by surfacing the Plan-mandate-vs-post-Plan-refinement distinction that the previous 3 navigation artifacts hadn't been forced to confront.
+
+### What landed
+
+Fourth cross-SI navigation artifact joining the 3 existing reusable autonomous-scope artifacts (PR #165 audit-failure injection harness + PR #167 Ratifier Ceremony Agenda + PR #168 Implementation State Audit). Answers a fourth question: **"which Tracks does each SI unblock, and what is each Track waiting on?"** Maps the 12 OPEN SIs to Master Completion Plan v1.0 Tracks (1-6) + Ratifier Ceremony Agenda Clusters (A-E).
+
+**7 sections:**
+- TL;DR with Plan-vs-current-state baseline note
+- §1 Track inventory (6 Tracks; Track 2 split between Plan's Buildable-now current Mode 1 surface vs SI-013/014 patient-localization upgrade; Track 6 split between Plan-original 7-SI scope vs post-Plan 12-SI scope)
+- §2 Per-SI Track allocation (reverse index)
+- §3 Phase A critical path documenting Plan's 4 Phase A deliverables verbatim + post-Plan refinement explicitly
+- §4 Per-sub-ceremony IMPL-surface-readiness matrix (distinguishes IMPL-surface ratification readiness from Track fan-out authorization)
+- §5 Recommended Plan patch documenting TWO drifts (7→12 SI scope; Track 2 sub-bullet split) with a separate Plan-patch PR recommendation
+- §6 What this doc is NOT + §7 Cross-references
+
+### Codex iteration (R1 → R4)
+
+| Round | Verdict | Severity → Closure |
+|---|---|---|
+| R1 | needs-attention | 1 medium: §4 matrix collapsed "IMPL-surface ratification readiness" and "Track fan-out authorization" into a single "Track X unblocks" column, contradicting the Plan's "NO PARALLELIZATION YET" rule. Closed by retitling §4 + explicit pre-matrix framing distinguishing the two concepts |
+| R2 | needs-attention | 1 high: doc overstated Plan mandate — the 12-SI / Tracks-1-2-3-fan-out-blocked model is a POST-PLAN refinement that emerged from the autonomous run's SI filings + cross-doc audit's drift surfacing. Plan v1.0 frames Phase A as 7 SIs + carves Track 2 Mode 1 out as "Buildable now without ratification gates." Closed by TL;DR baseline note + §1 Track 2 row split + §3 critical-path rewrite + NEW §5 Recommended Plan patch |
+| R3 | needs-attention | 1 medium: §1 Track 6 row still had unqualified "12 OPEN SIs" Phase A scope wording. Closed by splitting Track 6 row into Plan-original + Post-Plan recommended paragraphs matching TL;DR + §3 + §5 |
+| R4 | **APPROVE** | No findings; Plan-mandate-vs-post-Plan-refinement distinction consistent across all surfaces |
+
+### Novel patterns reinforced
+
+1. **Plan-mandate-vs-post-Plan-refinement is a constraint-gradation class.** The keystone Codex R2 H1 finding. When a navigation/consolidation doc derives from a sibling spec-corpus authority doc (here: Master Completion Plan v1.0) that has evolved differently than the navigation doc assumes, the navigation doc MUST EXPLICITLY surface the drift + recommend the patch path. Silently overriding the authority doc is the regression class. Pattern: navigation docs that aggregate across authority docs must distinguish "this is what the authority doc mandates" from "this is what current state recommends pending an authority-doc patch."
+
+2. **IMPL-surface ratification readiness vs Track fan-out authorization is a constraint-gradation class.** Codex R1 M1's finding. Per-sub-ceremony "Track X unblocks" framing collapses two different gating axes: (a) the spec contract for a specific IMPL surface becomes ratification-ready when its gating SI(s) ratify, AND (b) Track-level parallel-execution authorization requires the FULL Phase A ceremony close per Plan §"NO PARALLELIZATION YET" rule. Pattern: when a matrix has columns showing ratification state, the column semantics must distinguish surface-ratification-readiness from track-fan-out-authorization — these are independent axes.
+
+3. **Authority-doc carveouts must be preserved verbatim in derived navigation docs.** R2 H1's specific keystone: Plan §"Status pointer" item 4 explicitly says "Track 2 Mode 1 chat handler wire-up: Buildable now without ratification gates." This carveout was flattened in the previous doc draft into a generic "Tracks 1+2+3 blocked by Phase A" framing. Pattern: when an authority doc has explicit carveouts/exceptions, derived docs must preserve those carveouts verbatim — flattening them into a uniform rule is a regression class even if the derived rule is "tighter" than the carveout.
+
+4. **§1 inventory tables are the heaviest-consulted navigation surface — patch them FIRST when constraint gradations change.** R3 M1 caught that the TL;DR + §3 + §5 were patched for the Plan-vs-post-Plan distinction but the §1 Track 6 inventory row still used unqualified "12 OPEN SIs" wording. Pattern (extends Addendum 29 pattern 2): when constraint gradations change mid-doc-cycle, update inventory tables FIRST, then narrative — inventory tables are the high-density navigation surface a reader consults before the narrative.
+
+5. **4-round trajectory holds for docs that surface a new constraint-gradation class.** Unlike PR #170's 2-round trajectory (mirrored an existing test pattern) or PR #167's 9-round trajectory (introduced a brand-new constraint-class enumeration through repeated drift cycles), PR #171's 4 rounds reflected: 1 round surfacing the constraint class (R1 — IMPL-surface vs Track-fan-out) + 1 round surfacing the authority-doc-drift (R2 — Plan-mandate vs post-Plan-refinement) + 1 round patching the §1 inventory after the framing landed elsewhere (R3) + 1 final APPROVE. Pattern: docs that surface a new constraint-gradation class converge in ~3-5 rounds because each round adds one new framing dimension.
+
+### Cycle tally (post-PR #171)
+
+- **PRs merged this autonomous run: 35** (+1 since Addendum 32)
+- **Codex pre-ratification rounds: 133+** (PR #171 adds 4)
+- **Substantive Codex closures: 163+** (PR #171 adds 3: R1 M1 + R2 H1 + R3 M1)
+- **SIs filed this cycle: 7** (unchanged; PR #171 is documentation, not new SI)
+- **Pending-ratifier SI queue: 12** (unchanged; PR #171 navigates the queue rather than altering it)
+- **Distributed-systems / safety-surface / governance integrity patterns: 53** (PR #171 adds 5 above)
+- **Reusable autonomous-scope artifacts: 4** (PR #165 harness + PR #167 agenda + PR #168 audit + PR #171 per-Track nav)
+- **Plan-patch recommendations surfaced: 2** (Drift 1: 7→12 SI scope; Drift 2: Track 2 sub-bullet split) — both queued for a separate Plan-patch PR cycle requiring spec-corpus ratifier sign-off
+
+### What this enables next
+
+The 4 reusable navigation artifacts now collectively answer four different questions about the Q2 2026 ratifier ceremony + downstream IMPL work:
+
+1. **PR #165 harness:** "How do we test combined operational + safety-floor audit emission paths?"
+2. **PR #167 agenda:** "What ceremonies in what order?"
+3. **PR #168 audit:** "What implementation state does each ratification unlock?"
+4. **PR #171 per-Track nav:** "Which Tracks does each SI unblock, and what is each Track waiting on?"
+
+A Track lead or ceremony chair can now navigate from any of these four entry points to a fully drift-free picture (post the PR #169 agenda-patch + this PR's §5 Plan-patch recommendation). The remaining cross-doc drift is the Plan ↔ ratifier-queue inventory drift (Drift 1) and the Plan ↔ Track 2 carveout-precision drift (Drift 2) — both queued for a separate Plan-patch PR that requires spec-corpus ratifier sign-off (not autonomous-scope per Promotion Ledger discipline).
+
+### Next natural entry points
+
+With PR #171 merged + the 4th navigation artifact complete, the autonomous-scope navigation-doc work is largely complete (a 5th nav artifact would have diminishing marginal value). Pure code-only items remaining:
+
+1. **Second sibling-doc cross-validation pass** — extend the PR #168 audit pattern to validate Promotion Ledger + per-slice STATUS docs against SI source files (deferred from Addendum 31). Different from this PR's Plan-vs-current-state cross-validation; this would catch Promotion-Ledger-vs-SI-source drift specifically
+2. **AI Service module structure expansion** — current `handlers/*` tree may need refactoring for Mode 2 case-prep landing
+3. **Mode 2 case-prep handler scaffolding** — wire contract published; depends on SI-008 + protocol-engine + I-012 audit chain canonicalization
+4. **Crisis-detection classifier-adapter scaffolding pre-staging** — requires SI-014 ADR-030 ratification first (STOP condition territory)
+5. **Spec-corpus Plan-patch PR** — implements the 2 drift items §5 surfaced (7→12 SI scope; Track 2 sub-bullet split). Requires spec-corpus ratifier sign-off per Promotion Ledger discipline — sits in Track 6 work queue, not Track 1-5 work
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 per-Track-navigation close (35 PRs MERGED; 163+ Codex closures; 4-round trajectory on the new-constraint-gradation-class pattern; 4th reusable autonomous-scope navigation artifact landed; 2 Plan-patch recommendations surfaced for future spec-corpus PR)
