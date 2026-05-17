@@ -2285,3 +2285,67 @@ Pure code-only items still available:
 5. **A third cross-SI navigation doc** — the audit + agenda pair could be extended with a per-Track view (Track 1/2/3/4/5/6 from the Master Completion Plan) showing how the SI queue maps to the plan's tracks
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 implementation-state-audit close (32 PRs MERGED; 156+ Codex closures; 5-round trajectory on the grep-the-actual-code pattern class; 3 reusable autonomous-scope artifacts now staged for the Q2 2026 ratifier ceremony; agenda-patch list of 3 items surfaced for follow-on cleanup)
+
+---
+
+## Addendum 31 — Ratifier Agenda 3-patch + SI-014 source patches merged 2026-05-17 (2-round Codex convergence; novel doc-A-fix-requires-doc-B-fix pattern)
+
+**PR #169** — `docs(ratifier-agenda + SI-014): apply 3 patch items from Implementation State Audit cross-doc-drift surfacing` — **MERGED** 2026-05-17. **2 rounds Codex (R1 → R2 APPROVE)** — straightforward convergence: PR closed 3 cross-doc-drift items the previous audit explicitly surfaced + 1 follow-on (SI-014 source patches required by the agenda's own source-of-truth disclaimer).
+
+### What landed
+
+Three patches to PR #167's Ratifier Ceremony Agenda + a 4th patch to PR #166's SI-014 source file (required because the agenda's §5 disclaimer makes SI source files authoritative):
+
+**Patch 1 — Inventory completeness** (R1 H2 from PR #168): TL;DR count 10 → 12; HIGH count 3 → 4 (SI-007 added); Independent list extended; §1 SI-002 + SI-007 rows inserted; §1 severity 3 HIGH+7 MEDIUM → 4 HIGH+8 MEDIUM; §2 Cluster A 3→4 SIs (SI-002 added as sibling of SI-003); §2 Cluster E 1→2 SIs (SI-007 added); §3 sub-ceremony 1 became Cluster E batch (SI-012+SI-007); §3 sub-ceremony 3 became placeholder-namespace sibling pair (SI-002+SI-003); §3 total time 5-9 hr → 8-12 hr (sum of actual row estimates 465-680 min, rounded); §4 SI-002 + SI-007 judgment-dimensions added.
+
+**Patch 2 — SI-014 Closure path A vs B scoping** (R2 H1 from PR #168): §1 inventory SI-014 row + §4 SI-014 judgment dimensions both rewritten to scope the 2 audit-surface amendments + I-022 row amendment to Closure path A only (Options A/B/C ship classifier); Closure path B explicitly noted as ZERO amendments (Option D defers, SI-014 stays open).
+
+**Patch 3 — SI-002 stale-dependency in SI-003 row** (R2 M1 from PR #168): §1 SI-003 row removed "(SI-002 closed earlier)" stale claim; explicit sibling relationship documented; §4 SI-003 dimensions added explicit sibling-alignment dimension.
+
+**Patch 4 (R1 H2 follow-on this PR) — SI-014 source Rule 3 + Rule 5 hard-rule text scoped to Closure path A**: the agenda's §5 disclaimer makes SI source files authoritative, so patching only the agenda would have been defeated by SI-014 source's still-unconditional Rule 3 ("Whatever option ratifies, the downstream impl MUST update I-022...") and Rule 5 ("Two distinct AUDIT_EVENTS amendments are required"). Both rules now explicitly say "APPLIES ONLY UNDER CLOSURE PATH A" with explicit "UNDER CLOSURE PATH B: ZERO" framing.
+
+### Codex iteration (R1 → R2)
+
+| Round | Verdict | Severity → Closure |
+|---|---|---|
+| R1 | needs-attention | 2 high: §3 sub-ceremony count mis-claim (advertised 9 but only 8 rows; SI-002 placement inconsistency; time arithmetic 6-10 hr vs actual 8-12 hr); SI-014 source still unconditionally required Rule 3 + Rule 5 amendments contradicting the agenda's new Path A scoping |
+| R2 | **APPROVE** | No findings; both agenda and SI-014 source consistently scope Path A vs B semantics |
+
+### Novel patterns reinforced
+
+1. **Doc-A-fix-requires-doc-B-fix when doc-A defers to doc-B as source-of-truth.** The agenda's §5 disclaimer makes SI source files authoritative for any ratification decision. If a patch to doc A scopes a previously-unqualified surface (Path A vs B for SI-014's Rule 3 + Rule 5), the same scoping MUST land in doc B in the SAME PR — otherwise the source-of-truth disclaimer defeats doc A's patch. R1 H2 caught this: agenda was patched but SI-014 source remained unqualified. Pattern: when patching a consolidation/navigation doc, check whether the patched claim is one the consolidation doc DERIVES from a source-of-truth file vs one it ESTABLISHES. Derived claims require the source-of-truth file to be patched too.
+
+2. **Sub-ceremony count drift comes from inserting-into-existing-rows vs adding-new-rows.** R1 H1 caught a sub-ceremony count claim of 9 that didn't match the actual 8 rows. The drift came from a natural confusion: adding SI-002 + SI-007 to the queue (12 SIs) made it tempting to claim more sub-ceremonies, but the actual patch had SI-007 batched into sub-ceremony 1 (Cluster E pair) and SI-002 batched into sub-ceremony 3 (sibling pair) — neither added a new ceremony slot. Pattern: when a patch adds new items to an existing structure, distinguish "new container needed" from "fits in existing container" and check that count/time aggregates reflect the actual outcome.
+
+3. **Time-budget arithmetic is mechanical and verifiable.** Codex R1 H1 explicitly summed the table's per-row estimates (60-90 + 60-90 + 30-45 + 60-90 + 30-45 + 90-120 + 120-180 + 15-20 = 465-680 min = 7h45m-11h20m) and caught that the claimed "6-10 hr total" was wrong by ~50%. Pattern: aggregate numerical claims (counts, totals, sums) in agenda docs MUST be derivable from the underlying rows and should be re-computed on every patch, not carried forward from a previous round.
+
+4. **Cross-doc-drift cleanups require sibling-doc patches in the same PR.** The Implementation State Audit (PR #168) surfaced 3 drift items in the Ratifier Ceremony Agenda. PR #169 closed those 3 items + the SI-014 source items that derive from the agenda's scoping. The cleanup chain is naturally 1-shot: a sibling-doc audit surfaces items → a follow-on PR closes them → the autonomous run can verify closure by re-running the same audit. This is the operational pattern for "audit doc + cleanup PR" pairs.
+
+5. **2-round closure is the expected trajectory for follow-on cleanup PRs.** Unlike SI-013's 10-round + SI-014's 6-round + agenda's 9-round trajectories (where each round surfaced an adjacent defect class), the agenda-patch + SI-014-scoping closure converged in 2 rounds because the scope was bounded: 3 explicit cleanup items from the audit + 1 sibling-source-of-truth patch surfaced in R1. Pattern: follow-on cleanup PRs that close items from a prior audit should converge in 2-3 rounds because the scope is enumerated up-front. If a cleanup PR exceeds ~4 rounds, the scope has expanded and the PR may need to be split.
+
+### Cycle tally (post-PR #169)
+
+- **PRs merged this autonomous run: 33** (+1 since Addendum 30)
+- **Codex pre-ratification rounds: 127+** (PR #169 adds 2)
+- **Substantive Codex closures: 159+** (PR #169 adds 3: 2H (R1) + 1H follow-on)
+- **SIs filed this cycle: 7** (unchanged; this PR is cleanup, not new SI)
+- **Pending-ratifier SI queue: 12** (unchanged; PR #169 patches the agenda to correctly enumerate the 12)
+- **Distributed-systems / safety-surface / governance integrity patterns: 43** (PR #169 adds 5 above)
+- **Reusable autonomous-scope documentary artifacts: 3** (unchanged; PR #169 hardens existing artifacts rather than adding new ones)
+- **Agenda-patch items from prior audit: 0 remaining** (all 3 from PR #168 closed; +1 surfaced by Codex R1 H2 closed in the same PR)
+
+### What this enables next
+
+With PR #169 merged, the Ratifier Ceremony Agenda (PR #167) is now fully reconciled against the SI source files. The agenda + audit + SI texts converge on the same Path A vs B semantics for SI-014, the same 12-SI inventory + 8-sub-ceremony structure for the Q2 2026 ceremony, and the same dependency-graph for SI-011's IMPL-readiness gates. Evans's ceremony planning has a clean, drift-free set of pre-ratification artifacts.
+
+### Next natural entry points
+
+With PR #169 merged + all known cross-doc drift items closed, the pre-ratification documentary work is largely complete. Pure code-only items still available:
+
+1. **Integration test for parallel injection across two emitters in one test file** (deferred from Addendum 27 / 29 / 30 entry-point lists — exercise the closure-per-instance property end-to-end at the HTTP boundary)
+2. **AI Service module structure expansion** — current handlers/* tree may need refactoring for Mode 2 case-prep landing
+3. **Mode 2 case-prep handler scaffolding** — wire contract published; depends on protocol-engine + I-012 audit chain canonicalization
+4. **A per-Track navigation doc** — Master Completion Plan v1.0 has 6 tracks; the agenda + audit map SIs to clusters but not to plan-tracks; a 4th cross-SI artifact could show SI → cluster → plan-track mapping
+5. **A second sibling-doc cross-validation pass** — extend the audit pattern to validate the Promotion Ledger (and the various per-slice STATUS docs) against the SI source files; catches drift that the agenda-only-vs-audit validation might miss
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 agenda-patch-and-SI-014-source-patch close (33 PRs MERGED; 159+ Codex closures; 2-round trajectory on the follow-on-cleanup-PR pattern class; all 3 audit-surfaced agenda-patch items closed + 1 follow-on SI-014 source patch; Q2 2026 ratifier ceremony pre-staging is now drift-free across agenda + audit + SI texts)
