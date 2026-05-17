@@ -37,6 +37,131 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-013 — 2026-05-17 — SI-007 closure: Refill + Dispensing + Shipment canonical schemas (content-change promotion; 18-round Codex pre-ratification convergence; sub-ceremony 1 of Q2 2026 ratifier ceremony)
+
+**Type:** Content-change promotion (per operating rule 6 — Registry version bump from v2.11 → v2.12; three new entity expansions + AUDIT_EVENTS contract version bump + DOMAIN_EVENTS in-place additive extension + CDM §audit_events CHECK constraint amendment).
+
+**Status:** RATIFIED 2026-05-17 (workstream lead sign-off; sub-ceremony 1 of the Q2 2026 ratifier ceremony per `arthurmenson/telecheck-app:docs/Ratifier-Ceremony-Agenda-Q2-2026.md`).
+
+**Author:** Autonomous Claude (SI-007 v0.1 → v0.19 cycle 2026-05-14; 18 rounds of Codex pre-ratification adversarial-review convergence; the asymptote-class iteration discipline established by P-011); ratified by Evans (workstream lead) 2026-05-17 in chat-message ratification with explicit "I ratify" sign-off after review of the Ratifier Packet — Sub-Ceremony 1 (SI-012 + SI-007) artifact authored 2026-05-17.
+
+**Trigger:** SI-007 (Refill + Dispensing + Shipment schema gap; recorded in `arthurmenson/telecheck-app:docs/SI-007-Refill-Dispensing-Shipment-Schema-Gap.md` v0.19 DRAFT) blocked the pharmacy fulfillment lifecycle implementation. CDM v1.3 §3.5 listed entities #19 Refill, #20 Dispensing, #21 Shipment in the inventory but provided no §4 field-level expansions. Per the State Machines v1.1 §2 Refill state machine (23 states) + §5 Pharmacy Fulfillment state machine (9 states) being canonical, the gap was schema-only; this entry closes that gap by porting the ratified SI-007 v0.19 row shapes into CDM §4.17 + §4.18 + §4.19 as canonical content.
+
+**Pre-ratification gate (per P-011 retrospective):** 18 rounds of Codex adversarial-review convergence on the SI-007 v0.1 → v0.19 DRAFT trajectory closed 18 HIGH findings inline (R1 terminal-state contradiction + circular FK ambiguity → R2 §5 fulfillment-state ownership boundary → R3 NOT NULL contradicted XOR + Refill EXPIRED missing → R4 newly-added terminal states missing audit/domain entries → R5 pickup success path inconsistency + Dispensing.CANCELLED missing from enum → R6 `any → CANCELLED` contradicted append-only → R7 Shipment carrier_id duplicate-bullet → R8 Refill↔Dispensing atomicity → R9 Dispensing↔Shipment atomicity → R10 PENDING_CARRIER_PICKUP state added → R11 pre-dispatch cancellation cross-entity rule → R12 pickup-mode post-counter-opened cancellation → R13 universal cross-entity coordination table → R14 missing DOMAIN_EVENTS for coordination table → R15 FULFILLING→READY canonical naming → R16 `refill.released` dup → R17 `shipment.dispatched` dup → R18 plain FKs cross-tenant attack vector). The 18-round trajectory reflects SI-007's wider surface (3 entities + 2 cross-entity handoffs + tenant-scoped FK fan-out) compared to SI-001's 1 entity. Convergence call: R18 closure resolved the last new finding class (cross-tenant attack vector); subsequent rounds expected doc-polish only.
+
+**Promotion class:** content-change. Three new entity expansions + new audit/domain IDs + AUDIT_EVENTS §I-012 closure-rule prose amendment all require Registry version bump per operating rule 4.
+
+**Version bumps applied at P-013:**
+- Artifact Registry **v2.11 → v2.12** (this file's parent record; coverage counts updated: entities 42 → 45 (added Refill #19, Dispensing #20, Shipment #21); Contracts Pack rows updated)
+- Canonical Data Model **v1.3 → v1.4** (added §4.17 Refill + §4.18 Dispensing + §4.19 Shipment; amended `audit_i012_workload_evidence_required` CHECK constraint to add `refill.{clinician_approved, protocol_approved, bridge_supply_dispensed, execution_rejected}` to the I-012 action list in lockstep with AUDIT_EVENTS v5.4 §I-012 closure rule extension)
+- State Machines **v1.2** (NO version bump — §2 Refill state machine + §5 Pharmacy Fulfillment state machine were already canonical pre-P-013; SI-007 is a schema gap, not a state-machine gap. The cross-entity Shipment-event → Refill-transition coordination table from SI-007 §4.19 documents the cross-table coordination but does NOT introduce a new state machine.)
+- AUDIT_EVENTS Contracts Pack **v5.3 → v5.4** (38 net-new Category A action IDs replacing the placeholder set: 20 `refill.*` + 8 `dispensing.*` + 10 `shipment.*`; §I-012 closure-rule prose amended to add `refill.{clinician_approved, protocol_approved, bridge_supply_dispensed, execution_rejected}` to the authoritative I-012 action-class set + extend the `prescribing.*` future-extension carve-out from P-011 to include `refill.*` confirmation actions added by an I-012-amending SI promotion. P-013 IS the I-012-amending act for these additions.)
+- DOMAIN_EVENTS Contracts Pack **v5.2** (additive enum extension only — no normative-rule change; 20 net-new tenant-scoped event types added: 10 `refill.*` (partition_key `tenant_id:refill_id`) + 3 `dispensing.*` (partition_key `tenant_id:dispensing_id`) + 7 `shipment.*` (partition_key `tenant_id:shipment_id`). Audit-only carve-outs documented for high-volume internal events `shipment.in_transit_update`, `shipment.pending_carrier_pickup`, and `refill.fulfilling_started`.)
+
+**Changes:**
+
+1. **CDM v1.4 §4.17 — NEW entity expansion (Refill).** ~25 columns. Append-only at business-final states (`{COMPLETED, INELIGIBLE, DECLINED, CANCELLED, EXPIRED}`). State enum matches State Machines v1.1 §2 plus v0.4 EXPIRED addition. Composite FKs (`tenant_id, *_id`) per ADR-023 + PROJECT_CONVENTIONS r5 §1.1. Path 1 integration with Med Interaction Engine via `refill.interaction_safety_hold_triggered` domain event (mirrors MedicationRequest §4.16 Path 1).
+
+2. **CDM v1.4 §4.18 — NEW entity expansion (Dispensing).** ~15 columns. Source XOR: `refill_id IS NOT NULL XOR medication_request_id IS NOT NULL` enforced via CHECK constraint. Append-only at RELEASED + CANCELLED. Atomic Refill state UPDATE + Dispensing INSERT in single `withTransaction` (R8 closure precedent).
+
+3. **CDM v1.4 §4.19 — NEW entity expansion (Shipment).** ~15 columns. `carrier_id` + `pickup_location_id` mode-specific NOT-NULL via CHECK (delivery_preference discriminator). Authoritative link: `shipments.dispensing_id` (child holds the link; Dispensing does NOT carry `shipment_id`). Atomic Dispensing RELEASED + Shipment INSERT(PENDING_CARRIER_PICKUP) in single tx (R9 closure precedent). PENDING_CARRIER_PICKUP state (R10 closure) closes the pharmacist-released-but-not-yet-picked-up gap; CANCELLED_BEFORE_DISPATCH reachable only from PENDING_CARRIER_PICKUP.
+
+4. **CDM v1.4 §audit_events `audit_i012_workload_evidence_required` CHECK constraint amended.** `refill.clinician_approved`, `refill.protocol_approved`, `refill.bridge_supply_dispensed`, `refill.execution_rejected` added to the `action NOT IN (...)` list (database-level enforcement of the AUDIT_EVENTS v5.4 §I-012 closure rule's authoritative-set amendment). Without this lockstep amendment, a refill-execution audit row could pass the CHECK with null workload/autonomy fields, recreating the I-012 envelope gap.
+
+5. **CDM v1.4 §3.5 entity inventory.** Footnote pointers added: entity #19 Refill → §4.17 (canonical from v1.4 per P-013); entity #20 Dispensing → §4.18 (canonical from v1.4 per P-013); entity #21 Shipment → §4.19 (canonical from v1.4 per P-013). Body-resident entity count: 42 → 45.
+
+6. **AUDIT_EVENTS v5.4 — 38 net-new Category A action IDs:**
+   - **Refill (20):** `refill.{requested, eligible, ineligible, signals_evaluated, clinician_approved, clinician_declined, protocol_approved, protocol_declined, fulfilling_started, dispatched, delivered, delivery_failed, pickup_available, picked_up, completed, cancelled, expired, safety_hold_triggered, bridge_supply_dispensed, execution_rejected}`
+   - **Dispensing (8):** `dispensing.{queued, claimed, released, exception_recorded, held, escalated, resolved, cancelled}`
+   - **Shipment (10):** `shipment.{pending_carrier_pickup, pickup_from_pharmacy, pickup_counter_opened, in_transit_update, delivered, delivery_failed, pickup_available, picked_up, pickup_expired, cancelled_before_dispatch}`
+
+7. **DOMAIN_EVENTS v5.2 (amend in place) — 20 net-new event types:**
+   - **Refill (10):** `refill.{approved, dispatched, delivered, delivery_failed, pickup_available, picked_up, completed, cancelled, expired, interaction_safety_hold_triggered}`
+   - **Dispensing (3):** `dispensing.{released, exception_escalated, cancelled}`
+   - **Shipment (7):** `shipment.{pickup_from_pharmacy, pickup_available, picked_up, delivered, delivery_failed, pickup_expired, cancelled_before_dispatch}`
+   - **Audit-only carve-outs (no domain emission):** `shipment.in_transit_update` (high-volume carrier scan events); `shipment.pending_carrier_pickup` (internal handoff state-creation event); `refill.fulfilling_started` (internal lifecycle bookkeeping; downstream subscribers consume `dispensing.released` or `shipment.pickup_from_pharmacy` / `shipment.pickup_counter_opened`).
+
+No removals. No envelope shape changes. No breaking changes to existing slices.
+
+**Ratifier decisions explicitly approved at sub-ceremony 1:**
+- Refill append-only on terminal states `{COMPLETED, INELIGIBLE, DECLINED, CANCELLED, EXPIRED}`: **APPROVED** (consistent with Consent §7.1 precedent + I-003 audit-chain integrity).
+- Dispensing source XOR (`refill_id` ⊕ `medication_request_id`) via CHECK constraint: **APPROVED** (matches Pharmacy Fulfillment §5 "linked to Refill or Prescription" model).
+- ADR-008 bridge-supply path requires I-012 evidence: **APPROVED** (bridge supply is a clinical decision even on the safe-default path; same three-clause rule as prescribing; recorded as the canonical `refill.bridge_supply_dispensed` audit emission with I-012 envelope evidence).
+- Inventory awareness stays as `in_stock_status` column on Dispensing (not factored into a separate Inventory entity): **APPROVED** (v1.0 scope; Inventory entity proper deferred to v1.1+ scope decision).
+
+**Unblocks:**
+- Pharmacy slice closes the final 8% (cockpit `slice-pharmacy` task 92% → 100%); Refill + Dispensing + Shipment surfaces become implementable.
+- Subscription slice completion (downstream `period_end` transition creates a Refill); unblocks parallel with this entry.
+- Cancellation Deflection workflow (depends on Refill linkage).
+- Cart workflow + multi-product cart (depend on Refill creation on checkout).
+- Shipment tracking surfaces.
+
+**Lessons captured:**
+- **The 18-round Codex pre-ratification convergence trajectory** is the new high-water mark for ratification-class spec corpus changes — wider surface (3 entities + cross-entity handoffs + tenant-scoped FK fan-out) explains the longer trajectory vs SI-001's 11 rounds.
+- **Composite tenant-scoped FKs are platform-floor** for tenant-owned references (closes the cross-tenant attack vector per R18). Plain single-column FKs are FORBIDDEN for tenant-owned references per the §4.19 invariant block.
+- **Atomic cross-entity tx discipline** applies universally to every Shipment-event → Refill-transition pair (R13 closure). Not just cancellation paths.
+- **Audit-only carve-outs are the right pattern for high-volume internal lifecycle events** that have no external subscriber business meaning (R14/R15 carve-outs).
+
+**Registry absorption:** Registry v2.11 → v2.12. Coverage counts updated: entities 42 → 45; state machines 19 → 19 (no new SMs — §2 + §5 already canonical); Contracts Pack rows updated (AUDIT_EVENTS v5.4 with 38 net-new Category A action IDs + §I-012 closure-rule amendment; DOMAIN_EVENTS in-place at v5.2 with 20 net-new event types); CDM row updated to v1.4 with §4.17 + §4.18 + §4.19 + audit_events CHECK amendment noted.
+
+**Source-of-truth artifact:** the SI-007 DRAFT v0.19 at `arthurmenson/telecheck-app:docs/SI-007-Refill-Dispensing-Shipment-Schema-Gap.md` is the workstream-canonical record of the cycle (18 findings closed inline; Codex APPROVE on the Ratifier Packet sub-ceremony 1 review track). The bundle copies above ARE the canonical post-promotion state; the DRAFT itself is preserved as the audit-trail artifact for the cycle.
+
+---
+
+### Entry P-012 — 2026-05-17 — SI-012 closure: Med Interaction Engine CDM expansion — InteractionSignal + InteractionOverride + InteractionRuleset (content-change promotion; sub-ceremony 1 of Q2 2026 ratifier ceremony)
+
+**Type:** Content-change promotion (per operating rule 6 — Registry version bump consolidated with P-013 v2.11 → v2.12; three new entity expansions in CDM v1.4).
+
+**P-012 slot repurposing note:** Per Addendum 4 (2026-05-14) of `arthurmenson/telecheck-app:Telecheck_v1_10_PRD_Update/AI_Service_Rollout_24h_Status_2026-05-14.md`, the originally-proposed P-012 use (AI Service module implementation-milestone logging) was deferred because the Promotion Ledger is exclusively for spec-corpus promotions, not implementation milestones (per the P-001..P-011 precedent inventory). The P-012 slot was therefore unused but reserved. Repurposing P-012 for SI-012 (spec-corpus CDM expansion — fits the Ledger's actual purpose) is the cleanest move per Evans's 2026-05-17 ratifier choice ("P-012 (uses the deferred slot)" — symmetry bonus: SI-012 → P-012; cleanest sequencing — no downstream cascade shift of SI-002 P-014 / SI-005 P-017 / SI-008 P-018 / SI-009 P-019 / SI-010 P-020 / SI-011 P-021 etc.).
+
+**Status:** RATIFIED 2026-05-17 (workstream lead sign-off; sub-ceremony 1 of the Q2 2026 ratifier ceremony per `arthurmenson/telecheck-app:docs/Ratifier-Ceremony-Agenda-Q2-2026.md`).
+
+**Author:** Autonomous Claude (SI-012 v1.0 authored 2026-05-16; Med-Interaction module audit + Track 1 critical-path identification); ratified by Evans (workstream lead) 2026-05-17 in chat-message ratification with explicit "I ratify" sign-off after review of the Ratifier Packet — Sub-Ceremony 1 (SI-012 + SI-007) artifact authored 2026-05-17.
+
+**Trigger:** SI-012 (Med-Interaction Engine CDM expansion; recorded in `arthurmenson/telecheck-app:docs/SI-012-Med-Interaction-CDM-Expansion.md`) blocked the Medication Interaction Engine slice implementation. CDM v1.3 §3.5 contains the slice's entity references (signals, overrides, rulesets) at the conceptual level but no §4 field-level expansions. The Medication Interaction Engine Slice PRD v1.0 IS ratified in the bundle (slice PRD §4 + §5 + §6 + §9 cover the conceptual model). Engineering work cannot legitimately begin until canonical row shapes exist (per CLAUDE.md hard rule "do NOT silently fork specs"). This entry closes that gap by adding the three entity row shapes to CDM §4 as canonical content.
+
+**Promotion class:** content-change. Three new entity expansions require Registry version bump per operating rule 4 (consolidated with P-013's bump in the same sub-ceremony — Registry v2.11 → v2.12 covers both).
+
+**Version bumps applied at P-012:**
+- Artifact Registry **v2.11 → v2.12** (consolidated with P-013; coverage counts updated: entities 45 → 48 (added InteractionSignal #46, InteractionOverride #47, InteractionRuleset #48 — three NEW entity numbers beyond the §3.5 inventory which previously stopped at 45 post-P-013); CDM row updated to v1.4 with §4.20 + §4.21 + §4.22 added).
+- Canonical Data Model **v1.3 → v1.4** (consolidated with P-013; adds §4.20 InteractionSignal + §4.21 InteractionOverride + §4.22 InteractionRuleset).
+- AUDIT_EVENTS Contracts Pack **v5.4** (no version bump for P-012; audit event canonicalization for `interaction_signal_emitted`, `interaction_override_authorized`, etc. is explicitly **out of scope** per the SI-012 §"What this SI does NOT propose" decision approved by Evans 2026-05-17 — separate AUDIT_EVENTS v5.5+ amendment when the Med Interaction Engine impl needs concrete audit IDs).
+- DOMAIN_EVENTS Contracts Pack **v5.2** (no version bump for P-012; same rationale — separate event canonicalization deferred to impl-time SI).
+
+**Changes:**
+
+1. **CDM v1.4 §4.20 — NEW entity expansion (InteractionSignal).** ~12 columns. PK `intsig_<ULID>`; FK chain to `tenants`, `medication_requests`, optionally `patients` (nullable for in-flight signals). `check_class` ENUM: `drug_drug` | `drug_condition` | `drug_lab` | `pharmacogenomic` | `special_clinical_flag` (the exact five classes per slice PRD §4; **drug-allergy is NOT a separate class** — allergies surface via `drug_condition` or `special_clinical_flag` per ratified slice + Evans's 2026-05-17 explicit confirmation). `severity` ENUM per slice PRD §5.2. Composite tenant-scoped FKs per ADR-023 + PROJECT_CONVENTIONS r5 §1.1.
+
+2. **CDM v1.4 §4.21 — NEW entity expansion (InteractionOverride).** ~9 columns. PK `intovr_<ULID>`. FK to `interaction_signals` + `accounts` (clinician). `override_class` ENUM: `informed_override` | `risk_accepted` | `monitoring_plan_added`. `expires_at` for bounded override window (typically prescription cycle). Composite tenant-scoped FKs.
+
+3. **CDM v1.4 §4.22 — NEW entity expansion (InteractionRuleset).** ~9 columns. PK `intrs_<ULID>`. CCR-driven (`country_of_care`). `vendor` ENUM: `vendor:firstdatabank` | `vendor:lexicomp` | `vendor:medscape` (extensible). Versioned activation window (`effective_from` / `effective_until`). `status` ENUM: `draft` | `active` | `retired`.
+
+4. **CDM v1.4 §3.5 entity inventory.** Three new entity numbers added: #46 InteractionSignal (Pharmacy & Fulfillment family); #47 InteractionOverride (Pharmacy & Fulfillment family); #48 InteractionRuleset (Pharmacy & Fulfillment family). Body-resident entity count: 45 → 48 (post-P-013 baseline + P-012's three additions).
+
+No removals. No envelope shape changes. No breaking changes to existing slices.
+
+**Ratifier decisions explicitly approved at sub-ceremony 1:**
+- The 3 entity row shapes as proposed in SI-012 §"CDM expansion shape proposed": **APPROVED** (faithful to ratified slice PRD §5 conceptual model).
+- drug-allergy stays merged into `drug_condition` + `special_clinical_flag`, NOT added as 6th enum value: **APPROVED** (slice PRD §4 explicitly enumerates 5 classes only).
+- InteractionRuleset entity ratified as proposed (NOT split for pharmacogenomic-specific complexity): **APPROVED** (defer pharmacogenomic-specific complexity to a separate SI if/when vendor adapter scope demands it).
+- Out-of-scope items confirmed deferred: severity thresholds (slice PRD §5.2 already covers); audit event canonicalization (`interaction_signal_emitted`, `interaction_override_authorized`) → separate AUDIT_EVENTS v5.5+ amendment.
+
+**Unblocks:**
+- Medication Interaction Engine slice (`src/modules/med-interaction/`) becomes implementable. Module reclassifies from SKELETON to SUBSTANTIAL after migrations 032/033/034 land.
+- Platform-floor rule "interaction engine runs BEFORE clinician commits prescription" (Master PRD v1.10 §7) becomes enforceable at the data-model level.
+- **Telecheck-Ghana pilot launch unblocked at the spec-corpus layer** — Med Interaction Engine was the only SKELETON slice among pilot-required slices per the 2026-05-15 Implementation State Audit (`arthurmenson/telecheck-app:docs/Implementation-State-Audit-2026-05-17.md`).
+- AI Clinical Assistant Slice §7.3 (signal consumption by Mode 1 / Mode 2) gains canonical row shapes to consume.
+
+**Lessons captured:**
+- **Sub-ceremony batching works:** two ratifier-independent SIs (SI-012 + SI-007) ratified together in sub-ceremony 1 of the Q2 2026 ceremony with shared quorum (Evans + Engineering Lead + CDM v1.2 owner). Saves ratifier time; both Promotion Ledger entries land same-day with shared Registry bump v2.11 → v2.12.
+- **Pilot-launch standalone blockers ratify first:** the agenda §3 sub-ceremony 1 framing (SI-012 + SI-007 as the "Cluster E batch" — pilot-launch standalone blockers with no inter-cluster dependencies) is the right ratification-order leverage: highest single-sub-ceremony LOC unblock + Track 1 Telecheck-Ghana pilot launch.
+
+**Registry absorption:** Registry v2.11 → v2.12 (consolidated with P-013). Coverage counts updated: entities 45 → 48 (post-P-013 + P-012 additions); CDM row updated to v1.4 with §4.20 + §4.21 + §4.22 added.
+
+**Source-of-truth artifact:** the SI-012 v1.0 at `arthurmenson/telecheck-app:docs/SI-012-Med-Interaction-CDM-Expansion.md` is the workstream-canonical record. The bundle copies above ARE the canonical post-promotion state; the source SI itself is preserved as the audit-trail artifact.
+
+---
+
 ### Entry P-011 — 2026-05-11 — SI-001 closure: MedicationRequest canonical schema (content-change promotion; 11-round Codex pre-ratification convergence)
 
 **Type:** Content-change promotion (per operating rule 6 — Registry version bump from v2.10 → v2.11; new entity + new state machine + new audit/domain IDs + AUDIT_EVENTS contract version bump). Distinct from P-009/P-010 reconciliation pattern: P-011 introduces new artifact content (not body↔doc-control alignment), so the Registry bump is mandatory per operating rule 4.
