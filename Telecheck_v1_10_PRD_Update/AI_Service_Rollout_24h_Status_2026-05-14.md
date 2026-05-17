@@ -2647,3 +2647,86 @@ With PR #173 merged + the closure-debt list reduced to just the ratifier-blocked
 4. **Loop pause / status reflection** — given 37 PRs merged across this run + 5 reusable artifacts + 12 SIs in the ratifier queue, an explicit pause to surface "what's done + what's pending + what the next ratifier ceremony unlocks" to Evans might be higher-leverage than another PR
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 per-slice-STATUS-refresh close (37 PRs MERGED; 172+ Codex closures; 7-round trajectory on the grep-the-actual-code-three-times-per-PR class; 3 of 4 PR #172 audit-surfaced drift items closed + 3 pre-existing drift items closed in same-touched-file scope; closure-debt list reduced to ratifier-blocked Plan-patch items only)
+
+---
+
+## Addendum 36 — 3rd sibling-doc cross-validation audit merged 2026-05-17 (2-round Codex convergence)
+
+**Date:** 2026-05-17 (Sprint 38, autonomous turn)
+**PR:** `arthurmenson/telecheck-app#174` (MERGED `244ad66` 2026-05-17 09:53 UTC)
+**Branch:** `docs/3rd-cross-validation-audit-2026-05-17` (deleted post-merge)
+**Codex rounds:** 2 (r1 → 3 findings: 2 MEDIUM + 1 LOW → all closed inline → r2 APPROVE clean)
+
+### Entry point
+
+Per Addendum 35's "what next" list option 2: extend the PR #168 + PR #172 R3-class sibling-doc cross-validation pattern to the next 4 high-traffic sibling artifacts. The current message that fired (a stale wake-up prompt describing already-completed PR #173 STATUS doc refresh work) was acknowledged + pivoted to option 2 as the actual next critical-path autonomous-scope item.
+
+### What shipped (PR #174 — single file added)
+
+- `telecheck-app/docs/Sibling-Doc-Cross-Validation-Audit-Round-3-2026-05-17.md` (245 lines after r1 closures)
+
+The audit surfaces **19 drift items** (3 HIGH + 3 MEDIUM + 13 LOW) across:
+- `docs/BUILD_VS_SPEC_TRACEABILITY_MATRIX.md` (r6 dated 2026-05-12) — **largest drift surface**
+- `docs/AUTONOMOUS_TURN_SUMMARY_2026-05-05.md`
+- `docs/AUTONOMOUS_TURN_SUMMARY_2026-05-08.md`
+- `docs/AUTONOMOUS_TURN_SUMMARY_2026-05-11.md`
+
+### HIGH-severity drift in matrix r6
+
+1. **§4 OPEN-list is missing 10 OPEN SIs** (8 newly-filed SI-007/008/009/010/011/012/013/014 absent entirely + 2 pre-existing SI-004/005 misclassified as CLOSED). Matrix r6 lists only SI-002 + SI-003; current OPEN inventory per `docs/SI-*.md` source files is 12 SIs.
+2. **§4 CLOSED-list incorrectly lists SI-004 + SI-005 as closed.** Both source files are clearly OPEN, with no `## Status: CLOSED` block, and explicit forward-looking "When SI-XXX closes:" resolution paths. The matrix's "resolved during async-consult slice authoring; Sprint 9-10" claim is an outright fabrication relative to the source files — slice authoring was when they were FILED at Sprint 9 / TLC-021a, not resolved.
+3. **§3 Async Consult row miscites SI-006 + SI-007 with the wrong subject.** SI-006 is the Idempotency reserve-then-execute SI (CLOSED Sprint 33-34), NOT Payment. SI-007 is the Refill/Dispensing/Shipment schema SI, NOT AI Service.
+
+### MEDIUM-severity drift in matrix r6
+
+4. §2 Pharmacy "BLOCKED on SI-001" row stale post-P-011 (Pharmacy module now substantially-implemented per PR #173 reclassification SKELETON → SUBSTANTIAL).
+5. §1 I-012 row + §3 Pharmacy state-machine row self-contradict matrix r6's own revision-history block that documents SI-001 ratification.
+6. §6 cumulative-metrics "Closed Spec Issues" line restates the §4 Closed-list error (downstream of HIGH-2).
+
+### LOW-severity drift (historical-record framing)
+
+13 line-level stale claims across the 3 dated AUTONOMOUS_TURN_SUMMARY docs. Recommended treatment: historical-vs-current banner pattern PR #173 established for the Pharmacy + Forms-Intake STATUS docs (R4/R5 finding lineage).
+
+### Codex r1 findings (all closed inline → r2 APPROVE)
+
+| # | Sev | Issue | Resolution |
+| --- | --- | --- | --- |
+| 1 | MEDIUM | §5 patch 2 said "Add SI-001 row" but matrix already has SI-001 RATIFIED/P-011 row at line 161 | Revised to "retain existing SI-001 + SI-006 rows; only remove SI-004 + SI-005 (table shrinks 4 → 2)" |
+| 2 | MEDIUM | HIGH-1 said "missing 8 SIs" but source comparison shows 12 OPEN vs 2 listed = 10 missing | Renamed to "missing 10 OPEN SIs (8 newly-filed + 2 misclassified-as-CLOSED)" + added sub-paragraph clarifying the 2 distinct drift surfaces |
+| 3 | LOW | §4 said SI-001 ratified "one day after this doc was written" but P-011 landed same calendar date as the 2026-05-11 doc | Replaced with "later on 2026-05-11 / same calendar date as this doc but after the snapshot was captured" |
+
+Codex r2 returned APPROVE clean with no material findings.
+
+### What this PR does NOT do
+
+- Does NOT edit the drifted artifacts (matrix r6 + 3 AUTONOMOUS_TURN_SUMMARY docs)
+- Does NOT file a Spec Issue (drift is in code-repo `docs/` artifacts; no spec-corpus governance escalation needed)
+- Does NOT touch the Q2 2026 Ratifier Ceremony Agenda (PR #167) — that agenda already correctly enumerates the 12-OPEN-SI inventory; this audit closes the gap between the agenda + matrix
+
+Per the R3-class pattern (PR #168 + PR #172), the 11 recommended patches (8 to matrix r6 → r7; 3 banner-only to AUTONOMOUS_TURN_SUMMARY series) stage into a **separate follow-on PR** which this audit doc is the evidence base for.
+
+### Cockpit
+
+- `progress.json` r131 → r132 (matched bump for PR #174 merge)
+
+### Patterns reinforced
+
+- **R3-class sibling-doc cross-validation discipline** — now applied 3 times (PR #168 → PR #172 → PR #174). Each pass picks a different sibling-doc cluster + applies the same precision discipline (grep-the-actual-code + read-the-actual-SI-source-files; sibling-doc summaries are NOT the source of truth).
+- **Drift-surfacing vs drift-patching staging** — the audit PR surfaces; the patch PR fixes. Two separate Codex review cycles. The R3-class pattern is now codified across 3 PRs.
+- **Source-of-truth precedence holds:** (1) actual code files, (2) actual SI source files in `docs/SI-*.md`, (3) sibling-doc summaries that may be stale. This audit's HIGH-2 finding is a direct demonstration: matrix r6 said SI-004 + SI-005 were closed "during async-consult slice authoring; Sprint 9-10" — but the source files prove that's when they were FILED, not resolved.
+
+### Drift items reaching this audit's drift-surface
+
+- **10 OPEN SIs missing from matrix r6 §4** (highest-impact single drift surface across 3 R3 passes — matrix r6's OPEN-list undercount is the broadest single artifact misrepresentation discovered to date).
+- The "matrix r6 revision-history block correctly documents SI-001 closure but the body wasn't swept" pattern is a known r6-incomplete-edit class; the follow-on patch PR will sweep §1 / §2 / §3 / §6 in one r7 amendment.
+
+### Closure-debt heading into Sprint 38+
+
+With PR #174 merged + the matrix r6 r7-amendment surfaced for follow-on:
+
+1. **Matrix r6 → r7 follow-on patch PR** — execute the 8 matrix patches + 3 AUTONOMOUS_TURN_SUMMARY banner patches enumerated in PR #174 §5. **AUTONOMOUS SCOPE.** Highest-leverage next item.
+2. **AI Service module structure expansion** for Mode 2 case-prep scaffolding — depends on SI-008 ratification (ratifier-blocked but the scaffolding pattern could be pre-staged behind a feature flag).
+3. **Crisis-detection classifier-adapter scaffolding pre-staging** — STOP condition territory; depends on SI-014 ADR-030.
+4. **Loop pause / status reflection** — given 38 PRs merged across this run + the matrix r6 → r7 sweep being the natural "all autonomous-scope drift items audited + ready-to-patch" milestone, an explicit pause to surface "what's done + what's pending + what the next ratifier ceremony unlocks" to Evans may be higher-leverage than continuing the loop.
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 3rd-cross-validation-audit close (38 PRs MERGED; 175+ Codex closures; 2-round trajectory matched the audit-doc class precedent from PR #168 + PR #172; 19 drift items surfaced; r7 matrix-amendment + 3 banner patches staged for follow-on).
