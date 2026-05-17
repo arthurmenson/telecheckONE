@@ -2349,3 +2349,79 @@ With PR #169 merged + all known cross-doc drift items closed, the pre-ratificati
 5. **A second sibling-doc cross-validation pass** — extend the audit pattern to validate the Promotion Ledger (and the various per-slice STATUS docs) against the SI source files; catches drift that the agenda-only-vs-audit validation might miss
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 agenda-patch-and-SI-014-source-patch close (33 PRs MERGED; 159+ Codex closures; 2-round trajectory on the follow-on-cleanup-PR pattern class; all 3 audit-surfaced agenda-patch items closed + 1 follow-on SI-014 source patch; Q2 2026 ratifier ceremony pre-staging is now drift-free across agenda + audit + SI texts)
+
+---
+
+## Addendum 32 — Parallel-injection integration test merged 2026-05-17 (2-round Codex convergence; novel vi.mock factory TDZ hoisting pattern)
+
+**PR #170** — `test(harness): parallel-injection integration test — HTTP-boundary proof of closure-per-instance isolation` — **MERGED** 2026-05-17. **2 rounds Codex (R1 → R2 APPROVE)** — closes the 4-times-deferred entry-point from Addenda 27/29/30/31.
+
+### What landed
+
+Extends PR #165's closure-per-instance isolation proof to TWO higher boundaries:
+
+1. **vi.mock factory boundary** — ONE `vi.mock` factory wraps TWO different exports from the same source module (`src/modules/ai-service/audit.ts`) with TWO independent injectors. Failure modes set on injector A do not leak into injector B's state even though both stubs live in the same mock module.
+
+2. **HTTP-request boundary** — the Mode 1 chat handler triggers injector A's wrapped export via a real Fastify HTTP request. Injector B (wrapping `aiServiceAuditPlaceholder`, which the chat handler does NOT call) remains in its set state across the request. Direct invocation of B's wrapped export from test code then consumes B without touching A.
+
+**6 test cases (Group PJ):**
+
+- **PJ1** baseline — both injectors normal → HTTP 200 + both states unchanged
+- **PJ2** A fail-always, B normal → 503 + B unchanged + direct B succeeds
+- **PJ3** A normal, B fail-always → 200 (chat doesn't call B) + A unchanged + direct B throws with B's emitterName
+- **PJ4** A fail-once + B fail-always → 503 (A self-consumes); A→normal; B unchanged; retry succeeds; direct B still throws
+- **PJ5** both fail-always → 503; both unchanged; direct B throws B's sentinel (NOT A's)
+- **PJ6** sentinel-name disambiguation — A throws `Mode1AuditInjectedFailure` subclass (per Mode 1 wrapper's `errorCtor` wiring); B throws plain `AuditInjectedFailure` base; both `instanceof AuditInjectedFailure`
+
+### Codex iteration (R1 → R2)
+
+| Round | Verdict | Severity → Closure |
+|---|---|---|
+| R1 | needs-attention | 1 high: vi.mock factory referenced a top-level test-file `const` (`auditPlaceholderInjector`) which is in the TDZ at factory-hoist time → moved declaration into a helper module (`tests/helpers/audit-placeholder-injection.ts`) so the import (also hoisted) resolves before the factory runs |
+| R2 | **APPROVE** | No findings; both PJ assertions and injector wiring confirmed |
+
+### Novel patterns reinforced
+
+1. **vi.mock factories are hoisted ABOVE top-level const declarations.** R1's H1 catch is a vitest-specific runtime hazard: Vitest hoists `vi.mock` factories to the top of the module load sequence, BEFORE top-level `const` initializers execute. A factory that references a test-file-local `const` will hit a TDZ (temporal dead zone) error when the mocked module is first imported. The fix is structural: per-injector helper modules (the PR #163 Mode 1 pattern) — imports ARE hoisted in the same pass as `vi.mock` factories, so an injector exported from a separate module IS available when the factory runs. Pattern: ANY state needed inside a `vi.mock` factory must be either (a) imported from a separate module, (b) wrapped in `vi.hoisted()`, or (c) inlined inside the factory itself. Never reference a top-level local const.
+
+2. **TypeScript + ESLint cannot catch vitest runtime-ordering hazards.** R1's H1 was undetected at typecheck + lint time because the symbol IS in scope per the static module graph. The hazard is purely runtime — and specifically a vitest-internal ordering quirk that no static analyzer models. Pattern: vitest-specific runtime hazards (vi.mock hoisting, vi.hoisted ordering, vi.doMock differences) require Codex review or a real test run to catch — they cannot be statically verified.
+
+3. **Per-injector helper modules are a STRUCTURAL pattern, not an organizational nicety.** The PR #165 "Future emitter harnesses" docstring already recommended per-emitter helper modules (Mode 1 pattern). PR #170 R1 caught that the parallel-injection test had drifted from that pattern by declaring the second injector inline — and the drift produced a real runtime bug. Pattern: the per-injector helper module is the structural solution to the vi.mock factory hoisting hazard. Test files that need multiple injectors MUST source each from a helper module.
+
+4. **Synthetic second targets preserve structural-proof value when production targets don't exist yet.** SI-013's downstream impl will introduce `emitCrisisEscalationDestinationResolved` as the real second Mode 1 audit emitter. Until that lands, the parallel-injection test uses `aiServiceAuditPlaceholder` (a type-cast helper, NOT a real emitter) as a synthetic second target. The synthetic target preserves the structural-proof value of the test (closure-per-instance isolation works at vi.mock + HTTP boundaries) without requiring SI-013 ratification. Pattern: when a deferred-test target depends on a not-yet-ratified spec change, a synthetic target that exercises the SAME structural pathway is a valid stand-in — the test value is in the pathway, not in the specific target.
+
+5. **2-round trajectory holds for follow-on-cleanup AND for new-test-files-that-mirror-an-existing-pattern.** PR #170's 2-round convergence (vs SI-013's 10-round, SI-014's 6-round, agenda's 9-round trajectories) reflects the scope: this PR mirrors the existing PR #163 vi.mock factory pattern + extends it to two injectors. Codex caught one hazard the new structure introduced (the TDZ issue); after the fix, no other findings. Pattern: new test files that mirror an established harness pattern converge fast because the precedent constrains the design space. PRs that establish NEW patterns (like SI-013's Rule 4 fail-soft policy) converge slow because the design space is open.
+
+### Cycle tally (post-PR #170)
+
+- **PRs merged this autonomous run: 34** (+1 since Addendum 31)
+- **Codex pre-ratification rounds: 129+** (PR #170 adds 2)
+- **Substantive Codex closures: 160+** (PR #170 adds 1: R1 H1)
+- **SIs filed this cycle: 7** (unchanged; PR #170 is test infrastructure, not new SI)
+- **Pending-ratifier SI queue: 12** (unchanged)
+- **Distributed-systems / safety-surface / governance integrity patterns: 48** (PR #170 adds 5 above)
+- **Reusable autonomous-scope artifacts: 3** (unchanged; PR #170 hardens existing PR #165 harness rather than adding a new artifact)
+- **Test files in tests/integration/: extended** — the parallel-injection integration test joins the existing PR #163 single-injector integration test + the PR #162 Mode 1 chat HTTP integration test, providing 3-layer coverage of the audit-failure injection harness (unit isolation in PR #165, single-injector HTTP in PR #163, parallel-injector HTTP in PR #170)
+
+### What this enables next
+
+With PR #170 merged, the audit-failure injection harness is now proven at every relevant boundary:
+
+- **Factory level** (PR #165 Group E unit tests): per-injector isolation in process
+- **vi.mock factory level** (PR #170 PJ tests): two injectors wrapping two exports in one factory
+- **HTTP-request level** (PR #170 PJ tests): isolation preserved across real Fastify HTTP requests
+- **Sentinel-error disambiguation level** (PR #170 PJ6): subclass identity + emitterName field both disambiguate
+
+SI-013's downstream impl can land the real Cat B `emitCrisisEscalationDestinationResolved` emitter by mechanically swapping the synthetic placeholder target for the real emitter. The structural pattern is proven.
+
+### Next natural entry points
+
+With PR #170 merged + the deferred entry-point closed, the test-infrastructure work is largely complete. Pure code-only items remaining:
+
+1. **Per-Track navigation doc** — 4th cross-SI artifact showing SI → cluster → Master Completion Plan track mapping (deferred from Addendum 31 entry-point list)
+2. **AI Service module structure expansion** — current handlers/* tree may need refactoring for Mode 2 case-prep landing
+3. **Mode 2 case-prep handler scaffolding** — wire contract published; depends on protocol-engine + I-012 audit chain canonicalization
+4. **Second sibling-doc cross-validation pass** — extend the PR #168 audit pattern to validate Promotion Ledger + per-slice STATUS docs against SI source files (deferred from Addendum 31)
+5. **Crisis-detection clinical-grade NLP classifier scoping work** — the SI-014 spec is filed; the implementation depends on ADR-030 ratification but the engineering team could pre-stage the classifier-adapter scaffolding behind a feature flag for any of A/B/C options
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 parallel-injection-integration close (34 PRs MERGED; 160+ Codex closures; 2-round trajectory on the new-test-that-mirrors-existing-pattern class; 4-times-deferred entry-point closed; audit-failure injection harness now proven at every relevant boundary)
