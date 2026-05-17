@@ -2499,3 +2499,78 @@ With PR #171 merged + the 4th navigation artifact complete, the autonomous-scope
 5. **Spec-corpus Plan-patch PR** — implements the 2 drift items §5 surfaced (7→12 SI scope; Track 2 sub-bullet split). Requires spec-corpus ratifier sign-off per Promotion Ledger discipline — sits in Track 6 work queue, not Track 1-5 work
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 per-Track-navigation close (35 PRs MERGED; 163+ Codex closures; 4-round trajectory on the new-constraint-gradation-class pattern; 4th reusable autonomous-scope navigation artifact landed; 2 Plan-patch recommendations surfaced for future spec-corpus PR)
+
+---
+
+## Addendum 34 — 2nd sibling-doc cross-validation audit merged 2026-05-17 (3-round Codex convergence; novel audit-policing-its-own-source-of-truth pattern)
+
+**PR #172** — `docs(cross-validation): file 2nd sibling-doc audit — Promotion Ledger + per-slice STATUS docs vs SI source files` — **MERGED** 2026-05-17. **3 rounds Codex (R1 → R3 APPROVE)** — convergence trajectory dominated by Codex catching this audit itself drifting from SI-011's source file's specific ledger target shape (P-021 + P-022..P-025 per sub-SI) into a blanket "P-022 target" framing.
+
+### What landed
+
+Second cross-doc-drift audit extending the PR #168 pattern to two NEW sibling-doc surfaces: Promotion Ledger (spec corpus) + per-slice STATUS docs (this repo). Closes the audit's stated scope.
+
+**4 drift items surfaced:**
+1. **HIGH** — `docs/PHARMACY_SLICE_STATUS_2026-05-05.md` is 12 days stale (claims SI-001 OPEN + skeleton-only; reality: P-011 closed SI-001 + 11 prescribe routes shipped per `src/modules/pharmacy/routes.ts`)
+2. **MEDIUM** — `docs/FORMS_INTAKE_SLICE_STATUS_2026-05-05.md` misses publish-gate sentinel + SI-011 IMPL gate disclosure
+3. **LOW (expected; no action)** — Promotion Ledger has 0 entries for the 12 OPEN SIs; absence is correct; awaiting Q2 2026 Ratifier Ceremony. Per-SI target ledger shapes vary: most target a single ceremony-cycle entry; SI-011 specifically targets P-021 umbrella + P-022..P-025 per sub-SI per its source file:191
+4. **LOW** — `docs/TENANT_CONFIG_FOUNDATION_STATUS_2026-05-05.md` line 162 carries stale "blocked on SI-001" downstream-slice reference (Codex R1 M1 closure 2026-05-17 reclassified from DRIFT-FREE → drift item)
+
+**2 sibling-doc surfaces verified DRIFT-FREE:** Consent + Identity STATUS docs. Promotion Ledger structurally drift-free (P-001..P-011 all accurately reflect their ratification artifacts).
+
+**Recommended single follow-on patch PR (items 1+2+4):** ~115-155 LOC across 3 STATUS docs; bounded scope; mirrors existing STATUS doc format.
+
+### Codex iteration (R1 → R3)
+
+| Round | Verdict | Severity → Closure |
+|---|---|---|
+| R1 | needs-attention | 1 medium + 1 medium: Tenant-Config STATUS doc wrongly classified DRIFT-FREE despite stale SI-001 downstream-slice reference (line 162); P-022 collective ledger framing contradicted SI-011 source which specifically targets P-021 umbrella + P-022..P-025 per sub-SI. Both closed by reclassifying §2.5 to drift item 4 + preserving SI-011's per-sub-SI ledger shape verbatim across §1 + TL;DR + §3 |
+| R2 | needs-attention | 1 medium: §1 verdict + §4 NOT-list still had blanket "target P-022" framing despite §1 table preserving SI-011's distinct shape. Closed by rewriting verdict + NOT-list to enumerate per-SI target ledger shape |
+| R3 | **APPROVE** | No findings; per-SI target ledger preservation consistent across all surfaces |
+
+### Novel patterns reinforced
+
+1. **An audit that polices source-of-truth drift in OTHER docs must itself preserve source-of-truth from authoritative files.** Codex R1 M2's keystone finding: the audit was being PRESCRIPTIVE ("P-022 will cover them collectively") rather than DESCRIPTIVE ("each SI source file records its own target ledger entry shape"). Pattern: audits should be descriptive — surfacing what the source files say — never prescriptive about what the source files OUGHT to say. Especially important when the audit's stated purpose is to surface drift in other docs; an audit that drifts from its own source-of-truth files defeats the meta-pattern.
+
+2. **Downstream-slice references in per-slice STATUS docs are a hidden drift surface.** Codex R1 M1's finding: the Tenant-Config STATUS doc's OWN state was accurate (foundation module COMPLETE) but it carried a stale "Pharmacy + Refill (Slice 4, blocked on SI-001)" planning view of a DOWNSTREAM slice. Pattern: STATUS docs are typically audited only against their own slice's implementation reality — but cross-slice planning views inside STATUS docs are an additional drift surface that requires separate audit attention. When a STATUS doc mentions OTHER slices' SI dependencies, those references must also be verified against current state.
+
+3. **DRIFT-FREE classifications need to enumerate what's been checked.** R1 M1's broader lesson: declaring a doc "DRIFT-FREE" without enumerating WHAT was checked invites readers to assume completeness. The corrected §2.5 now explicitly says what's accurate (Tenant-Config's own state) AND what's stale (the downstream Pharmacy reference). Pattern: DRIFT-FREE classifications should enumerate the verified dimensions, not just the doc-level conclusion. Otherwise a single missed dimension converts the audit into a false-positive cert.
+
+4. **Constraint-correction propagation extends to verdict sentences + NOT-lists.** R2 M1's continuation of the cross-PR meta-pattern: fixing constraint drift in the TL;DR + section narratives + tables is not enough — verdict sentences and What-this-doc-is-NOT lists can both recite the corrected claim and must be updated too. Pattern (same as Addenda 29/31/32/33): when correcting a source-of-truth-drift finding, the correction must propagate to EVERY surface that recites the corrected claim across the entire doc.
+
+5. **3-round trajectory holds for new-pattern-application docs (vs 2-round for established-pattern mirroring; vs 4+-round for new constraint-class introduction).** PR #172 mirrors the PR #168 audit pattern but applies it to a new doc surface; convergence took 3 rounds because Codex caught (a) drift items the audit itself created by being prescriptive about SI-011's ledger target, and (b) drift items the audit missed by under-classifying Tenant-Config as DRIFT-FREE. Pattern observation: applying an established pattern to a new doc surface converges in ~3 rounds — fast enough that the autonomous-run discipline holds; slow enough that Codex catches real findings.
+
+### Cycle tally (post-PR #172)
+
+- **PRs merged this autonomous run: 36** (+1 since Addendum 33)
+- **Codex pre-ratification rounds: 136+** (PR #172 adds 3)
+- **Substantive Codex closures: 166+** (PR #172 adds 3: R1 M1 + R1 M2 + R2 M1)
+- **SIs filed this cycle: 7** (unchanged; PR #172 is documentation, not new SI)
+- **Pending-ratifier SI queue: 12** (unchanged)
+- **Distributed-systems / safety-surface / governance integrity patterns: 58** (PR #172 adds 5 above)
+- **Reusable autonomous-scope artifacts: 5** (PR #165 harness + PR #167 agenda + PR #168 audit + PR #171 per-Track nav + PR #172 2nd cross-validation audit)
+- **Cross-doc-drift items surfaced this run total: 11** (PR #168 surfaced 3 agenda + 1 SI-014; PR #171 surfaced 2 Plan-patch; PR #172 surfaced 4 STATUS+Tenant-Config + 1 SI-011-shape-preservation note)
+- **Cross-doc-drift items closed this run total: 8** (3 from PR #168 + 1 SI-014 from PR #169; 4 from PR #172 still pending the recommended follow-on patch PR; PR #171's 2 Plan-patch items remain pending a separate spec-corpus PR)
+
+### Pending closure debt
+
+After PR #172, the autonomous run has surfaced cross-doc-drift items not yet closed:
+
+| Source PR | Items pending | Closure path |
+|---|---|---|
+| PR #171 (Per-Track nav) | 2 Plan-patch items (Drift 1: 7→12 SI scope; Drift 2: Track 2 sub-bullet split) | Separate spec-corpus PR cycle requiring ratifier sign-off per Promotion Ledger discipline (STOP condition territory; not autonomous-scope) |
+| PR #172 (Cross-validation audit) | 3 STATUS doc patches (Pharmacy header rewrite; Forms-Intake publish-gate disclosure; Tenant-Config downstream SI reference fix) | Single follow-on PR ~115-155 LOC; autonomous-scope; could be the next entry-point in the loop |
+
+The PR #172 follow-on items are the cleanest next code-only work item — they're enumerated drift items with clear scope, ~115-155 LOC across 3 STATUS docs.
+
+### Next natural entry points
+
+With PR #172 merged + 5 reusable artifacts now staged + pending closure debt enumerated above:
+
+1. **STATUS doc refresh PR** (cleanest immediate work — closes 3 of the 4 PR #172 drift items)
+2. **AI Service module structure expansion** — depends on SI-008 ratification (ratifier-blocked)
+3. **Mode 2 case-prep handler scaffolding** — depends on SI-008 + protocol-engine + I-012 audit chain canonicalization (ratifier-blocked)
+4. **Crisis-detection classifier-adapter scaffolding** — depends on SI-014 ADR-030 (STOP condition territory)
+5. **5th meta-navigation artifact** — diminishing marginal value warning still applies; 5 reusable artifacts is already a lot
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 sibling-doc-cross-validation-audit close (36 PRs MERGED; 166+ Codex closures; 3-round trajectory on the new-pattern-application class; 5th reusable autonomous-scope artifact landed; 4 drift items surfaced for the next follow-on patch PR)
