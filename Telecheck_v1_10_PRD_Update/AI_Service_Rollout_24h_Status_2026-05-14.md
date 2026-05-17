@@ -1984,3 +1984,72 @@ With PR #164 merged, the pending-ratifier SI queue at 9 items is now the largest
 5. **Mode 2 case-prep handler scaffolding** — wire contract published; depends on protocol-engine + I-012 audit chain canonicalization
 
 — Claude (Opus 4.7, 1M context), 2026-05-16 SI-013 close (28 PRs MERGED; 131+ Codex closures; 10-round Codex convergence on a single SI; 5 novel forensic-audit + safety-surface patterns reinforced)
+
+---
+
+## Addendum 27 — Audit-failure injection harness generalized into reusable factory merged 2026-05-16
+
+**PR #165** — `test(harness): generalize PR #163 audit-failure injection into reusable per-emitter factory` — **MERGED** 2026-05-16. 3 rounds Codex (R1 M1 closed: errorCtor option + Mode 1 wrapper passes subclass; R2 M1 closed: factory adapter pattern preserves legacy custom-message constructor; R3 APPROVE).
+
+### What landed
+
+Generalizes the PR #163 single-emitter audit-failure injection harness into a closure-per-emitter factory at `tests/helpers/audit-failure-injection.ts`. Mode 1 wrapper at `tests/helpers/mode-1-chat-audit-injection.ts` is now a thin delegation layer preserving the PR #163 named API verbatim — existing integration tests don't change.
+
+**Surfaces:**
+- `createAuditFailureInjector(emitterName, { errorCtor? })` → independent injector with own mode state
+- `AuditInjectedFailure` base class (carries `emitterName` for multi-injector disambiguation)
+- `Mode1AuditInjectedFailure extends AuditInjectedFailure` preserved with the PR #163 `(message?: string)` constructor
+- Private `Mode1AuditInjectedFailureFactoryAdapter` subclass satisfies the factory's `(emitterName: string)` signature without compromising the public surface
+
+**Test coverage (25 cases across two unit-test files):**
+- `tests/unit/audit-failure-injection.test.ts` — 17 cases × 5 groups (construction guards, default state, consumeOrThrow, sentinel error contract, per-injector isolation)
+- `tests/unit/mode-1-chat-audit-injection.test.ts` — 8 cases pinning the PR #163 backwards-compat surface (dual `instanceof` chain, custom-message direct construction, factory-adapter canonical message, named API ↔ injector handle state-coherence)
+
+### Codex iteration
+
+- **R1 (medium)** — `consumeMode1AuditFailureOrThrow` threw the generic `AuditInjectedFailure` base class, NOT `Mode1AuditInjectedFailure`. The subclass was exported but never instantiated by the consume path → any `err instanceof Mode1AuditInjectedFailure` assertion would silently regress. Closure: added `errorCtor: AuditInjectedFailureCtor` option to the factory; Mode 1 wrapper passes the subclass.
+- **R2 (medium)** — The R1 fix normalized `Mode1AuditInjectedFailure`'s constructor signature to `(_emitterName?: string)` to satisfy `AuditInjectedFailureCtor`, which regressed the legacy PR #163 `(message?: string)` contract. `new Mode1AuditInjectedFailure('custom diagnostic')` silently discarded the custom message. Closure: restored the public constructor to `(message?: string)` and introduced a private factory-adapter subclass that satisfies the factory's signature by ignoring the passed emitter name and calling the parent's no-argument constructor.
+- **R3** — APPROVE.
+
+### Patterns reinforced
+
+1. **Closure-per-instance > shared module state.** The PR #163 design used module-level `let mode = 'normal'` which mathematically cannot support two emitters in the same test file without collisions. The factory pattern eliminates the class of bug entirely by giving each emitter its own closed-over state.
+
+2. **`errorCtor` option for sentinel subclass preservation.** When a generic factory creates instances and downstream code wants a specific subclass (for `instanceof` assertions or telemetry tagging), an explicit `errorCtor` option in the factory's option bag is cleaner than runtime type-detection or a `factory.subclass()` builder chain. The subclass constructor must match the factory's expected signature, but a private adapter class can bridge any signature mismatch without polluting the public surface.
+
+3. **Adapter pattern for orthogonal surfaces.** When two surfaces (legacy direct-construction with custom message + new factory-construction with canonical message) need the same class to satisfy both contracts, an internal adapter subclass that translates one signature to the other is cleaner than overloading the public constructor or runtime-branching on argument type. The legacy surface stays exactly as it was; the factory surface gets the signature it needs; neither knows about the other.
+
+4. **Pin both contracts independently.** The wrapper-level test file added in R2 closure asserts BOTH the factory-injected canonical-message path AND the direct-construction custom-message path. A regression that breaks either silently would be caught.
+
+### Cycle tally (post-PR #165)
+
+- **PRs merged this autonomous run: 29** (+1 since Addendum 26)
+- **Codex pre-ratification rounds: 105+** (PR #165 adds 3)
+- **Substantive Codex closures: 133+** (PR #165 adds 2: R1 M1, R2 M1)
+- **Distributed-systems / safety-surface integrity patterns: 23** (PR #165 adds 4 above)
+- **Reusable test infrastructure modules: 1** (the new `audit-failure-injection.ts` factory is the first of its kind in the repo — future harnesses can follow the same closure-per-instance + named-wrapper + adapter-for-legacy-surface template)
+
+### Why this matters for SI-013's downstream impl
+
+When SI-013's CCR crisis-helpline keys ratify and engineering authors the downstream impl, the regression-test obligation list (item 10 from PR #164 closure) requires a Category B emitter failure → 200 sentinel STILL returned test. That test needs an injector for `emitCrisisEscalationDestinationResolved` that does NOT collide with the existing Mode 1 Category C `emitMode1ChatResponseAudit` injector. The harness generalization landed in this PR makes that as simple as:
+
+```typescript
+// tests/helpers/mode-1-chat-crisis-destination-audit-injection.ts
+import { createAuditFailureInjector } from './audit-failure-injection.ts';
+export const crisisDestinationAuditInjector =
+  createAuditFailureInjector('emitCrisisEscalationDestinationResolved');
+```
+
+Both injectors can coexist in the same test file without state collision. The pattern scales to N emitters.
+
+### Next natural entry points
+
+With PR #165 merged, the test-infrastructure backlog item is closed. Pure code-only items still available:
+
+1. **Crisis-detection clinical-grade NLP classifier** — keyword-stub upgrade; could be filed as an SI scoping the classifier choice (Anthropic Claude vs. on-prem fine-tune vs. hybrid) since classifier choice is a clinical-safety-floor decision
+2. **AI Service module structure expansion** — current handlers/* tree may need refactoring for Mode 2 case-prep landing; planning could happen alongside ratification work
+3. **Async-Consult Sprint 10 route scaffolding** — depends on SI-005 ratification but the route scaffolding could be authored alongside
+4. **Mode 2 case-prep handler scaffolding** — wire contract published; depends on protocol-engine + I-012 audit chain canonicalization
+5. **Integration test for Mode 1 chat handler PARALLEL injection** — exercise two injectors in the same test file (today's tests prove they're isolated via unit-level construction, but a real handler integration with two emitters would prove it at the HTTP boundary)
+
+— Claude (Opus 4.7, 1M context), 2026-05-16 harness-generalization close (29 PRs MERGED; 133+ Codex closures; first reusable test-infrastructure module in the repo; SI-013 downstream impl unblocked on the test-harness axis)
