@@ -2956,3 +2956,88 @@ The asymptote pattern is well-documented for ratification-class spec corpus chan
 5. **Sub-ceremonies 2-8 of Q2 2026 ratifier ceremony:** RATIFIER-BLOCKED. Sub-ceremony 1 is the proof-of-concept for the ratification cycle; the remaining 7 sub-ceremonies can follow the same PR-A1 → PR-A2/A3 → PR B → PR C pattern when Evans is ready.
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 sub-ceremony-1-ratification-intent close (41 PRs MERGED; PR-A1 = first telecheckONE PR ever; 189+ Codex closures cumulative; 6-round trajectory on PR-A1 with each round catching a real lockstep-invariant issue; ratification record durably landed on spec corpus main; PR-A2/A3/B/C staged for next loop firing).
+
+---
+
+## Addendum 40 — Mode shift to ratification-track; Sub-Ceremony 2 Packet (SI-008+SI-009) + ADR-030 Decision Brief merged 2026-05-17 (PR #177 telecheck-app; 3-round Codex)
+
+**Date:** 2026-05-17 (Sprint 38, autonomous turn)
+**PR:** `arthurmenson/telecheck-app#177` (MERGED `895131d` 2026-05-17 19:00 UTC) — 3-round Codex convergence (1 HIGH + 1 MEDIUM r1 closed inline → 1 MEDIUM r2 closed inline → r3 APPROVE clean)
+**Branch:** `docs/sub-ceremony-2-packet-and-adr-030-brief-2026-05-17` (deleted post-merge)
+
+### Entry point — Evans's 2026-05-17 mode-shift directive
+
+Evans's verbatim directive: **"We are pausing speculative autonomous work and moving into ratification. Start with Cluster E: SI-012 and SI-007. Then ratify SI-008 and SI-009 before SI-005. After that, clear SI-002, SI-003, SI-004, SI-010, SI-011, SI-013, and handle SI-014 only after the ADR-030 clinical safety decision. No new speculative scaffolding should be built against unratified schemas."**
+
+This is a structural shift in the autonomous-work posture:
+- **Cluster E** (sub-ceremony 1: SI-012 + SI-007) — ratification-intent recorded 2026-05-17 (PR-A1 `36efccd` per Addendum 39); canonical content port (PR-A2/A3) staged for next loop
+- **Cluster B sub-ceremony 2** (SI-008 + SI-009 — HARD-sequenced before SI-005): Ratifier Packet authored + Codex-approved in this PR; waiting on Evans's review + sign-off
+- **Sub-ceremonies 3-9** (Evans's ordering): SI-005, SI-002, SI-003, SI-004, SI-010, SI-011, SI-013 — Ratifier Packets to be authored on demand
+- **SI-014 + ADR-030**: ADR-030 Decision Brief authored in this PR + ready for clinical-safety quorum (Evans + Engineering Lead + Platform Clinical Governance + Platform AI Safety); SI-014 stays parked until ADR-030 ratifies
+
+### What shipped (PR #177 — 2 durable ratifier-input artifacts)
+
+**1. `docs/Ratifier-Packet-Sub-Ceremony-2-SI-008-SI-009-2026-05-17.md`** (188 lines post-Codex)
+
+Same shape as the Sub-Ceremony 1 packet (turn-message format Evans ratified yesterday via "I'm in sync with the recommendation. I ratify."). Saved as durable file so Evans can review at his own pace.
+
+- **SI-008** (AiWorkflowExecution; entity #19): 23-column schema (15 base + 8-column KMS envelope including DEK ciphertext), triple-composite FK invariants, CAS-and-supersession protocol, `record_workflow_pointer_swap()` SECURITY DEFINER procedure, three-tier audit durability, 4 genuine ratifier decisions (state vocabulary scope; protocol versioning Pattern A pin; recommendation storage TOAST vs S3; KMS envelope consolidation deferral)
+- **SI-009** (SyncSession; entity #17): 13-column schema, four-predicate atomic UPDATE, `record_consult_escalation_target_swap()` SECURITY DEFINER procedure, server-trusted actor identity via `SET LOCAL` tx-scoped binding (no caller-supplied actor identity), 4 genuine ratifier decisions (livekit_room_id PHI encryption call ← privacy judgment; multi-participant deferral to v1.x; recording retention deferral; cancellation_reason 4-value enum)
+- **Cluster B HARD-sequenced framing**: SI-008 + SI-009 ratify FIRST in sub-ceremony 2; SI-005 then ratifies in sub-ceremony 3 with FK 6 + FK 7 row shapes pointing at the now-ratified SI-008/009 row shapes
+- **IMPL-readiness gate on SI-010** (sub-ceremony 7 per Evans's ordering) explicitly called out: both SIs' SECURITY DEFINER procedures depend on SI-010's `_session_actor_context` + `SET LOCAL` infrastructure. Per agenda's three-class framing, this is IMPLEMENTATION-readiness, NOT ratification-order — SI-008/009 can ratify TODAY independently of SI-010; the procedures they specify cannot LAND in code until SI-010 ratifies + lands.
+- **Ratification checklist**: 24 sign-off items across both SIs (12 SI-008 + 12 SI-009)
+- **Estimated ratifier time**: 60-90 min per agenda §3 sub-ceremony 4 estimate
+
+**2. `docs/ADR-030-Decision-Brief-Crisis-Detection-Classifier-2026-05-17.md`** (229 lines post-Codex)
+
+Pure decision-input for the clinical-safety quorum (Evans + Engineering Lead + Platform Clinical Governance + Platform AI Safety) per Evans's directive ("Author an ADR-030 Decision Brief surfacing the 4 options + tradeoffs ... clinical decision itself remains 100% with the quorum").
+
+- **Why decision matters now**: regex stub coverage gaps (Twi + paraphrase + quotation context); Ghana pilot Twi exposure brings theoretical risk to active risk; Master Completion Plan Phase B I-019 verification gate
+- **4 options with full tradeoff tables** across 9 dimensions each: clinical efficacy, regulatory posture (HIPAA / FDA / GDPR), latency budget, cost (one-time + recurring at pilot + full scale), failure mode, engineering complexity, time-to-launch
+  - Option A (Anthropic Claude): native multi-language, ~$45-90/qtr pilot, ~$73-146k/yr full scale, 2-4 wk to launch-ready, ~400ms P50 latency
+  - Option B (on-prem DistilBERT): tightest HIPAA posture, sub-50ms P95 latency, $50-200k one-time per language + $2-8k/mo GPU + 0.5-1 FTE, **6-12 mo Twi training delay**
+  - Option C (hybrid Claude + regex floor): graceful degradation under Claude outage; **same Claude per-call cost as Option A** + regex maintenance (per SI-014 source — R1 MEDIUM closure removed an unsourced "2× Option A" framing); measurement built in for side-by-side classifier-accuracy tracking
+  - Option D (defer pilot Mode 1 chat patient access): zero clinical-safety risk; bypasses FDA Quality System overhead at v1.0; **SI-014 stays open per §5 Closure path B** (Option D is DEFERRAL not closure)
+- **6 hard rules constraining ANY chosen impl** reproduced verbatim from SI-014 §4 with closure-path-A vs path-B carve-outs preserved (always-on; scoped fail-closed; PHI in I-022; 500ms latency floor; two-surface audit provenance; multi-language coverage)
+- **Decision matrix**: 10 dimensions × 4 options scored with explicit non-recommendation framing
+- **Closure path A vs Closure path B deliverables** enumerated
+- **Quorum decision checklist** (5 steps; explicit sign-off surface)
+- **Explicit non-recommendation framing throughout** — the brief does NOT recommend any option; clinical decision stays 100% with quorum per Evans's directive
+
+### Codex closure trajectory (3 rounds)
+
+| Round | Findings | Resolution |
+| --- | --- | --- |
+| r1 | 1 HIGH + 1 MEDIUM: (HIGH) SI-008 envelope mislabeled 7-column / 22-column when source says 8-column / 23-column total (including DEK ciphertext); (MEDIUM) ADR-030 Option C cost overstated as "2× Option A" + "Highest measured-accuracy" unsourced | (HIGH) Schema description + Decision 4 + checklist all updated to 23-column / 8-column with explicit 15-base + 8-envelope breakdown; (MEDIUM) Option C cost row + decision matrix cells cite SI-014 §3 verbatim "Same as Option A + maintenance of regex floor"; efficacy framing replaced with source-backed measurement-built-in |
+| r2 | 1 MEDIUM: lingering "22 SI-008 columns" reference at line 181 in "What to flag" section (R1 partial fix) | Updated to "23 SI-008 columns (15 base + 8-column KMS envelope) or 13 SI-009 columns" — spells out breakdown explicitly so DEK ciphertext cannot be dropped by interpretation |
+| r3 | APPROVE clean | — |
+
+3 substantive findings closed across 2 iteration rounds.
+
+### Cockpit
+
+- `progress.json` r135 → r136 (matched bump for PR #177 merge)
+
+### Operating posture confirmed (per Evans's mode shift)
+
+| Activity | Status |
+| --- | --- |
+| Speculative autonomous scaffolding | **STOPPED** (per Evans's directive: "No new speculative scaffolding should be built against unratified schemas") |
+| Sub-Ceremony 1 canonical content port (PR-A2/A3) | DEFERRED to next loop firing — **NOT speculative** (it materializes ratifications Evans already made via P-012/P-013 in PR-A1) |
+| Sub-Ceremony 2 Ratifier Packet (SI-008+SI-009) | DELIVERED in this PR — awaiting Evans's review + chat-message ratification |
+| ADR-030 Decision Brief | DELIVERED in this PR — awaiting clinical-safety quorum convening |
+| Sub-Ceremonies 3-9 Ratifier Packets (SI-005, SI-002, SI-003, SI-004, SI-010, SI-011, SI-013) | ON DEMAND — author when Evans signals readiness |
+| SI-014 | PARKED until ADR-030 ratifies (decision is path-A-close-SI-014 vs path-B-rescope-as-SI-014.1) |
+
+### What this addendum does NOT document
+
+- **Sub-Ceremony 1 canonical content port (PR-A2/A3)** has not happened. The SI-007 + SI-012 row shapes ratified in P-012/P-013 still live ONLY in the SI source files as ratifier-input artifacts. The bundle's CDM §4.17-§4.22 + AUDIT_EVENTS v5.4 + DOMAIN_EVENTS amendments do not yet exist. Engineering cannot implement Refill / Dispensing / Shipment / Interaction* row shapes until PR-A2/A3 lands. Per the lockstep invariant Codex enforced on PR-A1, this is by design — the ratification is recorded but not yet canonically reflected in the bundle.
+
+### Closure-debt heading into next loop
+
+1. **PR-A2 + PR-A3 (sub-ceremony 1 canonical content port)** — mechanical work; pre-ratified by P-012/P-013 sign-off. **AUTONOMOUS SCOPE**. Highest-leverage next item because it unlocks Pharmacy + Med-Interaction implementation (currently both still gated despite ratifier sign-off).
+2. **Sub-Ceremony 2 ratifier review** — awaiting Evans's chat-message ratification (or ratify-decisions-in-line response) on the SI-008 + SI-009 packet. Same pattern as Sub-Ceremony 1.
+3. **ADR-030 quorum convening** — clinical-safety quorum scheduling is Evans's call; this brief is the decision-input artifact ready to use whenever the quorum can convene.
+4. **Sub-Ceremonies 3-9 Ratifier Packets** — author on demand when Evans signals readiness for the next batch.
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 mode-shift-to-ratification-track close (42 PRs MERGED in cycle; 192+ Codex closures cumulative; 3-round trajectory on PR #177; 2 durable ratifier-input artifacts delivered; ADR-030 brief ready for clinical-safety quorum; sub-ceremonies 3-9 + PR-A2/A3 + ADR-030 quorum convening + SI-014 parked until ADR-030 = the remaining closure-debt surface for the ratification cycle).
