@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "revision": 140,
-  "updated": "2026-05-17",
+  "revision": 141,
+  "updated": "2026-05-18",
   "lifecycle": {
     "current": "foundation-build",
     "stages": [
@@ -219,12 +219,12 @@
       "status": "in-dev",
       "progress": 92,
       "owner": "Evans",
-      "notes": "feat(tests): Phase 1 + Phase 2 Tier 2 retirement progressing — Phase 1 patient endpoints MERGED (PRs #133/#134/#135; 57 header refs); Phase 2 admin-role widening MERGED (PR #140; 5 HIGH closures); admin-endpoint migrations MERGED (#142 templates 31 refs + #143 variants 28 refs) + #144 deployments 39 refs in flight. Total: 155 Tier 2 header refs migrated to JWT across 6 test files.",
+      "notes": "feat(forms-intake): SI-011 publish-gates bypass kill-switch (layers 1+2) (#155)",
       "docs": [
         "Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md",
         "Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md"
       ],
-      "updatedAt": "2026-05-05T21:40:56.023Z",
+      "updatedAt": "2026-05-18T02:25:15.103Z",
       "stage": "slice-build"
     },
     {
@@ -290,8 +290,7 @@
       "owner": "Evans",
       "notes": "feat(pharmacy): TLC-055 PRs C–K shipped 2026-05-13. /ready returns 200. Final 8% (Refill sub-slice) is now BLOCKED on SI-007 ratification (telecheck-app/docs/SI-007 v0.19, merged on main as 5ce0719 via PR #132 on 2026-05-14 after 18 Codex pre-ratification rounds; awaiting spec-corpus Engineering Lead + Clinical Lead + Pharmacy Lead sign-offs → Promotion Ledger P-013 → CDM v1.4 §4.17 Refill + §4.18 Dispensing + §4.19 Shipment + AUDIT_EVENTS v5.4 + DOMAIN_EVENTS in-place amendments). See AI_Service_Rollout_24h_Status_2026-05-14.md Addendum 3.",
       "docs": [
-        "Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md",
-        "Telecheck_v1_10_PRD_Update/AI_Service_Rollout_24h_Status_2026-05-14.md"
+        "Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md"
       ],
       "updatedAt": "2026-05-14T22:12:39Z",
       "stage": "slice-build"
@@ -584,41 +583,40 @@
       "status": "in-dev",
       "progress": 92,
       "owner": "",
-      "notes": "fix(idempotency): TLC-013 fix-forward — Codex idempotency-r5 HIGH closure",
+      "notes": "docs(audit): file 2026-05-17 Implementation State Audit for Q2 2026 ratifier ceremony (#168)",
       "docs": [
         "Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md"
       ],
       "stage": "foundation-build",
-      "updatedAt": "2026-05-05T21:40:56.023Z"
+      "updatedAt": "2026-05-18T02:25:15.103Z"
     },
     {
       "id": "impl-identity",
       "name": "Identity / Authentication",
       "category": "Implementation",
       "status": "in-dev",
-      "progress": 78,
+      "progress": 92,
       "owner": "",
-      "notes": "feat(identity): TLC-058 clinician-role JWT claim + accounts.account_type widening merged 2026-05-13 — prerequisite for the pharmacy clinician write surface (PR E onward).",
+      "notes": "chore(identity): sync plugin docstring with actual mounted route surface (#159)",
       "docs": [
         "Telecheck_Identity_Authentication_Spec_v1_0.md"
       ],
       "stage": "foundation-build",
-      "updatedAt": "2026-05-05T21:40:56.023Z"
+      "updatedAt": "2026-05-18T02:25:15.103Z"
     },
     {
       "id": "impl-ai-skeleton",
       "name": "AI Service skeleton",
       "category": "Implementation",
       "status": "in-dev",
-      "progress": 85,
+      "progress": 92,
       "owner": "",
-      "notes": "PRs A–F ALL MERGED 2026-05-14 (#126–#131; PR F = 74ea62d on main). Module phase = crisis_gate_wired_pr_f. Handlers NOT mounted — blocked on secrets-mgmt + clinical-grade NLP classifier + protocol-engine + CCR escalation resolver + delivery-outcome audit emission. Final 15% lands with live-handler PR G/H. See AI_Service_Rollout_24h_Status_2026-05-14.md. NOTE: Promotion Ledger NOT updated for this milestone — implementation milestones are tracked here (cockpit) + status doc + git history; ledger is for spec-corpus promotions only (precedent P-001..P-011).",
+      "notes": "test(ai-service): Mode 1 chat audit-failure injection harness + R4 H1 round-trip regression (#163)",
       "docs": [
-        "Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md",
-        "Telecheck_v1_10_PRD_Update/AI_Service_Rollout_24h_Status_2026-05-14.md"
+        "Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md"
       ],
       "stage": "foundation-build",
-      "updatedAt": "2026-05-14T19:06:31Z"
+      "updatedAt": "2026-05-18T02:25:15.103Z"
     },
     {
       "id": "impl-tenant-config",
@@ -635,6 +633,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-14T05:35:30.541Z",
-  "lastSyncedSha": "212dd69"
+  "updatedAt": "2026-05-18T02:25:15.103Z",
+  "lastSyncedSha": "a743f80"
 }
