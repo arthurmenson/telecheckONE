@@ -68,7 +68,7 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 **Ratifier sub-decisions explicitly approved IN P-016 scope at sub-ceremony 5 (3 of 3 SI-004 decisions):**
 - Sub-decision #6 Scope (ratify all 11 up-front vs only 4 currently-emitted): **APPROVED** for "all 11 up-front" (forward-compat path; lower overhead than SI-004.1 successor)
-- Sub-decision #7 7 Cat C + 3 Cat B + 2 reused Cat A from SI-001/SI-005: **APPROVED**
+- Sub-decision #7 **8 Cat C + 3 Cat B + 2 reused Cat A** from SI-001/SI-005 (authoritative count per Codex R1 MEDIUM closure 2026-05-17; the brief's "7 Cat C + 3 Cat B + 2 reused Cat A = 10 net-new" framing inadvertently omitted `consult.ai_preparation_completed` from the Cat C list — the ratify-all-11-up-front decision includes all 11 PRD §13 events including AI prep, plus the 2 State-Machines-required additions, yielding 8 Cat C net-new): **APPROVED**
 - Sub-decision #8 Add `consult.abandoned` + `consult.expired` per State Machines §3: **APPROVED** (CLAUDE.md hard rule)
 
 **Unblocks:**
