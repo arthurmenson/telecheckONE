@@ -1,10 +1,12 @@
 # Telecheck — Identity & Authentication Specification
 
-**Version:** 1.0
+**Version:** 1.1
 **Status:** Canonical for development
 **Owner:** Engineering Lead
-**Parent document:** Telecheck Master Platform PRD v1.6, §7, §16
-**Companion documents:** Consent & Delegated Access Slice PRD v1.0, RBAC Permissions Matrix v1.0, Contracts Pack v5 (AUDIT-EVENTS, CCR-RUNTIME)
+**Parent document:** Telecheck Master Platform PRD v1.10, §7, §16
+**Companion documents:** Consent & Delegated Access Slice PRD v1.0, RBAC Permissions Matrix v1.0, Contracts Pack v5.4 (AUDIT-EVENTS, CCR-RUNTIME)
+
+**v1.1 amendment (2026-05-18 per SC6 P-023 SI-010 canonical-content-port landing):** Added §3.6 "Server-side actor context (per SI-010)" closing Phase 2 F-3 (server-side actor identity binding). New `_session_actor_context` table + `bind_actor_context()` SECURITY DEFINER procedure + helper functions + cleanup mechanism + `authContextPlugin` wiring + 5-test regression gate. Filename retained at `_v1_0.md` per Contracts Pack convention (family identifier in filename; header iterates freely). Source-of-truth design doc: `telecheck-app/docs/SI-010-Session-Actor-Context-DB-Binding.md` v0.6.
 
 ---
 
@@ -83,6 +85,44 @@ If a patient loses access to their phone number:
 3. Support initiates a phone number change with the new number
 4. OTP verification on the new number
 5. 24-hour security hold on sensitive actions after phone number change
+
+### 3.6 Server-side actor context (per SI-010)
+
+**Added v1.1 per SC6 P-023 SI-010 canonical-content-port landing 2026-05-18.** This section closes Phase 2 F-3 (server-side actor identity binding) and is referenced by Contracts Pack v5.4 AUDIT_EVENTS (3 new Cat B identity binding-lifecycle action IDs: `identity.actor_context_bound`, `identity.session_liveness_check_failed`, `identity.actor_context_unbound_rejected`).
+
+**Purpose.** Every PHI-touching DB transaction MUST execute under a server-bound actor context — i.e., the DB session knows, by hard reference, which authenticated account is executing the statement, in which tenant, and under which session and request nonce. The mechanism is invariant-grade per I-023 (tenant isolation) and I-027 (audit attribution); it is not a soft "best-effort" attribution layer.
+
+**`_session_actor_context` table.** A PERMANENT (not TEMP) table in the `app_internal` schema, one row per active DB session, holding: `pg_backend_pid` (PK), `account_id`, `tenant_id`, `role`, `admin_home_tenant_id` (NULL for non-admin), `session_id`, `nonce_hash` (SHA-256 of the request nonce, never the raw nonce), `bound_at`, `expires_at` (5-minute TTL from `bound_at`). GRANT lockdown: only the privileged `bind_actor_context_role` may INSERT/UPDATE/DELETE; the application role `telecheck_app_role` has SELECT only via the helper functions below.
+
+**`bind_actor_context()` SECURITY DEFINER procedure.** The ONLY write path. Owned by `bind_actor_context_role` (a role separate from `telecheck_app_role` so the application cannot bypass the helper). The procedure:
+1. Verifies the session-liveness gate (revoked/missing/expired sessions raise `identity.session_liveness_check_failed` Cat B audit + fail-closed `throw UnauthenticatedError()` ordering — liveness check fires BEFORE the bind row INSERT, never after).
+2. Computes `nonce_hash` server-side from the caller-supplied request nonce; the raw nonce is discarded immediately.
+3. UPSERTs into `_session_actor_context` keyed on `pg_backend_pid` with `bound_at = NOW()`, `expires_at = NOW() + INTERVAL '5 minutes'`.
+4. Emits `identity.actor_context_bound` Cat B audit (atomic with the UPSERT under the same transaction).
+
+**Helper functions (read from table, NOT from GUCs).** `current_actor_account_id()`, `current_actor_tenant_id()`, `current_actor_role()`, `current_actor_admin_home_tenant_id()` — each `STABLE` SQL functions that SELECT the binding row for `pg_backend_pid` and return the respective column; raise `actor_context_unbound` if no row exists or `expires_at < NOW()`. GUCs (`SET LOCAL` / `current_setting()`) are explicitly NOT used — they are transaction-local in some configurations and process-local in others, and the historical Phase 2 F-3 finding documented unsound attribution under connection pooling.
+
+**`assert_request_nonce_bound()` helper.** Mutating SECURITY DEFINER procedures MUST call `assert_request_nonce_bound()` as their first statement. The helper SELECTs `nonce_hash` for `pg_backend_pid`, raises `request_nonce_unbound_or_expired` if missing/expired (emitting `identity.actor_context_unbound_rejected` Cat B audit with `procedure_name`, `rejection_code`, `nonce_hash`, `pg_backend_pid`, `txid`, `attempted_at`).
+
+**Cleanup mechanism (defense in depth).**
+1. **Transaction-end CONSTRAINT TRIGGER** (DEFERRABLE INITIALLY DEFERRED) that fires at COMMIT/ROLLBACK and DELETEs the binding row for `pg_backend_pid`. This is the primary cleanup path.
+2. **60-second background sweeper** (`pg_cron` or equivalent) that DELETEs rows where `expires_at < NOW()`. Catches sessions that died without a clean transaction close (network drops, process crashes).
+3. **5-minute `expires_at` TTL** enforced at helper-function read time (raises `actor_context_unbound` even if rows physically remain).
+
+**`authContextPlugin` wiring (Fastify).** The plugin is registered globally and runs as the first `onRequest` hook. It:
+1. Extracts and verifies the access-token JWT (signature + expiry + audience).
+2. Resolves `account_id` / `tenant_id` / `role` / `admin_home_tenant_id` / `session_id` from the JWT claims + a session-liveness check against the `auth.sessions` table (revoked/expired sessions short-circuit with `UnauthenticatedError` and emit `identity.session_liveness_check_failed`).
+3. Calls `CALL bind_actor_context(...)` over the request-scoped DB connection acquired from the pool.
+4. Registers an `onResponse` cleanup hook that confirms the CONSTRAINT TRIGGER fired (defensive belt-and-suspenders; logs an `identity.actor_context_unbound_rejected` if it discovers a leaked binding).
+
+**Mandatory regression test gate (5 tests).** No PR may merge against this contract without all five green:
+1. `bind_actor_context()` rejects calls from any role other than `bind_actor_context_role`.
+2. Helper functions raise `actor_context_unbound` after `expires_at` passes (5-min TTL).
+3. CONSTRAINT TRIGGER deletes the binding row on COMMIT and on ROLLBACK.
+4. Mutating procedure without `assert_request_nonce_bound()` raises `request_nonce_unbound_or_expired` and emits Cat B audit.
+5. Connection-pool reuse: after session A's transaction commits and pgbouncer hands the connection to session B, session B sees `actor_context_unbound` until its own `bind_actor_context()` call completes.
+
+**Reference contract.** See `telecheck-app/docs/SI-010-Session-Actor-Context-DB-Binding.md` (v0.6 source-of-truth design doc; the canonical executable contract is the migration set landing in the telecheck-app repo).
 
 ---
 
