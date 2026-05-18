@@ -3410,3 +3410,121 @@ P-016 absorbed the next available slot after P-015 in default ordering. Downstre
 7. **SI-014** — parked until ADR-030 ratifies.
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 sub-ceremony-5-ratification-intent close (48 PRs MERGED in cycle; 219+ Codex closures cumulative; 3-round trajectory on PR-A1⁗; 3 substantive findings closed inline; interpretation rule extended to 5 SCs / 8 entries with sub-ceremony 5 CDM-bump exemption preserved + DOMAIN_EVENTS no-version-bump pattern formalized + AUDIT_EVENTS max-5-bumps cap interpretation; **Cluster A placeholder-namespace pair COMPLETE**; remaining ratification surface = sub-ceremonies 6-9 per Evans's ordering + canonical content port + SI-009.1 next round + ADR-030 quorum + SI-014 parked).
+
+---
+
+## Addendum 45 — Sub-Ceremony 6 (SI-010 Session Actor Context DB Binding trust-anchor infrastructure) ratification-intent landed (P-023); closes Phase 2 F-3; unblocks SI-005 + SI-008 + SI-009 SECURITY DEFINER procedures' IMPL-readiness gate; interpretation rule extended to 6 SCs / 9 entries; cascade arithmetic reconciliation drops SI-012 from downstream queue (already at P-012 SC1)
+
+**Date:** 2026-05-17 → 2026-05-18 boundary (Sprint 38, autonomous turn — UTC date crossed during the Codex review cycle)
+
+**PR merged this turn:**
+- `arthurmenson/telecheckONE#6` (PR-A1⁗′ MERGED `869b0ab`) — Promotion Ledger P-023 ratification-intent entry + Registry §3 row 64 + §8 changelog updates + top-of-Ledger interpretation rule extended from 5 sub-ceremonies / 8 entries to **6 sub-ceremonies / 9 entries** with sub-ceremony 6 CDM-bump exemption preserved + DOMAIN_EVENTS no-version-bump pattern preserved across all 6 SCs + AUDIT_EVENTS max-6-bumps cap interpretation + dependent-procedure count reconciled to FOUR + downstream cascade arithmetic reconciled to drop SI-012 (already at P-012 SC1). **7-round Codex convergence** (4 substantive findings closed inline + 2 stale-text propagation findings + 1 deeper arithmetic finding: R1 MEDIUM SI-009.1 P-NUM ambiguity — closed by reconciling to authoritative P-020 target with P-017/P-022 reframed as unclaimed gap slots; R2 MEDIUM×2 P-013 + P-019 entries' historical cascade text annotated with SUPERSEDED-by-SC6 markers; R3 MEDIUM Registry §8 SC1 changelog row's stale cascade text annotated; R4 MEDIUM dependent-procedure count was FIVE but enumerated only FOUR — reconciled to FOUR throughout with explicit SI-005=2 + SI-008=1 + SI-009=1 breakdown citation; R5 MEDIUM Registry §8 SC2 + SC3 rows had unannotated stale cascade text — annotated with two-level SUPERSEDED markers; R6 MEDIUM SC5 row's "SI-012/013/014" 3-SI cascade grouping was pre-existing inconsistency that propagated through 4 sub-ceremonies — SI-012 was already ratified at P-012 SC1 and should NOT appear in downstream cascade; corrected to "SI-013 + SI-014" 2-SI grouping with cascade shortened by one slot; R7 APPROVE clean).
+
+### Entry point — Evans's 2026-05-17 sub-ceremony 6 ratification
+
+Evans's verbatim ratifier instruction at the Sub-Ceremony 6 chat-message Decision Brief: *"ratify"* (defaulted per the brief to "all 8 ratifier sub-decisions as recommended"). SI-010 v0.6 DRAFT was already pre-Codex-converged via 6 rounds 2026-05-15 (R1 HIGH expires_at predicate enforcement + R2 HIGH duplicate nonce-assertion-definition removal + R3 HIGH helpers-read-from-table-not-GUCs + R3 HIGH-2 fail-closed throw UnauthenticatedError() ordering + R4 HIGH PERMANENT-table + GRANT-lockdown supersedes TEMPORARY-table caller-spoof surface + R5 HIGH resolution-path-amended to match R4 trust-anchor design), so no additional Codex rounds were needed on the SI-010 source itself prior to Evans's ratification — only on the PR-A1⁗′ ratification-intent commit cross-artifact consistency surface.
+
+### What shipped (PR #6 — PR-A1⁗′ ratification-intent only)
+
+**Promotion Ledger:**
+- **NEW P-023** — SI-010 Session Actor Context DB Binding ratification-intent (standalone critical-path infrastructure entry; no cluster batching; sequenced AFTER SC1–SC5; unblocks SI-005 + SI-008 + SI-009 SECURITY DEFINER procedures' IMPL-readiness gate; closes deferred Phase 2 F-3 JWT session-liveness; 3 net-new Cat B AUDIT_EVENTS IDs on binding lifecycle; CDM-exempt + DOMAIN_EVENTS-non-touching)
+- **Top-of-Ledger interpretation rule extended** from 5 sub-ceremonies / 8 entries to 6 sub-ceremonies / 9 entries with first/second/third/fourth/fifth/sixth landing destinations (v2.11 → v2.12 → v2.13 → v2.14 → v2.15 → v2.16 → v2.17) + sub-ceremony 6 CDM-bump exemption preserved (Identity-slice procedure-only; total maximum CDM bumps across all 6 SCs = 3, unchanged) + DOMAIN_EVENTS no-version-bump pattern preserved (SC6 contributes 0 DOMAIN_EVENTS amendment — binding lifecycle is audit-only Cat B) + AUDIT_EVENTS max-6-bumps cap interpretation (each SC contributes one AUDIT_EVENTS bump; SC6 contributes the 6th via SI-010's 3 net-new Cat B IDs) + multi-granularity consolidation paths (5+6 = +2; 4+5+6 = +3; all-9-entry = +6 to v2.17 directly)
+
+**Registry:** v2.11 (UNCHANGED per lockstep invariant) — Last-updated header bumped to 2026-05-17 with explicit P-023 mention; §3 row 64 extended to 9-entry framing with SC4/SC5/SC6 all-CDM-exempt summary + AUDIT_EVENTS max-6-bumps cap + P-NUM cascade clarification (P-017 + P-022 unassigned gap slots); §8 changelog new top row dated 2026-05-17 SC6 with all 8 sub-decisions enumerated.
+
+### SI-010 unblocks four SECURITY DEFINER procedures across three SIs
+
+| Procedure | SI | Ledger entry | Status post-SC6 |
+| --- | :---: | :---: | --- |
+| `record_consult_clinician_decision()` | SI-005 | P-021 | IMPL-readiness gate clears once SI-010 migration + plugin wiring land |
+| `rotate_consult_clinician_decision_kms()` | SI-005 | P-021 | IMPL-readiness gate clears once SI-010 lands |
+| `record_workflow_pointer_swap()` | SI-008 | P-018 | IMPL-readiness gate clears once SI-010 lands |
+| `record_consult_escalation_target_swap()` | SI-009 | P-019 | IMPL-readiness gate clears once SI-010 lands |
+
+**Count reconciliation (R4 closure):** the SI-010 v0.6 source and the SC6 Decision Brief both said "FIVE procedures" but enumerated 4. The miscount conflated SI-005's two procedures with a 3-SI / 5-procedure framing. Canonical P-023 corrects to **FOUR** with explicit SI-005=2 + SI-008=1 + SI-009=1 breakdown.
+
+### Phase 2 F-3 closure (deferred 8+ weeks)
+
+SI-010's authContextPlugin wiring change folds the JWT session-liveness check into the binding path with fail-closed `throw UnauthenticatedError()` ordering. The check runs BEFORE any binding work; revoked/missing/expired sessions terminate the request + roll back the transaction via Fastify's error-envelope plugin mapping `UnauthenticatedError` to a tenant-blind 401 per I-025. Phase 2 F-3 (originally deferred during the Phase 2 admin JWT scope cycle) closes as a byproduct of SI-010 without a separate work item — an efficient convergent infrastructure closure pattern worth noting for future deferred-follow-on lookups.
+
+### Codex closure trajectory summary
+
+| Round | Finding | Closure |
+| :---: | --- | --- |
+| R1 | MEDIUM: SI-009.1 P-NUM ambiguity — Registry §3 row 64 + §8 changelog said both "SI-009.1 still targets P-020" AND "P-022 reserved for SI-009.1 if its gate completes before P-023" | Reconciled SI-009.1 authoritative target = P-020 (unchanged from SC2 PR-A1′ assignment); P-017 + P-022 reframed as unclaimed gap slots from cascade re-numbering, not reserved for SI-009.1 |
+| R2 | MEDIUM×2: P-013 entry (line 545) historical cascade prediction "SI-005 P-017 / SI-010 P-020" contradicted post-SC6 mapping; P-019 entry (line 380) said "SI-010 sub-ceremony 7" when SC6 was actually 6 | Both annotated in place with strikethrough + SUPERSEDED markers citing authoritative post-SC6 mapping; append-only invariant preserved via inline annotation precedent (established at P-018 SC3 supersession) |
+| R3 | MEDIUM: Registry §8 SC1 changelog row's "P-012 slot repurposing" cascade prediction had same stale cascade as P-013 ledger entry | Annotated with same SUPERSEDED marker + current authoritative mapping |
+| R4 | MEDIUM: P-023 + Registry §8 SC6 said "FIVE separate procedures" but enumerated only FOUR (2 SI-005 + 1 SI-008 + 1 SI-009 = 4) | Reconciled to FOUR throughout with explicit breakdown citation; reconciliation note added pointing to SI-010 source + Decision Brief as ratifier-input artifacts (not implementation-authoritative) |
+| R5 | MEDIUM: Registry §8 SC2 + SC3 rows had unannotated stale cascade text from the original SC2/SC3 authoring period | Both annotated in place with explicit two-level SUPERSEDED markers (SC3-corrected then SC6-corrected for SC2 row) |
+| R6 | MEDIUM: SC5 row's "SI-012/013/014 → P-025/026/027" cascade list contradicted SC6 mapping; deeper investigation revealed SI-012 was already ratified at P-012 sub-ceremony 1 and the 3-SI grouping was pre-existing inconsistency propagated through 4 sub-ceremonies | Dropped SI-012 from downstream cascade globally; corrected to "SI-013 + SI-014" 2-SI grouping with cascade shortened by one slot; SC4/SC5 row text annotated with explicit "further SUPERSEDED at SC6" markers + corrected mapping; P-NUM cascade arithmetic now consistent |
+| R7 | APPROVE clean | — |
+
+**4 substantive findings closed across 6 iteration rounds + 1 verify round; 2 of those 4 were deeper arithmetic / cascade inconsistencies that took multiple rounds to fully reconcile (the SI-012 propagation chain through SC2 → SC3 → SC4 → SC5 was a particularly instructive miss — the original-agenda's "SI-012/013/014" grouping was never corrected at each successor SC's authoring time).** R6 was the most instructive find: cascade prediction lists across SCs need an explicit "currently-in-queue" reconciliation pass, not just propagation of the original-agenda grouping. Future SC ratification-intent commits should include a fresh "what SIs remain in queue post-this-SC" enumeration rather than carrying forward the prior SC's list.
+
+### P-NUM cascade post-SC6 (R6-reconciled — SI-012 dropped)
+
+| SI | P-NUM | Status |
+| --- | :---: | --- |
+| SI-007 (SC1) | P-013 | ✅ ratification-intent |
+| SI-012 (SC1) | P-012 | ✅ ratification-intent |
+| SI-002 (SC4) | P-014 | ✅ ratification-intent |
+| SI-003 (SC5) | P-015 | ✅ ratification-intent |
+| SI-004 (SC5) | P-016 | ✅ ratification-intent |
+| SI-008 (SC2) | P-018 | ✅ ratification-intent |
+| SI-009 original (SC2) | P-019 | ✅ ratification-intent |
+| SI-009.1 successor | P-020 | 🕐 awaiting next Codex pre-ratification gate (6 open questions) |
+| SI-005 (SC3) | P-021 | ✅ ratification-intent |
+| **SI-010 (SC6)** | **P-023** | ✅ **ratification-intent (this turn)** |
+| SI-011 umbrella (SC7) | P-024 | 🕐 upcoming |
+| SI-013 (SC8) | P-025 | 🕐 upcoming |
+| SI-014 (SC9) | P-026 | 🕐 upcoming (parked until ADR-030 clinical-safety quorum) |
+| (Gap slots) | P-017, P-022, P-027 | unclaimed |
+
+### Cockpit
+
+- `progress.json` r140 → r142 (concurrent autonomous-track work bumped r141 via PR #155 "SI-011 publish-gates bypass kill-switch (layers 1+2)" merged during this SC6 Codex cycle — surprise concurrency artifact; r141 → r142 is this addendum's SC6 close-out bump)
+
+### Concurrent autonomous-track activity (during this SC6 Codex review cycle)
+
+PR #155 ("feat(forms-intake): SI-011 publish-gates bypass kill-switch (layers 1+2)") merged on main during the SC6 Codex iteration cycle. This is **autonomous-track implementation work** under Evans's Master Completion Plan Phase A/B authorization (separate from the ratification track this Addendum documents). The concurrent merge bumped progress.json r140 → r141 with updated notes for the SI-011 Forms/Intake entry. **No conflict with SC6 ratification track:** SC6's spec-corpus PR only touches Promotion Ledger + Registry; PR #155's implementation work touches application code paths under `telecheck-app/`. Both tracks operate per Evans's autonomous-work authorization and converge cleanly. **Note for future cockpit close-outs:** when a cockpit Addendum's progress.json bump collides with a concurrent autonomous-track bump, the close-out bump goes to N+1 from the current revision (here r141 → r142) rather than the originally-planned bump (here r140 → r141).
+
+### Operating posture confirmed
+
+| Activity | Status |
+| --- | --- |
+| Speculative autonomous scaffolding | STOPPED per Evans's directive |
+| **Sub-Ceremony 1 ratification-intent (P-012 + P-013)** | ✅ Landed PR-A1 `36efccd` |
+| **Sub-Ceremony 2 ratification-intent (P-018 + P-019)** | ✅ Landed PR-A1′ `74c189b` |
+| **Sub-Ceremony 3 ratification-intent (P-021)** | ✅ Landed PR-A1″ `786b2a2` |
+| **Sub-Ceremony 4 ratification-intent (P-014)** | ✅ Landed PR-A1‴ `a883790` |
+| **Sub-Ceremony 5 ratification-intent (P-015 + P-016)** | ✅ Landed PR-A1⁗ `08deafd` |
+| **Sub-Ceremony 6 ratification-intent (P-023)** | ✅ **Landed PR-A1⁗′ `869b0ab` (this addendum)** |
+| **Cluster B HARD-sequencing** | ✅ CLOSED at ratification-intent layer (sub-ceremony 3) |
+| **Cluster A placeholder-namespace pair** | ✅ COMPLETE at ratification-intent layer (SI-002 SC4 + SI-003 SC5) |
+| **Phase 2 F-3 (JWT session-liveness check) deferred follow-on** | ✅ **CLOSED by SI-010 P-023 authContextPlugin wiring change (this addendum)** |
+| SI-009.1 v0.1 DRAFT | ✅ Filed `ae87ad7` (PR #178); P-020 target after Codex pre-ratification gate |
+| Sub-Ceremony 1-6 canonical content port | ⏸ DEFERRED — mechanical work; pre-ratified by P-012/P-013/P-014/P-015/P-016/P-018/P-019/P-021/P-023 sign-offs |
+| Sub-Ceremonies 7-9 Ratifier Packets (SI-011, SI-013, SI-014) | 🕐 ON DEMAND per Evans's ordering (SI-011 next per his sequence) |
+| ADR-030 clinical-safety quorum convening | 🕐 Brief delivered PR #177 (Addendum 40); awaiting quorum |
+| SI-014 | 🛑 Parked until ADR-030 |
+| Autonomous-track implementation (concurrent with ratification track) | ▶️ PR #155 SI-011 publish-gates bypass kill-switch (layers 1+2) merged this cycle |
+
+### Closure-debt heading into next loop
+
+1. **Sub-Ceremony 7 Ratifier Packet (SI-011)** — Forms publish gates umbrella SI; per-sub-SI ledger shape question to resolve in brief. Next in Evans's stated ordering.
+2. **Sub-Ceremony 8 Ratifier Packet (SI-013)** — CCR crisis-helpline keys.
+3. **Sub-Ceremony 9 Ratifier Packet (SI-014)** — parked until ADR-030 ratifies.
+4. **Canonical content port** (PR-A2/A3 × 6 sub-ceremonies + variants) — mechanical work; pre-ratified by sub-ceremonies 1-6 sign-offs. **AUTONOMOUS SCOPE.**
+5. **SI-009.1 next Codex pre-ratification round** — close the 6 open questions before P-020 ratification-intent.
+6. **ADR-030 quorum convening** — Evans's call.
+7. **SI-010 IMPLEMENTATION PR** (separate from this ratification-intent commit) — Identity slice migration + authContextPlugin wiring with all 5 mandatory regression tests; merge-blocking on the GRANT enforcement + caller-spoof adversarial + pooled-connection bleed + expired-context + migration-deploy gates per Sub-decision 7.
+
+### Lessons captured for future SC ratification-intent cycles
+
+1. **Cascade prediction lists need explicit "remaining-in-queue" reconciliation at each successor SC's authoring time**, not just propagation of the prior SC's list. The "SI-012/013/014" 3-SI grouping propagated through SC2 → SC3 → SC4 → SC5 before SC6's Codex review caught it (R6 MEDIUM closure).
+2. **Two-level SUPERSEDED annotation pattern works** for chained cascade corrections (SC3-corrected then SC6-corrected for the SC2 row). Append-only invariant preserved via inline annotation precedent.
+3. **Surface-count reconciliation must trace back to the SI source file** — the SI-010 v0.6 source had "FIVE separate procedures" but enumerated 4; the SC6 Decision Brief carried the error forward; canonical P-023 corrected via Codex R4 round. Future SC ratification-intent commits should verify surface counts independently rather than copy-pasting from the SI source.
+4. **Convergent infrastructure closures (like SI-010 closing Phase 2 F-3) are efficient** — when an SI naturally provides the right place for a deferred follow-on, fold the follow-on closure into the SI without a separate work item. Worth scanning the deferred-follow-on list at each future SI authoring to find similar convergence opportunities.
+5. **Concurrent autonomous-track activity is OK** — PR #155 (SI-011 publish-gates implementation) merged during this SC6 Codex cycle without conflicting; ratification-track and implementation-track operate on disjoint file surfaces under Evans's autonomous-work authorization. Cockpit close-out bumps progress.json to N+1 from current revision rather than the originally-planned bump.
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 → 2026-05-18 sub-ceremony-6-ratification-intent close (49 PRs MERGED in cycle; 226+ Codex closures cumulative; 7-round trajectory on PR-A1⁗′; 4 substantive findings + 2 stale-text propagation closures + 1 deeper arithmetic reconciliation closed inline; interpretation rule extended to 6 SCs / 9 entries with sub-ceremony 6 CDM-bump exemption preserved + DOMAIN_EVENTS no-version-bump pattern preserved across all 6 SCs + AUDIT_EVENTS max-6-bumps cap interpretation; **Phase 2 F-3 deferred follow-on CLOSED by SI-010 authContextPlugin wiring change**; SC6 unblocks 4 SECURITY DEFINER procedures across SI-005/SI-008/SI-009 IMPL-readiness gate; cascade arithmetic reconciliation drops SI-012 from downstream queue with cascade shortened by one slot; remaining ratification surface = sub-ceremonies 7-9 per Evans's ordering + canonical content port + SI-009.1 next round + ADR-030 quorum + SI-014 parked).
