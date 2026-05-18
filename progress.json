@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 143,
+  "revision": 154,
   "updated": "2026-05-18",
   "lifecycle": {
     "current": "foundation-build",
@@ -224,7 +224,7 @@
         "Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md",
         "Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md"
       ],
-      "updatedAt": "2026-05-18T02:25:15.103Z",
+      "updatedAt": "2026-05-18T14:05:27.757Z",
       "stage": "slice-build"
     },
     {
@@ -588,7 +588,7 @@
         "Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md"
       ],
       "stage": "foundation-build",
-      "updatedAt": "2026-05-18T02:25:15.103Z"
+      "updatedAt": "2026-05-18T14:35:27.798Z"
     },
     {
       "id": "impl-identity",
@@ -602,7 +602,7 @@
         "Telecheck_Identity_Authentication_Spec_v1_0.md"
       ],
       "stage": "foundation-build",
-      "updatedAt": "2026-05-18T02:25:15.103Z"
+      "updatedAt": "2026-05-18T14:35:27.798Z"
     },
     {
       "id": "impl-ai-skeleton",
@@ -616,7 +616,7 @@
         "Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md"
       ],
       "stage": "foundation-build",
-      "updatedAt": "2026-05-18T02:25:15.103Z"
+      "updatedAt": "2026-05-18T14:35:27.798Z"
     },
     {
       "id": "impl-tenant-config",
@@ -633,6 +633,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-18T02:25:15.103Z",
-  "lastSyncedSha": "a743f80"
+  "updatedAt": "2026-05-18T14:35:27.798Z",
+  "lastSyncedSha": "61fbd38"
 }
