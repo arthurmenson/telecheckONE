@@ -3228,3 +3228,90 @@ The cascade reflects SI-009.1's reservation of P-020 (Evans's successor-packagin
 5. **SI-014** — parked until ADR-030 ratifies.
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 sub-ceremony-3-ratification-intent + Cluster-B-CLOSED close (46 PRs MERGED in cycle; 211+ Codex closures cumulative; 3-round trajectory on SI-005 v0.2 + 6-round trajectory on PR-A1″; 10 substantive findings closed inline across both PRs; Cluster B HARD-sequencing fully CLOSED at the ratification-intent layer; Async Consult slice clinician-decision branch implementation unblocked at data-model layer once canonical content lands; sub-ceremonies 4-9 + canonical content port + SI-009.1 next round + ADR-030 quorum = remaining closure-debt surface).
+
+---
+
+## Addendum 43 — Sub-Ceremony 4 (SI-002 AUDIT_EVENTS) ratification-intent landed (P-014); interpretation rule extended to 4 SCs / 6 entries
+
+**Date:** 2026-05-17 (Sprint 38, autonomous turn)
+
+**PR merged this turn:**
+- `arthurmenson/telecheckONE#4` (PR-A1‴ MERGED `a883790`) — Promotion Ledger P-014 ratification-intent entry + Registry §3 row 64 + §8 changelog updates + top-of-Ledger interpretation rule extended from 3 sub-ceremonies / 5 entries to **4 sub-ceremonies / 6 entries** with sub-ceremony 4 AUDIT_EVENTS-only CDM-bump exemption. **6-round Codex convergence** (5 substantive findings closed: R1 HIGH row 64 stale 3-SC framing; R2 HIGH P-014 hard-coded v5.5 destination after sub-ceremonies 1+2+3 contribute earlier AUDIT_EVENTS bumps; R3 HIGH lingering P-014 v5.5 references in title/status/trigger/change-items; R4 HIGH remaining v5.5 in Version-bumps + Registry-absorption; R5 HIGH×2 over-corrected P-018/P-019 v5.5 to v5.7 via replace_all blast radius — reverted to correct sub-ceremony-2 default v5.5; R6 APPROVE clean).
+
+### Entry point — Evans's 2026-05-17 sub-ceremony 4 ratification
+
+Evans's verbatim ratifier instruction at the Sub-Ceremony 4 chat-message Decision Brief: *"ratify"* (defaulted per the brief to "all 5 ratifier decisions as recommended"). SI-002 v0.5 DRAFT was already pre-Codex-converged via 3 rounds 2026-05-14 (R1 HIGH auth-proof events C → B promotion + R2 HIGH atomic per-slice cutover discipline + R3 HIGH category-canonicalization bridge for the 3 auth-proof events spanning the P-014 boundary), so no additional Codex rounds were needed on the SI-002 source itself prior to Evans's ratification.
+
+### What shipped (PR #4 — PR-A1‴ ratification-intent only)
+
+**Promotion Ledger:**
+- **NEW P-014** — SI-002 ratification-intent (Cluster A placeholder-namespace pair half; AUDIT_EVENTS canonical action IDs; 31 net-new IDs + category-canonicalization bridge for 3 auth-proof events + NEW canonical artifact `AUDIT_ACTION_ID_CANONICALIZATION_MAP_P_014.md`)
+- **Top-of-Ledger interpretation rule extended** from 3 sub-ceremonies / 5 entries to 4 sub-ceremonies / 6 entries with first/second/third/fourth landing destinations (v2.11 → v2.12 → v2.13 → v2.14 → v2.15) + sub-ceremony 4 CDM-bump exemption (AUDIT_EVENTS-only; total maximum CDM bumps across all 4 SCs = 3, not 4) + multi-granularity consolidation paths (1+2 / 2+3 / 3+4 / all-6 = +4 to v2.15 directly)
+
+**Registry:** v2.11 (UNCHANGED per lockstep invariant) — Last-updated reframed to cover 4 sub-ceremonies; §3 row 64 extended; §8 changelog new top row dated 2026-05-17 (sub-ceremony 4).
+
+### Cluster A pair half ratified
+
+SI-002 + SI-003 are the placeholder-namespace pair per the agenda's original sub-ceremony 3 batching; Evans's 2026-05-17 ordering split them across sub-ceremonies 4 (SI-002 today) + 5 (SI-003 next). Both ratify independently against different contracts-pack files (SI-002 = AUDIT_EVENTS; SI-003 = DOMAIN_EVENTS). Same atomic-per-slice cutover discipline established at P-014 becomes the template for SI-003 at sub-ceremony 5.
+
+### Codex closure trajectory summary
+
+| Round | Finding | Closure |
+| :---: | --- | --- |
+| R1 | HIGH: Registry row 64 stale 3-SC framing after P-014 added in PR-A1‴ | Extended row 64 to 4 SCs / 6 entries + sub-ceremony 4 CDM-exemption + corrected consolidation paths |
+| R2 | HIGH: P-014 hard-coded AUDIT_EVENTS v5.4→v5.5 as default destination, ignoring that sub-ceremonies 1+2+3 each contribute one AUDIT_EVENTS bump first in default ordering | Reframed P-014 AUDIT_EVENTS bump as ordering-dependent (+1 minor from then-current version; default 4th-landing v5.6→v5.7) |
+| R3 | HIGH: lingering P-014 v5.5 references in title/status/trigger/change-items not yet reframed | replace_all over P-014 v5.5 patterns with "canonical content (default 4th-landing v5.7)" framing |
+| R4 | HIGH: remaining v5.5 hard-codes in Version-bumps + Registry-absorption lines 55 + 95 | Targeted Edit reframe both lines |
+| R5 | HIGH×2: replace_all in R3 over-corrected P-018 + P-019 (sub-ceremony 2) AUDIT_EVENTS bullets from correct "default 2nd-landing v5.5" to incorrect "default 4th-landing v5.7" | Reverted both P-018/P-019 bullets back to "default 2nd-landing v5.5" — sub-ceremony 2 not sub-ceremony 4 |
+| R6 | APPROVE clean | — |
+
+**5 substantive findings closed across 5 iteration rounds.** R5 was a particularly instructive find: `replace_all` is dangerous in cross-entry contexts where the same lexical pattern means different things in different entries (here, `AUDIT_EVENTS v5.5` was a legitimate sub-ceremony 2 default destination in P-018/P-019 but a stale hard-code in P-014). Codex's blast-radius scan caught the over-correction immediately.
+
+### P-NUM cascade (post sub-ceremony 4 — UNCHANGED from sub-ceremony 3)
+
+| SI | P-NUM | Status |
+| --- | :---: | --- |
+| SI-007 (SC1) | P-013 | ✅ ratification-intent |
+| SI-012 (SC1) | P-012 | ✅ ratification-intent |
+| **SI-002 (SC4)** | **P-014** | ✅ **ratification-intent (this turn)** |
+| SI-008 (SC2) | P-018 | ✅ ratification-intent |
+| SI-009 original (SC2) | P-019 | ✅ ratification-intent |
+| SI-009.1 successor (Codex pre-ratification gate) | P-020 | 🕐 awaiting next gate |
+| SI-005 (SC3) | P-021 | ✅ ratification-intent |
+| SI-010 (SC6) | P-022 | 🕐 upcoming |
+| SI-011 umbrella (SC7) | P-023 | 🕐 upcoming |
+| SI-012/013/014 (SC8-9) | P-024/025/026 | 🕐 upcoming |
+
+P-014 was always SI-002's target since SI-008 status block 2026-05-15; the post-SC2/SC3 cascade preserved this assignment.
+
+### Cockpit
+
+- `progress.json` r138 → r139 (matched bump for PR #4 merge)
+
+### Operating posture confirmed
+
+| Activity | Status |
+| --- | --- |
+| Speculative autonomous scaffolding | STOPPED per Evans's directive |
+| **Sub-Ceremony 1 ratification-intent (P-012 + P-013)** | ✅ Landed PR-A1 `36efccd` |
+| **Sub-Ceremony 2 ratification-intent (P-018 + P-019)** | ✅ Landed PR-A1′ `74c189b` |
+| **Sub-Ceremony 3 ratification-intent (P-021)** | ✅ Landed PR-A1″ `786b2a2` |
+| **Sub-Ceremony 4 ratification-intent (P-014)** | ✅ **Landed PR-A1‴ `a883790` (this addendum)** |
+| **Cluster B HARD-sequencing** | ✅ CLOSED at ratification-intent layer (sub-ceremony 3) |
+| **Cluster A placeholder-namespace pair** | ⏳ Half-closed (SI-002 at SC4; SI-003 next at SC5) |
+| SI-009.1 v0.1 DRAFT | ✅ Filed `ae87ad7` (PR #178); P-020 target after Codex pre-ratification gate |
+| Sub-Ceremony 1-4 canonical content port | ⏸ DEFERRED — mechanical work; pre-ratified by P-012/P-013/P-018/P-019/P-021/P-014 sign-offs |
+| Sub-Ceremonies 5-9 Ratifier Packets (SI-003, SI-004, SI-010, SI-011, SI-013) | 🕐 ON DEMAND per Evans's ordering |
+| ADR-030 clinical-safety quorum convening | 🕐 Brief delivered PR #177 (Addendum 40); awaiting quorum |
+| SI-014 | 🛑 Parked until ADR-030 |
+
+### Closure-debt heading into next loop
+
+1. **Sub-Ceremony 5 Ratifier Packet (SI-003 DOMAIN_EVENTS placeholder ratification)** — placeholder-namespace pair sibling to SI-002 (this addendum's ratification); same atomic-per-slice cutover discipline applies. Author when Evans signals readiness.
+2. **Sub-Ceremony 5 may also include SI-004** (Async-Consult audit events) per Evans's ordering — same Async-Consult slice scope; could batch with SI-003 or split.
+3. **Canonical content port** (PR-A2/A3 + PR-A2′/A3′ + PR-A2″/A3″ + PR-A2‴/A3‴) — mechanical work; pre-ratified by sub-ceremonies 1-4 sign-offs. **AUTONOMOUS SCOPE.**
+4. **SI-009.1 next Codex pre-ratification round** — close the 6 open questions before P-020 ratification-intent.
+5. **ADR-030 quorum convening** — Evans's call.
+6. **SI-014** — parked until ADR-030 ratifies.
+
+— Claude (Opus 4.7, 1M context), 2026-05-17 sub-ceremony-4-ratification-intent close (47 PRs MERGED in cycle; 216+ Codex closures cumulative; 6-round trajectory on PR-A1‴; 5 substantive findings closed inline; interpretation rule extended to 4 SCs / 6 entries with sub-ceremony 4 CDM-bump exemption; replace_all blast-radius lesson learned for future bulk edits across multi-entry source files; remaining ratification surface = sub-ceremonies 5-9 per Evans's ordering + canonical content port + SI-009.1 next round + ADR-030 quorum + SI-014 parked).
