@@ -3528,3 +3528,125 @@ PR #155 ("feat(forms-intake): SI-011 publish-gates bypass kill-switch (layers 1+
 5. **Concurrent autonomous-track activity is OK** — PR #155 (SI-011 publish-gates implementation) merged during this SC6 Codex cycle without conflicting; ratification-track and implementation-track operate on disjoint file surfaces under Evans's autonomous-work authorization. Cockpit close-out bumps progress.json to N+1 from current revision rather than the originally-planned bump.
 
 — Claude (Opus 4.7, 1M context), 2026-05-17 → 2026-05-18 sub-ceremony-6-ratification-intent close (49 PRs MERGED in cycle; 226+ Codex closures cumulative; 7-round trajectory on PR-A1⁗′; 4 substantive findings + 2 stale-text propagation closures + 1 deeper arithmetic reconciliation closed inline; interpretation rule extended to 6 SCs / 9 entries with sub-ceremony 6 CDM-bump exemption preserved + DOMAIN_EVENTS no-version-bump pattern preserved across all 6 SCs + AUDIT_EVENTS max-6-bumps cap interpretation; **Phase 2 F-3 deferred follow-on CLOSED by SI-010 authContextPlugin wiring change**; SC6 unblocks 4 SECURITY DEFINER procedures across SI-005/SI-008/SI-009 IMPL-readiness gate; cascade arithmetic reconciliation drops SI-012 from downstream queue with cascade shortened by one slot; remaining ratification surface = sub-ceremonies 7-9 per Evans's ordering + canonical content port + SI-009.1 next round + ADR-030 quorum + SI-014 parked).
+
+---
+
+## Addendum 46 — Sub-Ceremony 7 (SI-011 Forms-Intake publish-time governance gates UMBRELLA) ratification-intent landed (P-024); FIRST SC across the Q2 2026 ratifier ceremony to be exempt from ALL THREE contract-file bumps (CDM + AUDIT_EVENTS + DOMAIN_EVENTS); 2 NEW dependency SIs filed (SI-015 MarketingCopy + SI-016 ai_workflow_handler_registry); interpretation rule extended to 7 SCs / 10 entries
+
+**Date:** 2026-05-18 (Sprint 38, autonomous turn)
+
+**PR merged this turn:**
+- `arthurmenson/telecheckONE#7` (PR-A1⁗″ MERGED `60785e4`) — Promotion Ledger P-024 ratification-intent entry + Registry §3 row 64 + §8 changelog updates + top-of-Ledger interpretation rule extended from 6 sub-ceremonies / 9 entries to **7 sub-ceremonies / 10 entries** with **SC7 as FIRST SC exempt from ALL THREE contract-file bumps** + umbrella ratification artifact strictly separated from per-sub-SI successor SI ratifications. **4-round Codex convergence** (3 substantive findings closed: R1 HIGH top-of-Ledger rule still said "SIX landings" — extended prose to SEVEN throughout; R1 MEDIUM×2 stale 6-SC embedded summary + Registry §3 row 64 future-landing list missing SC7 — fixed both; R2 HIGH Registry Last-updated + §3 row 64 primary summary stale at "all nine RATIFIED-IN-INTENT entries" + "all-9-entry +6 v2.17 directly" — fixed to "ten entries" + "all-10-entry +7 v2.18 directly"; R3 HIGH P-024 Type + Status said "physical content lands across MULTIPLE future PR-A2/A3 commits" + "CANONICAL after each sub-SI canonical content lands" — defeated the umbrella-only model; rewrote both to strictly separate umbrella-only Registry-bump landing from per-sub-SI successor SI ratifications with no absorption; R4 APPROVE clean).
+
+### Entry point — Evans's 2026-05-18 sub-ceremony 7 ratification
+
+Evans's verbatim ratifier instruction at the SC6 close-out exchange: *"ratify"* — given as forward authorization for SC7 (defaulted per the brief to "all 9 ratifier sub-decisions as recommended"). SI-011 v0.1 source filed 2026-05-15 has NOT undergone Codex pre-ratification rounds prior to SC7 (unlike SI-005/008/009/010); SC7 ratifies the **umbrella scoping + substantive design pattern for each sub-SI** only, NOT canonical row shapes. Per-sub-SI Codex pre-ratification cycles will run BEFORE each SI-011.1a/b/c/d canonical-content-port commit to converge row-level invariants, FK shapes, trigger semantics, exact API surfaces.
+
+### What shipped (PR #7 — PR-A1⁗″ ratification-intent only)
+
+**Promotion Ledger:**
+- **NEW P-024** — SI-011 UMBRELLA ratification-intent (standalone umbrella SI with 4 sub-SIs SI-011a/b/c/d; substantive design + implementation outline ratified for each; per-sub-SI canonical content deferred to future SI-011.1a/b/c/d at separate SCs; kill-switch 4-layer defense pattern ratified with layers 1+2 already merged via PR #155 implementation track; Tenant Clinical Lead = separate `tenant_clinical_lead_assignments` table; I-030 exemption = 90-day default expiry; SI-015 + SI-016 dependency SIs filed to queue)
+- **Top-of-Ledger interpretation rule extended** from 6 sub-ceremonies / 9 entries to 7 sub-ceremonies / 10 entries with seventh-landing destination (Registry v2.17 → v2.18 umbrella-only) + **SC7 exempt from all three contract-file bumps** (CDM unchanged at max 3 across all 7 SCs; AUDIT_EVENTS unchanged at max 6 across all 7 SCs; DOMAIN_EVENTS unchanged at 0 across all 7 SCs) + consolidation paths extended (6+7 = +2; all-10-entry = +7 to v2.18 directly)
+
+**Registry:** v2.11 (UNCHANGED per lockstep invariant) — Last-updated header bumped to 2026-05-18 SC7 with explicit P-024 mention + 2 NEW dependency SIs note; §3 row 64 extended to 10-entry framing with SC4/SC5/SC6/SC7 all-CDM-exempt summary + SC7 ALL-THREE-bump-exempt clarification + 6+7 consolidation path; §8 changelog new top row dated 2026-05-18 SC7 with all 9 sub-decisions enumerated.
+
+### Umbrella vs successor-SI strict separation (R3 closure)
+
+The cleanest lesson from this cycle: **umbrella SIs need strict separation from their successor SIs in the ledger language**. P-024 originally said "physical content lands across MULTIPLE future PR-A2/A3 commits" + "CANONICAL after each sub-SI canonical content lands" — which Codex correctly identified as defeating the umbrella-only Registry-bump landing model. The corrected language:
+
+- **P-024 UMBRELLA** absorbs ONLY at a SINGLE future PR-A2⁗″/A3⁗″ Registry-only umbrella-bump landing (Registry +1 + 2 artifact rows only; no entity rows, no AUDIT_EVENTS, no DOMAIN_EVENTS)
+- **SI-011.1a/b/c/d** are SEPARATE successor SIs under SEPARATE P-NUMs at SEPARATE successor SCs; each ratifies its own canonical row shapes
+- **SI-015 + SI-016** are SEPARATE prerequisite SIs (also under SEPARATE future P-NUMs / SCs)
+- No canonical content from any successor SI is "absorbed into" P-024's landing — they each absorb independently
+- The umbrella ratification authorizes scoping-level decisions only; implementation against unratified row shapes still waits for per-sub-SI ratification
+
+This pattern is now established for any future umbrella SIs in the cycle.
+
+### Codex closure trajectory summary
+
+| Round | Finding | Closure |
+| :---: | --- | --- |
+| R1 | HIGH: Top-of-Ledger interpretation-rule operative sentence said "ordering-dependent across SIX sub-ceremony landings" despite header listing 7 SCs / 10 entries | Extended prose to "SEVEN landings" + added SC7 PR-A2⁗″ to default landing-order list |
+| R1 | MEDIUM: Embedded CDM/AUDIT_EVENTS bullet retained 6-SC summary ("4+5+6 CDM-exempt; max CDM 3 across all 6 SCs; max AUDIT_EVENTS 6") inside the new 7-SC rule | Replaced with 7-SC version (4+5+6+7 CDM-exempt; max CDM 3 across all 7 SCs; max AUDIT_EVENTS 6 with SC7 contributing none) |
+| R1 | MEDIUM: Registry §3 row 64 future-landing list enumerated only sub-ceremonies 1-6 (SC7 omitted) | Added SC7 PR-A2⁗″/A3⁗″ to the explicit list with umbrella-only Registry-bump landing framing |
+| R2 | HIGH: Registry Last-updated + §3 row 64 primary summary stale at "all nine RATIFIED-IN-INTENT entries" + "cover 6 sub-ceremonies / 9 entries" + "all-9-entry +6 v2.17 directly" | Fixed to "ten entries" + "7 sub-ceremonies / 10 entries" + "all-10-entry +7 v2.18 directly" + added 6+7 consolidation path |
+| R3 | HIGH: P-024 Type said "physical content lands across MULTIPLE future PR-A2/A3 commits" + Status said "CANONICAL after each sub-SI canonical content lands" — defeated the umbrella-only Registry-bump landing model | Rewrote both to strictly separate: P-024 UMBRELLA lands at SINGLE future PR-A2⁗″/A3⁗″ Registry-only landing; per-sub-SI canonical content (SI-011.1a/b/c/d) + dependency SIs (SI-015 + SI-016) absorb independently at their own SCs; no absorption into P-024's landing; umbrella ratification authorizes scoping-level decisions only, NOT implementation against unratified row shapes |
+| R4 | APPROVE clean | — |
+
+**3 substantive findings closed across 3 iteration rounds + 1 verify round.** R3 was the most instructive: umbrella SIs need strict separation from their successor SIs in ledger language. The lesson captured for future umbrella ratifications: explicitly say "ABSORBED INTO P-NUM's PR-A2/A3 landing" only for things that actually absorb at that landing; everything else absorbs at its own SC.
+
+### P-NUM cascade post-SC7 (unchanged from SC6)
+
+| SI | P-NUM | Status |
+| --- | :---: | --- |
+| SI-007 (SC1) | P-013 | ✅ ratification-intent |
+| SI-012 (SC1) | P-012 | ✅ ratification-intent |
+| SI-002 (SC4) | P-014 | ✅ ratification-intent |
+| SI-003 (SC5) | P-015 | ✅ ratification-intent |
+| SI-004 (SC5) | P-016 | ✅ ratification-intent |
+| SI-008 (SC2) | P-018 | ✅ ratification-intent |
+| SI-009 original (SC2) | P-019 | ✅ ratification-intent |
+| SI-009.1 successor | P-020 | 🕐 awaiting next Codex pre-ratification gate (6 open questions) |
+| SI-005 (SC3) | P-021 | ✅ ratification-intent |
+| SI-010 (SC6) | P-023 | ✅ ratification-intent |
+| **SI-011 UMBRELLA (SC7)** | **P-024** | ✅ **ratification-intent (this turn)** |
+| SI-013 (SC8) | P-025 | 🕐 upcoming |
+| SI-014 (SC9) | P-026 | 🕐 upcoming (parked until ADR-030 clinical-safety quorum) |
+| **SI-011.1a** (per-sub-SI canonical content) | TBD (future SC) | 🕐 prereq SI-010 ✅; ready for Codex pre-ratification |
+| **SI-011.1b** (per-sub-SI canonical content) | TBD (future SC) | 🕐 no prereqs; ready for Codex pre-ratification |
+| **SI-011.1c** (per-sub-SI canonical content) | TBD (future SC) | 🕐 gated on SI-015 ratification |
+| **SI-011.1d** (per-sub-SI canonical content) | TBD (future SC) | 🕐 gated on SI-016 ratification |
+| **SI-015 MarketingCopy CDM §4 expansion** (NEW dependency) | TBD (future SC) | 🕐 NEW in queue |
+| **SI-016 `ai_workflow_handler_registry`** (NEW dependency) | TBD (future SC) | 🕐 NEW in queue |
+| (Gap slots) | P-017, P-022, P-027 | unclaimed |
+
+### Cockpit
+
+- `progress.json` r142 → r143 (matched bump for PR #7 merge)
+
+### Operating posture confirmed
+
+| Activity | Status |
+| --- | --- |
+| Speculative autonomous scaffolding | STOPPED per Evans's directive |
+| **Sub-Ceremony 1 ratification-intent (P-012 + P-013)** | ✅ Landed PR-A1 `36efccd` |
+| **Sub-Ceremony 2 ratification-intent (P-018 + P-019)** | ✅ Landed PR-A1′ `74c189b` |
+| **Sub-Ceremony 3 ratification-intent (P-021)** | ✅ Landed PR-A1″ `786b2a2` |
+| **Sub-Ceremony 4 ratification-intent (P-014)** | ✅ Landed PR-A1‴ `a883790` |
+| **Sub-Ceremony 5 ratification-intent (P-015 + P-016)** | ✅ Landed PR-A1⁗ `08deafd` |
+| **Sub-Ceremony 6 ratification-intent (P-023)** | ✅ Landed PR-A1⁗′ `869b0ab` |
+| **Sub-Ceremony 7 UMBRELLA ratification-intent (P-024)** | ✅ **Landed PR-A1⁗″ `60785e4` (this addendum)** |
+| **Cluster B HARD-sequencing** | ✅ CLOSED at ratification-intent layer (SC3) |
+| **Cluster A placeholder-namespace pair** | ✅ COMPLETE at ratification-intent layer (SC4 + SC5) |
+| **Phase 2 F-3 (JWT session-liveness check)** | ✅ CLOSED by SI-010 SC6 authContextPlugin wiring change |
+| **First UMBRELLA SI ratified** | ✅ **SC7 SI-011 with strict separation pattern established for future umbrellas** |
+| SI-009.1 v0.1 DRAFT | ✅ Filed `ae87ad7` (PR #178); P-020 target after Codex pre-ratification gate |
+| **NEW dependency SIs in queue** | 🕐 SI-015 MarketingCopy CDM + SI-016 ai_workflow_handler_registry |
+| **NEW successor SIs in queue** | 🕐 SI-011.1a/b/c/d for per-sub-SI canonical content |
+| Sub-Ceremonies 8-9 Ratifier Packets (SI-013, SI-014) | 🕐 ON DEMAND per Evans's ordering (SI-013 next per sequence) |
+| ADR-030 clinical-safety quorum convening | 🕐 Brief delivered PR #177 (Addendum 40); awaiting quorum |
+| SI-014 | 🛑 Parked until ADR-030 |
+| Autonomous-track implementation (concurrent with ratification track) | ▶️ PR #155 SI-011 publish-gates kill-switch layers 1+2 merged SC6 cycle |
+
+### Closure-debt heading into next loop
+
+1. **Sub-Ceremony 8 Ratifier Packet (SI-013)** — CCR crisis-helpline keys; next in Evans's stated ordering. Single-SI ratification, smaller scope than SC7 umbrella.
+2. **Sub-Ceremony 9 Ratifier Packet (SI-014)** — parked until ADR-030 ratifies.
+3. **SI-009.1 next Codex pre-ratification round** — close the 6 open questions before P-020 ratification-intent.
+4. **NEW: SI-015 (MarketingCopy CDM) Codex pre-ratification cycle** — should start to clear path for SI-011.1c.
+5. **NEW: SI-016 (ai_workflow_handler_registry) Codex pre-ratification cycle** — should start to clear path for SI-011.1d.
+6. **NEW: SI-011.1a (L3 dual-control gate) Codex pre-ratification cycle** — prereqs ✅; ready to start.
+7. **NEW: SI-011.1b (I-030 analyzer) Codex pre-ratification cycle** — no prereqs; ready to start.
+8. **Canonical content port** (PR-A2/A3 × 7 sub-ceremonies + variants) — mechanical work; pre-ratified by sub-ceremonies 1-7 sign-offs. **AUTONOMOUS SCOPE.**
+9. **ADR-030 quorum convening** — Evans's call.
+10. **SI-011 IMPLEMENTATION** (separate from this umbrella ratification) — kill-switch layers 3+4 + per-sub-SI gate logic as each SI-011.1a/b/c/d successor lands.
+
+### Lessons captured for future umbrella-SI ratification cycles
+
+1. **Umbrella SIs need strict separation from successor SIs in ledger language.** P-024 originally said "physical content lands across MULTIPLE future PR-A2/A3 commits" + "CANONICAL after each sub-SI canonical content lands" — Codex R3 correctly identified this as defeating the umbrella-only Registry-bump landing model. Corrected language explicitly says "P-024 UMBRELLA lands at SINGLE future PR-A2⁗″/A3⁗″ Registry-only landing; successor SIs absorb at their own SCs; no absorption into P-024's landing." This pattern is now established for any future umbrella SIs.
+2. **Umbrella ratification authorizes scoping-level decisions only, NOT implementation against unratified row shapes.** Evans's "ratify" for SC7 authorizes the design-pattern decisions (e.g., "Tenant Clinical Lead = separate table", "I-030 exemption = 90 days") but does NOT authorize implementation against `forms_template_l3_edit_log` row shapes (which wait for SI-011.1a ratification) or MarketingCopy CDM row shapes (which wait for SI-015 ratification).
+3. **Dependency SIs surface during umbrella ratification.** SI-015 + SI-016 emerged from SI-011's design analysis; both are now in the queue as concrete pending-ratification work.
+4. **Concurrent implementation track can ship narrowly-scoped pieces of an unratified SI safely.** PR #155 (SI-011 publish-gates kill-switch layers 1+2) merged BEFORE the SC7 ratification of SI-011; the spec corpus catches up at the umbrella ratification ceremony. Works when the implementation pieces touch no spec-corpus row shapes (only env-var handling + runtime guards).
+5. **Top-of-Ledger interpretation-rule extensions need comprehensive prose scrubs.** SC7's "ordering across SEVEN landings" extension needed updates in 3+ places (header, operative sentence, embedded summary, Registry §3 row 64 list, §8 changelog) — Codex caught multiple stale references in R1 + R2. Future SC ratification-intent commits should grep for the prior count ("six landings", "all nine", etc.) and update each occurrence consistently.
+
+— Claude (Opus 4.7, 1M context), 2026-05-18 sub-ceremony-7-umbrella-ratification-intent close (50 PRs MERGED in cycle; 229+ Codex closures cumulative; 4-round trajectory on PR-A1⁗″; 3 substantive findings closed inline; interpretation rule extended to 7 SCs / 10 entries with **SC7 as FIRST SC across the Q2 2026 ratifier ceremony to be exempt from ALL THREE contract-file bumps**; umbrella-vs-successor-SI strict separation pattern established as canonical for future umbrella ratifications; 2 NEW dependency SIs filed (SI-015 + SI-016) + 4 NEW successor SIs implicit in umbrella (SI-011.1a/b/c/d); remaining ratification surface = sub-ceremonies 8-9 per Evans's ordering + canonical content port + SI-009.1 next round + SI-015/SI-016 pre-ratification + SI-011.1a/b ready to begin pre-ratification + ADR-030 quorum + SI-014 parked).
