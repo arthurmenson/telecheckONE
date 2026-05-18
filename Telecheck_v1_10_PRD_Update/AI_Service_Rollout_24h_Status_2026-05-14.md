@@ -3724,3 +3724,84 @@ Evans's verbatim ratifier instruction at the SC8 Decision Brief: *"ratify"* — 
 3. **Pre-ratification gate wave-merge unlocked the SC7 umbrella.** Within the SC8 close-out window, all 4 SI-011 sub-SIs (SI-011.1a/b/c/d) + both SI-011 dependency SIs (SI-015 + SI-016) cleared their Codex pre-ratification gates. The full SC7 SI-011 UMBRELLA is now structurally implementation-ready pending Evans's ratification of the 6 dependent + successor SIs (which can happen at any future SC, no specific ordering required).
 
 — Claude (Opus 4.7, 1M context), 2026-05-18 sub-ceremony-8-ratification-intent close (58 PRs MERGED in cycle; 281+ Codex closures cumulative; 3-round trajectory on PR-A1⁗‴; 3 substantive findings closed inline; interpretation rule extended to 8 SCs / 11 entries with **SC8 as FIRST SC across the Q2 2026 ratifier ceremony to bump BOTH CCR_RUNTIME AND AUDIT_EVENTS in the same ceremony**; 7 successor SI pre-ratification gates all Codex-APPROVED + merged to telecheck-app main + ready for ratification; remaining ratification surface = sub-ceremony 9 (SI-014 parked until ADR-030) + canonical content port + 7 pending successor SI ratifications at Evans's choice of SC + ADR-030 quorum).
+
+---
+
+## Addendum 48 — FIRST canonical-content-port landing of the Q2 2026 ratifier ceremony: SC7 P-024 SI-011 UMBRELLA → CANONICAL via Registry v2.11 → v2.12 (5-round Codex prose-scrub convergence; 6 substantive findings closed)
+
+**Date:** 2026-05-18 (Sprint 38, autonomous turn)
+
+**PR merged this turn:**
+- `arthurmenson/telecheckONE#9` (PR-A2/A3 SC7 canonical-content-port MERGED `ee979bb`) — Registry v2.11 → v2.12 umbrella-only landing for SC7 P-024 SI-011 UMBRELLA; FIRST PR-A2/A3-class lockstep canonical-content-port landing of the Q2 2026 ratifier ceremony; P-024 transitions RATIFIED-IN-INTENT → CANONICAL. **5-round Codex convergence** (6 substantive findings closed inline across the prose-scrub work: R1 HIGH×2 stale "Registry remains at v2.11" header text + missing artifact-row absorption framing; R2 HIGH×2 carried-forward stale "eleven entries" + stale "artifact row added" SC7 ledger row claims; R3 HIGH carried-forward "Until PR-A2/A3 lands, Registry remains at v2.11" tail; R4 HIGH SC7 ledger row's stale "7th-landing v2.17→v2.18 default" ordering; R5 APPROVE clean).
+
+### Entry point — Evans's standing autonomous-work authorization
+
+Per CLAUDE.md "Autonomous-work authorization (Evans standing directive, 2026-05-16+)": canonical content ports are AUTONOMOUS SCOPE. SC7 P-024 SI-011 UMBRELLA's canonical content is registry-bump-only per Sub-decision #1's ratified umbrella ledger shape; smallest landing surface across the 8 SC ratifier ceremony. Per smallest-first triage discipline, SC7 lands first in the canonical-content-port wave.
+
+### What shipped (PR #9 — PR-A2/A3 SC7 canonical-content-port)
+
+**Registry version bump:** v2.11 → v2.12. This is the canonical "FIRST canonical-content-port landing" slot per the top-of-Ledger interpretation rule's "+1 minor Registry bump regardless of ordering" semantics. SC7's actual destination version is v2.12 (the first available landing slot), NOT v2.18 (the default 7th-landing position) — per the interpretation rule, each PR-A2/A3 lands at the next available +1 minor regardless of which SC it covers.
+
+**Status transitions:**
+- P-024 Promotion Ledger entry: RATIFIED-IN-INTENT → CANONICAL
+- Registry §3 row 64 Promotion Ledger inventory: updated pending-set to remaining-ten (P-012/P-013/P-018/P-019/P-021/P-014/P-015/P-016/P-023/P-025)
+- Registry §8 changelog: NEW top row documenting the first canonical-content-port landing
+- Registry header Last-updated: bumped to 2026-05-18 with explicit "Registry v2.11 → v2.12 canonical-content-port for SC7" framing
+- Last-updated header's stale "Registry remains at v2.11 / All eleven RATIFIED-IN-INTENT entries / Until PR-A2/A3 lands" tail: SUPERSEDED-annotated per Codex R3/R4 closures
+- SC7 ratification-intent ledger row's stale "Registry remains at v2.11" + "one new canonical artifact row added" claims: SUPERSEDED-annotated per R2/R4 closures
+- SC7 ratification-intent ledger row's stale "7th-landing v2.17→v2.18 default" ordering: SUPERSEDED-annotated per R4 closure
+
+**No contract-file changes:** per SC7 ratified umbrella ledger shape (Sub-decision #1), no CDM/AUDIT_EVENTS/DOMAIN_EVENTS/CCR_RUNTIME content changes. Umbrella ratification artifact canonical content IS the Promotion Ledger entry + the Registry version bump itself.
+
+### Codex closure trajectory summary
+
+| Round | Findings | Closure |
+| :---: | --- | --- |
+| R1 | HIGH×2: Registry header still said P-024 pending + v2.11 authoritative; §8 changelog claimed "two new canonical artifact rows" without adding any | Updated header pending-set to ten remaining (P-024 removed); clarified umbrella canonical content semantics (Ledger entry + Registry bump IS the bundle-side canonical representation; no §3 inventory rows because SI source artifacts are cross-repo per established precedent) |
+| R2 | HIGH×2: Carried-forward "Registry remains at v2.11" in Last-updated history; SC7 ledger row promised "one new canonical artifact row" | SUPERSEDED-annotated each historical "Registry remains at v2.11" + the artifact-row promise in the SC7 ledger row |
+| R3 | HIGH: Last-updated header carried-forward "All eleven RATIFIED-IN-INTENT entries land in future PR-A2/A3" + "Until PR-A2/A3 lands, Registry remains at v2.11" tail | SUPERSEDED-annotated both with remaining-ten / v2.12-canonical framing |
+| R4 | HIGH: SC7 ledger row's stale "Registry bump destination ordering-dependent / default 7th-landing v2.17→v2.18" | Strikethrough + SUPERSEDED annotation; SC7 landed FIRST as v2.11→v2.12 per smallest-first triage discipline |
+| R5 | APPROVE clean | — |
+
+**5-round Codex convergence with 6 substantive findings closed inline.** All 6 findings were prose-scrub work — multiple authoritative surfaces (Registry header / §3 row 64 / §8 changelog / SC7 ratification-intent ledger row / Last-updated carried-forward history) carried stale "P-024 pending / Registry remains at v2.11 / artifact row pending / 7th-landing default" framings that needed surface-by-surface scrub to reflect the new SC7 CANONICAL state. Mirror of the SC6/SC7/SC8 prose-scrub discipline lessons (each SC extension catches more stale surfaces; same pattern applies to canonical-content-port landings).
+
+### Cascade slot consumed
+
+| Slot | Status |
+| :---: | --- |
+| v2.11 → v2.12 | ✅ **CONSUMED by SC7 P-024 PR-A2/A3 landing 2026-05-18 (this commit)** |
+| v2.12 → v2.13 | 🕐 Next available canonical-content-port landing slot |
+| ... | |
+| v2.18 → v2.19 | 🕐 Final canonical-content-port landing slot (10 remaining landings total to v2.22) |
+
+Per the interpretation rule: each remaining PR-A2/A3-class commit applies +1 minor bump consuming the next available slot regardless of SC ordering. Smallest-first triage continues to apply for the next landings.
+
+### Cockpit
+
+- `progress.json` r155 → r156 (matched bump for PR #9 merge)
+
+### Operating posture confirmed
+
+| Activity | Status |
+| --- | --- |
+| **All 8 SC ratification-intent commits** | ✅ Landed (P-012/P-013/P-018/P-019/P-021/P-014/P-015/P-016/P-023/P-024/P-025) |
+| **SC7 P-024 SI-011 UMBRELLA → CANONICAL** | ✅ **Landed PR-A2/A3 `ee979bb` (this addendum)** |
+| **10 remaining SC ratification-intent entries** | 🕐 Awaiting canonical-content-port landings (P-012/P-013/P-018/P-019/P-021/P-014/P-015/P-016/P-023/P-025) |
+| **7 successor SI pre-ratification gates** | ✅ Codex-APPROVED + merged to telecheck-app main; awaiting Evans's ratification at any future SC |
+| Sub-Ceremony 9 (SI-014) | 🛑 Parked until ADR-030 quorum |
+| ADR-030 quorum | 🕐 Brief delivered PR #177 (Addendum 40); awaiting quorum |
+
+### Closure-debt heading into next loop
+
+1. **9 remaining canonical-content-port landings** (10 ratification-intent entries minus SC7 just landed) — AUTONOMOUS SCOPE per standing directive; can proceed nonstop next loop
+2. **7 successor SI ratifications** — Evans's call which future SCs to bundle them at
+3. **Sub-Ceremony 9 (SI-014)** — parked until ADR-030
+4. **ADR-030 quorum** — Evans's call
+
+### Lessons captured for future canonical-content-port cycles
+
+1. **Canonical-content-port commits carry inherent prose-scrub work.** Each PR-A2/A3 landing changes multiple authoritative surfaces (Registry header / §3 row 64 / §8 changelog / Promotion Ledger entry Status / Last-updated history). All carry forward-state vs current-state distinctions that need explicit SUPERSEDED annotation. SC7's 5-round Codex convergence on a SINGLE-file Registry bump set the prose-scrub precedent.
+2. **Smallest-first triage discipline.** Per the interpretation rule's "+1 minor Registry bump regardless of ordering", canonical-content-ports can land in ANY order; smallest-surface SCs (like SC7 umbrella-only) make the cleanest first-landing precedents because they isolate the prose-scrub work from contract-file work.
+3. **Lockstep invariant explicit semantics for umbrellas.** SC7 umbrella ratification artifact canonical content IS the Promotion Ledger entry + the Registry version bump itself. No separate §3 inventory rows or artifact-table rows; cross-repo SI source files at `arthurmenson/telecheck-app:docs/` are ratifier-input + audit-trail evidence per established SI source-file precedent (SI-005/SI-007/SI-008/SI-009/SI-010/etc.).
+
+— Claude (Opus 4.7, 1M context), 2026-05-18 SC7-PR-A2/A3-canonical-content-port-landing close (59 PRs MERGED in cycle; 287+ Codex closures cumulative; 5-round trajectory on the FIRST canonical-content-port commit; 6 substantive findings closed inline; **P-024 transitions RATIFIED-IN-INTENT → CANONICAL via Registry v2.11 → v2.12**; canonical-content-port wave initiated with smallest-first SC7 umbrella landing; remaining surface = 9 canonical-content-port landings (P-012/P-013/P-018/P-019/P-021/P-014/P-015/P-016/P-023/P-025) + 7 pending successor SI ratifications + SC9 parked + ADR-030 quorum).
