@@ -3650,3 +3650,77 @@ This pattern is now established for any future umbrella SIs in the cycle.
 5. **Top-of-Ledger interpretation-rule extensions need comprehensive prose scrubs.** SC7's "ordering across SEVEN landings" extension needed updates in 3+ places (header, operative sentence, embedded summary, Registry §3 row 64 list, §8 changelog) — Codex caught multiple stale references in R1 + R2. Future SC ratification-intent commits should grep for the prior count ("six landings", "all nine", etc.) and update each occurrence consistently.
 
 — Claude (Opus 4.7, 1M context), 2026-05-18 sub-ceremony-7-umbrella-ratification-intent close (50 PRs MERGED in cycle; 229+ Codex closures cumulative; 4-round trajectory on PR-A1⁗″; 3 substantive findings closed inline; interpretation rule extended to 7 SCs / 10 entries with **SC7 as FIRST SC across the Q2 2026 ratifier ceremony to be exempt from ALL THREE contract-file bumps**; umbrella-vs-successor-SI strict separation pattern established as canonical for future umbrella ratifications; 2 NEW dependency SIs filed (SI-015 + SI-016) + 4 NEW successor SIs implicit in umbrella (SI-011.1a/b/c/d); remaining ratification surface = sub-ceremonies 8-9 per Evans's ordering + canonical content port + SI-009.1 next round + SI-015/SI-016 pre-ratification + SI-011.1a/b ready to begin pre-ratification + ADR-030 quorum + SI-014 parked).
+
+---
+
+## Addendum 47 — Sub-Ceremony 8 (SI-013 CCR crisis-helpline key namespace expansion) ratification-intent landed (P-025); FIRST SC across the Q2 2026 ratifier ceremony to bump BOTH CCR_RUNTIME AND AUDIT_EVENTS in the same ceremony; interpretation rule extended to 8 SCs / 11 entries; cumulative pre-ratification gates wave (7 successor SIs APPROVED) all merged + ready
+
+**Date:** 2026-05-18 (Sprint 38, autonomous turn)
+
+**PRs merged this turn:**
+- `arthurmenson/telecheckONE#8` (PR-A1⁗‴ MERGED `a182ac3`) — Promotion Ledger P-025 ratification-intent for SI-013 CCR crisis-helpline keys + Registry §3 row 64 + §8 changelog updates + top-of-Ledger interpretation rule extended from 7 sub-ceremonies / 10 entries to **8 sub-ceremonies / 11 entries** with **SC8 as FIRST SC across the ratifier ceremony to bump BOTH CCR_RUNTIME AND AUDIT_EVENTS in the same ceremony** + CDM-exempt + DOMAIN_EVENTS-exempt. **3-round Codex convergence** (3 substantive findings closed: R1 HIGH×2 + 1 MEDIUM stale 7-SC/10-entry rollups in Registry header + row 64 + Ledger interpretation-rule operative prose; R2 HIGH stale 7-SC trailing prose in operative bullets; R3 APPROVE clean).
+- `arthurmenson/telecheck-app#181` (SI-015 v0.1 MarketingCopy CDM pre-ratification gate APPROVE; 4 rounds; 7 findings closed)
+- `arthurmenson/telecheck-app#182` (SI-016 v0.1 ai_workflow_handler_registry CDM pre-ratification gate APPROVE; 3 rounds; 4 findings closed)
+- `arthurmenson/telecheck-app#183` (SI-011.1a v0.1 L3 dual-control pre-ratification gate APPROVE; 4 rounds; 6 findings closed)
+- `arthurmenson/telecheck-app#184` (SI-011.1b v0.1 I-030 analyzer pre-ratification gate APPROVE; 6 rounds; 7 findings closed)
+- `arthurmenson/telecheck-app#185` (SI-011.1c v0.1 L4 MarketingCopy gate pre-ratification gate APPROVE; 3 rounds; 4 findings closed)
+- `arthurmenson/telecheck-app#186` (SI-011.1d v0.1 Mode 2 contract pre-ratification gate APPROVE; 3 rounds; 4 findings closed)
+- `arthurmenson/telecheck-app#180` (SI-009.1 v0.2 SyncSession scaffold expansion pre-ratification gate APPROVE; 10 rounds; 9 findings closed)
+- `arthurmenson/telecheck-app#187` (SC8 SI-013 Decision Brief)
+
+**Pre-ratification gates landed this wave:** 7 successor SIs Codex-APPROVED across 33-round Codex convergence (39+ substantive findings closed cumulative). All merged to `telecheck-app/main` and ready for Evans's ratification at any future SC of his choosing.
+
+### Entry point — Evans's 2026-05-18 sub-ceremony 8 ratification
+
+Evans's verbatim ratifier instruction at the SC8 Decision Brief: *"ratify"* — defaulted per the brief to "all 6 ratifier sub-decisions as recommended". SI-013 source was extensively pre-Codex-converged across 7 internal rounds 2026-05-16 (R1 H1/H2 safety-floor invariants + R1 M1 dialable-string discipline + R3 M1 paired Cat B audit + R4 M1 ccrThrew flag + R5 H1 fail-soft Cat B policy + R6 M1 third typed resolver + R7 M1 4-value resolution_status enum); SC8 commits the design at the Promotion Ledger level.
+
+### What shipped (PR #8 — PR-A1⁗‴ ratification-intent only)
+
+**Promotion Ledger:**
+- **NEW P-025** — SI-013 ratification-intent: 3 new CCR keys in NEW `crisis` namespace (`helpline_e164` + `helpline_label` + `emergency_number`) + 3 typed resolvers (per Rule 3) + 1 new Cat B AUDIT_EVENTS action `crisis.escalation_destination_resolved` (4-value `resolution_status` enum + patient-surface-agreement contract) + safety-floor Rule 1 + Rule 2 (crisis gate first; CCR fail-soft) + Rule 4 fail-soft Cat B policy (divergent from FLOOR-020) + 11 mandatory regression tests at downstream implementation
+- **Top-of-Ledger interpretation rule extended** from 7 sub-ceremonies / 10 entries to 8 sub-ceremonies / 11 entries with sub-ceremony 8 framing: SC8 bumps Registry +1 + AUDIT_EVENTS +1 (contributes the 7th AUDIT_EVENTS bump) + CCR_RUNTIME +1 (FIRST + ONLY SC across the ceremony to bump CCR_RUNTIME); CDM-exempt + DOMAIN_EVENTS-exempt. AUDIT_EVENTS max-bumps cap extends from 6 to 7. CCR_RUNTIME max-bumps cap = 1.
+
+**Registry:** v2.11 (UNCHANGED per lockstep invariant) — Last-updated header bumped to 2026-05-18 SC8 with explicit P-025 mention + 8-SC/11-entry framing; §3 row 64 extended to 11-entry framing with SC4-SC8 all-CDM-exempt summary + AUDIT_EVENTS max-7-bumps cap + CCR_RUNTIME max-1-bump + SC8 FIRST-to-bump-both clarification; §8 changelog new top row dated 2026-05-18 SC8 with all 6 sub-decisions enumerated.
+
+### Codex closure trajectory summary
+
+| Round | Findings | Closure |
+| :---: | --- | --- |
+| R1 | HIGH×2 + MEDIUM: Registry header excluded P-025 from pending lockstep set + Registry §3 row 64 had stale "all ten / seven landings / max-6 cap" + Ledger interpretation-rule operative sentence said "ordering-dependent across SEVEN landings" despite header listing 8 SCs / 11 entries | Updated all three to 8-SC/11-entry framing with SC8 CCR_RUNTIME + AUDIT_EVENTS co-bump explicit |
+| R2 | HIGH: Ledger interpretation-rule trailing operative bullets retained stale "1→2→3→4→5→6→7 default order / SC4+5+6+7 CDM exemption / max-6 AUDIT_EVENTS cap" | Updated 'General rule' to 1→2→3→4→5→6→7→8; 'CDM-bump exemption' extended to SC4+5+6+7+8 with SC8 service-layer-only description; added SC8 bump-pattern bullet; updated totals (CDM 3 / AUDIT_EVENTS 7 / CCR_RUNTIME 1 / DOMAIN_EVENTS 0) |
+| R3 | APPROVE clean | — |
+
+**3 substantive findings closed across 2 iteration rounds + 1 verify round.** The 7-SC → 8-SC extension required scrubs of multiple authoritative rollup surfaces (Registry header + row 64 description column + row 64 post-pipe historical summary + Ledger header + Ledger interpretation-rule operative + Ledger interpretation-rule trailing bullets). Codex's surface-by-surface pass caught each stale reference. Mirror of the SC6/SC7 prose-scrub discipline lessons.
+
+### Cockpit
+
+- `progress.json` r154 → r155 (matched bump for PR #8 merge)
+- 7 successor SI pre-ratification gates merged with progress.json bumps to r154 over the prior commits
+
+### Operating posture confirmed
+
+| Activity | Status |
+| --- | --- |
+| Speculative autonomous scaffolding | STOPPED per Evans's directive |
+| **Sub-Ceremony 1-7 ratification-intent** | ✅ All landed |
+| **Sub-Ceremony 8 ratification-intent (P-025)** | ✅ **Landed PR-A1⁗‴ `a182ac3` (this addendum)** |
+| **7 successor SI pre-ratification gates APPROVED** | ✅ SI-009.1 / SI-015 / SI-016 / SI-011.1a / SI-011.1b / SI-011.1c / SI-011.1d all Codex-APPROVED + merged to telecheck-app main; ready for ratification at any future SC |
+| **Sub-Ceremony 9 (SI-014)** | 🛑 Parked until ADR-030 clinical-safety quorum convenes |
+| **ADR-030 clinical-safety quorum** | 🕐 Brief delivered PR #177 (Addendum 40); awaiting quorum |
+| **Canonical content port (PR-A2/A3 × 8 sub-ceremonies)** | ⏸ DEFERRED — mechanical work; pre-ratified by P-012/P-013/P-014/P-015/P-016/P-018/P-019/P-021/P-023/P-024/P-025 sign-offs |
+| **7 successor SI ratifications** | 🕐 ON DEMAND per Evans's choice of SC |
+
+### Closure-debt heading into next loop
+
+1. **Sub-Ceremony 9 Decision Brief (SI-014)** — parked until ADR-030 clinical-safety quorum convenes
+2. **7 successor SI ratifications** — Evans's call which SCs to bundle them at
+3. **Canonical content port** (PR-A2/A3 × 8 sub-ceremonies) — mechanical work; pre-ratified. **AUTONOMOUS SCOPE.**
+4. **ADR-030 quorum convening** — Evans's call
+
+### Lessons captured for future SC ratification-intent cycles
+
+1. **CCR_RUNTIME co-bumps are first-class.** SC8 introduces the first CCR_RUNTIME contribution to the ratifier ceremony. The interpretation rule now tracks CCR_RUNTIME max-bumps alongside CDM, AUDIT_EVENTS, DOMAIN_EVENTS. Future SCs that touch CCR_RUNTIME (e.g., when new country regulatory placeholders need CCR coverage) will reference this SC8 precedent.
+2. **Internal-Codex pre-Codex-converged SIs ratify fast.** SI-013 went through 7 internal Codex rounds 2026-05-16 BEFORE SC8 ratification. The substantive design was already settled; SC8 ratification only needed to commit the design at the Promotion Ledger level + handle the prose-scrub work for the 8-SC/11-entry rule extension (3 Codex rounds total, far below the SC6 7-round mean and SC7 4-round mean for fresh-design SCs).
+3. **Pre-ratification gate wave-merge unlocked the SC7 umbrella.** Within the SC8 close-out window, all 4 SI-011 sub-SIs (SI-011.1a/b/c/d) + both SI-011 dependency SIs (SI-015 + SI-016) cleared their Codex pre-ratification gates. The full SC7 SI-011 UMBRELLA is now structurally implementation-ready pending Evans's ratification of the 6 dependent + successor SIs (which can happen at any future SC, no specific ordering required).
+
+— Claude (Opus 4.7, 1M context), 2026-05-18 sub-ceremony-8-ratification-intent close (58 PRs MERGED in cycle; 281+ Codex closures cumulative; 3-round trajectory on PR-A1⁗‴; 3 substantive findings closed inline; interpretation rule extended to 8 SCs / 11 entries with **SC8 as FIRST SC across the Q2 2026 ratifier ceremony to bump BOTH CCR_RUNTIME AND AUDIT_EVENTS in the same ceremony**; 7 successor SI pre-ratification gates all Codex-APPROVED + merged to telecheck-app main + ready for ratification; remaining ratification surface = sub-ceremony 9 (SI-014 parked until ADR-030) + canonical content port + 7 pending successor SI ratifications at Evans's choice of SC + ADR-030 quorum).
