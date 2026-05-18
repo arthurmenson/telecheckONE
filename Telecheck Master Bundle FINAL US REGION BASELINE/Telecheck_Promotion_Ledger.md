@@ -37,11 +37,81 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
-> **Interpretation rule for all RATIFIED-IN-INTENT entries dated 2026-05-17 (P-012, P-013, P-018, P-019; added in PR-A1′ 2026-05-17 per Codex R3/R4 closure):** specific version targets cited in these entries (`Registry v2.11 → v2.12`, `CDM v1.3 → v1.4`, `AUDIT_EVENTS v5.3 → v5.4`) assume the **default sub-ceremony-1-first landing order** (sub-ceremony 1 PR-A2/A3 lands first; sub-ceremony 2 PR-A2′/A3′ lands second). The actual destination versions are **ordering-dependent**:
-> - **Whichever sub-ceremony lands canonical content FIRST**: bumps Registry v2.11 → v2.12 (and CDM v1.3 → v1.4, and AUDIT_EVENTS v5.3 → v5.4 for that sub-ceremony's scope)
-> - **Whichever sub-ceremony lands SECOND**: bumps Registry v2.12 → v2.13 (and CDM v1.4 → v1.5, and AUDIT_EVENTS v5.4 → v5.5 for that sub-ceremony's scope)
-> - **Consolidation** into a single combined PR-A2/A3 covering all four ratification-intent entries (P-012/P-013/P-018/P-019) IS PERMITTED and would bump Registry v2.11 → v2.13 directly (with CDM v1.3 → v1.5 and AUDIT_EVENTS v5.3 → v5.5) — but is **NOT the default sequencing** because each sub-ceremony's canonical content surface is independent + cleaner to land separately for focused Codex review.
-> - Future PR-A2/A3-class commits MUST consult the current Registry version at the time of landing and apply the appropriate +1 minor bump, rather than applying the specific version target cited in any 2026-05-17 ratification-intent entry verbatim.
+### Entry P-021 — 2026-05-17 — SI-005 ratification-intent: Consult + ConsultEvent canonical schemas (sub-ceremony 3 of Q2 2026 ratifier ceremony; Cluster B HARD-sequencing CLOSED; 3-round Codex pre-ratification convergence on SI-005 v0.2 DRAFT)
+
+**Type:** Content-change promotion — **ratification-intent recorded in PR-A1″ commit; physical content + Registry +1 minor bump land together in a future PR-A2″/A3″-class lockstep commit** per the lockstep invariant. Destination version follows the same ordering-dependent rule as P-012/P-013/P-018/P-019 (see Interpretation rule below): sub-ceremony 3 lands its Registry bump as the next-available +1 minor whenever the lockstep commit fires, sequenced against the other sub-ceremony landings.
+
+**Cluster B HARD-sequencing status:** **CLOSED.** P-018 (SI-008 AiWorkflowExecution) + P-019 (SI-009 SyncSession) + P-021 (SI-005 Consult/ConsultEvent) — the full Cluster B trio is now ratification-intent recorded. SI-005's FK 6 + FK 7 triple-composite shapes now reference canonical SI-008/SI-009 targets per Codex R5/R1 closures on those upstream SIs. Sub-ceremonies 1-3 ratifications (Cluster E + Cluster B) are complete; remaining ratifications per Evans's 2026-05-17 ordering: sub-ceremony 4 (SI-002 placeholder-namespace pair half), 5 (SI-003 placeholder-namespace pair half + SI-004 Async-Consult audit events), 6 (SI-010 session actor-context), 7 (SI-011 forms publish gates), 8 (SI-013 CCR crisis-helpline). SI-014 stays parked until ADR-030 ratifies.
+
+**Status:** **RATIFIED IN INTENT 2026-05-17** (workstream lead chat-message sign-off; sub-ceremony 3 of the Q2 2026 ratifier ceremony). Evans's verbatim ratifier instruction at the Sub-Ceremony 3 chat-message digest: *"ratify"* (defaulted per the brief to "all 6 ratifier decisions as recommended"). **CANONICAL** after future PR-A2″/A3″ lockstep commit lands Consult §4.27 + ConsultEvent §4.28 in the bundle.
+
+**Author:** Autonomous Claude (Sub-Ceremony 3 Decision Brief authored 2026-05-17 in chat-message turn; SI-005 v0.2 DRAFT authored + pushed in PR `arthurmenson/telecheck-app#179` merged `a743f80` 2026-05-17 after 3-round Codex pre-ratification convergence — 5 substantive findings closed inline: R1 HIGH-1 idempotency-key + R1 HIGH-2 state-machine consistency + R1 MEDIUM audit-row consult-binding + R2 HIGH-1 transition trigger OLD→NEW directionality + R2 HIGH-2 auth-before-idempotency + R2 MEDIUM advisory-lock + unique_violation safety net); ratified by Evans (workstream lead) 2026-05-17 in chat-message ratification.
+
+**Trigger:** SI-005 (Consult/ConsultEvent schema gap; recorded in `arthurmenson/telecheck-app:docs/SI-005-Consult-ConsultEvent-Schema-Gap.md` v0.2) blocks the Async Consult slice's clinician-decision branch implementation (transitions 9-15 per State Machines §3). CDM v1.X §3 entity inventory names #15 Consult + #16 ConsultEvent at the entity-roster level but provides no §4 field-level expansion. Sprint 9 / TLC-021a shipped placeholder schemas (10-column consults + 9-column consult_events) + 4 cross-tenant safety FKs as resume gate. This PR-A1″ commit records ratifier sign-off on the v0.2 canonical expansion (25 → 26 columns post R1-HIGH-1 idempotency-key addition; 8 composite FKs; SECURITY DEFINER procedure + 3 DB triggers + decision-class state transition table). Future PR-A2″/A3″ will physically port the v0.2 row shapes into CDM §4.27 + §4.28 as canonical content. Until PR-A2″/A3″ lands, no Consult or ConsultEvent canonical row shape exists in the bundle — implementation work MUST WAIT.
+
+**Promotion class:** content-change. Two new entity expansions + new audit/domain IDs + SECURITY DEFINER procedure + 3 DB triggers + decision-class state transition CHECK constraint all require Registry version bump per operating rule 4 — bump deferred to PR-A2″/A3″ lockstep landing.
+
+**Version bumps deferred to PR-A2″/A3″ landing (NOT applied in this PR-A1″ commit; destination version is ordering-dependent per the top-of-Ledger interpretation rule):**
+- Artifact Registry **+1 minor bump** will apply in the same lockstep PR-A2″/A3″ commit. Coverage counts after this entry's content lands: +2 entities (#15 Consult + #16 ConsultEvent post-canonical-expansion).
+- Canonical Data Model **+1 minor bump** will apply (§4.27 Consult + §4.28 ConsultEvent to be added; CHECK constraint `consult_decision_state_consistency` to be added).
+- AUDIT_EVENTS Contracts Pack **+1 patch/minor bump** will apply (3 net-new Cat A action IDs: `consult.clinician_decision_recorded` + `consult.escalation_target_swapped` + `consult.ai_workflow_execution_swapped`). Note: the latter two may already be in SI-008 P-018 / SI-009 P-019 scope — to be reconciled at the future PR-A2″/A3″ landing per OQ3 + OQ4 in SI-005 v0.2 source.
+- DOMAIN_EVENTS Contracts Pack **v5.2** (additive enum extension only — no version bump; 2 net-new tenant-scoped event types `consult.clinician_decided.v1` + `consult.escalated_to_sync.v1`).
+
+**Changes (ratified at sub-ceremony 3 2026-05-17; will physically land in PR-A2″/A3″ per lockstep):**
+
+1. **CDM §4.27 — NEW entity expansion (Consult) will be added in PR-A2″.** 26 columns per SI-005 v0.2 §"Canonical `consults` table column set":
+   - Base 10 columns from Sprint 9 / TLC-021a placeholder (preserved verbatim)
+   - 2 FK forward-pointer columns: `ai_workflow_execution_id` (triple-composite FK to SI-008) + `escalation_target_sync_session_id` (triple-composite FK to SI-009)
+   - 5 clinician-decision groups: `decided_by_clinician_account_id` + `clinician_decision_class` (5-value enum) + `clinician_decision_at` + `clinician_decision_audit_id` + 8-column KMS envelope for `clinician_decision_rationale_encrypted`
+   - 1 idempotency key column: `clinician_decision_idempotency_key` (R1 HIGH-1 closure)
+2. **CDM §4.28 — Consult Event** preserves Sprint 9 / TLC-021a 9-column placeholder + adds DB-layer strict append-only enforcement (BEFORE UPDATE + BEFORE DELETE triggers per sub-decision #6).
+3. **CDM CHECK constraint** `consult_decision_state_consistency` (R1 HIGH-2 closure): enforces valid `(state, clinician_decision_class)` tuples at DB layer per the decision-class → state transition map.
+4. **CDM `consults_two_tier_append_only` BEFORE UPDATE trigger** (sub-decision #4): Tier 0 identity immutable from INSERT + Tier 1 payload immutable post-decision; Tier 2 state-machine progression allowed via guarded transitions.
+5. **CDM `consults_state_transition_validator` BEFORE UPDATE trigger** (R2 HIGH-1 closure): enforces allowed `(OLD.state, NEW.state, clinician_decision_class)` tuples via explicit transition table. Terminal states (`completed`, `cancelled_post_decision`, `clinician_declined`, `sync_consult_completed`, `sync_consult_cancelled`) can only self-transition.
+6. **CDM `consult_events_strict_append_only_*` BEFORE UPDATE + BEFORE DELETE triggers** (sub-decision #6): forensic-evidence enforcement; consult events table is append-only forever.
+7. **8 composite FKs** (sub-decisions #1 + #2 add 2 triple-composite FKs to SI-008 + SI-009 targets): 4 Sprint 9 R1 FKs preserved + 4 new (clinician + audit + FK 6 + FK 7).
+8. **`record_consult_clinician_decision()` SECURITY DEFINER procedure** (sub-decision #5; R2 HIGH-2 + R2 MEDIUM closures): 11-step validation including auth-FIRST, advisory-lock for first-use idempotency-key race serialization, idempotent-replay with prior_outcome return tuple, audit-row consult-binding validation, atomic UPDATE + paired consult_events INSERT, unique_violation safety net. 7 rejection codes. **DEFERRED to SI-010 landing** per IMPL-readiness gate.
+9. **AUDIT_EVENTS amendments:** 3 net-new Cat A action IDs.
+10. **DOMAIN_EVENTS in-place amendment:** 2 net-new tenant-scoped event types.
+
+**Ratifier sub-decisions explicitly approved IN P-021 scope at sub-ceremony 3 (6 of 6):**
+- Sub-decision #1 FK 6 triple-composite → SI-008 ai_workflow_executions: **APPROVED**
+- Sub-decision #2 FK 7 triple-composite → SI-009 sync_sessions: **APPROVED**
+- Sub-decision #3 5 clinician-decision column groups + 8-column KMS envelope + 5-value clinician_decision_class enum: **APPROVED**
+- Sub-decision #4 Two-tier append-only on consults clinician-decision columns: **APPROVED**
+- Sub-decision #5 `record_consult_clinician_decision()` SECURITY DEFINER procedure: **APPROVED**
+- Sub-decision #6 `consult_events` strict append-only via BEFORE UPDATE + BEFORE DELETE triggers: **APPROVED**
+
+**Codex pre-ratification trail (3 rounds; 5 substantive findings closed):**
+- R1 HIGH-1 (idempotency): procedure had no idempotency key → added `p_idempotency_key` parameter + `clinician_decision_idempotency_key` column + UNIQUE partial index + idempotent-replay validation + `prior_outcome` return tuple
+- R1 HIGH-2 (state-machine consistency): Tier 2 allowed direct state UPDATE post-decision via service-layer guards only → added DB-layer CHECK constraint enforcing `(state, clinician_decision_class)` consistency + transition trigger
+- R1 MEDIUM (audit-row binding): procedure didn't verify audit row bound to THIS consult → added `subject_table = 'consults'` + `subject_id = p_consult_id` + `detail->>'idempotency_key' = p_idempotency_key` validation
+- R2 HIGH-1 (transition trigger directionality): R1 trigger only checked NEW.state class-wide membership → replaced with explicit `(OLD.state, NEW.state)` allow-list per decision class; terminal states self-transition-only
+- R2 HIGH-2 (auth-before-idempotency): R1 idempotency lookup returned success before auth check → reordered procedure validation; auth + tenant check now at step 1
+- R2 MEDIUM (concurrent first-use race): two concurrent submissions could both pass pre-update lookup then race at UNIQUE index → added `pg_advisory_xact_lock(hashtext(tenant_id || ':' || idempotency_key))` at step 2 + `unique_violation` catch with re-read + normal rejection-log path at step 10
+
+R3 APPROVE clean.
+
+**Unblocks:**
+- **Cluster B HARD-sequencing CLOSED.** All three Cluster B SIs ratified at the ratification-intent layer (P-018 + P-019 + P-021). Async Consult slice clinician-decision branch implementation (transitions 9-15) unblocked at the data-model level once canonical content lands.
+- Async Consult Sprint 10+ clinician-review + protocol-evaluate + escalate-to-sync workflows.
+- Pharmacy + Sync-Consult downstream subscribers for `consult.clinician_decided.v1` + `consult.escalated_to_sync.v1` domain events.
+
+**Registry absorption (PENDING PR-A2″/A3″ lockstep landing; destination version is ordering-dependent per the top-of-Ledger interpretation rule):** Registry remains at **v2.11** in PR-A1″ (this commit). The Registry +1 minor bump applies in a future PR-A2″/A3″-class lockstep commit covering SI-005 canonical content. Coverage counts after PR-A2″/A3″ lands: +2 entities (#15 Consult expansion + #16 ConsultEvent expansion).
+
+**Ratifier-input + audit-trail artifact (PR-A1″ — ratification-intent commit):** the SI-005 v0.2 DRAFT at `arthurmenson/telecheck-app:docs/SI-005-Consult-ConsultEvent-Schema-Gap.md` is the **ratifier-input artifact** Evans reviewed at sub-ceremony 3 (via the chat-message Decision Brief) + the **audit-trail evidence** for the 3 Codex pre-ratification rounds closed (5 substantive findings). It is **NOT implementation-authoritative** — implementation work against Consult or ConsultEvent canonical row shapes MUST wait for PR-A2″/A3″ landing because no canonical bundle content exists for these entities in PR-A1″.
+
+---
+
+> **Interpretation rule for all RATIFIED-IN-INTENT entries dated 2026-05-17 (P-012, P-013, P-018, P-019, P-021; added in PR-A1′ 2026-05-17 per Codex R3/R4 closure; updated 2026-05-17 PR-A1″ to cover all 3 sub-ceremonies / 5 entries per Codex R1 HIGH closure):** specific version targets cited in these entries (`Registry v2.11 → v2.12`, `CDM v1.3 → v1.4`, `AUDIT_EVENTS v5.3 → v5.4`) assume the **default sub-ceremony-1-first landing order** (sub-ceremony 1 PR-A2/A3 → sub-ceremony 2 PR-A2′/A3′ → sub-ceremony 3 PR-A2″/A3″). The actual destination versions are **ordering-dependent**:
+> - **Whichever sub-ceremony lands canonical content FIRST** (i.e., the first of the three sub-ceremonies' PR-A2/A3-class commits to merge): bumps Registry v2.11 → v2.12 (and CDM v1.3 → v1.4, and AUDIT_EVENTS v5.3 → v5.4 for that sub-ceremony's scope).
+> - **Whichever sub-ceremony lands SECOND**: bumps Registry v2.12 → v2.13 (and CDM v1.4 → v1.5, and AUDIT_EVENTS v5.4 → v5.5 for that sub-ceremony's scope).
+> - **Whichever sub-ceremony lands THIRD**: bumps Registry v2.13 → v2.14 (and CDM v1.5 → v1.6, and AUDIT_EVENTS v5.5 → v5.6 for that sub-ceremony's scope).
+> - **Sub-ceremony 1 + sub-ceremony 2 consolidation** (P-012 + P-013 + P-018 + P-019 in a single combined PR-A2/A3 covering 4 entries; sub-ceremony 3 lands separately): bumps Registry v2.11 → v2.13 directly (with CDM v1.3 → v1.5 and AUDIT_EVENTS v5.3 → v5.5) for the combined commit + then sub-ceremony 3 PR-A2″/A3″ bumps v2.13 → v2.14 + CDM v1.5 → v1.6 + AUDIT_EVENTS v5.5 → v5.6.
+> - **Sub-ceremony 2 + sub-ceremony 3 consolidation** (P-018 + P-019 + P-021 in a single combined PR-A2/A3 covering 3 entries; sub-ceremony 1 lands separately): bumps Registry by 2 minor versions (e.g., v2.12 → v2.14 if sub-ceremony 1 already landed; or v2.11 → v2.13 if sub-ceremony 2+3 land first then sub-ceremony 1 lands as the third commit bumping v2.13 → v2.14).
+> - **All-five-entry consolidation** (P-012 + P-013 + P-018 + P-019 + P-021 in a single combined PR-A2/A3 covering all 5 entries from all 3 sub-ceremonies): bumps Registry v2.11 → v2.14 directly (with CDM v1.3 → v1.6 and AUDIT_EVENTS v5.3 → v5.6). PERMITTED but NOT the default sequencing because each sub-ceremony's canonical content surface is independent + cleaner to land separately for focused Codex review.
+> - **General rule:** each sub-ceremony's PR-A2/A3-class commit applies +1 minor Registry bump regardless of ordering; consolidation of N sub-ceremonies into a single commit applies +N minor Registry bumps. The specific version numbers cited in individual ratification-intent entries assume the default 1→2→3 sub-ceremony landing order; the actual destination version is determined by consulting the current Registry version at the time of each future PR-A2/A3-class landing.
+> - Future PR-A2/A3-class commits MUST consult the current Registry version at the time of landing and apply the appropriate +N minor bump (where N is the number of sub-ceremony scopes consolidated into that commit), rather than applying the specific version target cited in any 2026-05-17 ratification-intent entry verbatim.
 > - This interpretation rule does NOT apply to entries before 2026-05-11 (P-001 through P-011 + the v1.10.1 hygiene cycle entries) — those entries' version targets are historical fact, not ordering-dependent.
 
 ### Entry P-019 — 2026-05-17 — SI-009 ratification-intent: SyncSession canonical schema (sub-ceremony 2 of Q2 2026 ratifier ceremony; Cluster B HARD-sequenced sibling of P-018; original-scope only — scaffold expansion split to SI-009.1 P-020 per Evans's ratifier choice)
