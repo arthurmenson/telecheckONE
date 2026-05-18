@@ -88,7 +88,7 @@ If a patient loses access to their phone number:
 
 ### 3.6 Server-side actor context (per SI-010)
 
-**Added v1.1 per SC6 P-023 SI-010 canonical-content-port landing 2026-05-18.** This section closes Phase 2 F-3 (server-side actor identity binding) and is referenced by Contracts Pack v5.4 AUDIT_EVENTS (3 new Cat B identity binding-lifecycle action IDs: `identity.actor_context_bound`, `identity.session_liveness_check_failed`, `identity.actor_context_unbound_rejected`).
+**Added v1.1 per SC6 P-023 SI-010 canonical-content-port landing 2026-05-18; refined across Codex PR #10 rounds 1–8.** This section closes Phase 2 F-3 (server-side actor identity binding) and is referenced by Contracts Pack v5.4 AUDIT_EVENTS (**4 net-new Cat B identity binding-lifecycle action IDs**: `identity.actor_context_bound`, `identity.session_liveness_check_failed`, `identity.actor_context_unbound_rejected` (the three binding-path events) + `identity.audit_recovery_link` (chain-bridge checkpoint emitted by `audit_backstop_ingest` worker once per outage window during drain of the dedicated audit-backstop instance back into primary `identity_lifecycle` partition; added per Codex R6 round-6 HIGH-1 closure)).
 
 **Purpose.** Every PHI-touching DB transaction MUST execute under a server-bound actor context — i.e., the DB session knows, by hard reference, which authenticated account is executing the statement, in which tenant, and under which session and request nonce. The mechanism is invariant-grade per I-023 (tenant isolation) and I-027 (audit attribution); it is not a soft "best-effort" attribution layer.
 
