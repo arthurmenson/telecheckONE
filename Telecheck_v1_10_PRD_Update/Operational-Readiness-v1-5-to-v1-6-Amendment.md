@@ -314,6 +314,7 @@ No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honor
 | Round | Findings | Status |
 |---|---|---|
 | R2 | HIGH-1 evidence-rubric catalog referenced but not in branch diff (R1 MED-1 closure incomplete); MED-1 cross-tenant canary lacks containment (could pollute live tenant data) | Both closed inline |
+| R3 | HIGH §7 per-tenant launch-gate rubric was placeholder ("catalogued at promotion time"); R2 closure incomplete for the highest-risk gate items | Closed inline: §7 expanded with full rubric for 19 per-tenant items (P-1 to P-19) covering identity/RLS + data/clinical + ops/audit + data-boundary/lifecycle + cross-tenant negative tests + canary; every item has Test ID + Environment + Pass threshold + Tenant scope + Owner + Freshness + Attestation path |
 
 **R2 closure pattern recap:**
 - HIGH-1: Created `Telecheck_v1_10_PRD_Update/v1-6-evidence-rubric-catalog.md` v0.1 DRAFT as a companion artifact in this branch; catalog includes full rubric for all 22 items (14 infrastructure + 6 security + 12 per-tenant). Referenced from amendment §3 + §4 + §7.

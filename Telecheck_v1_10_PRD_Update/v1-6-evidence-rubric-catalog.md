@@ -241,9 +241,192 @@ Every checklist item has the following fields:
 
 ---
 
-## 4. §7 Per-tenant launch-readiness sub-checklist (full rubric per item)
+## 4. §7 Per-tenant launch-readiness sub-checklist (full rubric per item; R3 HIGH closure)
 
-(See §3 + §4 above for items 1-22; the per-tenant sub-checklist additionally includes 12 items — identity/RLS + data/clinical + operations/audit + data-boundary/lifecycle proof + cross-tenant negative tests + canary. Each follows the same rubric template; specific Test IDs + attestation paths catalogued here at amendment promotion time.)
+The per-tenant sub-checklist applies independently to each day-1 tenant (Telecheck-US / Heros Health + Telecheck-Ghana / Heros Health Ghana). Each item below MUST be green per-tenant BEFORE that tenant goes live.
+
+### §7.1 Per-tenant identity / RLS
+
+**Item P-1: Tenant CMK provisioned + multi-region replica verified.**
+- Test ID: cross-reference Item 9 above (`__integration__/kms/cmk-provisioning.test.ts` + `replica-policy-drift.test.ts`).
+- Environment: staging+production.
+- Pass threshold: CMK ARN bound to `tenant.cmk_arn`; us-east-1 + us-west-2 replicas drift-free per IaC artifact.
+- Tenant scope: per-tenant.
+- Owner: SRE Lead.
+- Freshness: ongoing daily drift check; pre-launch verification within 14 days.
+- Attestation: `attestations/operational-readiness/per-tenant/p1-cmk-tenant-<id>.md`.
+
+**Item P-2: Tenant service IAM role with STS session-tag binding verified.**
+- Test ID: cross-reference Item 10 (`__integration__/kms/sts-session-tag-binding.test.ts`).
+- Environment: staging+production.
+- Pass threshold: confused-deputy negative test denies cross-tenant assume-role; positive test succeeds with matching tenant tag.
+- Tenant scope: per-tenant.
+- Owner: Security Engineering Lead.
+- Freshness: within 14 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p2-sts-binding-tenant-<id>.md`.
+
+**Item P-3: RLS policies enforced on every PHI table per ADR-023 Model A.**
+- Test ID: `__integration__/rls/full-table-coverage.test.ts` + `rls/tenant-binding-enforcement.test.ts`.
+- Environment: staging+production.
+- Pass threshold: every PHI table (from CDM v1.2 inventory) has RLS policy `tenant_id = current_setting('app.tenant_id')`; cross-tenant SELECT returns 0 rows; cross-tenant INSERT/UPDATE/DELETE rejected.
+- Tenant scope: per-tenant (verified by running tests under that tenant's service identity).
+- Owner: Engineering Lead.
+- Freshness: within 14 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p3-rls-tenant-<id>.md`.
+
+**Item P-4: Tenant-routing infrastructure wired + cutover-tested.**
+- Test ID: `__integration__/routing/tenant-dns-alb-mesh.test.ts`.
+- Environment: staging+production.
+- Pass threshold: DNS resolves to correct ALB; ALB routes to tenant-scoped service mesh; cutover test exercises full traffic switch in <5min without dropped requests.
+- Tenant scope: per-tenant.
+- Owner: SRE Lead.
+- Freshness: within 7 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p4-routing-tenant-<id>.md`.
+
+### §7.2 Per-tenant data + clinical
+
+**Item P-5: CCR keys provisioned per tenant.**
+- Test ID: `__integration__/ccr/per-tenant-key-completeness.test.ts`.
+- Environment: production.
+- Pass threshold: all required CCR keys present per tenant: `sms_provider_primary`, `sms_provider_fallback`, `ai_provider`, `kms_residency_policy`, `country_of_care`, `ai_mode1_daily_quota`, `ai_mode2_daily_quota`, `ai_mode2_per_patient_hourly_quota` + slice-specific keys (Forms Engine + Pharmacy + Refill).
+- Tenant scope: per-tenant.
+- Owner: Compliance Officer + SRE Lead.
+- Freshness: within 7 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p5-ccr-keys-tenant-<id>.md`.
+
+**Item P-6: Country-of-care protocols loaded.**
+- Test ID: `__integration__/protocols/country-protocol-loaded.test.ts`.
+- Environment: production.
+- Pass threshold: Ghana Protocol Library v1.0 OR US protocol library loaded; per-protocol acceptance test passes (synthetic patient case progression through each registered protocol).
+- Tenant scope: per-tenant.
+- Owner: Clinical Lead.
+- Freshness: within 14 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p6-protocols-tenant-<id>.md`.
+
+**Item P-7: Crisis-line resource content localized.**
+- Test ID: `__integration__/crisis/localized-resource-content.test.ts`.
+- Environment: production.
+- Pass threshold: country-specific crisis-line phone numbers configured + verified callable; localized safety language per WHO crisis-line guidelines; rendered correctly in Mode 1 crisis_signal response.
+- Tenant scope: per-tenant.
+- Owner: Clinical Lead.
+- Freshness: within 14 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p7-crisis-content-tenant-<id>.md`.
+
+**Item P-8: Clinician roster provisioned with licenses verified.**
+- Test ID: `__integration__/clinician-roster/license-verification.test.ts`.
+- Environment: production.
+- Pass threshold: every clinician in roster has valid + non-expired license verified against Ghana Medical and Dental Council OR US state medical board; license expiry monitoring configured.
+- Tenant scope: per-tenant.
+- Owner: Compliance Officer + Clinical Lead.
+- Freshness: within 30 days of launch; ongoing per-license expiry tracking.
+- Attestation: `attestations/operational-readiness/per-tenant/p8-clinician-roster-tenant-<id>.md`.
+
+### §7.3 Per-tenant operations + audit
+
+**Item P-9: Audit-event aggregation + retention configured.**
+- Test ID: `__integration__/audit/per-tenant-dashboard-routing.test.ts` + `audit/retention-policy.test.ts`.
+- Environment: production.
+- Pass threshold: tenant-specific Datadog/SIEM dashboards live + showing real events; retention policy per AUDIT_EVENTS spec configured (Cat A = 7y; Cat B = 3y; Cat C = 90d sampled).
+- Tenant scope: per-tenant.
+- Owner: SRE Lead + Compliance Officer.
+- Freshness: within 14 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p9-audit-tenant-<id>.md`.
+
+**Item P-10: Tenant operator onboarded with operator-mode-switcher.**
+- Test ID: `__integration__/identity/operator-mode-switch.test.ts`.
+- Environment: production.
+- Pass threshold: tenant operator account provisioned with SI-017 §6 operator-mode-switcher access; switching between tenant-scoped + platform-scope emits Cat B `identity.operator_mode_switched` event.
+- Tenant scope: per-tenant.
+- Owner: Compliance Officer + Engineering Lead.
+- Freshness: within 14 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p10-operator-tenant-<id>.md`.
+
+**Item P-11: Per-tenant DR drill executed within last 90 days.**
+- Test ID: full DR drill walkthrough per Cold-DR Runbook + tests `cold-dr/three-state-obligation.test.ts` + `cold-dr/i019-fallback-replay.test.ts` for this tenant.
+- Environment: staging (full drill); production (canary verification).
+- Pass threshold: RPO ≤15min + RTO ≤4h verified; tenant-specific replay drained per Step 14.5.
+- Tenant scope: per-tenant.
+- Owner: SRE Lead + Incident Commander.
+- Freshness: within 90 days (per quarterly cadence § Sub-decision 3).
+- Attestation: `attestations/operational-readiness/per-tenant/p11-dr-drill-tenant-<id>.md`.
+
+**Item P-12: Per-tenant crisis-detection chaos drill executed within last 30 days.**
+- Test ID: full chaos drill per § Sub-decision 3 monthly cadence; tenant-specific synthetic-test patient cohort.
+- Environment: staging (drill execution); production (acknowledgment of drill outcome).
+- Pass threshold: I-019 detector fires within 500ms p99; cross-channel dispatch within 30s p99; undeliverable escalation fires within 5min SLA — all under bounded blast-radius controls per § Sub-decision 3.
+- Tenant scope: per-tenant.
+- Owner: Clinical Lead + SRE Lead.
+- Freshness: within 30 days (per monthly cadence).
+- Attestation: `attestations/operational-readiness/per-tenant/p12-chaos-drill-tenant-<id>.md`.
+
+### §7.4 Per-tenant data-boundary + lifecycle proof (R1 HIGH-2 closure items)
+
+**Item P-13: Tenant-scoped backup/restore tested.**
+- Test ID: `__integration__/data-lifecycle/backup-restore-isolation.test.ts`.
+- Environment: staging.
+- Pass threshold: snapshot restored into test env; cross-tenant queries return zero rows; RLS behavior matches production.
+- Tenant scope: per-tenant.
+- Owner: SRE Lead.
+- Freshness: within 30 days of launch; ongoing quarterly.
+- Attestation: `attestations/operational-readiness/per-tenant/p13-backup-restore-tenant-<id>.md`.
+
+**Item P-14: Migration/import isolation tested.**
+- Test ID: `__integration__/data-lifecycle/migration-isolation.test.ts`.
+- Environment: staging.
+- Pass threshold: multi-tenant import fixture; all rows carry correct tenant_id; cross-tenant queries rejected.
+- Tenant scope: per-tenant.
+- Owner: Engineering Lead.
+- Freshness: within 30 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p14-migration-tenant-<id>.md`.
+
+**Item P-15: Export/data-portability isolation tested.**
+- Test ID: `__integration__/data-lifecycle/export-isolation.test.ts`.
+- Environment: staging.
+- Pass threshold: export bundle contains ONLY requesting patient's data; no cross-tenant leakage; UUID-collision-edge-case test passes.
+- Tenant scope: per-tenant.
+- Owner: Compliance Officer + Engineering Lead.
+- Freshness: within 30 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p15-export-tenant-<id>.md`.
+
+**Item P-16: Retention/deletion policy execution tested.**
+- Test ID: `__integration__/data-lifecycle/retention-isolation.test.ts`.
+- Environment: staging.
+- Pass threshold: synthetic retention sweep deletes only target tenant's expired data; cross-tenant retention sweep blocked without I-024 break-glass.
+- Tenant scope: per-tenant.
+- Owner: Compliance Officer.
+- Freshness: within 30 days of launch; ongoing per-retention-cycle verification.
+- Attestation: `attestations/operational-readiness/per-tenant/p16-retention-tenant-<id>.md`.
+
+**Item P-17: Audit-log tenant partitioning integrity verified.**
+- Test ID: `__integration__/audit/partition-isolation.test.ts`.
+- Environment: production.
+- Pass threshold: SIEM query for tenant returns ALL tenant-bound events (P1/P2 partitioning consistent with SI-018); cross-tenant query rejected.
+- Tenant scope: per-tenant.
+- Owner: SRE Lead + Compliance Officer.
+- Freshness: within 30 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p17-audit-partition-tenant-<id>.md`.
+
+**Item P-18: Cross-tenant negative test suite passed.**
+- Test ID: `__integration__/cross-tenant-negative-tests/full-suite.test.ts` covering HTTP API path-parameter manipulation + batch worker queues + DR-failover replay + analytics/reporting paths.
+- Environment: staging.
+- Pass threshold: every cross-tenant attempt rejected with tenant-blind 404 (HTTP) OR canonical denial (queue/replay/analytics).
+- Tenant scope: per-tenant (suite runs as tenant_A's service identity against tenant_B and vice versa).
+- Owner: Engineering Lead + Security Engineering Lead.
+- Freshness: within 30 days of launch.
+- Attestation: `attestations/operational-readiness/per-tenant/p18-cross-tenant-negative-tenant-<id>.md`.
+
+**Item P-19: Cross-tenant data-mixing canary running.**
+- Test ID: `infrastructure/canary/tenant-isolation-canary.test.ts` (the canary itself; not a one-time test).
+- Environment: production.
+- Pass threshold: canary running at 5-min cadence; zero contamination detected; canary follows containment per § Sub-decision 4 (synthetic_canary table + 30-min TTL + SYNTH- ID space + exclusion-by-table + pause-on-deploy).
+- Tenant scope: per-tenant (separate canary pair per tenant).
+- Owner: SRE Lead.
+- Freshness: ongoing post-launch (5-min cadence); pre-launch readiness = canary operational + zero contamination over 7-day staging soak.
+- Attestation: `attestations/operational-readiness/per-tenant/p19-canary-tenant-<id>.md` (rolling attestation; updated weekly).
+
+---
+
+**Total per-tenant items: 19** (P-1 through P-19). Every item required per tenant before that tenant goes live; Compliance Officer + SRE Lead + Country Lead joint sign-off references this catalog at the tenant launch ceremony.
 
 ---
 
