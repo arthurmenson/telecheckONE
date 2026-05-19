@@ -29,6 +29,8 @@ The two options have different downstream implications for: schema shape, audit-
 
 ## 2. The two options
 
+**Note on R1 HIGH-1 closure:** the original v0.1 draft characterized Option A as "no race conditions structurally"; this was inaccurate. Option A's race-safety is conditional on explicit admissibility constraints (UNIQUE on `(entity_id, from_state)` for in-progress transitions, OR application-layer idempotency keys, OR row-level locks on the transition entity). The revised schema below includes the admissibility constraint to make the comparison apples-to-apples with Option B's row-level locking.
+
 ### Option A — Immutable rows + transition entity table (event-sourced)
 
 **Schema shape:**
@@ -44,17 +46,25 @@ CREATE TABLE marketing_copy (
     -- No 'status' field; derived from latest transition entity row
 );
 
--- Transition entity: each row records a state transition
+-- Transition entity: each row records a state transition; admissibility-constrained per R1 HIGH-1 closure
 CREATE TABLE marketing_copy_transition (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id tenant_id_t NOT NULL,
     marketing_copy_id UUID NOT NULL,
     from_state TEXT,                      -- Null for initial admission
     to_state TEXT NOT NULL,               -- e.g., 'draft', 'published', 'retracted'
+    transition_idempotency_key UUID NOT NULL,  -- Caller-supplied; same key on retry = same transition
     transitioned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     transitioned_by_user_id UUID NOT NULL,
     transition_reason TEXT NOT NULL,
-    CONSTRAINT mc_transition_tenant_fk FOREIGN KEY (tenant_id, marketing_copy_id) REFERENCES marketing_copy(tenant_id, id)
+    CONSTRAINT mc_transition_tenant_fk FOREIGN KEY (tenant_id, marketing_copy_id) REFERENCES marketing_copy(tenant_id, id),
+    -- Admissibility: at most one in-progress transition from a given state at a time
+    CONSTRAINT mc_transition_admissibility UNIQUE (tenant_id, marketing_copy_id, from_state, to_state, transition_idempotency_key),
+    -- Application-layer enforced via SECURITY DEFINER procedure:
+    --   At INSERT time, verify the entity's most-recent transition's to_state = NEW.from_state
+    --   (else raise "invalid from_state" error). This is the structural equivalent of Option B's
+    --   constrained UPDATE ROW_COUNT guard.
+    CHECK (from_state IS NULL OR from_state != to_state)
 );
 
 -- Current-state view derived at query time
@@ -162,7 +172,58 @@ $$;
 - **Query complexity:** current-state lookup is a direct field read; no view or subquery needed.
 - **Race conditions on concurrent transitions:** PostgreSQL row-level locking via the constrained UPDATE — only one concurrent transaction wins; the loser's UPDATE produces ROW_COUNT=0 and the procedure raises TLC50.
 
-**Existing precedent in canonical bundle:** **P-021 SC3** (`record_consult_clinician_decision()` procedure-side amendment ratified 2026-05-19) follows this pattern — constrained UPDATE on the consult entity + append-only decision-log table. The ratifier confirmed this pattern at P-021a promotion.
+**Existing precedent in canonical bundle:** **P-021 SC3** (`record_consult_clinician_decision()` procedure-side amendment ratified 2026-05-19) follows this pattern — constrained UPDATE on the consult entity + append-only decision-log table. The ratifier confirmed this pattern at P-021a promotion. **Caveat (R1 HIGH-2 closure):** P-021 SC3 is a clinician-decision procedure on a single consult entity; the ratifier's approval at P-021a does NOT automatically extend to all status-bearing entities. The three pending SIs (SI-015 marketing copy + SI-016 handler registry + SI-019 medication-interaction signal) have different domain semantics (multi-stakeholder publish workflows vs single-clinician decisions) and may warrant different patterns. The ratifier must evaluate whether P-021 SC3's pattern generalizes to these domains.
+
+### Option C — Event-sourced transition log + materialized current-state projection (omitted from v0.1; surfaced per R1 MED-1)
+
+**Schema shape:**
+
+```sql
+-- Original entity: INSERT-only, like Option A
+CREATE TABLE marketing_copy (
+    id UUID PRIMARY KEY,
+    tenant_id tenant_id_t NOT NULL,
+    body_text TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by_user_id UUID NOT NULL
+);
+
+-- Transition log: append-only, like Option B, but the AUTHORITATIVE source of current state
+CREATE TABLE marketing_copy_transition_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id tenant_id_t NOT NULL,
+    marketing_copy_id UUID NOT NULL,
+    from_state TEXT,
+    to_state TEXT NOT NULL,
+    transition_idempotency_key UUID NOT NULL,
+    transitioned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    transitioned_by_user_id UUID NOT NULL,
+    transition_reason TEXT NOT NULL,
+    CONSTRAINT mc_transition_log_admissibility UNIQUE (tenant_id, marketing_copy_id, from_state, to_state, transition_idempotency_key)
+);
+
+-- Materialized current-state projection: maintained by trigger; INSERT-only at base; UPSERT here
+CREATE MATERIALIZED VIEW marketing_copy_current_state AS
+SELECT DISTINCT ON (marketing_copy_id, tenant_id)
+    marketing_copy_id, tenant_id, to_state AS current_state, transitioned_at AS last_transition_at
+FROM marketing_copy_transition_log
+ORDER BY marketing_copy_id, tenant_id, transitioned_at DESC;
+
+-- Or: a regular table maintained by AFTER INSERT trigger on transition_log
+-- (avoiding REFRESH MATERIALIZED VIEW overhead)
+```
+
+**Properties:**
+
+- **Audit-chain reconstructability:** trivial (same as Option A and Option B; the transition_log is the authoritative event source).
+- **Read-time performance:** matches Option B (direct read from the materialized projection).
+- **Write-time complexity:** higher than both A and B — every transition INSERT must also update the materialized projection (either via REFRESH MATERIALIZED VIEW or via AFTER INSERT trigger with UPSERT on the projection table). The projection table itself is technically NOT INSERT-only (it has UPSERTs); however, the AUTHORITATIVE source of truth (the transition_log) remains append-only.
+- **Race conditions:** the same admissibility constraint as Option A (UNIQUE on the transition key); the materialized projection's UPSERT happens within the same transaction as the transition_log INSERT, so the projection is consistent.
+- **I-027 append-only compliance:** authoritative source (transition_log) is append-only; projection is a derived data structure not subject to I-027 audit-trail invariants. Procedurally treat the projection as a read-cache; if it gets corrupted, rebuild from the log.
+
+**Existing precedent in canonical bundle:** materialized views are used in Telecheck for analytics-style derived data (e.g., per-tenant active-patient counts). They are NOT used for audit-bound entity state, but the pattern is well-tested in other Telecheck surfaces.
+
+**Why Option C exists:** Option C is the "best of both worlds" attempt — append-only authoritative source (like Option A) + direct field read at query time (like Option B). The cost is write-time complexity (UPSERT on the projection) + the projection table is NOT I-027-bound. This third option may or may not be the canonical pattern; surfaced here per R1 MED-1 so the ratifier can evaluate.
 
 ---
 
@@ -184,73 +245,120 @@ $$;
 
 ---
 
-## 4. Recommendation
+## 4. Recommendation (tempered per R1 HIGH-2 closure)
 
-**Recommendation: Option B (constrained UPDATE + transition log) — adopt as canonical pattern across SI-015 + SI-016 + SI-019.**
+**Working recommendation: Option B (constrained UPDATE + transition log) OR Option C (event-sourced + materialized projection) — both are defensible; Option A is also defensible with admissibility constraints.**
 
-**Reasoning:**
+**Per R1 HIGH-2 closure, this proposal does NOT assert that P-021 SC3 establishes a canonical-bundle-wide rule.** P-021 SC3 was a specific clinician-decision procedure on the consult entity; the ratifier's approval at P-021a is a precedent for that domain, not a corpus-wide canonical rule. The three pending SIs span different domains (multi-stakeholder publish workflows for marketing copy; handler-registry resolution; medication-interaction signal lifecycle) which may warrant different patterns.
 
-1. **P-021 SC3 precedent is already ratified.** The ratifier sequence for Q2 2026 has already accepted Option B at the P-021a procedure-side amendment. Adopting Option B for the three pending SIs preserves consistency with the ratified P-021 precedent.
+**Working considerations:**
 
-2. **CDM v1.2 baseline entities (patient, medication_request, consult, etc.) all have mutable status fields.** These entities follow the informal Option B pattern at CDM v1.2 baseline. Adopting Option A for the three new SIs would create a schema-style inconsistency between v1.2-baseline entities (Option B style) and v1.10-amendment entities (Option A style). Maintaining one canonical pattern across the corpus is preferable to two.
+1. **P-021 SC3 precedent exists but does not generalize automatically.** The ratifier's P-021a approval is one data point in favor of Option B for clinician-decision procedures. Whether it generalizes to marketing copy / handler registry / medication-interaction signals is a separate question the ratifier must answer.
 
-3. **Procedure-side STEP 0 with constrained UPDATE is a well-tested pattern.** The ROW_COUNT=0 race-detection mechanism is canonical in PostgreSQL + has been used in Telecheck consult-decision procedures since canonical content port 2026-05-19. The idempotency-wrapper for "already transitioned" detection is a small additional layer; the v1.10.1 hygiene cycle already validated this pattern across 12 rounds of Codex review.
+2. **CDM v1.2 baseline entities follow Option B informally.** Patient, medication_request, consult, etc. have mutable status fields with implicit transition logging. The "informal Option B" baseline suggests Option B has been the de-facto pattern; adopting Option B explicitly for new SIs would formalize what exists. **However**, formalizing the informal baseline is not the same as ratifying it as a corpus-wide canonical rule — the ratifier may decide that future entities should use a different pattern (Option A or Option C) even if it doesn't propagate back to v1.2 entities.
 
-4. **Sprint 7 + Sprint 9 specs that follow Option A are NEW spec drafts on different domains.** Cold-DR Runbook's three-state per-device obligation model is a transient state tracking concept for a DR scenario; Sprint 9 Mode 1 handler's split-table lifecycle is a transient per-turn lifecycle on conversational data with different semantics from durable status-bearing entities (marketing copy, AI handler registry, medication-interaction signals). The Option A pattern works there because the entities are fundamentally event-flow rather than status-bearing. The three pending SIs (SI-015 / SI-016 / SI-019) are status-bearing entities and align more naturally with Option B.
+3. **Procedure-side STEP 0 with constrained UPDATE is well-tested in Telecheck.** Validated across the v1.10.1 hygiene cycle (~12 Codex rounds) for the canonical content-port procedures. Familiarity is a positive but not decisive factor.
 
-5. **Read-time performance.** For status-bearing entities accessed frequently at read time (marketing copy display, handler-registry resolution, medication-interaction signal display), Option B's direct field read is meaningfully faster than Option A's subquery / view. The cumulative latency saved is real for high-volume workloads (Mode 1 LLM context construction reads from these entities every turn; the savings compound).
+4. **Sprint 7 + Sprint 9 specs follow Option A.** These are event-flow domains (transient DR-recovery state tracking; transient per-turn conversation lifecycle), different from status-bearing entities. The Option A pattern is appropriate there; it does not automatically generalize to status-bearing entities, and Option B's appropriateness for status-bearing entities does not automatically generalize back to event-flow domains. **Pattern-domain alignment is what matters; the cross-corpus pattern is necessarily heterogeneous to some extent.**
 
-6. **Audit-chain reconstructability is preserved.** Option B's append-only transition_log table provides the same reconstructability as Option A's transition entity table; the canonical replay mechanism is identical (SELECT from transition_log ORDER BY transitioned_at).
+5. **Read-time performance favors Option B and Option C.** For high-volume status-bearing entity reads (Mode 1 LLM context construction reads handler-registry every turn), direct field read or materialized projection is meaningfully faster than Option A's subquery. The cumulative latency saved is real.
 
-**The recommendation is therefore: ratify Option B as the canonical Telecheck pattern for audit-bound status-bearing entities with publish / lifecycle-transition events.**
+6. **Audit-chain reconstructability is equivalent across all three options.** All options have append-only transition records as the authoritative event source.
 
----
+**Per-SI domain analysis (added per R1 HIGH-2 closure):**
 
-## 5. Proposed ratifier-decision shape
+- **SI-015 MarketingCopy:** multi-stakeholder publish workflow (legal review + brand review + marketing operator). Multiple concurrent transitions are unusual (review-approve-publish is sequential). **Recommended:** Option B or Option C; Option A's complexity is unnecessary for the low-concurrency domain.
+- **SI-016 AI Workflow Handler Registry:** handler-registry resolution is read-heavy (every Mode 1 turn looks up the active handler). Publish/retract events are infrequent (handler-version-bump cadence). **Recommended:** Option C (read performance for the high-volume read path + append-only authority for the low-volume write path).
+- **SI-019 Medication-Interaction Signal:** signal lifecycle is medium-volume; signals can transition concurrently (multiple clinicians reviewing simultaneously). **Recommended:** Option B with explicit ROW_COUNT race-detection; the constrained UPDATE pattern handles concurrent review cleanly. Alternatively Option C is also defensible.
 
-The ratifier-quorum decision is binary on Option A vs Option B. The decision binds three pending SIs simultaneously + sets the canonical pattern for future SIs.
-
-**Decision question (for ratifier-quorum approval):**
-
-> Does Telecheck adopt **Option B (constrained UPDATE + transition log, per P-021 SC3 precedent)** as the canonical pattern for status-bearing audit-bound entities with publish / lifecycle-transition events?
->
-> [ ] **Yes, Option B** — adopt across SI-015 + SI-016 + SI-019. Future status-bearing entity SIs use Option B unless explicitly authorized to use Option A.
->
-> [ ] **No, Option A** — adopt event-sourced pattern across SI-015 + SI-016 + SI-019. Re-evaluate P-021 SC3 procedure-side amendment for consistency.
->
-> [ ] **Hybrid (case-by-case)** — each SI uses the pattern that best fits its domain; ratifier accepts the heterogeneous approach.
-
-**Recommended ratifier action:** **YES on Option B**, per the reasoning in §4.
+**Conclusion:** the proposal does NOT make a unilateral recommendation that applies to all three SIs uniformly. **The ratifier ceremony should evaluate per-SI** — the working recommendation per domain is articulated above. The Hybrid option (§5) is now the primary recommended outcome of the ratifier ceremony, with Option B being the most-frequent per-SI choice based on the domain analysis.
 
 ---
 
-## 6. Downstream amendment scope (post-ratifier)
+## 5. Proposed ratifier-decision shape (revised per R1 HIGH-2 + MED-1 closure)
 
-If ratifier approves Option B:
+The ratifier-quorum decision is **per-SI**, with three independent options per SI (A / B / C) + a meta-decision about whether to bind future SIs.
 
-1. **SI-015 MarketingCopy CDM Canonical Schema (Sprint 2 RATIFIER-READY-WITH-KNOWN-OQs):** OQ4 closed. The Sub-decision 5 schema is finalized as Option B; the constrained UPDATE procedure + transition_log table land at canonical promotion.
+**Per-SI decision question:**
 
-2. **SI-016 AI Workflow Handler Registry (Sprint 3 APPROVE):** OQ1 closed. The handler-registry's status field follows Option B; SI-016 already specifies the constrained UPDATE pattern for handler-state transitions (e.g., `draft` → `published` → `retracted`). The post-ratifier closure is documentary only.
+For each of SI-015, SI-016, SI-019, the ratifier selects:
 
-3. **SI-019 Med-Interaction Slice PRD v2.0 Implementation-Readiness Extension:** OQ7 (SIGNAL-LIFECYCLE) closed. The signal-row uses Option B with the medication-interaction-signal status field + an append-only signal_transition_log table.
+> [ ] **Option A** (event-sourced; immutable rows + transition entity with admissibility constraint).
+>
+> [ ] **Option B** (constrained UPDATE + transition log; ROW_COUNT race-detection in SECURITY DEFINER procedure).
+>
+> [ ] **Option C** (event-sourced authoritative + materialized current-state projection).
 
-4. **CDM v1.2 → v1.3 amendment:** the three SIs' canonical entity schemas land at CDM v1.3 promotion (sister SI-024 candidate). The amendment is purely additive (no v1.2 entity changes).
+**Meta-decision (cross-corpus pattern binding):**
 
-If ratifier approves Option A:
+> [ ] **Bind future SIs:** future status-bearing entity SIs MUST use the same option-per-SI mapping decided here (no per-SI re-evaluation unless explicitly authorized).
+>
+> [ ] **Per-SI evaluation continues:** each future status-bearing entity SI evaluates A/B/C independently; the decisions here set precedent but not binding rule.
 
-1. Re-evaluate SI-015/SI-016/SI-019 with the event-sourced schema model.
-2. Open a new SI to re-evaluate P-021a procedure-side amendment for consistency (the existing ratified P-021a would need a follow-on amendment to convert to event-sourced; the ratifier ceremony would need to decide whether to revert P-021a or accept heterogeneous patterns).
-3. The downstream scope is larger; the ratification timeline is longer.
+**Working recommendation per the §4 domain analysis:**
+- SI-015 MarketingCopy: **Option B** (multi-stakeholder publish workflow; low concurrency)
+- SI-016 AI Workflow Handler Registry: **Option C** (read-heavy; materialized projection serves high-volume reads)
+- SI-019 Medication-Interaction Signal: **Option B** (medium-volume; concurrent-review race handled cleanly by constrained UPDATE)
+- Meta-decision: **Per-SI evaluation continues** (the heterogeneous nature of domains makes a single corpus-wide rule too restrictive)
 
-If ratifier approves Hybrid:
+These are working recommendations only; the ratifier's authority over the canonical decision is preserved.
 
-1. The three SIs proceed with case-by-case decisions (SI-019 might use Option A for signal-row immutability; SI-015 + SI-016 might use Option B). The ratifier ceremony's per-SI decisions are independent.
+---
+
+## 6. Downstream amendment scope (post-ratifier; per R1 MED-2 closure: OQs NOT auto-closed)
+
+**Critical:** the ratifier's option-selection for each SI does NOT automatically close the SI's OQ. Each SI requires a follow-on amendment that specifies the option-specific implementation details:
+
+For each SI, after ratifier selects an option, the SI's author drafts the following follow-on:
+
+### For Option B SIs:
+- SECURITY DEFINER procedure signature with `p_tenant_id` + state-machine arguments (per Sprint 8 I-032 STEP 0 contract).
+- Constrained UPDATE WHERE clause specifying allowed `from_state` values.
+- ROW_COUNT=0 race-detection + the error code (TLC50 by Sprint 10 v0.1 convention).
+- Idempotency wrapper for "already transitioned" retries: idempotency-key column on transition_log + INSERT-on-conflict-skip pattern.
+- Append-only transition_log schema with composite tenant FK + RLS policy.
+- GRANT statements: the canonical procedure-caller role gets EXECUTE on the procedure; the base entity table grants UPDATE only via the procedure.
+- Rollback semantics: how does the system recover from a constraint violation mid-transition (e.g., the transition_log INSERT succeeds but the constrained UPDATE rolls back unexpectedly)?
+
+### For Option A SIs:
+- Admissibility-constraint schema (UNIQUE on the transition key) per the revised §2 Option A.
+- Application-layer "verify entity's most-recent transition's to_state = NEW.from_state" check in the SECURITY DEFINER procedure.
+- View definition for `<entity>_current_state` (canonical name pattern).
+- Idempotency: caller-supplied `transition_idempotency_key`; retries see the existing row + are no-ops.
+- RLS policy on transition entity.
+
+### For Option C SIs:
+- Trigger function maintaining the materialized projection (AFTER INSERT on transition_log → UPSERT on projection).
+- Materialized projection schema + RLS.
+- Bootstrap procedure: if projection is corrupted, rebuild from transition_log via `REFRESH MATERIALIZED VIEW` or equivalent.
+- Authoritative-source-of-truth note: applications read from the projection for performance, but audit reconstruction reads from the transition_log.
+
+### Common to all options:
+- CDM v1.2 → v1.3 amendment (per OQ4 of this proposal): the three SIs' entity schemas + the supporting transition_log / transition / projection tables land at CDM v1.3 promotion (sister SI-024 candidate).
+- Promotion Ledger entry per SI per ratifier action.
+
+**Estimate of follow-on work after ratifier-quorum approval:** 1-2 additional Codex cycles per SI (the option-specific implementation details surface their own correctness gaps; in-scope correctness, not architectural-judgment). Total: 3-6 Codex cycles across the three SIs.
 
 ---
 
 ## 7. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
+
+**v0.1 R1 closure 2026-05-19:** 2 HIGH + 2 MED findings closed inline:
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | HIGH-1 Option A mischaracterized as race-safe without admissibility constraints (revised schema + admissibility constraint added); HIGH-2 recommendation overstated P-021 SC3 precedent (tempered: P-021 SC3 is consult-decision-specific, not corpus-wide; per-SI domain analysis added); MED-1 binary framing omitted Option C (event-sourced + materialized projection now surfaced); MED-2 downstream scope assumed automatic OQ closure (revised: OQs NOT auto-closed; option-specific follow-on amendments required per SI) | All 4 closed inline |
+
+**Key revisions in R1 closure:**
+- §2 Option A schema gains admissibility constraint (UNIQUE on transition key) + application-layer verification.
+- §2 Option C added: event-sourced authoritative source + materialized current-state projection.
+- §4 Recommendation tempered: no unilateral Option B; per-SI domain analysis articulated; Hybrid is now the primary recommended outcome.
+- §5 Decision shape: per-SI selection (A/B/C) + cross-corpus meta-decision (bind future SIs vs per-SI evaluation continues).
+- §6 Downstream scope: option-specific implementation-detail requirements articulated; OQs NOT auto-closed.
+
+No architectural-judgment items closed inline; the proposal articulates the question + 3 options + working recommendations, and explicitly preserves the ratifier's authority over the canonical decision. CLAUDE.md hard-floor item 6 honored.
 
 ---
 
