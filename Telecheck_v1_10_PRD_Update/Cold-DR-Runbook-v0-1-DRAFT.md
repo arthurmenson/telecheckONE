@@ -83,7 +83,9 @@ DR Operator MUST be a DIFFERENT human from IC per I-015. Acknowledgment within 5
 - Pre-prepared status page update published; canonical message templates per Ghana Launch Playbook v1.2 §Tenant Communications.
 - Direct outreach to flagship tenants (Telecheck-US Heros Health + Telecheck-Ghana Heros Health Ghana DBA per Master PRD §17) within 30 min of declaration.
 
-### 4.2 T+0 to T+15: Database promotion
+### 4.2 T+0 to T+15: Pre-promotion integrity verification (closes Codex R1 HIGH-1; verification BEFORE promotion, not after)
+
+**Pre-promotion hard gate.** Per R1 HIGH-1 closure: the original draft promoted at Step 6 and ran integrity checks at Steps 7-10 (after promotion + replication-severance). This is reversed — integrity checks now run BEFORE promotion against the read-only replica, so a failed check aborts the failover entirely without leaving the system in an irreversible promoted-with-broken-chain state.
 
 **Step 4: Stop writes to us-east-1 RDS** (if reachable; if not, skip).
 
@@ -101,7 +103,22 @@ $ dr-tool verify-replica-lag --target us-west-2
 # Fails if lag > 15 min (RPO breach)
 ```
 
-**Step 6: Promote us-west-2 RDS replica to primary.**
+**Step 5.5: PRE-PROMOTION integrity verification on the read-only replica (HARD GATE per R1 HIGH-1 closure).**
+
+ALL of the following MUST pass BEFORE Step 6 promotion:
+
+```bash
+$ dr-tool pre-promotion-verify --target us-west-2 --read-only
+# (a) Schema/extensions/triggers/RLS verification: pg_dump schema diff between us-east-1 (if reachable) and us-west-2 replica; all custom functions present; all triggers active including I-016 + I-013 append-only triggers; all RLS policies enabled per ADR-023; SI-016 semver triggers active; SI-020 form-version analyzer triggers active.
+# (b) I-027 audit-chain integrity full-traversal on the read-only replica: every active P1 + P2 partition chain verified from genesis to current head.
+# (c) Archived manifest boundary-hash verification per SIEM Integration Spec §4.5.HC: most-recent archived manifest's last-record_hash matches the audit_events table's predecessor-boundary-hash at the WAL position being promoted.
+# (d) Multi-region KMS key access spot-check on the replica's auth context (verify that the replica side can decrypt at least 1 sample PHI envelope per tenant cohort without errors).
+# (e) Reports each gate's pass/fail with measurement values for retrospective record.
+```
+
+**ANY failure of (a)-(d) ABORTS the failover BEFORE Step 6 promotion.** The DR Operator + IC + on-call SRE escalate to: stay in us-east-1 (if reachable) OR declare extended outage + invoke alternate recovery (e.g., point-in-time-recovery from snapshot to a new replica). The read-only replica is NOT promoted with known integrity violations.
+
+**Step 6: Promote us-west-2 RDS replica to primary** (proceeds ONLY after Step 5.5 PASS).
 
 ```bash
 $ dr-tool promote-replica --target us-west-2 --session <id>
@@ -164,6 +181,21 @@ $ dr-tool dns-cutover --target us-west-2 --confirm-ic-approver-handles
 # Verifies DNS propagation via multiple resolvers
 ```
 
+**Step 11.5: Tenant-routing verification gate BEFORE traffic admission (closes Codex R1 HIGH-2).**
+
+DNS propagation proves DNS records changed; it does NOT prove tenant routing is preserved. Per R1 HIGH-2 closure, the following tenant-routing checks MUST pass BEFORE Step 13 opens traffic:
+
+```bash
+$ dr-tool verify-tenant-routing --target us-west-2 --enumerate-all-tenants
+# (a) Enumerate canonical tenant domains: heroshealth.com → Telecheck-US; ghana.heroshealth.com → Telecheck-Ghana; any custom-domain mappings per the tenant_custom_domains registry.
+# (b) For each tenant domain: send a probe request with the canonical Host header; verify the request resolves to the us-west-2 ALB; verify the ALB listener rules + TLS certificate + host-header routing direct the request to the correct application service + the correct tenant_id is set in the resulting app.tenant_id GUC.
+# (c) Cross-tenant isolation probe per F-4 §3.3 Sub-decision: 200 synthetic requests/min across tenant boundaries (tenant_A-authenticated session → tenant_B resources) MUST all receive tenant-blind 404 per I-025.
+# (d) Custom-domain certificate validation: every active tenant with a custom domain has a valid TLS cert in us-west-2 (cert manager replication MUST be verified pre-DR; this step validates it took).
+# (e) Reports per-tenant routing PASS/FAIL with measurement values.
+```
+
+**ANY tenant-routing FAIL before Step 13 BLOCKS traffic admission.** The DR Operator + IC + on-call SRE escalate: investigate the misrouting; do NOT open traffic until all tenants verify PASS.
+
 **Step 12: Bring up app services in us-west-2.**
 
 ```bash
@@ -213,29 +245,83 @@ $ dr-tool mark-failover-complete --session <id>
 
 ---
 
-## 5. Back-failover procedure (us-west-2 → us-east-1)
+## 5. Back-failover procedure (us-west-2 → us-east-1; idempotent state-machine per R1 MED-1 closure)
 
 Back-failover restores primary-region operation after us-east-1 recovers. Timing: NOT immediate; minimum 7-day soak in us-west-2 before back-failover unless operator + IC + CTO override.
 
-**Step B1: Verify us-east-1 health.**
+**Per R1 MED-1 closure, back-failover is an explicit state machine with durable session checkpoints. Each step is idempotent + retry-safe. Operators MUST NOT retry by re-running from §4 Step 4 — the canonical retry path is via the dr-tool session checkpoint resume.**
 
-```bash
-$ dr-tool verify-region-health --target us-east-1
-# All services + RDS + KMS + EKS healthy for ≥48 hours continuous
-# AWS has declared the original disruption resolved
+### Back-failover session state machine
+
+States (durable in dr-tool session store):
+```
+b_initiated → b_health_verified → b_reverse_replication_established →
+b_reverse_replication_soaked → b_source_writes_frozen →
+b_pre_promotion_verified → b_promoted → b_storage_verified →
+b_kms_verified → b_audit_chain_verified → b_dns_cutover_completed →
+b_tenant_routing_verified → b_services_scaled →
+b_traffic_cutover_completed → b_post_failover_verified →
+b_back_failover_completed
 ```
 
-**Step B2: Establish replication us-west-2 → us-east-1.**
+Each state transition emits a Cat B audit event `dr.back_failover.<state>` at SI-018 P2 partition keyed on `'platform'`. Recovery from interruption resumes from the last successfully-checkpointed state.
 
-us-east-1 RDS becomes the new replica (reverse direction). Replication lag observed for ≥24h before back-failover proceeds.
+**Step B1: `b_initiated → b_health_verified`.** Verify us-east-1 region health.
 
-**Step B3: Repeat §4 procedure with regions swapped.**
+```bash
+$ dr-tool back-failover-step --session <id> --target-state b_health_verified
+# All services + RDS + KMS + EKS healthy for ≥48 hours continuous
+# AWS has declared the original disruption resolved
+# Idempotent: re-running returns the cached health-check result if <1h old
+```
 
-Same 16-step procedure with us-west-2 as the source + us-east-1 as the target.
+**Step B2: `b_health_verified → b_reverse_replication_established`.** Establish replication us-west-2 → us-east-1.
 
-**Step B4: Verify primary-region restoration.**
+```bash
+$ dr-tool back-failover-step --session <id> --target-state b_reverse_replication_established
+# Configures us-east-1 RDS as logical replica of us-west-2 primary
+# Idempotent: re-running verifies replication is already established + reports lag
+# Single-writer assertion: verifies us-west-2 is the SOLE writer (no split-brain)
+# Aborts if any us-east-1 write detected since b_initiated (split-brain detected → operator + IC + CTO + Compliance Officer review)
+```
 
-us-east-1 returns to primary; us-west-2 returns to cold-DR posture. Cross-region replication direction restored (us-east-1 → us-west-2).
+**Step B3: `b_reverse_replication_established → b_reverse_replication_soaked`.** 24h replication lag observation window.
+
+Idempotent: re-running checks elapsed time since b_reverse_replication_established; reports remaining wait.
+
+**Steps B4-B14: equivalent to §4 Steps 4-14 with regions swapped (us-west-2 as source; us-east-1 as target).** Each step is idempotent + checkpointed. The §4 pre-promotion integrity gate (Step 5.5) applies: us-east-1 replica MUST PASS schema + I-027 + manifest-boundary verification BEFORE promotion. The §4 tenant-routing gate (Step 11.5) applies: us-east-1 ALB + DNS + tenant routing MUST PASS verification BEFORE traffic admission.
+
+**Step B15: `b_traffic_cutover_completed → b_post_failover_verified`.** Run §4.5 Step 14 post-failover verification.
+
+**Step B16: `b_post_failover_verified → b_back_failover_completed`.** Mark back-failover complete.
+
+```bash
+$ dr-tool back-failover-step --session <id> --target-state b_back_failover_completed
+# Emits Cat B dr.back_failover_completed audit event
+# Triggers post-incident retrospective
+# us-east-1 returns to primary; us-west-2 returns to cold-DR posture
+# Cross-region replication direction restored (us-east-1 → us-west-2)
+```
+
+### Split-brain fencing (R1 MED-1 closure)
+
+Throughout back-failover, the dr-tool enforces a single-writer invariant per session:
+
+- During b_initiated through b_traffic_cutover_completed: us-west-2 is the SOLE writer; any us-east-1 write attempt rejects with `back_failover_split_brain_detected` error + P0 alert + abort.
+- After b_traffic_cutover_completed: us-east-1 is the SOLE writer; us-west-2 reverts to read-only replica posture.
+- The transition (B14 cutover) is atomic per the dr-tool's write-fence: us-west-2 is frozen to read-only BEFORE us-east-1 begins accepting writes; no overlap window.
+
+### Abort / rollback decision tree
+
+| Failure during back-failover | Action |
+|---|---|
+| B1-B3 (pre-replication-soak): operator decision is reversible | Abort back-failover; remain in us-west-2 primary; resume B1 after issue resolution |
+| B4-B6 (pre-promotion): integrity check fails on us-east-1 replica | Abort; us-west-2 stays primary; investigate replica integrity; do NOT promote |
+| B7-B10 (post-promotion, pre-cutover): storage/KMS/audit-chain fails on us-east-1 | Roll back promotion (us-east-1 returns to replica posture); us-west-2 stays primary; investigate |
+| B11-B14 (cutover): tenant-routing or traffic-admission fails | Roll back DNS to us-west-2 ALB; us-east-1 returns to replica; investigate |
+| B15-B16 (post-cutover verification): post-failover verification fails | Operator + IC + CTO decision: either roll back to us-west-2 OR accept partial-state + open P0 incident |
+
+Each abort path emits Cat B `dr.back_failover_aborted` with reason + last-completed-state.
 
 ---
 
@@ -271,6 +357,32 @@ Tenant communications cadence: status page update at T-0, T+90 (mid-failover), T
 - During T+90 to T+180 (traffic cutover), crisis-detection processing in us-west-2 resumes; the queued signals from the read-only window are processed in order.
 
 **No DR scenario justifies suspending I-019 enforcement.** Any deviation requires Privacy Officer + Compliance Officer + CTO retrospective sign-off.
+
+### I-019 fallback replay hard gate (closes Codex R1 MED-2)
+
+Per R1 MED-2 closure, the failover is NOT COMPLETE until queued crisis-detection signals from the T+15 to T+90 read-only window are verifiably processed in us-west-2 with no loss, no duplication, no reordering, and per-tenant isolation preserved.
+
+**Step 14.5 (HARD GATE between Step 14 post-failover-verify and Step 16 mark-complete): I-019 fallback replay drain.**
+
+```bash
+$ dr-tool verify-i019-fallback-replay --target us-west-2 --window T+0 to T+failover_complete
+# (a) Inventory queued-on-device crisis-detection signals from the read-only window:
+#     each device's local-fallback queue reports its pending-signal count + timestamps to the platform on first successful write after cutover
+# (b) Verify replay completeness: every queued signal received by us-west-2 within 60 min of cutover (no signals stuck on devices longer than necessary)
+# (c) Verify ordering: replayed signals processed in original emit-timestamp order per tenant + per patient
+# (d) Verify deduplication: signals are idempotent on (device_id, local_signal_id, emit_timestamp); duplicate emissions on retry produce a single canonical audit row
+# (e) Verify per-tenant isolation: a tenant_A device's queued signals NEVER route to tenant_B audit chain (cross-check against canonical I-023 + I-025)
+# (f) Replay latency measurement: P99 replay latency from device emission to platform processing recorded
+# (g) Per-tenant queue drain verification: every active tenant's queue reports drained = true before failover marks complete
+# Fails if ANY tenant queue not drained within 60 min of cutover OR ANY ordering/dedup/isolation violation
+```
+
+**Step 14.5 result interpretation:**
+- **All tenants drained + ordered + deduped + isolated within 60 min**: failover proceeds to Step 16 mark-complete.
+- **Some queues not drained within 60 min**: extend deadline to 4h; if still not drained, escalate to Incident Commander + Privacy Officer + Compliance Officer review; Step 16 mark-complete BLOCKED until queue resolution.
+- **Any ordering / dedup / isolation violation**: P0 alert; quarantine the affected tenant cohort; the failover is not marked complete; named manual review of every affected signal per crisis-response runbook (separate document).
+
+This gate ensures that the T+15 to T+90 read-only window's I-019 local-fallback pathway DOES NOT leak crisis signals — the foundational guarantee of I-019 (crisis-detection-always-on) is preserved across the DR boundary not just by best-effort queue mechanics but by hard verification before failover completion.
 
 ---
 
