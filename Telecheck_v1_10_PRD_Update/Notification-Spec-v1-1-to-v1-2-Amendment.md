@@ -121,7 +121,23 @@ The UNIQUE constraint on `(tenant_id, patient_id, server_signal_id, channel)` is
 
 **Encryption-context binding (cross-references §3 SD5):** the notification's `payload_body` encryption-context includes `notification_id` from this ledger row, NOT the server_signal_id directly. This means encryption-context binding is per-channel (one notification_id per channel per signal), which prevents channel-payload cross-contamination from ledger-key collisions.
 
-**24h re-dispatch window (OQ1 deferred):** the canonical dedup is permanent at the channel granularity; OQ1's 24h window only governs whether a NEW notification_id can be issued for the same signal_id + channel after the initial dispatch terminates in a failure state. Recommendation: re-dispatch on terminal failure (delivery_failed) is allowed via a NEW notification_id within 24h; subsequent re-dispatch beyond 24h requires a new server_signal_id (which means a re-detection by Mode 1).
+**24h re-dispatch window (R3 HIGH closure: re-dispatch reuses existing notification_id with new provider_attempt rows):**
+
+The canonical ledger UNIQUE constraint on `(tenant_id, patient_id, server_signal_id, channel)` is preserved as the canonical dedup. Re-dispatch within 24h of terminal failure does NOT create a new ledger row — instead, it adds new rows to `notification_crisis_provider_attempt` under the same `notification_id` and transitions the channel-obligation state machine back from `terminal_failed` to `accepted` (representing the re-dispatch).
+
+**Canonical re-dispatch flow:**
+
+1. Initial dispatch: `notification_id=N` ledger row created (channel=sms, state=accepted). Provider attempts: attempt_seq=1 (Twilio), attempt_seq=2 (Vonage). Both terminal_failed.
+2. Channel-obligation transitions to `terminal_failed`.
+3. **Within 24h of terminal_failed:** a re-dispatch trigger (e.g., operator-initiated retry; OR client-driven retry per OQ1 ratifier decision) updates the SAME ledger row's `dispatch_obligation_state` from `terminal_failed` → `accepted` (re-dispatch admission); a new provider attempt row is created with `attempt_seq=3` (next available; e.g., re-trying primary Twilio after recovery).
+4. Re-dispatch follows the standard state machine (provider_invocation_pending → provider_invoked → delivery_confirmed or terminal_failed).
+5. Cat A `notification.crisis_redispatch_admitted` event emitted (P1 keyed by patient_id) recording the redispatch_at + redispatch_trigger reason.
+
+**Beyond 24h:** re-dispatch is forbidden for the same `(signal_id, channel)`. A new server_signal_id (i.e., Mode 1 re-detection by the AI Service) is required to re-dispatch. The 24h window prevents operator-driven retry loops; beyond the window, the assumption is the original crisis state has evolved + a fresh detection is appropriate.
+
+**State machine extension:** `terminal_failed → accepted` is the canonical re-dispatch transition. The state transitions are append-only audited per Cat A `notification.crisis_state_transition` events (state machine is fully reconstructable from the audit chain).
+
+**Audit:** every redispatch admission emits Cat A `notification.crisis_redispatch_admitted` with `redispatch_count` (1 for first redispatch, 2 for second within the same 24h window, etc.) + `redispatch_trigger` (`operator_initiated` | `client_retry` | `automated_retry`).
 
 ### Sub-decision 2 — DR-survivable notification delivery via multi-region ACK channel
 
@@ -348,7 +364,9 @@ New events per Sub-decisions 1-6:
 |---|---|---|---|---|
 | Test N.1 | `apps/api-server/__integration__/notification/crisis_cross_channel.test.ts` | `integration-notification` | Mode 1 emits crisis_signal → notification subsystem dispatches push + SMS + in-app in parallel; Cat A audit chain complete | §3 SD1 |
 | Test N.2 | `apps/api-server/__integration__/notification/crisis_severity_tiered_routing.test.ts` | `integration-notification` | severity=imminent_harm → operator-alert Cat A event emitted; severity=medical_emergency → emergency-services-redirect content included | §3 SD1 |
-| Test N.3 | `apps/api-server/__integration__/notification/crisis_dedup.test.ts` | `integration-notification` | Same crisis signal re-delivered (multi-region ACK replay) → notification dispatched once per channel; idempotency keyed by (tenant_id, patient_id, server_signal_id) | §3 SD1 |
+| Test N.3 | `apps/api-server/__integration__/notification/crisis_dedup.test.ts` | `integration-notification` | Same crisis signal re-delivered (multi-region ACK replay) → notification ledger row stays single per channel; idempotency keyed by (tenant_id, patient_id, server_signal_id, channel); re-delivery is no-op | §3 SD1 |
+| Test N.3b | `apps/api-server/__integration__/notification/crisis_redispatch_within_24h.test.ts` | `integration-notification` | Terminal-failed channel obligation re-dispatched within 24h → SAME ledger row's state transitions terminal_failed → accepted; new provider_attempt row with attempt_seq=3 created; Cat A `crisis_redispatch_admitted` event (R3 HIGH closure) | §3 SD1 |
+| Test N.3c | `apps/api-server/__integration__/notification/crisis_redispatch_beyond_24h.test.ts` | `integration-notification` | Re-dispatch attempt beyond 24h of terminal_failed → rejected; requires fresh server_signal_id for new ledger row (R3 HIGH closure) | §3 SD1 |
 | Test N.4 | `apps/api-server/__integration__/notification/crisis_quiet_hours_override.test.ts` | `integration-notification` | Patient in 10pm-7am quiet-hours window → crisis notification dispatches anyway + Cat A `opt_out_override_for_emergency` event | §3 SD4 |
 | Test N.5 | `apps/api-server/__integration__/notification/crisis_transactional_optout_override.test.ts` | `integration-notification` | Patient opted out of transactional SMS → crisis SMS dispatches anyway + override audit | §3 SD4 |
 | Test N.6 | `apps/api-server/__integration__/notification/crisis_marketing_optout_preserved.test.ts` | `integration-notification` | Patient with marketing opt-out → no marketing content in crisis notification; crisis-resource content only | §3 SD4 |
@@ -419,6 +437,7 @@ No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honor
 | Round | Findings | Status |
 |---|---|---|
 | R2 | HIGH SMS provider fallback conflict with channel-scoped UNIQUE constraint (same `sms` channel can't have two ledger rows; primary→Vonage fallback semantics impossible to represent) | Closed inline by splitting provider attempts into `notification_crisis_provider_attempt` child table keyed by `(notification_id, provider, attempt_seq)`; channel obligation aggregates across attempts |
+| R3 | HIGH 24h same-signal re-dispatch contradiction (R1 closure said "NEW notification_id" but UNIQUE constraint forbids this) | Closed inline by reusing existing notification_id; re-dispatch transitions channel-obligation state machine from `terminal_failed` → `accepted` and adds new provider_attempt rows. Beyond 24h: new server_signal_id (Mode 1 re-detection) required. Cat A `crisis_redispatch_admitted` event added |
 
 ---
 
