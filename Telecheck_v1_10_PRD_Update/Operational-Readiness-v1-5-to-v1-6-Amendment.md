@@ -47,35 +47,64 @@ This amendment integrates **five Sprints' worth of operations specs** (Sprints 5
 
 ### Sub-decision 1 — Pre-launch infrastructure checklist additions (Sprints 5, 7, 13, 16 integration)
 
-**Decision shape:** the following items are added to the canonical pre-launch infrastructure checklist (current v1.5 has ~50 items; v1.6 adds these 14):
+**Decision shape:** the following items are added to the canonical pre-launch infrastructure checklist (current v1.5 has ~50 items; v1.6 adds these 14). Each item is paired with the **evidence-artifact rubric (R1 MED-1 closure)** specifying:
+
+- **Test/runbook ID:** the canonical test or runbook artifact that proves the item is green.
+- **Environment:** which environment(s) the test must pass in (test/staging/production).
+- **Pass threshold:** quantitative pass criteria.
+- **Tenant scope:** per-tenant or platform-wide.
+- **Owner:** the canonical accountable role.
+- **Freshness window:** how recent the evidence must be (e.g., within 90 days).
+- **Attestation location:** where the evidence document is stored (canonical artifact path).
 
 **F-4 Deploy Runbook (Sprint 5) integration:**
 
 - [ ] F-4 deploy pipeline implemented per Sprint 5 runbook (canary stages + invariant probes + dual-control authorization checklist + migration-failure recovery branch).
+  - **Test ID:** F-4 integration test suite `__integration__/deploy/f4_canary.test.ts` + manual deploy-runbook walkthrough.
+  - **Environment:** staging (full pipeline run); production (canonical canary on first real deploy).
+  - **Pass threshold:** all 9 dual-control authorization checklist items signed; all canary-stage probes green; migration-failure recovery branch test (5-row decision matrix per Sprint 5 §5.1.MIG) passes.
+  - **Tenant scope:** platform-wide.
+  - **Owner:** SRE Lead.
+  - **Freshness:** within 30 days of launch.
+  - **Attestation:** `attestations/operational-readiness/f4-deploy-runbook-attestation.md`.
 - [ ] Per-canary invariant probes (I-019 / I-023 / cache / service-health) wired to PagerDuty with the canonical per-probe freshness SLA table per Sprint 5 R2 closure.
+  - **Test ID:** `__integration__/deploy/invariant_probe_freshness.test.ts`.
+  - **Environment:** staging.
+  - **Pass threshold:** I-019/I-023 ≤60s freshness; cache/service-health ≤60s; I-027 audit-trail probe 5-10min staleness window per Sprint 5 R2 closure.
+  - **Tenant scope:** platform-wide.
+  - **Owner:** SRE Lead.
+  - **Freshness:** within 30 days.
+  - **Attestation:** `attestations/operational-readiness/invariant-probe-freshness-attestation.md`.
 - [ ] Deploy-event correlation with SIEM (per SIEM §8 deploy-event-correlation) verified end-to-end on a test deployment.
+  - **Test ID:** `__integration__/deploy/siem_correlation.test.ts`.
+  - **Environment:** staging.
+  - **Pass threshold:** deploy event appears in SIEM dashboard within 30s p99; deploy-correlation alerts fire correctly on simulated invariant regression.
+  - **Tenant scope:** platform-wide.
+  - **Owner:** SRE Lead.
+  - **Freshness:** within 30 days.
+  - **Attestation:** `attestations/operational-readiness/siem-deploy-correlation-attestation.md`.
 
-**Cold-DR Runbook (Sprint 7) integration:**
+**Cold-DR Runbook (Sprint 7) integration** — *every item below follows the F-4 evidence-rubric template above; full per-item rubric details in `attestations/operational-readiness/v1-6-evidence-rubric-catalog.md`:*
 
-- [ ] Multi-region ACK channel (DynamoDB Global Tables OR equivalent per Cold-DR OQ7) provisioned + canonical topology verified.
-- [ ] Pre-failover canary decrypts (per Sprint 13 §3.1) executable in test environment.
-- [ ] Three-state per-device obligation model implemented + verified via simulated DR drill.
-- [ ] Step 14.5 I-019 fallback replay verified against synthetic offline-device cohort.
-- [ ] Tenant-routing gate (Step 11.5 + 12.5) verified per tenant for day-1 launch tenants.
+- [ ] Multi-region ACK channel (DynamoDB Global Tables OR equivalent per Cold-DR OQ7) provisioned + canonical topology verified. **Owner:** SRE Lead. **Test ID:** `cold-dr/multi-region-ack-topology.test.ts`. **Freshness:** within 90 days.
+- [ ] Pre-failover canary decrypts (per Sprint 13 §3.1) executable in test environment. **Owner:** SRE Lead. **Test ID:** `cold-dr/pre-failover-canary.test.ts`. **Tenant scope:** per-tenant.
+- [ ] Three-state per-device obligation model implemented + verified via simulated DR drill. **Owner:** SRE Lead + Clinical Lead. **Test ID:** `cold-dr/three-state-obligation.test.ts`. **Freshness:** within 90 days.
+- [ ] Step 14.5 I-019 fallback replay verified against synthetic offline-device cohort. **Owner:** Clinical Lead. **Test ID:** `cold-dr/i019-fallback-replay.test.ts`. **Pass threshold:** 100% drain within 60min for reachable cohort; offline cohort ≤20% per tenant.
+- [ ] Tenant-routing gate (Step 11.5 + 12.5) verified per tenant for day-1 launch tenants. **Owner:** SRE Lead. **Test ID:** `cold-dr/tenant-routing-gate.test.ts`. **Tenant scope:** per-tenant.
 
-**KMS Architecture (Sprint 13) integration:**
+**KMS Architecture (Sprint 13) integration** — *per-item evidence-rubric details in `attestations/operational-readiness/v1-6-evidence-rubric-catalog.md`:*
 
-- [ ] Per-tenant CMK provisioned with canonical IaC module + multi-region replica policy verified drift-free.
-- [ ] STS session-tag binding (`tenant-id`) enforced via assume-role trust policies; confused-deputy test passes.
-- [ ] Break-glass IAM role provisioned with all 5 per-tag Explicit Deny statements (per Sprint 13 R3 closure) + HSM-backed approver signing keys provisioned for CTO + Compliance Officer + Incident Commander.
-- [ ] Versioned DEK keyring populated for each data class per tenant; reader-fallback rule integration-tested.
-- [ ] `kms_residency_policy` CCR key value verified per tenant (`us_with_dr_fallback` for both Telecheck-US + Telecheck-Ghana per ADR-026).
+- [ ] Per-tenant CMK provisioned with canonical IaC module + multi-region replica policy verified drift-free. **Owner:** SRE Lead. **Test ID:** `kms/cmk-provisioning + kms/replica-policy-drift`. **Tenant scope:** per-tenant. **Freshness:** ongoing daily drift check.
+- [ ] STS session-tag binding (`tenant-id`) enforced via assume-role trust policies; confused-deputy test passes. **Owner:** Security Engineering Lead. **Test ID:** `kms/sts-session-tag-binding.test.ts`. **Tenant scope:** per-tenant.
+- [ ] Break-glass IAM role provisioned with all 5 per-tag Explicit Deny statements (per Sprint 13 R3 closure) + HSM-backed approver signing keys provisioned for CTO + Compliance Officer + Incident Commander. **Owner:** Security Engineering Lead + Compliance Officer. **Test ID:** `kms/break-glass-iam-policy + kms/break-glass-signature-check`.
+- [ ] Versioned DEK keyring populated for each data class per tenant; reader-fallback rule integration-tested. **Owner:** SRE Lead. **Test ID:** `kms/dek-versioned-reads.test.ts`. **Tenant scope:** per-tenant.
+- [ ] `kms_residency_policy` CCR key value verified per tenant (`us_with_dr_fallback` for both Telecheck-US + Telecheck-Ghana per ADR-026). **Owner:** Compliance Officer. **Test ID:** `kms/residency-policy-verification.test.ts`. **Tenant scope:** per-tenant.
 
-**Notification Spec v1.2 (Sprint 16) integration:**
+**Notification Spec v1.2 (Sprint 16) integration** — *per-item evidence-rubric details in `attestations/operational-readiness/v1-6-evidence-rubric-catalog.md`:*
 
-- [ ] Per-tenant SMS provider configured: Twilio (Telecheck-US) + Africa's Talking (Telecheck-Ghana); Vonage fallback configured for both.
-- [ ] Crisis-notification cross-channel dispatch verified end-to-end (push + SMS + email) via test crisis-signal injection.
-- [ ] Dual-bucket rate-limit reservation (90% routine + 10% reserved crisis) configured per provider per tenant.
+- [ ] Per-tenant SMS provider configured: Twilio (Telecheck-US) + Africa's Talking (Telecheck-Ghana); Vonage fallback configured for both. **Owner:** SRE Lead. **Test ID:** `notification/sms-provider-routing.test.ts`. **Tenant scope:** per-tenant.
+- [ ] Crisis-notification cross-channel dispatch verified end-to-end (push + SMS + email) via test crisis-signal injection. **Owner:** Clinical Lead + SRE Lead. **Test ID:** `notification/crisis-cross-channel.test.ts`. **Pass threshold:** all channels dispatched within 30s p99 (per §5 SLO).
+- [ ] Dual-bucket rate-limit reservation (90% routine + 10% reserved crisis) configured per provider per tenant. **Owner:** SRE Lead. **Test ID:** `notification/dual-bucket-reservation.test.ts`. **Tenant scope:** per-tenant per-provider.
 
 ### Sub-decision 2 — Pre-launch security checklist additions (Sprints 6, 13, 16 integration)
 
@@ -105,15 +134,45 @@ This amendment integrates **five Sprints' worth of operations specs** (Sprints 5
 | Quarterly (offset 45 days from full drill) | Partial DR: KMS replica policy drift detection + multi-region ACK channel quorum-correctness verification | SRE Lead attestation |
 | Monthly | I-019 fallback-replay drill: synthetic offline-device cohort + post-cutover Step 14.5 verification | SRE on-call attestation |
 
-**Crisis-detection chaos drills (NEW per Sprint 9 + Sprint 16 integration):**
+**Crisis-detection chaos drills (NEW per Sprint 9 + Sprint 16 integration; R1 MED-2 closure: bounded blast radius):**
+
+All crisis chaos drills run under the following canonical safety controls:
+
+- **Synthetic-patient isolation:** every drill uses a dedicated `tenant_<tenant_id>_synthetic_test` patient cohort flagged in CDM via `patient.is_synthetic_test = true`. Real patients are NEVER target of chaos drills.
+- **Production-notification suppression:** synthetic-patient notifications are routed to a dedicated provider sandbox endpoint (Twilio test credentials / FCM test channel / etc), NOT real SMS/push delivery. The notification pipeline checks `patient.is_synthetic_test` BEFORE provider dispatch + redirects accordingly.
+- **Cost budget:** each drill operation under $5 in aggregate provider costs (token-bucket guards exceeded → drill aborts).
+- **Rate-limit budget:** drill operations consume from a dedicated `chaos_drill` rate-limit bucket (per-region 10/min limit); does NOT consume from routine or crisis buckets.
+- **Clinical staffing impact:** drills MUST run during business hours of the target country (Ghana = 09:00-17:00 GMT; US = 09:00-17:00 ET); no off-hours drills. Clinical on-call is notified 24h in advance via Cat B `chaos.drill_scheduled` event; on-call may opt-out of receiving drill-induced alerts (drill alerts route to a dedicated `chaos_drill_alerts` PagerDuty rotation, NOT the live on-call rotation).
+- **Drill abort criteria:** any drill that fails its acceptance threshold or exceeds 15-minute wall-clock runtime aborts automatically; Cat A `chaos.drill_aborted` event emitted.
+
+**Drill schedule:**
 
 | Cadence | Drill scope | Required attestation |
 |---|---|---|
-| Monthly | I-019 always-on detector: inject crisis-message into test patient's Mode 1 conversation; verify detector fires within 500ms p99 + audit chain + cross-channel notification dispatched | Clinical Lead + SRE attestation |
-| Monthly | Crisis-notification cross-channel: simulate primary SMS provider outage; verify Vonage fallback fires per Sprint 16 §3 SD3 within latency budget | SRE attestation |
-| Monthly | Crisis-notification undeliverable escalation: simulate all 4 channels failing for a test patient; verify Cat A `crisis_undeliverable_5min` + P0 PagerDuty fires within 5min SLA | Clinical Lead + SRE attestation |
+| Monthly | I-019 always-on detector: inject crisis-message into synthetic-test patient's Mode 1 conversation; verify detector fires within 500ms p99 + audit chain + cross-channel notification dispatched to provider sandboxes | Clinical Lead + SRE attestation |
+| Monthly | Crisis-notification cross-channel: simulate primary SMS provider outage in test environment; verify Vonage fallback fires per Sprint 16 §3 SD3 within latency budget | SRE attestation |
+| Monthly | Crisis-notification undeliverable escalation: simulate all 4 channels failing in test environment for a synthetic-test patient; verify Cat A `crisis_undeliverable_5min` + P0 PagerDuty fires within 5min SLA (P0 routes to the `chaos_drill_alerts` rotation, NOT live on-call) | Clinical Lead + SRE attestation |
 
-**Quarterly + monthly drill failures trigger:** P0 incident review; pre-launch checklist item rolled back; remediation tracking until drill passes; gating effect on any deploy/release until resolved.
+**Quarterly + monthly drill failures trigger (R1 HIGH-1 closure: scoped gating + emergency carve-out):**
+
+Drill failures trigger P0 incident review + remediation tracking. The gating effect is **scoped**, not blanket, per the following matrix:
+
+| Drill failure scope | Releases blocked | Allowed under carve-out |
+|---|---|---|
+| DR drill failure affecting all tenants (e.g., Cold-DR runbook step regression) | Routine feature deploys for all tenants | Remediation deploys for the failing path; emergency safety/security deploys (e.g., crisis-detector fix); single-tenant launch deploys for tenants demonstrably unaffected by the failure scope |
+| Crisis-detection chaos drill failure for a specific tenant | Routine feature deploys affecting that tenant's crisis path | Remediation deploys for the failing path; deploys to unrelated tenants; emergency safety deploys |
+| KMS replica drift detected on specific tenant | Routine feature deploys affecting that tenant | Drift-remediation deploys; deploys to unrelated tenants |
+| Notification undeliverable escalation drill failure | Routine notification-spec changes | Remediation deploys for the notification path; emergency safety deploys |
+
+**Emergency safety/security deploy carve-out:**
+- Requires dual-control approval: CTO + Incident Commander OR Compliance Officer + Engineering Lead.
+- Must include explicit `emergency_justification` field on the release ticket.
+- Auto-expires the carve-out 72 hours after release (subsequent releases for the same path return to standard gating).
+- Cat A `release.emergency_carve_out_invoked` audit event emitted per use (P2 keyed by 'platform' for visibility).
+
+**Unrelated-tenant proof:** the scoped-gating model requires the release approver to attest that the failing drill scope does NOT impact the tenant(s) targeted by the proposed release. The attestation references the specific drill-failure event + names the unaffected tenants explicitly. Cat A `release.scope_attestation_recorded` event emitted.
+
+**This prevents deadlock:** a failed drill can never freeze the very release needed to fix it (remediation path always allowed); unrelated tenants' release cadence is not blocked; emergency safety/security paths always have escape valve under dual-control. The gate's protective intent is preserved (routine releases on the affected scope wait until drill passes) without operational deadlock risk.
 
 ### Sub-decision 4 — Per-tenant launch-readiness sub-checklist
 
@@ -139,6 +198,21 @@ This amendment integrates **five Sprints' worth of operations specs** (Sprints 5
 - [ ] Tenant operator (e.g., Telecheck-Ghana operator) onboarded with operator-mode-switcher access per Sprint 8 SI-017 §3.6.
 - [ ] Per-tenant DR drill executed within last 90 days (or pre-launch).
 - [ ] Per-tenant crisis-detection chaos drill executed within last 30 days (or pre-launch).
+
+**Per-tenant data-boundary + lifecycle proof (R1 HIGH-2 closure: critical for multi-tenant PHI launch):**
+
+- [ ] **Tenant-scoped backup/restore tested.** Restore a snapshot of the tenant's data into a test environment + verify no cross-tenant data leaks; verify RLS + tenant-scoped queries match production behavior. Test artifact: `backup-restore-isolation-test-tenant-<id>.report.md` filed.
+- [ ] **Migration/import isolation tested.** Patient data import path (e.g., new-patient onboarding bulk import) tested with multi-tenant fixtures; verify all imported rows carry correct tenant_id; verify RLS rejects cross-tenant queries against imported data. Test artifact: `migration-isolation-test-tenant-<id>.report.md` filed.
+- [ ] **Export/data-portability isolation tested.** Patient data export path (e.g., HIPAA portability request fulfillment) tested; verify exported bundle contains ONLY the requesting patient's data; verify no cross-tenant data appears even when patient_id collisions exist across tenants (UUIDs make this rare but the test verifies the bound). Test artifact: `export-isolation-test-tenant-<id>.report.md` filed.
+- [ ] **Retention/deletion policy execution tested.** Run a synthetic retention sweep on test environment; verify the canonical retention procedure deletes only the targeted tenant's expired data; verify cross-tenant retention sweeps cannot be triggered without I-024 break-glass. Test artifact: `retention-isolation-test-tenant-<id>.report.md` filed.
+- [ ] **Audit-log tenant partitioning integrity verified.** Run a SIEM audit query for the test tenant + verify ALL returned events are tenant-bound (P1/P2 partitioning consistent with SI-018); run a cross-tenant query as the tenant's service identity and verify it is rejected. Test artifact: `audit-partition-isolation-test-tenant-<id>.report.md` filed.
+- [ ] **Cross-tenant negative tests passed** across the following paths:
+  - HTTP API endpoints: attempt cross-tenant data access via path-parameter manipulation → 404 tenant-blind per I-025.
+  - Batch worker queues: enqueue cross-tenant job → rejected by tenant-id binding.
+  - DR-failover replay: in-flight tenant-A data does not appear in tenant-B post-cutover.
+  - Analytics/reporting: tenant-A analytics query cannot access tenant-B data even under aggregation paths.
+  Test artifact: `cross-tenant-negative-test-suite-tenant-<id>.report.md` filed.
+- [ ] **Cross-tenant data-mixing canary.** A continuous canary process inserts test markers into tenant-A's data + queries tenant-B periodically (and vice versa); markers MUST NOT appear in opposing tenant's results. Canary runs at 5-min cadence post-launch; alert fires if ANY marker appears cross-tenant.
 
 **Per-tenant launch gate:** every per-tenant sub-checklist item MUST be green; any red item blocks tenant go-live; Compliance Officer + SRE Lead + Country Lead joint sign-off required per tenant launch ceremony.
 
@@ -214,6 +288,20 @@ This amendment integrates **five Sprints' worth of operations specs** (Sprints 5
 ## 7. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
+
+**v0.1 R1 closure 2026-05-19:** 2 HIGH + 2 MED closed inline:
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | HIGH-1 blanket gate on drill failure could deadlock remediation deploys; HIGH-2 per-tenant checklist missing backup/restore + migration + retention + cross-tenant negative tests; MED-1 checklist items vague + non-individually-verifiable; MED-2 monthly chaos cadence missing operational-overhead controls | All 4 closed inline |
+
+**R1 closure pattern recap:**
+- HIGH-1: scoped gating matrix replaces blanket gate; emergency safety/security carve-out via dual-control approval + auto-expire + Cat A audit; unrelated-tenant proof attestation required per release.
+- HIGH-2: 7 new per-tenant evidence items added (backup/restore + migration + export + retention/deletion + audit-partition integrity + cross-tenant negative tests across HTTP/queue/DR-replay/analytics + continuous data-mixing canary).
+- MED-1: evidence-artifact rubric introduced; F-4 items expanded with full rubric inline; Cold-DR / KMS / Notification items expanded with abbreviated rubric (Owner + Test ID + Tenant scope + Freshness) with reference to canonical catalog `attestations/operational-readiness/v1-6-evidence-rubric-catalog.md`.
+- MED-2: chaos-drill bounded-blast-radius controls: synthetic-patient isolation + production-notification suppression + cost budget ($5/drill) + dedicated chaos_drill rate-limit bucket + business-hours-only + dedicated `chaos_drill_alerts` PagerDuty rotation (not live on-call) + 15-min wall-clock auto-abort.
+
+No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. 6 known OQs remain ratifier-targetable.
 
 ---
 
