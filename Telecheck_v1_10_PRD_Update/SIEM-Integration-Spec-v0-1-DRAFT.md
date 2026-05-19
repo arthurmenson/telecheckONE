@@ -1,7 +1,7 @@
 # SIEM Integration Spec
 
-**Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; Track 5 Infra/Ops deliverable per Master Completion Plan §"Track 5 (operates AHEAD of code)"
+**Version:** 0.2 DRAFT (R1-R6 in-scope closures applied; §4.5.HC marked as SI-021 split candidate per §10 cadence)
+**Status:** **RATIFIER-READY-WITH-KNOWN-OQs.** Spec body (§§1-3 + §§4 non-HC + §§5-8) is Codex-converged across 6 rounds with all in-scope findings closed inline. **§4.5.HC (Hash-chain archival contract) is recommended for split into a dedicated SI-021 "Audit-chain Long-Term Archival + Independence-of-Tamper-Detection Architecture"** at the ratifier ceremony — the sub-system has grown into a complete dedicated SI (4-role separation + 2-phase crash-safe signing + HSM + transparency log + 4-source verification + crash-recovery protocol + failure-mode coverage matrix). Codex R1-R6 produced productive design depth on §4.5.HC; further iteration is bounded by the dedicated-SI threshold per CLAUDE.md §10-escalation cadence. Track 5 Infra/Ops deliverable per Master Completion Plan §"Track 5 (operates AHEAD of code)".
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus operations deliverable)
 **Owner:** SRE Lead + Compliance Officer + Operations Lead
 **Companion documents:** F-4 Deploy Runbook v0.1 DRAFT, GOVERNANCE_CONTROLS Contracts Pack v5.2, AUDIT_EVENTS Contracts Pack v5.5, ADR-026 (single-region+cold-DR), Ghana Launch Playbook v1.2
@@ -228,7 +228,13 @@ Per AUDIT_EVENTS v5.5 §Retention canonical policy:
        - **Step R1: Detect manifest_intent without manifest_persisted.** Recovery job (separate from writer/signer/verifier; on a 5-min cadence) scans the transparency log for `manifest_intent` entries that have no matching `manifest_persisted` Cat B audit event in the `archive_meta` partition.
        - **Step R2: Discover object existence by deterministic key.** For each unpaired intent, the recovery job HEADs/LISTs the deterministic S3 key. Three cases:
          - **(a) Object does NOT exist:** writer's PUT never succeeded. Recovery re-runs Phase 2 PUT against the same intent (conditional `If-None-Match: *` succeeds because key is missing). Then emits the `manifest_persisted` Cat B referencing the new S3 version_id.
-         - **(b) Object exists with matching digest + matching transparency-log signature:** writer's PUT succeeded but Cat B emission failed. Recovery retrieves the actual S3 version_id via `HeadObject`, verifies the object's content digest equals the `manifest_intent.manifest_digest`, verifies the Object Lock retention is intact, then emits the missing `manifest_persisted` Cat B referencing the discovered version_id. No PUT attempted.
+         - **(b) Object exists with matching digest + matching transparency-log signature:** writer's PUT succeeded but Cat B emission failed. Recovery:
+           - **(b.i) `HeadObject`** retrieves S3 ETag + version_id + Object Lock retention metadata.
+           - **(b.ii) `GetObject`** (or a streaming bytes read) downloads the full object content + recovery re-computes the SHA-256 over those exact bytes. (HeadObject alone is INSUFFICIENT because ETag is not a SHA-256; it is S3's internal opaque object identifier that varies by upload path. Per R6 HIGH-1 closure, the recovery MUST GET the bytes + re-hash.)
+           - **(b.iii) Compare** the recovery-computed SHA-256 against `manifest_intent.manifest_digest`. Bytes-match-signed-intent is verified by hash equality, not ETag equality.
+           - **(b.iv) Verify** the transparency-log signature against the recovery-computed digest (signature is over the digest; if bytes match, signature verifies).
+           - **(b.v) Verify** Object Lock retention is intact + retention end-date is set to the canonical legal-retention period.
+           - **(b.vi) Emit** missing `manifest_persisted` Cat B referencing discovered version_id + bytes-match-confirmed flag. No PUT attempted.
          - **(c) Object exists but content digest does NOT match the manifest_intent digest:** integrity violation. Recovery does NOT emit Cat B. Recovery emits `audit_retention.manifest_integrity_violation_detected` Cat B (ELEVATED severity) + P0 alert + freezes the affected partition. The manifest_intent is invalidated via the superseding-error-manifest mechanism.
        - **Idempotency invariant:** because manifest content is deterministic from CDC + writer never modifies an existing key (case (b)), the recovery protocol either creates the missing PUT (case (a)), discovers + binds the existing PUT (case (b)), or detects a tampering case (case (c)). The protocol terminates in all three branches without leaving an orphan intent.
        - **Conditional PUT semantics correctness:** `If-None-Match: *` is used ONLY in Phase 2 initial PUT + recovery case (a). It is NOT used in recovery case (b) — that path uses `HeadObject` for discovery, not PUT.
