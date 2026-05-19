@@ -1,7 +1,8 @@
 # AI Service Mode 2 Handler Specification
 
 **Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; Sprint 12 of autonomous 24h-loop work plan
+**Status:** RATIFIER-READY-WITH-KNOWN-OQs (R4 Codex APPROVE 2026-05-19); Sprint 12 of autonomous 24h-loop work plan
+**Codex iteration trajectory:** R1 (1 CRITICAL + 3 HIGH + 3 MED) → R2 (1 HIGH execution-lease vs pending-TTL) → R3 (1 HIGH §8 SLO vs §3.2 lease) → R4 APPROVE. All 9 findings closed inline; 0 architectural-judgment items closed inline; 7 known OQs (§10) remain ratifier-targetable.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus Track 2 deliverable)
 **Owner:** AI Service Lead + Clinical Lead + Governance Lead (tri-owner per Mode 2's protocol-execution + clinical-safety + governance-gating scope)
 **Companion documents:** Sprint 9 AI Service Mode 1 Handler Spec; SI-016 ai_workflow_handler_registry (Sprint 3 APPROVE); SI-017 Identity Spec v1.1 amendment (Sprint 8); ADR-002 two-mode AI architecture; ADR-029 AI Workload Taxonomy; Contracts Pack v5.2 AI_LAYERING + AUTONOMY_LEVELS + WORKLOAD_TAXONOMY + AUDIT_EVENTS v5.5; Cold-DR Runbook (Sprint 7); P-018a + P-019a + P-021a procedure-side STEP 0 amendments.
@@ -369,7 +370,7 @@ Per-stage breakdown for L4:
 - Handler resolution (registry lookup): 5-20ms.
 - Governance gate evaluation: 10-50ms.
 - Workflow input validation: 5-50ms (depends on schema complexity).
-- Workflow execution (varies by workflow): 500-9000ms typical; 60s hard ceiling.
+- Workflow execution (varies by workflow): 500-9000ms typical; 60s SLO alerting ceiling (§3.2 60-min lease is the absolute hard timeout).
 - Audit emission (multiple Cat A events): 5-50ms per event.
 - Response construction: 5-20ms.
 
@@ -488,6 +489,9 @@ No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honor
 |---|---|---|
 | R2 | HIGH execution-lease vs pending-token-TTL timeout conflict | Closed inline by separating execution lease (handler-runtime; 60min) from pending-token TTL (human-review; 7 days); lease released on transition to pending_* state |
 | R3 | HIGH §3.2 60-min lease ceiling vs §8 30s/60s "hard ceiling" labels created internal contradiction (active execution would time out at §8 ceiling before lease expiry) | Closed inline: §8 ceilings re-labeled as SLO breach alerting thresholds (operational targets; SRE alert fires; workflow may still complete); §3.2 60-min lease is the absolute hard timeout (forcible termination). Two-tier semantics articulated. |
+| R4 | APPROVE — §8 + §3.2 distinction is internally consistent; one residual prose nit (§8 per-stage breakdown said "60s hard ceiling") cleaned up to "60s SLO alerting ceiling" | RATIFIER-READY |
+
+**Status at R4 close:** RATIFIER-READY-WITH-KNOWN-OQs. Sprint 12 closes at R4 with APPROVE verdict; workstream proceeds to Sprint 13.
 
 ---
 
