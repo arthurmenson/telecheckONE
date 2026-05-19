@@ -71,14 +71,69 @@ The generated columns make per-(tenant_id, handler_name) max-version comparison 
 
 **Versioning rule (I-013 published-content-immutable; closes Codex R1 HIGH-2 monotone-semver enforceability):** handler_version semver is monotonically increasing per (tenant_id, handler_name); a new registration with the same handler_name MUST be strictly greater than the current maximum version. Same-name+version registrations REJECTED. Lower-version registrations REJECTED. Enforcement: see Sub-decision 1.5 INSERT trigger below.
 
-### Sub-decision 1.5: BEFORE INSERT trigger `ai_workflow_handler_registry_semver_monotone` (closes Codex R1 HIGH-2)
+### Sub-decision 1.5: BEFORE INSERT trigger `ai_workflow_handler_registry_semver_monotone` (closes Codex R1 HIGH-2 + R2 HIGH-1 race-safety + generated-column ordering)
 
-Trigger fires BEFORE INSERT on `ai_workflow_handler_registry` and validates that `NEW.(handler_version_major, handler_version_minor, handler_version_patch)` is strictly greater (lexicographic comparison on the 3 generated columns) than `MAX((handler_version_major, handler_version_minor, handler_version_patch))` for the same `(NEW.tenant_id, NEW.handler_name)` stream. SELECT-FOR-UPDATE-locks the existing-max row to prevent concurrent inserts racing.
+**R2 HIGH-1 correction.** PostgreSQL generated columns (`STORED`) are computed AFTER `BEFORE INSERT` triggers, so the trigger CANNOT rely on `NEW.handler_version_major/minor/patch` being populated at trigger fire-time. SELECT-FOR-UPDATE on the existing max row also doesn't lock anything when the `(tenant_id, handler_name)` stream is empty — two concurrent first registrations would race. Both issues addressed below:
+
+**Trigger implementation (race-safe; trigger-compatible parsing):**
+
+```sql
+CREATE OR REPLACE FUNCTION ai_workflow_handler_registry_semver_monotone_fn()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_new_major INT;
+  v_new_minor INT;
+  v_new_patch INT;
+  v_max_major INT;
+  v_max_minor INT;
+  v_max_patch INT;
+  v_stream_key TEXT;
+BEGIN
+  -- Step 1: parse semver inside the trigger (do NOT rely on generated columns in BEFORE INSERT)
+  IF NEW.handler_version !~ '^\d+\.\d+\.\d+$' THEN
+    RAISE EXCEPTION 'semver_grammar_violation: handler_version % does not match ^\\d+\\.\\d+\\.\\d+$', NEW.handler_version;
+  END IF;
+  v_new_major := split_part(NEW.handler_version, '.', 1)::INT;
+  v_new_minor := split_part(NEW.handler_version, '.', 2)::INT;
+  v_new_patch := split_part(NEW.handler_version, '.', 3)::INT;
+
+  -- Step 2: serialize per-(tenant_id, handler_name) stream via advisory transaction lock
+  -- pg_advisory_xact_lock auto-releases at transaction end; locks even when stream is empty
+  v_stream_key := NEW.tenant_id || ':' || NEW.handler_name;
+  PERFORM pg_advisory_xact_lock(hashtext('ai_workflow_handler_registry_stream:' || v_stream_key));
+
+  -- Step 3: read post-lock max version (advisory lock guarantees no concurrent INSERTs to this stream)
+  SELECT
+    COALESCE(MAX(split_part(handler_version, '.', 1)::INT), -1),
+    COALESCE(MAX(CASE WHEN split_part(handler_version, '.', 1)::INT = (SELECT MAX(split_part(handler_version, '.', 1)::INT) FROM ai_workflow_handler_registry WHERE tenant_id = NEW.tenant_id AND handler_name = NEW.handler_name) THEN split_part(handler_version, '.', 2)::INT END), -1),
+    COALESCE(MAX(CASE WHEN split_part(handler_version, '.', 1)::INT = (SELECT MAX(split_part(handler_version, '.', 1)::INT) FROM ai_workflow_handler_registry WHERE tenant_id = NEW.tenant_id AND handler_name = NEW.handler_name)
+                       AND split_part(handler_version, '.', 2)::INT = (SELECT MAX(split_part(handler_version, '.', 2)::INT) FROM ai_workflow_handler_registry WHERE tenant_id = NEW.tenant_id AND handler_name = NEW.handler_name AND split_part(handler_version, '.', 1)::INT = (SELECT MAX(split_part(handler_version, '.', 1)::INT) FROM ai_workflow_handler_registry WHERE tenant_id = NEW.tenant_id AND handler_name = NEW.handler_name))
+                       THEN split_part(handler_version, '.', 3)::INT END), -1)
+  INTO v_max_major, v_max_minor, v_max_patch
+  FROM ai_workflow_handler_registry
+  WHERE tenant_id = NEW.tenant_id AND handler_name = NEW.handler_name;
+  -- (production implementation may compute the 3-tuple max via a simpler subquery; the spec only requires the contract: strictly-greater per (major,minor,patch) lex ordering.)
+
+  -- Step 4: reject if new version is not strictly greater than existing max in (major,minor,patch) lex order
+  IF (v_new_major, v_new_minor, v_new_patch) <= (v_max_major, v_max_minor, v_max_patch) THEN
+    RAISE EXCEPTION 'semver_not_monotone_increasing: handler_version % is not strictly greater than current max %.%.% for (tenant_id=%, handler_name=%)',
+      NEW.handler_version, v_max_major, v_max_minor, v_max_patch, NEW.tenant_id, NEW.handler_name;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Key changes from R1:**
+- Parse semver inline from `NEW.handler_version` TEXT (not generated columns)
+- `pg_advisory_xact_lock` serializes per-stream regardless of stream emptiness (closes the first-registration race)
+- Max-version read happens AFTER lock acquisition, so the lex-comparison is against the current authoritative max
 
 Rejection codes:
 - `semver_grammar_violation` — handler_version doesn't match `^\d+\.\d+\.\d+$`
 - `semver_not_monotone_increasing` — proposed version not strictly greater than current max
-- `concurrent_registration_race` — SELECT-FOR-UPDATE lock contention (caller retries with idempotency)
+- (No `concurrent_registration_race` code — pg_advisory_xact_lock blocks rather than rejecting; lock-wait contention manifests as transaction latency, not a structured rejection)
 
 **Persistence model per OQ4 (cross-SI ratifier decision):**
 - Option A (immutable + transition entity): registry row never updates; state changes via `ai_workflow_handler_registry_transition` entity (separate). The `state` column above becomes a derived view.
@@ -115,9 +170,34 @@ Subscribers:
 - `approved_at` TIMESTAMPTZ NULL — populated alongside `approved_by_account_id`
 - `approval_artifact_id` ULID FK to governance review artifact NOT NULL when state ∈ `{published, deprecated, retired}`
 
-**CHECK constraints (table-level):**
-- `(state = 'registered' AND approved_by_account_id IS NULL AND approved_at IS NULL) OR (state IN ('published', 'deprecated', 'retired') AND approved_by_account_id IS NOT NULL AND approved_at IS NOT NULL)`
-- `approved_by_account_id <> proposed_by_account_id` when state ∈ `{published, deprecated, retired}` — enforces no-self-approval per I-015
+**CHECK constraints (table-level; collapsed workload-aware single CHECK per Codex R2 MED-1 closure — replaces the prior 2 contradictory CHECKs):**
+
+```sql
+-- Single workload-aware CHECK; closes R2 MED-1 (the prior 2-CHECK pattern was internally
+-- contradictory because the unconditional approved_by <> proposed_by overrode the
+-- conversational_assistant carve-out)
+CHECK (
+  -- Branch 1: state = 'registered' → no approval fields populated yet
+  (state = 'registered'
+    AND approved_by_account_id IS NULL
+    AND approved_at IS NULL
+    AND approval_artifact_id IS NULL)
+  OR
+  -- Branch 2: state ∈ {published, deprecated, retired}
+  --   AND approval fields populated
+  --   AND no-self-approval ONLY for non-conversational_assistant workload types
+  --   (conversational_assistant carve-out: single-control acceptable; approved_by MAY equal proposed_by)
+  (state IN ('published', 'deprecated', 'retired')
+    AND approved_by_account_id IS NOT NULL
+    AND approved_at IS NOT NULL
+    AND approval_artifact_id IS NOT NULL
+    AND (
+      ai_workload_type = 'conversational_assistant'
+      OR approved_by_account_id <> proposed_by_account_id
+    )
+  )
+)
+```
 
 **Workload-type-driven dual-control matrix (closes Codex R1 MED-1 OQ3 promotion to normative):**
 
@@ -129,19 +209,7 @@ Subscribers:
 | `multi_agent_supervisor` (reserved; ADR-031+) | **YES** (dual-control required) |
 | `tool_using_agent` (reserved; ADR-032+) | **YES** (dual-control required) |
 
-**CHECK constraint** (table-level, dual-control matrix enforcement):
-```sql
-CHECK (
-  -- conversational_assistant carve-out: dual-control NOT required
-  (ai_workload_type = 'conversational_assistant' AND state IN ('registered','published','deprecated','retired'))
-  OR
-  -- All other ai_workload_types: dual-control REQUIRED (approved_by != proposed_by)
-  (ai_workload_type <> 'conversational_assistant' AND
-    ((state = 'registered') OR
-     (state IN ('published','deprecated','retired') AND approved_by_account_id <> proposed_by_account_id))
-  )
-)
-```
+**The collapsed single CHECK above (above the matrix table) enforces the workload-type-driven dual-control matrix.** This replaces the prior R1 design which had 2 separate CHECK constraints that contradicted each other for the `conversational_assistant` carve-out (R2 MED-1 closure).
 
 **Procedure-level enforcement:** any `registered → published` state transition that goes through a SECURITY DEFINER procedure (per OQ4 persistence-model decision) inherits the same matrix as STEP 2.5 of its validation chain.
 
@@ -157,24 +225,42 @@ CHECK (
 A bare FK from `ai_workflow_executions.ai_workflow_handler_id` to `ai_workflow_handler_registry.id` proves the handler row exists but NOT that it is usable by the execution's tenant. To prevent silent cross-tenant binding, an execution-time CHECK is required:
 
 ```sql
--- BEFORE INSERT trigger ai_workflow_executions_handler_tenant_eligibility
--- Closes SI-016 R1 HIGH-1 — prevents silent cross-tenant handler binding
-CREATE OR REPLACE FUNCTION ai_workflow_executions_handler_tenant_eligibility_fn()
+-- BEFORE INSERT trigger ai_workflow_executions_handler_eligibility
+-- Closes SI-016 R1 HIGH-1 (tenant) + R2 HIGH-2 (published-state)
+-- Validates BOTH tenant eligibility AND operational eligibility
+CREATE OR REPLACE FUNCTION ai_workflow_executions_handler_eligibility_fn()
 RETURNS TRIGGER AS $$
 DECLARE
   v_handler_tenant_id TEXT;
+  v_handler_state     TEXT;
 BEGIN
-  SELECT tenant_id INTO v_handler_tenant_id
+  -- SELECT FOR SHARE: prevents the handler row from being updated to deprecated/retired
+  -- between this check and the execution row's commit
+  SELECT tenant_id, state
+  INTO v_handler_tenant_id, v_handler_state
   FROM ai_workflow_handler_registry
-  WHERE id = NEW.ai_workflow_handler_id;
+  WHERE id = NEW.ai_workflow_handler_id
+  FOR SHARE;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'ai_workflow_executions: handler_id % does not exist in registry', NEW.ai_workflow_handler_id;
   END IF;
 
+  -- R1 HIGH-1: tenant eligibility (tenant_specific OR platform-sentinel only)
   IF v_handler_tenant_id <> NEW.tenant_id AND v_handler_tenant_id <> 'platform' THEN
     RAISE EXCEPTION 'ai_workflow_executions: handler_id % belongs to tenant %, not execution tenant % (and not platform-sentinel); cross-tenant handler binding rejected',
       NEW.ai_workflow_handler_id, v_handler_tenant_id, NEW.tenant_id;
+  END IF;
+
+  -- R2 HIGH-2: operational eligibility (only `published` state allowed at execution time)
+  -- `registered` = not yet approved for production use → reject
+  -- `deprecated` = warn-only state per Sub-decision 1 spec; this trigger REJECTS deprecated to enforce hard cutoff
+  --   (interpretation choice: deprecated is reductive and warn-only at the UI / registration layer,
+  --    but executions of deprecated handlers are rejected to force migration to a newer version)
+  -- `retired` = explicitly rejected per Sub-decision 1 spec
+  IF v_handler_state <> 'published' THEN
+    RAISE EXCEPTION 'ai_workflow_executions: handler_id % is in state %, only `published` handlers may be executed',
+      NEW.ai_workflow_handler_id, v_handler_state;
   END IF;
 
   -- Record which resolution path (tenant-specific or platform-fallback) was used
@@ -184,6 +270,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 ```
+
+**Sub-decision 5.5 ratifier-decision item (R2 HIGH-2):** the choice to REJECT `deprecated` state at execution time (rather than warn-only) is a substantive change to v1.0 §1 deprecation semantics. Recommendation: hard-reject (prevents accidental long-tail execution against deprecated handlers; forces affirmative migration). Alternative interpretation (warn-only execution allowed against `deprecated`) requires a separate `degraded_path_allowed` flag + per-call governance reason — added complexity. Hard-reject is the safer canonical default.
 
 **Cross-SI consequence:** SI-008 `ai_workflow_executions` entity gains a new column `handler_resolution_path` VARCHAR(40) NOT NULL with enum `('tenant_specific' | 'platform_fallback')` — populated by the trigger above. This is a CDM amendment to an already-ratified entity (P-018 SI-008); it requires a parallel supersession entry (P-018b) OR a single combined ratification.
 
