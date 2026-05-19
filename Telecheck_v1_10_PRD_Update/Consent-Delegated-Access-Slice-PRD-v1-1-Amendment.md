@@ -55,27 +55,69 @@ This amendment integrates **three architectural shifts** into the canonical Cons
 | `delegation_granted → delegation_revoked` | `consent.delegation_revoked` | `DelegationRevokedDomainEvent` |
 | `granted → expired` (auto-transition at expiry timestamp) | `consent.expired` | `ConsentExpiredDomainEvent` |
 
-**Schema for consent_domain_event_outbox:**
+**Schema for consent_domain_event_outbox + per-subscriber delivery ledger (R1 HIGH-2 closure):**
 
 ```sql
+-- Append-only event log: one row per emitted event (canonical authoritative event source)
 CREATE TABLE consent_domain_event_outbox (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id tenant_id_t NOT NULL,
     patient_id UUID NOT NULL,
-    event_type TEXT NOT NULL,                         -- e.g., 'ConsentRevokedDomainEvent'
-    event_payload JSONB NOT NULL,                     -- Event-specific fields
-    correlated_audit_event_id UUID NOT NULL,          -- Reference to the Cat A audit row for the same transition
-    consent_id UUID NOT NULL,                         -- The consent record this event pertains to
+    event_type TEXT NOT NULL,
+    event_payload JSONB NOT NULL,
+    correlated_audit_event_id UUID NOT NULL,
+    consent_id UUID NOT NULL,
+    -- Monotonic ordering key per (tenant_id, patient_id, consent_id):
+    -- used by subscribers to detect missed events + by DR reconciliation to verify ordering
+    event_sequence_no BIGINT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    consumed_at TIMESTAMPTZ,                          -- Set by dispatcher when delivered to all subscribers
-    delivery_attempts INT NOT NULL DEFAULT 0,
-    last_delivery_error TEXT,
-    CONSTRAINT consent_domain_event_outbox_tenant_check CHECK (tenant_id IS NOT NULL)
+    CONSTRAINT consent_domain_event_outbox_tenant_check CHECK (tenant_id IS NOT NULL),
+    CONSTRAINT consent_domain_event_outbox_sequence_unique UNIQUE (tenant_id, patient_id, consent_id, event_sequence_no)
 );
 
-CREATE INDEX consent_domain_event_outbox_pending_idx
-    ON consent_domain_event_outbox(tenant_id, created_at) WHERE consumed_at IS NULL;
+-- Per-subscriber delivery ledger (R1 HIGH-2 closure): one row per (event, subscriber) pair
+CREATE TABLE consent_domain_event_delivery (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id UUID NOT NULL REFERENCES consent_domain_event_outbox(id),
+    tenant_id tenant_id_t NOT NULL,
+    subscriber_id TEXT NOT NULL,                      -- e.g., 'ai-service-mode1', 'ai-service-mode2', 'forms-engine', 'research-pipeline'
+    delivery_status TEXT NOT NULL,                    -- 'pending' | 'delivered' | 'failed_retrying' | 'dead_lettered' | 'skipped'
+    delivery_attempts INT NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMPTZ,                      -- Backoff-driven next retry time; NULL for terminal states
+    delivered_at TIMESTAMPTZ,                         -- Set on successful delivery
+    dead_lettered_at TIMESTAMPTZ,
+    last_delivery_error TEXT,
+    last_attempt_at TIMESTAMPTZ,
+    CONSTRAINT consent_domain_event_delivery_unique UNIQUE (event_id, subscriber_id),
+    CONSTRAINT consent_domain_event_delivery_status_check CHECK (delivery_status IN
+        ('pending','delivered','failed_retrying','dead_lettered','skipped'))
+);
+
+-- Derived view: outbox events with their per-subscriber delivery state
+CREATE VIEW consent_domain_event_status AS
+SELECT
+    o.id AS event_id, o.tenant_id, o.patient_id, o.event_type, o.event_sequence_no, o.created_at,
+    COUNT(d.id) AS subscriber_count,
+    SUM((d.delivery_status = 'delivered')::int) AS delivered_count,
+    SUM((d.delivery_status = 'dead_lettered')::int) AS dead_lettered_count,
+    (COUNT(d.id) > 0 AND COUNT(d.id) FILTER (WHERE d.delivery_status IN ('delivered','dead_lettered','skipped')) = COUNT(d.id)) AS fully_terminal
+FROM consent_domain_event_outbox o
+LEFT JOIN consent_domain_event_delivery d ON d.event_id = o.id
+GROUP BY o.id, o.tenant_id, o.patient_id, o.event_type, o.event_sequence_no, o.created_at;
+
+CREATE INDEX consent_domain_event_delivery_pending_idx
+    ON consent_domain_event_delivery(tenant_id, next_attempt_at)
+    WHERE delivery_status IN ('pending','failed_retrying');
 ```
+
+**Per-subscriber delivery semantics (R1 HIGH-2 closure):**
+
+- At INSERT into `consent_domain_event_outbox`, a trigger creates one `consent_domain_event_delivery` row per registered subscriber (status='pending', next_attempt_at=now()).
+- The dispatcher reads from `consent_domain_event_delivery` WHERE `delivery_status IN ('pending','failed_retrying')` ORDER BY `next_attempt_at ASC`.
+- Per-subscriber delivery state is independent: a failing subscriber doesn't block other subscribers' deliveries.
+- Per-subscriber retry: 5 attempts with exponential backoff (1m, 5m, 15m, 1h, 6h). After 5 failed attempts: status → `dead_lettered`; Cat A `consent.outbox_drain_failed` event emitted (P2 keyed by tenant_id + subscriber_id).
+- Event is fully terminal when ALL per-subscriber rows are in {delivered, dead_lettered, skipped}.
+- `event_sequence_no` is a monotonic counter per (tenant_id, patient_id, consent_id); subscribers can detect missed events by gap detection.
 
 **Why same-transaction outbox** (vs separate-transaction event emission, vs synchronous dispatch):
 - **Atomicity with the consent transition:** if the consent transition rolls back, the domain event row also rolls back (same transaction). No "ghost events" referring to consent state that never actually transitioned.
@@ -86,23 +128,41 @@ CREATE INDEX consent_domain_event_outbox_pending_idx
 
 **Decision shape:** revocation of a research-consent triggers a Cat A `kms.consent_revocation_research_data_lock` event + INSERT into `consent_revocation_locks`. Downstream KMS decrypt operations on that tenant's `pii_research_consented` data class verify the lock is not present BEFORE proceeding.
 
-**Schema:**
+**Schema (R1 HIGH-1 closure: epoch-versioned lock model preserves re-grant decryptability):**
 
 ```sql
-CREATE TABLE consent_revocation_locks (
+-- Append-only consent-revocation event table (canonical audit anchor for revocation events)
+CREATE TABLE consent_revocation_event (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id tenant_id_t NOT NULL,
     patient_id UUID NOT NULL,
-    data_class TEXT NOT NULL,                         -- 'pii_research_consented' for v1.1; future: other revocable data classes
-    locked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    locked_by_consent_revocation_id UUID NOT NULL,    -- References the consent row that triggered the lock
-    CONSTRAINT consent_revocation_locks_unique UNIQUE (tenant_id, patient_id, data_class)
+    data_class TEXT NOT NULL,                         -- e.g., 'pii_research_consented'
+    revoked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_consent_id UUID NOT NULL,                 -- The consent row that was revoked
+    revoked_by_user_id UUID NOT NULL,
+    CONSTRAINT consent_revocation_event_tenant_check CHECK (tenant_id IS NOT NULL)
 );
+
+-- Append-only consent record table (already in v1.0; v1.1 ensures consent_id is canonical)
+-- consent(id, tenant_id, patient_id, tier, scope_json, granted_at, granted_by_user_id, expires_at)
+
+-- View: the most-recent ACTIVE (non-revoked, non-expired) consent for a (tenant, patient, tier=6)
+CREATE VIEW consent_research_active AS
+SELECT DISTINCT ON (tenant_id, patient_id)
+    id, tenant_id, patient_id, granted_at, scope_json
+FROM consent c
+WHERE tier = 6
+  AND (expires_at IS NULL OR expires_at > now())
+  AND NOT EXISTS (
+    SELECT 1 FROM consent_revocation_event r
+    WHERE r.revoked_consent_id = c.id
+  )
+ORDER BY tenant_id, patient_id, granted_at DESC;
 ```
 
-**KMS-side integration (cross-references Sprint 13 KMS Architecture Spec):**
+**KMS-side integration with epoch-versioned check (R1 HIGH-1 closure):**
 
-The canonical research-data decrypt procedure adds a STEP 0.5 (after I-032 STEP 0) that checks the consent_revocation_locks table:
+The canonical research-data decrypt procedure's STEP 0.5 uses an epoch model: the decrypt is permitted IFF there exists an ACTIVE consent that was granted AFTER any prior revocation for the same (tenant, patient, tier=6) tuple. This handles re-grant cycles correctly — a fresh grant supersedes earlier revocations.
 
 ```sql
 -- STEP 0: I-032 tenant-GUC guard per Sprint 8 contract
@@ -110,22 +170,31 @@ IF NULLIF(current_setting('app.tenant_id', true), '') IS DISTINCT FROM p_tenant_
     RAISE EXCEPTION 'I-032 tenant-GUC violation' USING ERRCODE = 'TLC32';
 END IF;
 
--- STEP 0.5 (NEW v1.1): consent-revocation lock check
-IF EXISTS (
-    SELECT 1 FROM consent_revocation_locks
+-- STEP 0.5 (NEW v1.1; R1 HIGH-1 closure: epoch-versioned check inside SECURITY DEFINER):
+-- Decrypt permitted ONLY if there is a currently-active tier-6 consent for this (tenant, patient).
+IF NOT EXISTS (
+    SELECT 1 FROM consent_research_active
     WHERE tenant_id = p_tenant_id
       AND patient_id = p_patient_id
-      AND data_class = 'pii_research_consented'
 ) THEN
-    RAISE EXCEPTION 'Research consent revoked; decrypt forbidden' USING ERRCODE = 'TLC51';
+    RAISE EXCEPTION 'Research consent not active; decrypt forbidden' USING ERRCODE = 'TLC51';
 END IF;
 
 -- ... proceed with decrypt
 ```
 
-**Why structural lock vs application-layer check:** the lock at the SECURITY DEFINER procedure boundary provides defense-in-depth — even if the application layer has a bug that doesn't check consent state, the decrypt fails at STEP 0.5 with ERRCODE TLC51. The forensic audit record is in the consent_revocation_locks + Cat A audit trail.
+**Why epoch-versioned check (R1 HIGH-1 closure):** the previous design had a permanent `consent_revocation_locks` row that would forever block decrypt even after re-grant. The fix: the canonical decision is "is there an active consent NOW?" not "was there ever a revocation?". The append-only `consent_revocation_event` table preserves the full audit history (forensic record of every revocation); the active-consent view computes the current state at query time. Both append-only invariants honored.
 
-**Lock retention:** the lock is permanent for the life of the patient + tenant (no auto-removal). If a patient re-grants consent later, a NEW consent record is created + the lock entry is supplemented by a Cat A `consent.research_re_grant` event but the old lock row remains (audit trail of "this was revoked at time T, re-granted at time T' "). Downstream decrypt logic checks for the MOST RECENT consent state, not just the lock presence (handled by application layer querying both tables).
+**Why structural check at SECURITY DEFINER vs application-layer:** the STEP 0.5 check at the procedure boundary provides defense-in-depth — even if the application layer has a bug that doesn't check consent state, the decrypt fails at STEP 0.5 with ERRCODE TLC51. The forensic audit record is in the consent_revocation_event + Cat A audit trail.
+
+**Re-grant cycle correctness:**
+- T0: patient grants tier 6 → consent record created.
+- T1: patient revokes → consent_revocation_event row INSERTed; decrypt fails at STEP 0.5 (no active consent in view).
+- T2: patient re-grants → NEW consent record created with `granted_at = T2`.
+- T3: decrypt attempt → STEP 0.5 sees active consent in view; decrypt succeeds.
+- The T0 consent record + T1 revocation event are preserved (audit trail intact); the T2 grant + T3 decrypt are independently auditable.
+
+The `consent_revocation_locks` table from the v0.1 draft is replaced by the `consent_revocation_event` append-only table + `consent_research_active` view. The model is purely append-only across all tables (consistent with I-027 and Sprint 9 patterns).
 
 ### Sub-decision 3 — Six consent tiers (ADR-028 Posture A integration)
 
@@ -170,15 +239,47 @@ Reference procedures amended:
 - `grant_delegation(p_tenant_id, p_patient_id, p_delegate_user_id, p_scope_json, p_granted_by_user_id)` — adds STEP 0 + outbox emission.
 - `revoke_delegation(p_tenant_id, p_patient_id, p_delegation_id, p_revoked_by_user_id)` — adds STEP 0 + outbox emission.
 
-### Sub-decision 6 — Consent-aware AI service integration
+### Sub-decision 6 — Consent-aware AI service integration (R1 HIGH-3 closure: revalidation at finalization + L3 pending_review handling)
 
-**Decision shape:** the Mode 1 (Sprint 9) + Mode 2 (Sprint 12) handlers subscribe to `ConsentRevokedDomainEvent` + `ConsentExpiredDomainEvent`. On receipt:
+**Decision shape:** AI Service handles consent state at THREE enforcement boundaries — each provides defense-in-depth against the propagation window:
 
-1. AI Service invalidates any in-flight conversation/workflow that depended on the revoked consent (e.g., Mode 2 GLP-1 titration workflow when clinical-care consent revoked).
-2. The patient's Mode 1 conversation receives a system message acknowledging the consent change ("Your clinical-care consent was revoked. I can no longer assist with clinical workflows.").
-3. Cat A `ai.consent_revocation_propagated` event emitted by AI Service.
+**Boundary 1 — Request admission (eventual consistency via outbox subscriber):** the Mode 1 (Sprint 9) + Mode 2 (Sprint 12) handlers subscribe to `ConsentRevokedDomainEvent` + `ConsentExpiredDomainEvent`. On receipt:
 
-The cross-domain subscriber pattern provides eventual consistency: a clinical-care consent revocation may take up to 5 seconds (outbox dispatcher poll + AI Service handler) to propagate; the AI Service's request-admission flow does NOT live-query consent state per turn (would create per-turn DB load); the outbox-driven propagation is the canonical pattern.
+1. AI Service invalidates any in-flight conversation/workflow that depended on the revoked consent.
+2. The patient's Mode 1 conversation receives a system message acknowledging the consent change.
+3. Cat A `ai.consent_revocation_propagated` event emitted.
+4. **5-second propagation target; 30-second SLO ceiling** (per OQ4). New requests admitted between revocation event INSERT and event consumption MAY be admitted under stale consent state — Boundary 2 + Boundary 3 catch these.
+
+**Boundary 2 — L3/L2 review-token resolution (R1 HIGH-3 closure: mandatory consent revalidation):** when a clinician resolves a pending_clinician_review token (per Sprint 12 §7), the resolution endpoint MUST live-query the canonical consent state for the workflow's underlying tier:
+
+```sql
+SELECT EXISTS (
+    SELECT 1 FROM consent c
+    WHERE c.tenant_id = $1 AND c.patient_id = $2 AND c.tier = $3
+      AND (c.expires_at IS NULL OR c.expires_at > now())
+      AND NOT EXISTS (SELECT 1 FROM consent_revocation_event r WHERE r.revoked_consent_id = c.id)
+);
+```
+
+If the consent is no longer active at resolution time: the resolution rejects with 422 `mode2.consent_revoked_post_admission`; Cat A `ai.mode2.consent_revoked_at_review` event emitted; the in-progress workflow transitions to `failed` with `failure_class = 'consent_revoked_post_admission'`. NO side effects are committed.
+
+**Boundary 3 — Workflow finalization (R1 HIGH-3 closure: mandatory consent revalidation before side effects):** before any Mode 2 workflow commits side effects (L4 autonomous execution OR L3 post-approval commit OR L2 post-confirmation commit), the workflow MUST live-query consent state. If consent is no longer active: workflow transitions to `failed` per Boundary 2; NO side effects committed.
+
+**Pending-review-queued items handling (R1 HIGH-3 closure):** on receipt of `ConsentRevokedDomainEvent`, the AI Service's outbox subscriber:
+1. Identifies all pending_clinician_review + pending_patient_confirm items for the affected (tenant, patient, consent-tier) tuple.
+2. Marks each as `cancelled_due_to_consent_revocation` (state transition); invalidates the associated token.
+3. Emits Cat A `ai.mode2.workflow_cancelled_consent_revoked` per cancelled item.
+4. The clinician's review-queue UI shows the cancellation reason; the clinician is freed from acting on stale-consent items.
+
+**Why three boundaries:** Boundary 1 alone has a 5-30s window where stale consent could be acted on. Boundary 2 + Boundary 3 close the window — the worst case is a stale L4 autonomous execution that started just before revocation propagates AND completes before Boundary 3 fires. To minimize this:
+
+- Boundary 3 is invoked at EVERY side-effect-producing step (not just end-of-workflow); for long-running L4 workflows with multiple side effects, consent is re-checked before EACH.
+- The check is a single indexed SELECT (low latency; <2ms p99) per the canonical CDM v1.2 patient + consent indexes.
+- The 5s target is the cache-invalidation target, NOT the only enforcement boundary — Boundaries 2 + 3 are authoritative regardless of propagation timing.
+
+**Test C.10b (R1 HIGH-3 closure):** L3 pending_review item queued before revocation; clinician attempts resolution after revocation → Boundary 2 rejects with 422 + workflow_cancelled_consent_revoked event.
+
+**Test C.10c:** Mode 2 L4 workflow in mid-execution; consent revoked between side-effect-step-1 and side-effect-step-2 → Boundary 3 fires; workflow transitions to failed before side-effect-step-2 commits.
 
 ---
 
@@ -260,7 +361,12 @@ Each procedure amended per Sub-decision 5 with I-032 STEP 0 + outbox emission st
 2. **OQ2 — Subscriber registration: declarative (table) vs code-config?** Recommendation: declarative via `consent_domain_event_subscriber` table; tenant-scoped subscribers permitted. Ratifier confirms.
 3. **OQ3 — DLQ retention + operator triage SLA.** Recommendation: 90-day DLQ retention; 24-hour SRE triage SLA on `outbox_drain_failed` events.
 4. **OQ4 — Consent-revocation propagation SLA.** Recommendation: 5-second target; 30-second SLO ceiling. SRE alerts above 30s. Ratifier confirms.
-5. **OQ5 — Cross-region outbox replication during DR.** Recommendation: outbox replicates via standard RDS logical replication; dispatcher in us-west-2 resumes drain from same outbox post-failover. Aligned with Cold-DR Runbook (Sprint 7).
+5. **OQ5 — Cross-region outbox replication during DR (R1 MED-1 closure: promoted to concrete contract).** The outbox + delivery-ledger replicate via standard RDS logical replication (consistent with Cold-DR Runbook Sprint 7). Additional DR-specific guarantees:
+   - **Dispatcher leadership fencing:** exactly ONE active dispatcher across regions at any time. The dispatcher holds an advisory lock `consent_dispatcher_lease` in the primary region's RDS; us-west-2 dispatcher attempts to acquire the lease ONLY after us-east-1 is declared unreachable per Cold-DR Step 1. Lease acquisition emits Cat A `consent.dispatcher_leadership_transferred` event.
+   - **Replication-lag handling:** before us-west-2 dispatcher begins drain, it verifies replication lag <= 60 seconds + waits for canonical Cold-DR Step 5.5 schema-integrity gate to pass; otherwise drain blocked.
+   - **Per-subscriber idempotency invariant:** every subscriber MUST implement idempotency keyed by `event_id`; duplicate deliveries during DR are tolerated by subscribers without double-side-effects. Subscribers register their idempotency-token contract during subscriber registration (OQ2).
+   - **Event-sequence ordering invariant:** the `event_sequence_no` per (tenant_id, patient_id, consent_id) is a monotonic counter; the us-west-2 dispatcher resumes from the highest delivered_at + verifies sequence continuity per (tenant_id, patient_id, consent_id) tuple. Gap detection: missing sequences trigger Cat A `consent.event_sequence_gap_detected` event + operator triage.
+   - **Failover reconciliation:** before us-west-2 dispatcher begins normal drain, it runs reconciliation pass — for every event in outbox with no terminal delivery state, it verifies subscribers' idempotency state via subscriber-side ack endpoint. Subscribers that have already processed the event (per their idempotency key) get the delivery_ledger row updated to delivered without re-delivery.
 6. **OQ6 — Codex pre-ratification target.** Recommendation: 3-4 rounds.
 7. **OQ7 — Tier 6 audit retention 7-year-post-end-of-relationship.** Aligned with HIPAA + GDPR + research-partnership regulatory frameworks. Ratifier confirms vs separate retention SI.
 
@@ -282,6 +388,20 @@ Each procedure amended per Sub-decision 5 with I-032 STEP 0 + outbox emission st
 ## 8. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
+
+**v0.1 R1 closure 2026-05-19:** 3 HIGH + 1 MED closed inline:
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | HIGH-1 permanent KMS lock contradicted re-grant semantics (epoch-versioned consent_revocation_event + active-consent view replaces lock table); HIGH-2 single consumed_at couldn't track per-subscriber delivery (split into outbox + per-subscriber delivery ledger with status + monotonic event_sequence_no); HIGH-3 AI propagation missed L3 pending_review handling + stale-consent window (three-boundary defense-in-depth: admission via outbox + review-token resolution revalidation + side-effect finalization revalidation); MED-1 DR outbox replication lacked ordering/duplicate/fencing guarantees (promoted OQ5 to concrete contract: dispatcher leadership lease + replication-lag gate + per-subscriber idempotency + event-sequence-gap detection + failover reconciliation pass) | All 4 closed inline |
+
+**R1 closure pattern recap:**
+- HIGH-1: append-only `consent_revocation_event` + view-based active-consent semantics replace the permanent-lock approach; epoch-versioned check inside SECURITY DEFINER procedure supports re-grant cycles.
+- HIGH-2: split outbox/delivery into 2 tables + 1 view; per-subscriber delivery_status with exponential backoff retries; event fully terminal only when all subscriber rows terminal.
+- HIGH-3: three boundaries (admission propagation + review-token resolution + workflow finalization); pending_review queued items auto-cancelled on revocation event; live consent query at every side-effect-producing step.
+- MED-1: dispatcher single-active-lease + replication-lag-gate + monotonic event_sequence_no + reconciliation pass before resumed drain.
+
+No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. 7 known OQs (§6) remain ratifier-targetable.
 
 ---
 
