@@ -1,7 +1,7 @@
 # SI-019 — Medication Interaction & Validation Engine Slice PRD v1.0 → v2.0 implementation-readiness extension
 
-**Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; not yet routed to ratifier
+**Version:** 0.2 DRAFT (R1 STOP-and-queue 2026-05-19)
+**Status:** **DRAFT / BLOCKED-PENDING-EVANS-SI-019-OQ-SIGNAL-LIFECYCLE-RATIFIER-DECISION.** Codex R1 (2026-05-19, review-mpcvz3wr-593vo1) explicitly invoked CLAUDE.md hard-floor item 6 on the canonical contradiction between Sub-decision 1's strict append-only `interaction_signal` row (BEFORE UPDATE + BEFORE DELETE triggers per I-016 + I-003) AND Sub-decision 5's state machine requiring `active → {overridden, superseded, resolved, expired}` UPDATE transitions on the same row. The conflict is design-blocking + architectural-judgment per the discriminator (canonical CDM entity persistence semantics). Iteration HALTED at R1 per the §10-escalation cadence. See §5 Open Question 7 (SI-019-OQ-SIGNAL-LIFECYCLE) for the framed ratifier-decision question.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; ratifier-input artifact)
 **Owner:** Clinical Governance Lead (existing v1.0 owner) + Async Consult slice owner (cross-cutting consumer)
 **Related artifacts:**
@@ -227,6 +227,45 @@ Beyond the 8 sub-decisions above, the following questions are open and should be
 4. **Pharmacogenomic stub** (preserved from v1.0 §4.4) — the v1.0 §4.4 marks PGx as a stub; should v2.0 codify the stub OR remove it pending real PGx integration? Recommendation: codify the stub (no-op behavior; structural placeholder so future PGx integration is additive).
 5. **Multi-prescriber notification** (preserved from v1.0 §15 OQ 4) — when signals involve different prescribers' medications, should the engine surface a "cross-prescriber concern" signal, or only notify the currently-prescribing clinician? Recommendation: surface the concern as a signal but route the notification to the currently-prescribing clinician (cross-prescriber visibility through the patient's chart, not via direct notification to the other prescriber).
 6. **Patient-reported OTC** (preserved from v1.0 §15 OQ 5) — treat as full medications for interaction checking? Recommendation: YES (treat identically); the patient-reported flag on the medication row is metadata, not a checking gate.
+
+### Open Question 7 (SI-019-OQ-SIGNAL-LIFECYCLE) — **STOP-CONDITION; HARD-FLOOR ITEM 6 ESCALATION; AWAITING EVANS'S RATIFIER DECISION**
+
+**Trigger:** Codex R1 on SI-019 v0.1 (2026-05-19, review-mpcvz3wr-593vo1) explicitly invoked CLAUDE.md hard-floor item 6: *"Append-only signal rows conflict with required lifecycle state updates... This is a blocking implementation-readiness issue because the spec gives contradictory persistence semantics for a safety-critical clinical signal."*
+
+**The contradiction:** Sub-decision 1 declares `interaction_signal` strict append-only (BEFORE UPDATE + BEFORE DELETE triggers per I-016 + I-003). Sub-decision 5 defines `interaction_signal_lifecycle` state machine with transitions `active → overridden | superseded | resolved | expired` that require UPDATE on the same row. Sub-decision 8 the SECURITY DEFINER procedure `record_interaction_signal_override` explicitly performs `active → overridden` UPDATE. Implementers cannot satisfy both requirements without breaking either audit immutability or override behavior.
+
+**Two architectural options for Evans's ratifier decision:**
+
+**Option A — Immutable signal rows + append-only transition entity (lifecycle decoupled from signal row).**
+
+- `interaction_signal` stays strict append-only per I-016 + I-003. No state column; no UPDATE triggers needed.
+- NEW 4th CDM entity: `interaction_signal_lifecycle_transition` — one row per transition. Columns: `id` ULID, `tenant_id`, `signal_id` FK, `from_state` enum, `to_state` enum, `transition_reason` enum (`override | superseded_by_evaluation | resolution_event | time_expiry`), `transition_at` timestamp, `transition_by_actor_id` ULID (clinician if override; system if automatic), `metadata` JSONB (e.g., new_evaluation_id for superseded; medication_discontinuation_event_id for resolution; time_window_basis for expiry).
+- `interaction_signal_lifecycle` state machine becomes a stateless DERIVED view: a signal's current state = `most_recent(interaction_signal_lifecycle_transition WHERE signal_id = ...) ?? 'active'` (default `active` if no transition row exists).
+- `record_interaction_signal_override` procedure INSERTs a transition row instead of UPDATEing the signal row.
+- **Pros:** preserves I-016 + I-003 audit-immutability invariants; transition history is fully queryable; pattern matches Promotion Ledger append-only model; consistent with SI-008's `audit_events` strict append-only design.
+- **Cons:** every read of "current signal state" requires a JOIN to transition table; +1 entity to CDM scope; slightly more storage.
+
+**Option B — Constrained signal-row updates + audited transition rows (state column on signal row).**
+
+- `interaction_signal` gains a `state` column with CHECK constraint enforcing only allowed `(OLD.state, NEW.state)` transitions. BEFORE UPDATE trigger is conditional: it permits only the allowed state transitions; rejects any other UPDATE (including any attempt to modify non-state columns).
+- NEW 4th CDM entity: `interaction_signal_transition_log` (audit-history table; like P-021's `consult_events`) — one row per allowed transition. Strict append-only.
+- `interaction_signal_lifecycle` state machine reads/writes the `state` column on the signal row directly.
+- `record_interaction_signal_override` procedure UPDATEs `interaction_signal.state` AND INSERTs a transition log row in a single atomic transaction.
+- **Pros:** "current signal state" is directly readable from the signal row; matches existing P-021 `consults` two-tier append-only pattern (Tier 0 identity immutable + Tier 1 payload immutable post-decision + Tier 2 state-machine progression).
+- **Cons:** the I-016 + I-003 invariant interpretation is "audit-history is append-only" (the transition log), NOT "every audit-relevant entity row is immutable." Some implementers may read I-016/I-003 strictly enough that constrained signal-row updates would be perceived as a relaxation. (Counter-argument: P-021's two-tier append-only pattern was ratified at SC3 with exactly this interpretation; SI-019 Option B is the same pattern.)
+
+**Claude's advisory recommendation (advisory only; ratifier decides):** **Option B.** Reasoning:
+
+1. **Cycle precedent.** P-021 (SC3 ratification 2026-05-17) explicitly ratified the two-tier append-only pattern on `consults` (Tier 0 identity immutable from INSERT + Tier 1 payload immutable post-decision + Tier 2 state-machine progression via guarded transitions). Med-Interaction signals are structurally analogous to consult clinical-decision rows; the same pattern is the consistent precedent application.
+2. **I-016 + I-003 invariant alignment.** P-021's ratification confirmed the interpretation "audit-history is append-only + state machine progression on the entity row is permitted via guarded transitions" is invariant-compliant. Option B inherits that interpretation.
+3. **Read-path simplicity.** "Get current signal state" is a frequent read (every clinician decision surface, every pharmacy release check, every protocol gate). Option A requires a JOIN; Option B is a direct column read. The patient-safety system reads signals on every prescribing/refill action; latency matters.
+4. **Migration story.** Option B preserves the existing v1.0 §5.1 Signal structure (which has a `severity` + implicit state-like fields); Option A would require restructuring the existing signal model + the canonical PRD wording.
+
+**If Evans selects Option A:** Sub-decision 1 simplifies (no triggers needed on signal row), Sub-decision 5 redefines the state machine as a derived view, Sub-decision 8 procedure rewrites to INSERT transition rows; total scope: same +3 entities → +4 entities (add interaction_signal_lifecycle_transition).
+
+**If Evans selects Option B:** Sub-decision 1 updates to state-column + constrained UPDATE trigger pattern (matches P-021), Sub-decision 5 stays as-is, Sub-decision 8 procedure stays as-is; total scope: same +3 entities (the transition log table is the 3rd entity per Option B's framing) plus the state column on `interaction_signal`.
+
+**Decision Memo template available for either Option** if Evans signals which path he prefers; the corresponding SI-019 amendment + Codex re-verification cycle follows.
 
 ---
 
