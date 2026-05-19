@@ -87,14 +87,50 @@ $ deploy-tool app-rollout --session <id> --stage canary-5pct --commit <sha>
 # Rolls out new app version to 5% of traffic; emits deploy.canary_stage_started Cat B audit
 ```
 
-**Per-stage soak gates (MUST pass before next stage):**
+**Per-stage soak gates (MUST pass at every stage; R1 HIGH-2 closure makes invariant probes mandatory at EVERY stage, not stage-conditional):**
 
-| Stage | Traffic % | Min soak | Error-rate gate | Latency gate (p99) | Cross-check |
-|---|---|---|---|---|---|
-| canary-5pct | 5% | 10 min | < 0.5% | < 1.5× baseline | I-019 crisis-detection emits at expected rate |
-| canary-25pct | 25% | 10 min | < 0.3% | < 1.3× baseline | Audit-chain integrity check passes on a sample |
-| canary-50pct | 50% | 15 min | < 0.2% | < 1.2× baseline | Cross-tenant isolation check on a sample request set |
-| full | 100% | 30 min | < 0.1% | < 1.1× baseline | Full Operational Readiness v1.5 spot-check passes |
+| Stage | Traffic % | Min soak | Error-rate gate | Latency gate (p99) |
+|---|---|---|---|---|
+| canary-5pct | 5% | 10 min | < 0.5% | < 1.5× baseline |
+| canary-25pct | 25% | 10 min | < 0.3% | < 1.3× baseline |
+| canary-50pct | 50% | 15 min | < 0.2% | < 1.2× baseline |
+| full | 100% | 30 min | < 0.1% | < 1.1× baseline |
+
+**Mandatory continuous invariant probes (run at EVERY stage; R1 HIGH-2 closure):**
+
+The following probes run continuously during every canary stage (not stage-conditional). Missing telemetry on any probe at any stage = gate failure (treat absence of signal as failed probe, not as silent success).
+
+**I-019 crisis-detection-always-on probe (runs every 60s; sample size 100% of crisis-detection-eligible requests):**
+- Definition: every request that traverses a crisis-detection path emits a `crisis_detection_evaluated` event regardless of whether a crisis signal fired. Missing events = probe fail.
+- Coverage: 100% of crisis-eligible request paths (Mode 1 conversational + intake-flow + clinical messaging surfaces).
+- Freshness window: events must reach SIEM within 30 seconds of request completion.
+- Gate failure: zero `crisis_detection_evaluated` events for 2 consecutive 60s windows across the canary cohort.
+
+**I-023 cross-tenant isolation probe (runs every 60s; sample size 200 synthetic requests per minute):**
+- Definition: a synthetic-request set issues 200 requests/min across tenant boundaries (e.g., tenant_A-authenticated session attempts to read tenant_B resources) using the canonical break-glass-required surfaces. All 200 MUST receive tenant-blind 404 per I-025; zero responses may leak the existence or shape of cross-tenant data.
+- Coverage: includes all 5 pilot-required slices' canonical authenticated endpoints.
+- Freshness window: probe results aggregated within 30s.
+- Gate failure: any cross-tenant leak signal in any 60s window.
+
+**I-027 audit-chain integrity probe (runs every 5 min; full-chain verification on the canary tenant cohort):**
+- Definition: for every active P1 (patient-bound) chain in the canary tenant cohort + every active P2 (tenant-governance) chain, traverse the chain from genesis to current head; verify hash continuity per I-003.
+- Coverage: 100% of active partitions in the canary tenant cohort (not sampled).
+- Freshness window: completion within 5 min.
+- Gate failure: any broken hash chain (gap, mismatch, missing previous_hash linkage).
+
+**Cross-tenant cache/state-leakage probe (runs every 60s):**
+- Definition: synthetic session-switch tests verify that per-request `SET LOCAL app.tenant_id` correctly isolates connection state per I-032 + System Architecture §5.
+- Coverage: 50 connection-pool-reuse pattern requests/min across all canary tenants.
+- Gate failure: any persistent-state-leak signal (e.g., a query returns rows from the previously-bound tenant).
+
+**Service-health probe baseline (P0-alert source):**
+- Datadog + CloudWatch monitor: all canary-cohort services emit health-check responses every 30s; missing 2 consecutive = P0 alert (which triggers auto-rollback per §3.3).
+
+**Stage-promotion criterion (extended):** all 1-min-window error/latency gates pass AND all continuous invariant probes have green at every observed window during the soak period.
+
+**Stage-demotion criterion (extended):** ≥2 consecutive 1-min windows with ANY gate or probe failure.
+
+**Missing-telemetry = failed probe:** any 60s window without a probe result is treated as probe failure, not silent success. The telemetry pipeline's health is itself part of the canary gate.
 
 **Auto-rollback triggers (any one fires → automatic rollback per §5):**
 
@@ -158,6 +194,45 @@ gate_pass = (
 | Operator manually triggers rollback during canary | App rollback to prior commit | Yes (approver consent in ticket) |
 | Operator triggers rollback after full deploy + verification failure | App rollback to prior commit + migration rollback if applicable | Yes (named approver) |
 | P0 incident raised post-deploy | App rollback IMMEDIATELY; migration rollback per incident type | On-call SRE can authorize during active P0 |
+| **Migration-apply failure mid-set (pre-app-rollout; R1 HIGH-1 closure)** | **§5.1.MIG explicit branch below** | **See §5.1.MIG** |
+
+### 5.1.MIG — Migration-apply failure recovery branch (closes Codex R1 HIGH-1)
+
+When `deploy-tool migrate-apply` halts mid-set, the partially-applied schema MAY differ from both the pre-deploy and the post-deploy expected states. The operator faces a 4-option decision tree:
+
+**Step 1 — Validate the partial-set state:**
+
+```bash
+$ deploy-tool migration-partial-validate --session <id>
+# Reports: applied_migrations[], failed_migration_id, schema_drift_summary,
+# pre_deploy_schema_compatible (does the prior app version work against the
+# partial schema?), post_deploy_schema_compatible (does the new app version
+# work?)
+```
+
+**Step 2 — Apply the decision matrix per validation result:**
+
+| Validation result | Canonical action | Authorization required |
+|---|---|---|
+| `pre_deploy_schema_compatible = true` AND `failed_migration_id` retry-eligible (transient error: connection drop, lock timeout, etc.) | Retry the failed migration ONCE; if it succeeds, continue migration-apply forward | Operator alone (one retry permitted) |
+| `pre_deploy_schema_compatible = true` AND failed migration NOT retry-eligible (semantic error: constraint violation, data conflict) | HALT deploy; partial-set REMAINS applied; open incident; resume on next deploy after failed migration is fixed | Operator alone; incident filed |
+| `pre_deploy_schema_compatible = false` AND `post_deploy_schema_compatible = false` (production stuck in undefined schema state) | EMERGENCY revert applied migrations via `down.sql` to restore pre-deploy state | **DUAL-CONTROL: Operator + Approver + CTO sign-off + incident filed with P0 severity** |
+| `pre_deploy_schema_compatible = false` AND `post_deploy_schema_compatible = true` (the prior app can't read the new schema; the new app can) | FORCE-FORWARD: complete migration apply + proceed with app rollout (the prior-app rollback is no longer viable; the deploy MUST proceed forward) | Operator + Approver sign-off + incident filed |
+| Any data-loss possibility detected in `schema_drift_summary` (e.g., DROP COLUMN already applied, partial table truncation) | EMERGENCY restore from backup per §5.3.MIG snapshot procedure | **DUAL-CONTROL: Operator + Approver + CTO + Compliance Officer (if PHI-bearing) + incident filed with P0 severity** |
+
+**Step 3 — Authorization gates per §5.3 dual-control discipline.** No migration revert proceeds without:
+- Exact list of migration IDs to revert
+- Data-loss impact assessment (what rows / columns / constraints lost)
+- Backup/snapshot reference (which RDS snapshot ID will be used for verification or restore)
+- Restore plan (how the operator verifies the restore succeeded)
+- Explicit prohibition on revert when data restoration is not proven (a destructive revert without a verified restore plan is REJECTED at this checkpoint)
+- Per Master Completion Plan Track 6 ratifier-quorum analog: the approver MUST be a different human from the operator + (for PHI-bearing migrations) the Compliance Officer must additionally sign off per I-015 dual-control extended
+
+**Step 4 — Emit audit + incident.** Every migration-failure recovery action emits:
+- Cat B `deploy.migration_recovery_initiated` audit event with the decision-matrix outcome
+- Cat B `deploy.migration_recovery_completed` audit event on completion
+- Incident ticket linked to the deploy session
+- Slack `#deploys` + `#incidents` channel notification
 
 ### 5.2 App rollback
 
@@ -173,17 +248,36 @@ App rollback target time: **< 5 minutes from rollback initiation to 100% prior c
 
 For deploys that included migrations: migrations are designed to be forward-compatible (additive); rollback strategy is **DO NOT REVERT migrations by default** — instead, the app rollback runs against the new schema (the new schema's additive changes are transparent to the prior app version).
 
-**Migration revert is permitted only when:**
-- The migration is provably destructive (e.g., introduced a NOT NULL column with no default that the prior app version writes NULLs to)
-- AND the prior app version cannot run against the new schema
-- AND the approver explicitly authorizes the migration revert
+**Migration revert is permitted only when ALL of the following are true:**
+- The migration is provably destructive or schema-incompatible (e.g., introduced a NOT NULL column with no default that the prior app version writes NULLs to; OR added a CHECK constraint that rejects rows the prior app version inserts)
+- AND the prior app version cannot run against the new schema (verified by `deploy-tool schema-compatibility-check --version <prior>`)
+- AND the dual-control authorization checklist in §5.3.AUTH below is fully completed
 
-Migration revert process:
+### §5.3.AUTH — Migration revert hard authorization checklist (R1 MED-1 closure)
+
+EVERY migration revert (destructive OR non-destructive) MUST complete this checklist BEFORE `down.sql` execution. Skipping any item REJECTS the revert.
+
+| Item | Requirement | Verification command / artifact |
+|---|---|---|
+| **1. Operator identity** | Named operator with deploy-authorized RBAC | `deploy-tool whoami --session <id>` returns operator GitHub handle from §3.1 init |
+| **2. Approver identity** | Named approver, DIFFERENT human from operator, with deploy-authorized RBAC | Approver explicitly types `APPROVE <session_id>` in the deploy ticket; tool verifies role + human-distinctness from operator |
+| **3. CTO sign-off (destructive revert only)** | For any revert that loses data or schema state irrecoverably from the post-deploy state alone | CTO explicitly types `CTO-APPROVE <session_id>` in the deploy ticket |
+| **4. Compliance Officer sign-off (PHI-bearing revert only)** | For reverts touching any table flagged PHI in the canonical PHI inventory (per Master PRD §6 + CDM v1.X PHI tagging) | Compliance Officer explicitly types `COMPLIANCE-APPROVE <session_id>` |
+| **5. Exact migration ID list** | Comma-separated list of migration IDs to revert (in reverse-apply order) | Recorded in deploy ticket; matches `deploy-tool migration-partial-validate` output |
+| **6. Data-loss impact assessment** | Written assessment: which rows/columns/constraints are lost; which tenants impacted; estimated row count loss | 1-paragraph minimum; attached to deploy ticket as `impact_assessment.md` |
+| **7. Backup/snapshot reference** | RDS snapshot ID that captures the pre-deploy state | `aws rds describe-db-snapshots ...` output attached; snapshot age MUST be ≤ 4h |
+| **8. Restore plan** | Step-by-step restore procedure if revert fails | `restore_plan.md` attached; MUST include the verification step that confirms restore succeeded |
+| **9. Restore-verified flag** | Pre-revert dry-run: execute `down.sql` against a sandbox restored from the backup snapshot; verify schema matches expected pre-deploy state | `deploy-tool dry-run-revert --session <id> --sandbox-restore-from <snapshot>` returns success |
+
+**Hard prohibition (R1 MED-1 closure):** any migration revert WITHOUT a verified restore plan (item 9 NOT completed) is **REJECTED at the canonical authorization gate**. The operator cannot bypass this — the tool enforces it.
+
+**Revert execution (only after §5.3.AUTH complete):**
 - Execute the migration-rollback script (each migration ships with a `down.sql` reverse migration)
-- Verify the reverted schema is consistent
+- Verify the reverted schema is consistent (`deploy-tool schema-validate`)
 - Run app rollback per §5.2 to align app + schema versions
+- Emit Cat B audit events: `deploy.migration_reverted` per migration + `deploy.migration_revert_completed` overall + `deploy.migration_revert_audit_checklist_completed` with the §5.3.AUTH checklist hash for audit reproducibility
 
-**Default:** app rolls back; migrations stay applied. The new schema's additive design is the safety mechanism.
+**Default reminder:** app rolls back; migrations stay applied. The new schema's additive design is the safety mechanism. §5.3.AUTH applies only to the exceptional cases.
 
 ### 5.4 Post-rollback verification
 
