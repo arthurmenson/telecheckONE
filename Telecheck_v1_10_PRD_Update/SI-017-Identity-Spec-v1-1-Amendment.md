@@ -33,7 +33,7 @@ This amendment integrates **two ratified architectural shifts** into the canonic
 | §3.8 (NEW) Session-revocation propagation | NEW section | SI-017 Phase 2 F-3 + Sub-decision 4.5 mismatch-path interaction |
 | §4.2 Clinician session | Amended re-authentication clause to reference I-032 guard for prescribing actions | I-032 invariant ratification |
 | §6 Operator and admin authentication | Amended to require tenant-GUC binding (operators MAY operate in platform-scope only when explicitly required; never in tenant-scope without an explicit `app.tenant_id` set) | I-032 + I-024 cross-tenant break-glass |
-| §9 Audit | NEW events: `identity.session_jwt_tenant_id_mismatch` (Cat A), `identity.session_revoked` (Cat A), `identity.middleware_guc_set` (Cat C high-volume) | SI-017 + I-032 |
+| §9 Audit | NEW events: `identity.middleware_guc_set` (Cat C high-volume sampled), `identity.patient_session_revoked` (Cat A P1), `identity.clinician_session_revoked` (Cat B P2), `identity.operator_session_revoked` (Cat B P2), `identity.tenant_session_revocation_cascade` (Cat B P2 summary), `identity.tenant_session_revocation_batch_completed` (Cat B P2 per-batch progress), `identity.dr_failover_session_freeze_cascade` (Cat B P2 summary), `identity.session_jwt_tenant_id_mismatch` (Cat A P1), `identity.session_liveness_check_failed_*` (Cat C), `identity.security_definer_tenant_guc_mismatch` (Cat A P2 platform-floor), `identity.operator_mode_switched` (Cat B P2). Classification split by actor type per R1 MED-2 closure. | SI-017 + I-032 + SI-018 partition rule |
 | §11 (NEW) I-032 STEP 0 contract for SECURITY DEFINER call sites | NEW section | I-032 invariant ratification |
 | §12 (NEW) Open questions for ratifier | NEW section | Sprint 8 ratifier-targetable scope |
 
@@ -66,10 +66,29 @@ The amendment is decomposed into 6 sub-decisions, each independently ratifier-ta
 - A subsequent request on the same connection must re-set the GUC via its own middleware pass.
 - A misuse where one request's tenant_id leaks into another's transaction is structurally impossible because SET LOCAL scopes to the transaction.
 
+**Enforceable entry-point enumeration (R1 HIGH-3 closure):**
+
+The canonical enforcement model has FIVE layers (defense-in-depth):
+
+1. **Application-layer (canonical middleware):** HTTP middleware (Fastify hook), gRPC interceptor, background-worker dispatcher (BullMQ wrapper), CLI tooling wrapper, migration runner wrapper. Every entry point MUST be one of these five paths. The canonical helper for non-HTTP paths is `@telecheck/auth-core/with_tenant_scope.ts` (location pinned at code-repo bootstrap per OQ3; the helper accepts a tenant_id parameter + a callback + opens a transaction with `SET LOCAL app.tenant_id = $1` before invoking the callback).
+
+2. **PostgreSQL RLS (primary defense):** every PHI table has an RLS policy that requires `tenant_id = current_setting('app.tenant_id')` for SELECT/INSERT/UPDATE/DELETE. The RLS policy is enforced at the row-fetch boundary, regardless of how SQL reached the table (procedure, raw query, ORM). RLS is the primary protection; the middleware-GUC contract is the canonical SOURCE of the GUC; I-032 STEP 0 is defense-in-depth on SECURITY DEFINER procedures specifically.
+
+3. **I-032 STEP 0 on SECURITY DEFINER procedures:** any procedure marked SECURITY DEFINER that touches PHI MUST include the canonical STEP 0 block per Sub-decision 5 below.
+
+4. **Static-analyzer check (canonical CI gate `tenant-scope-binding`):** the CI pipeline runs a static analyzer that:
+   - Parses every TypeScript/SQL file at PR open.
+   - Identifies every PHI-table access (SELECT/INSERT/UPDATE/DELETE/EXECUTE).
+   - Verifies each access path is downstream of either (a) the canonical HTTP middleware, (b) a gRPC interceptor, (c) a background-worker dispatcher, (d) a `with_tenant_scope()` wrapper, or (e) a SECURITY DEFINER procedure with the canonical STEP 0 block.
+   - FAILS CI on any unscoped access path (merge-blocking; see §5 Test 7.U for the canonical merge-blocking test).
+   - The static analyzer's name, location, and rule IDs are pinned at code-repo bootstrap (Track 1); the analyzer's existence + merge-blocking status is canonical at this amendment.
+
+5. **Operator + admin entry-point enumeration:** raw psql access by operators is the ONE entry path that cannot be enforced via application code. Per Telecheck operational policy, raw psql is forbidden in production; operators use the canonical admin tooling which wraps every PHI query in a `with_tenant_scope()` block. Break-glass raw psql access requires an operator-gated DBA-emergency procedure with audit + dual-control (per I-024 break-glass invariant).
+
 **Acceptance:**
-- Every request handler that touches PHI MUST be downstream of the middleware pass.
-- Code paths that bypass the middleware (e.g., admin tooling, migration runners) MUST set `app.tenant_id` explicitly via the canonical `with_tenant_scope()` helper OR run with `app.tenant_id = 'platform'` for platform-scope operations (per I-032's NULLIF normalization handling of blank/RESET).
-- Static-analyzer check (added at canonical content port): every Track 1+2+3+4 module's middleware-pass MUST be on the canonical path; bypass paths are linted.
+- Every PHI-touching code path MUST satisfy at least Layer 4 (static-analyzer pass) + Layer 2 (RLS); SECURITY DEFINER procedures MUST additionally satisfy Layer 3.
+- The static-analyzer check is merge-blocking on every PR; bypass paths require an explicit annotation `// @telecheck-canonical-bypass: <reason + reviewer signoff>` that is reviewed at PR open.
+- Layer 1 (canonical middleware) is the canonical SOURCE of `app.tenant_id`; Layer 2 (RLS) is the canonical ENFORCER at the table boundary; Layer 3 (I-032 STEP 0) is defense-in-depth on SECURITY DEFINER procedures specifically. Defense-in-depth is the design rationale.
 
 ---
 
@@ -92,24 +111,56 @@ The amendment is decomposed into 6 sub-decisions, each independently ratifier-ta
 
 **Performance posture:** the session-liveness check is a single indexed lookup on `session_state` by `session_id` primary key. Expected p99 latency: <2ms. Caching is permitted at the per-request scope (the middleware can reuse the lookup result within the same request) but NOT across requests (the cache window would re-introduce the revocation lag this design closes).
 
-**SI-017 Phase 2 F-3 contract:** ratified 2026-05-19; this Sub-decision integrates that ratified contract into the Identity Spec.
+**In-flight request semantics under concurrent revocation (R1 HIGH-2 closure):**
+
+The session-liveness check is performed exactly once per request, at request admission. Once admitted, a request runs to completion under its admission-time session state, even if revocation occurs during the request's execution. This is the canonical contract:
+
+1. **Admitted-before-revocation requests complete normally.** A request that passed the liveness check at admission MAY perform PHI mutations until completion. The middleware does NOT recheck liveness mid-request.
+2. **Subsequent requests under revoked sessions are rejected.** The very next request on the same session (after revocation propagates to `session_state.revoked_at`) is short-circuited at admission per §3.7 step 6.
+3. **Cascade lag is bounded by the slowest individual revocation INSERT** (millisecond-scale per `session_state` row update under contention; tenant_disabled cascade for high-volume tenants uses per-batch progress checkpoints per OQ4).
+4. **Audit trail:** every admitted request emits Cat C `identity.middleware_guc_set` at admission (per §3.6); every revocation emits the actor-typed revocation event per §3.8 / Sub-decision 3 (e.g., Cat A `identity.patient_session_revoked` for patients, Cat B `identity.clinician_session_revoked` for clinicians). The forensic trail allows reconstruction of "request admitted at T1, session revoked at T2 > T1" sequences for any in-flight overlap.
+5. **No procedure-level liveness recheck.** SECURITY DEFINER procedures do NOT recheck `session_state` mid-transaction; the canonical contract is admission-time liveness only. (Closes R1 HIGH-2.)
+
+**Why this in-flight semantic** (vs row-locking, revocation-epoch checking, or procedure-level liveness recheck):
+
+- **Row-locking on session_state for every PHI mutation** would serialize all requests for the same session, eliminating concurrent device usage (multi-device patient sessions, multi-tab clinician portal). The performance cost outweighs the revocation-window-closure benefit.
+- **Revocation-epoch checked at write boundaries** would require every PHI procedure to recheck liveness; this proliferates the binding logic + introduces N+1 lookup overhead.
+- **Procedure-level liveness recheck** has the same N+1 problem + couples each procedure to session_state, breaking the canonical-middleware-only binding contract.
+- **The accepted semantic** (admission-time-only check) is the standard model in well-engineered systems. The revocation-window for in-flight requests is bounded by the request's own execution time (typically <1 second for PHI mutations). The Cat A audit trail provides forensic reconstruction if a revocation race causes user-visible inconsistency.
+
+**Explicit revocation-emergency-stop exception:** if a session must be stopped mid-request (e.g., compromise detection, regulatory order), the operator uses the admin force-logout endpoint which:
+1. Sets `session_state.revoked_at` immediately (cascades the actor-typed revocation event per §3.8 / Sub-decision 3 — Cat A `identity.patient_session_revoked` for patient targets, Cat B `identity.clinician_session_revoked` or `identity.operator_session_revoked` for non-patient targets).
+2. Optionally invokes the `kill_in_flight_session_requests($session_id)` operator procedure which terminates all open transactions for that session at the PostgreSQL level (via `pg_terminate_backend` on the connection holding the open transaction). This is an operator-gated escape hatch; not the standard revocation path.
+
+**SI-017 Phase 2 F-3 contract:** ratified 2026-05-19; this Sub-decision integrates that ratified contract into the Identity Spec. The in-flight semantic is the canonical implementation of Phase 2 F-3.
 
 ---
 
 ### Sub-decision 3 — Session-revocation propagation (`identity.session_revoked` Cat A event)
 
-**Decision shape:** session revocation paths emit a Cat A audit event `identity.session_revoked` with: session_id, user_id, tenant_id, revocation_reason (`user_logout`, `admin_force`, `password_change`, `tenant_disabled`, `clinician_license_expired`, `phone_changed`, `device_limit_exceeded`, `dr_failover_session_freeze`).
+**Decision shape (R1 MED-2 closure: classification split by actor type per SI-018 partition rule):**
 
-**Trigger paths:**
-- `POST /auth/logout` → user_logout
-- Admin force-logout → admin_force
-- Password / phone change → password_change / phone_changed
-- Tenant disable → tenant_disabled (cascade to all sessions in that tenant)
-- Clinician license expiry → clinician_license_expired (cascade to all that clinician's sessions)
-- Device-limit exceeded → device_limit_exceeded (oldest session dropped)
-- DR session freeze (Cold-DR Runbook §4 Step 1) → dr_failover_session_freeze (cascade to all sessions)
+Session-revocation events are classified by **the actor whose session is being revoked**, with the partition key determined by whether the actor has a valid patient-bound key:
 
-**Cat A justification:** revocation is a security-critical state transition; it MUST land in the patient-bound audit-chain partition (P1 per SI-018) so that the canonical session-liveness trail is reconstructable per-patient. Aligns with I-013 + I-016 append-only audit invariants.
+| Actor type | Cat | Partition | Partition key | Event name |
+|---|---|---|---|---|
+| Patient session | A | P1 | user_id (= patient_id; the user_id IS the patient_id in this case) | `identity.patient_session_revoked` |
+| Clinician session | B | P2 | tenant_id (clinician is not a patient; per-tenant operations governance) | `identity.clinician_session_revoked` |
+| Operator/admin session | B | P2 | tenant_id OR `'platform'` (depending on operator-mode at revocation; per Sub-decision 6) | `identity.operator_session_revoked` |
+| Tenant-disable cascade | B | P2 | tenant_id (one summary event per tenant; individual session-level events suppressed in favor of the summary; per-batch progress events emitted) | `identity.tenant_session_revocation_cascade` |
+| DR failover session freeze | B | P2 | `'platform'` (platform-wide cascade; one summary event per region) | `identity.dr_failover_session_freeze_cascade` |
+| JWT-tenant-mismatch | A | P1 | user_id (the user is known from session_state) | `identity.session_jwt_tenant_id_mismatch` (already canonical per Sub-decision 4) |
+
+**Why split classification:**
+- Per SI-018 ratified partition rule (2026-05-19): P1 is patient-bound; P2 is tenant-governance + platform-floor. Only events that have a valid patient-identifier partition key route to P1.
+- Patient session revocation IS patient-bound (the user IS the patient).
+- Clinician + operator + admin sessions are NOT patient-bound; routing them to P1 would either pollute patient audit chains with non-patient activity OR cause partition-key violations.
+- Tenant-disable + DR cascades are tenant-wide / platform-wide; per-session events would flood P1 with millions of non-patient-bound rows; the summary-event pattern at P2 is the canonical approach (with per-batch Cat B progress events per OQ4).
+- The forensic trail per actor type remains reconstructable: patient session-liveness trail at P1; clinician/operator session-liveness trail at P2 (tenant_id-keyed); platform cascade trail at P2 (`'platform'`-keyed).
+
+**Cross-reference to Sub-decision 4 (JWT-mismatch path):** the mismatch event remains Cat A P1 keyed by user_id because the user_id is known from `session_state` regardless of the JWT's claimed tenant. This is consistent with the table above.
+
+**Audit trail completeness invariant:** for every session revocation, exactly ONE primary event emits per the table above. Cascade summary events (tenant_session_revocation_cascade, dr_failover_session_freeze_cascade) do NOT additionally emit per-session events — the summary IS the canonical audit trail for the cascade; the per-session revocation is implicit from `session_state.revoked_at` rows.
 
 ---
 
@@ -119,7 +170,7 @@ The amendment is decomposed into 6 sub-decisions, each independently ratifier-ta
 
 1. Short-circuits the request with a tenant-blind 401 (no detail about which tenant the JWT claimed; per I-025).
 2. Emits a Cat A audit event `identity.session_jwt_tenant_id_mismatch` with: session_id (from session_state), jwt_claimed_tenant_id (NOT echoed back in response; logged for forensic trail only), user_id, request_id, middleware-version.
-3. Revokes the session immediately (cascades to Sub-decision 3 `identity.session_revoked` Cat A event with reason `jwt_tenant_id_mismatch`).
+3. Revokes the session immediately (cascades to Sub-decision 3 — actor-typed revocation event per §3.8 with reason `jwt_tenant_id_mismatch`; for patient sessions this is Cat A `identity.patient_session_revoked`; for clinician/operator it is Cat B).
 4. **Merge-blocking Test 7.X** (ratified at canonical content port 2026-05-19): an integration test in the canonical test suite verifies that:
    - Forging a JWT with `tenant_id = tenant_B` on a session bound to `tenant_A` results in 401 + the Cat A event + session revocation.
    - The 401 response body contains NO tenant_id reference (tenant-blind per I-025).
@@ -136,24 +187,63 @@ The amendment is decomposed into 6 sub-decisions, each independently ratifier-ta
 **Decision shape:** every SECURITY DEFINER procedure that touches PHI MUST, as STEP 0 of its body, verify:
 
 ```sql
-IF NULLIF(current_setting('app.tenant_id', true), '') IS DISTINCT FROM $1 THEN
-    RAISE EXCEPTION 'I-032 tenant-GUC equality violation: app.tenant_id=% does not match procedure tenant_id=%',
-        NULLIF(current_setting('app.tenant_id', true), ''), $1
+IF NULLIF(current_setting('app.tenant_id', true), '') IS DISTINCT FROM p_tenant_id THEN
+    RAISE EXCEPTION 'I-032 tenant-GUC equality violation: app.tenant_id=% does not match procedure p_tenant_id=%',
+        NULLIF(current_setting('app.tenant_id', true), ''), p_tenant_id
         USING ERRCODE = 'TLC32';
 END IF;
 ```
 
-Where `$1` is the procedure's tenant_id parameter.
+**Named-parameter convention (R1 MED-1 closure):** every PHI-touching SECURITY DEFINER procedure MUST declare an explicitly named `p_tenant_id` parameter of type `tenant_id_t` (CDM-canonical tenant identifier type). `p_tenant_id` MUST be present in the procedure signature; positional `$1` is forbidden because:
+
+1. Procedures whose first argument is not tenant_id would silently compare against the wrong value.
+2. Overloaded procedures with different parameter orders would have inconsistent guard behavior.
+3. Wrappers calling subprocedures need to pass `p_tenant_id` by name (`CALL inner_proc(p_tenant_id => v_tenant_id)`) to make the contract verifiable.
+
+**Nested procedure call contract:**
+- A SECURITY DEFINER procedure that invokes another SECURITY DEFINER subprocedure MUST pass `p_tenant_id => <value>` by name (named parameter, not positional). The subprocedure's STEP 0 guard re-verifies independently.
+- A SECURITY DEFINER procedure that invokes a SECURITY INVOKER subprocedure does NOT require the subprocedure to have STEP 0 (the SECURITY INVOKER subprocedure inherits the caller's role + the RLS policy on PHI tables enforces tenant binding at the row boundary; defense-in-depth via Layer 2 RLS).
+- SAVEPOINT + ROLLBACK TO SAVEPOINT semantics: an inner SAVEPOINT rollback does NOT reset `app.tenant_id` (the GUC was set by SET LOCAL at the outer transaction's start; SAVEPOINT rollback only rolls back data changes, not GUCs). The STEP 0 guard remains valid across SAVEPOINT cycles.
+- Exception handlers (`EXCEPTION WHEN OTHERS THEN`) MUST NOT swallow the TLC32 error. The canonical exception-handler pattern is `EXCEPTION WHEN SQLSTATE 'TLC32' THEN RAISE; WHEN OTHERS THEN ...`; the TLC32-specific re-raise is mandatory.
+- Overloaded procedures: the static-analyzer (Layer 4 above) verifies that every overload of a procedure has consistent `p_tenant_id` placement + STEP 0 block.
+
+**The canonical STEP 0 block** (preserved across the procedure-side amendments P-018a / P-019a / P-021a 2026-05-19):
 
 **NULLIF normalization** (R5 closure from canonical-content-port iteration): PostgreSQL custom GUCs return empty string when RESET or blank, not NULL. The NULLIF normalization treats blank/RESET as NULL for the comparison; an explicit `tenant_id = NULL` mismatches any concrete tenant_id parameter, which is the desired semantic (no caller may invoke a procedure with a NULL or unset GUC).
 
 **ERRCODE `TLC32`** (custom PostgreSQL error code): allows client-side discrimination between I-032 violations and other PL/pgSQL errors. Reserved as canonical at the I-032 ratification 2026-05-19.
 
-**Mode 1 + Mode 2** (canonical content port nomenclature):
-- **Mode 1 (RAISE):** the procedure raises the exception, the transaction aborts, the caller receives a tenant-blind error per I-025.
-- **Mode 2 (RAISE + audit emission):** the procedure emits a Cat A audit event `identity.security_definer_tenant_guc_mismatch` BEFORE raising (within the same transaction; if the audit emission itself fails, the procedure still raises the I-032 exception but logs the audit-emission-failure to an error-stream fallback).
+**Mode 1 + Mode 2** (canonical content port nomenclature; **R1 HIGH-1 closure refined: audit durability via application-layer catch-and-emit pattern, NOT in-procedure emission**):
 
-**Why Mode 2** (with audit emission) for Identity-spec-side SECURITY DEFINER procedures: identity-related procedures are platform-floor; a tenant-GUC mismatch in this layer is a high-severity forensic event. The audit emission MUST happen so the event lands in the canonical audit-chain.
+- **Mode 1 (procedure-side RAISE only):** the procedure raises the TLC32 exception; the transaction aborts; the caller (application middleware error-handler) receives a tenant-blind error per I-025.
+- **Mode 2 (RAISE + application-layer audit emission in a SEPARATE transaction):** the procedure raises the TLC32 exception (Mode 1); the application's canonical middleware error-handler catches TLC32 specifically, opens a **fresh, separate transaction**, INSERTs the Cat A `identity.security_definer_tenant_guc_mismatch` audit row, COMMITs that transaction, then propagates the tenant-blind error to the caller. **The audit row is durable because it lives in a fresh transaction that succeeds; the original aborted transaction is unrelated.**
+
+**R1 HIGH-1 closure rationale (engineering-review-pattern consistent):** the PR #11 cycle engineering review (Engineering-Review-Request-I-003-Atomic-Audit-Inside-vs-Application-Layer-Audit-2026-05-19, unanimous NO answer) confirmed that application-layer audit emission in a transaction governed by the application's BEGIN/COMMIT boundary satisfies I-003 + I-013 + HIPAA technical-safeguards. The Mode 2 pattern here applies the same principle: the audit row is emitted by the application after catching the procedure's raise, in a fresh transaction. The original transaction's rollback does not affect the audit row's durability. The procedure does NOT emit the audit; only the application does. (Closes R1 HIGH-1.)
+
+**Why Mode 2** (application-layer catch-and-emit) for identity-platform-floor SECURITY DEFINER procedures: identity-related procedures are platform-floor; a tenant-GUC mismatch is a high-severity forensic event. The application-layer catch-and-emit pattern ensures the audit lands durably without coupling audit durability to the procedure's transaction outcome.
+
+**Application-layer error-handler contract** (canonical):
+
+```pseudocode
+try {
+  call_security_definer_procedure(...)
+} catch (PostgresError e) {
+  if (e.errcode == 'TLC32') {
+    # Open fresh transaction, emit Cat A audit, COMMIT
+    db.transaction(() => {
+      audit.emit_cat_a('identity.security_definer_tenant_guc_mismatch', {
+        procedure_name: e.procedure_name,
+        expected_tenant_id: e.expected_tenant_id_from_message,
+        observed_tenant_id_or_null: e.observed_tenant_id_from_message,
+        caller_session_id: current_session_id,
+      })
+    })
+  }
+  throw new TenantBlindError(401)  # per I-025
+}
+```
+
+The application's middleware error-handler is the canonical home for TLC32 catch-and-emit; per-handler catch-and-emit is forbidden (would proliferate the logic + violate single-canonical-path).
 
 **Cross-references:**
 - INVARIANTS v5.3 §I-032 (canonical statement).
@@ -233,33 +323,47 @@ The following deltas apply against the existing v1.0 body. The amendments are wr
 > 2. SELECT from `session_state` WHERE `session_id = $1` (indexed primary-key lookup).
 > 3. Verify: `session_state.user_id = jwt.user_id`, `session_state.tenant_id = jwt.tenant_id`, `revoked_at IS NULL`, `expires_at > now()`.
 > 4. If all checks pass: proceed to §3.6 step 4.
-> 5. If `session_state.tenant_id != jwt.tenant_id`: short-circuit with tenant-blind 401; emit Cat A `identity.session_jwt_tenant_id_mismatch` (with jwt_claimed_tenant_id logged in payload, NOT echoed in response per I-025); revoke the session (cascade to §3.8 Cat A `identity.session_revoked` with reason `jwt_tenant_id_mismatch`). Merge-blocking Test 7.X verifies this path.
+> 5. If `session_state.tenant_id != jwt.tenant_id`: short-circuit with tenant-blind 401; emit Cat A `identity.session_jwt_tenant_id_mismatch` (with jwt_claimed_tenant_id logged in payload, NOT echoed in response per I-025); revoke the session (cascade to §3.8 actor-typed revocation event with reason `jwt_tenant_id_mismatch` — `identity.patient_session_revoked` Cat A for patient sessions, `identity.clinician_session_revoked` Cat B for clinician sessions, `identity.operator_session_revoked` Cat B for operator/admin sessions). Merge-blocking Test 7.X verifies this path.
 > 6. If `revoked_at IS NOT NULL`: short-circuit with tenant-blind 401; emit Cat C `identity.session_liveness_check_failed_revoked`.
 > 7. If `expires_at <= now()`: short-circuit with tenant-blind 401; emit Cat C `identity.session_liveness_check_failed_expired`.
 >
 > Performance: single indexed lookup; expected p99 <2ms. Per-request caching is permitted (within the same request scope only); cross-request caching is forbidden (would re-introduce revocation lag).
 
-### Delta 5 — §3.8 (NEW) Session-revocation propagation
+### Delta 5 — §3.8 (NEW) Session-revocation propagation (classification split by actor type per R1 MED-2 closure)
 
 **Insertion after §3.7:**
 
 > ### 3.8 Session-revocation propagation
 >
-> Session revocation paths emit Cat A `identity.session_revoked` with: session_id, user_id, tenant_id, revocation_reason. Trigger paths:
+> Session-revocation events are classified by the **actor whose session is being revoked**. The partition key is determined by whether the actor has a valid patient-bound key (per SI-018 ratified partition rule 2026-05-19).
 >
-> | Reason | Path |
+> | Actor type | Cat | Partition | Partition key | Event name |
+> |---|---|---|---|---|
+> | Patient session | A | P1 | user_id (= patient_id) | `identity.patient_session_revoked` |
+> | Clinician session | B | P2 | tenant_id | `identity.clinician_session_revoked` |
+> | Operator/admin session | B | P2 | tenant_id OR `'platform'` (per operator-mode) | `identity.operator_session_revoked` |
+> | Tenant-disable cascade | B | P2 | tenant_id (one summary event per tenant) | `identity.tenant_session_revocation_cascade` |
+> | DR failover session freeze | B | P2 | `'platform'` (one summary event per region) | `identity.dr_failover_session_freeze_cascade` |
+> | JWT-tenant-mismatch | A | P1 | user_id (from session_state) | `identity.session_jwt_tenant_id_mismatch` |
+>
+> **Trigger paths:**
+>
+> | Trigger | Cascade events emitted |
 > |---|---|
-> | `user_logout` | `POST /auth/logout` |
-> | `admin_force` | Admin force-logout endpoint |
-> | `password_change` | Password change flow (clinician/operator) |
-> | `phone_changed` | Phone-number change flow |
-> | `tenant_disabled` | Tenant disable cascade (all sessions in tenant) |
-> | `clinician_license_expired` | License-expiry cascade (all that clinician's sessions) |
-> | `device_limit_exceeded` | §3.4 device-limit oldest-session-drop |
-> | `dr_failover_session_freeze` | Cold-DR Runbook §4 Step 1 (cascade to all sessions) |
-> | `jwt_tenant_id_mismatch` | §3.7 step 5 cascade |
+> | `POST /auth/logout` (patient) | `identity.patient_session_revoked` |
+> | `POST /auth/logout` (clinician) | `identity.clinician_session_revoked` |
+> | `POST /auth/logout` (operator) | `identity.operator_session_revoked` |
+> | Admin force-logout (target = patient) | `identity.patient_session_revoked` |
+> | Admin force-logout (target = clinician/operator) | `identity.clinician_session_revoked` / `identity.operator_session_revoked` |
+> | Patient password / phone change | `identity.patient_session_revoked` |
+> | Clinician password change | `identity.clinician_session_revoked` |
+> | Tenant disable | ONE `identity.tenant_session_revocation_cascade` summary + per-batch Cat B `identity.tenant_session_revocation_batch_completed` progress events |
+> | Clinician license expiry | `identity.clinician_session_revoked` (per-clinician; not a cascade summary because typically one clinician at a time) |
+> | Device-limit exceeded (§3.4) | `identity.patient_session_revoked` (oldest patient session dropped) |
+> | DR session freeze (Cold-DR Runbook §4 Step 1) | ONE `identity.dr_failover_session_freeze_cascade` summary keyed by `'platform'`; per-session events NOT emitted |
+> | JWT-tenant-mismatch (§3.7 step 5) | `identity.session_jwt_tenant_id_mismatch` + actor-typed revocation event per the actor's role |
 >
-> Cat A justification: revocation is security-critical; lands in patient-bound audit-chain partition (P1) per SI-018 for per-user session-liveness trail reconstruction.
+> **Audit-trail completeness invariant:** for every session revocation, exactly ONE primary event emits per the table above. Cascade summary events do NOT additionally emit per-session events — the summary IS the canonical audit trail for the cascade; the per-session revocation is implicit from `session_state.revoked_at` rows.
 
 ### Delta 6 — §9 Audit (amended)
 
@@ -267,13 +371,18 @@ The following deltas apply against the existing v1.0 body. The amendments are wr
 
 | Event | Category | Detail |
 |---|---|---|
-| `identity.middleware_guc_set` | C (high-volume, sampled) | session_id, user_id, tenant_id, request_id, middleware_version |
-| `identity.session_revoked` | A | session_id, user_id, tenant_id, revocation_reason |
-| `identity.session_jwt_tenant_id_mismatch` | A | session_id, user_id, jwt_claimed_tenant_id, request_id, middleware_version |
-| `identity.session_liveness_check_failed_revoked` | C | session_id, user_id |
-| `identity.session_liveness_check_failed_expired` | C | session_id, user_id |
-| `identity.security_definer_tenant_guc_mismatch` | A | procedure_name, expected_tenant_id, observed_tenant_id_or_null, caller_session_id |
-| `identity.operator_mode_switched` | B | operator_id, from_mode, to_mode, target_tenant_id (nullable), session_id |
+| `identity.middleware_guc_set` | C (high-volume, sampled) | session_id, user_id, tenant_id, request_id, middleware_version | P1 if user is patient; P2 otherwise (keyed by tenant_id) |
+| `identity.patient_session_revoked` | A | session_id, user_id (= patient_id), tenant_id, revocation_reason | P1 keyed by patient_id |
+| `identity.clinician_session_revoked` | B | session_id, user_id (clinician), tenant_id, revocation_reason | P2 keyed by tenant_id |
+| `identity.operator_session_revoked` | B | session_id, user_id (operator/admin), tenant_id OR 'platform', revocation_reason | P2 keyed by tenant_id OR 'platform' per operator-mode |
+| `identity.tenant_session_revocation_cascade` | B | tenant_id, total_sessions_revoked, started_at, completed_at | P2 keyed by tenant_id (summary; one per tenant disable) |
+| `identity.tenant_session_revocation_batch_completed` | B | tenant_id, batch_id, sessions_in_batch, total_batches, started_at, completed_at | P2 keyed by tenant_id (per-batch progress per OQ4) |
+| `identity.dr_failover_session_freeze_cascade` | B | region (us-east-1 or us-west-2), total_sessions_frozen, freeze_initiated_at, freeze_completed_at | P2 keyed by 'platform' (summary; one per region) |
+| `identity.session_jwt_tenant_id_mismatch` | A | session_id, user_id, jwt_claimed_tenant_id, request_id, middleware_version | P1 keyed by user_id |
+| `identity.session_liveness_check_failed_revoked` | C | session_id, user_id | P1 if user is patient; P2 otherwise |
+| `identity.session_liveness_check_failed_expired` | C | session_id, user_id | P1 if user is patient; P2 otherwise |
+| `identity.security_definer_tenant_guc_mismatch` | A | procedure_name, expected_tenant_id, observed_tenant_id_or_null, caller_session_id | P2 keyed by expected_tenant_id (platform-floor forensic) |
+| `identity.operator_mode_switched` | B | operator_id, from_mode, to_mode, target_tenant_id (nullable), session_id | P2 keyed by tenant_id OR 'platform' |
 
 ### Delta 7 — §11 (NEW) I-032 STEP 0 contract for SECURITY DEFINER call sites
 
@@ -310,7 +419,7 @@ The following deltas apply against the existing v1.0 body. The amendments are wr
 > 1. **OQ1 — `session_state` table canonical home (CDM v1.2 vs Identity Spec v1.1).** The session-liveness check requires a canonical `session_state` table. Recommendation: file as SI-022 to add `session_state` entity to CDM v1.2 (becomes CDM v1.3 at promotion). Identity Spec v1.1 references the entity but does not redefine the schema. *Cross-SI dependency for ratifier sequencing.*
 > 2. **OQ2 — Session-state replication topology under DR.** Cold-DR Runbook v0.1 DRAFT §"DR session freeze" presumes session_state replicates to us-west-2 via standard RDS logical replication. The session-liveness check during DR failover would read from the promoted us-west-2 RDS. Recommendation: confirm via ratifier. If session_state requires multi-region active-active (vs single-region+cold-DR), file as follow-up SI overlapping with Cold-DR OQ7.
 > 3. **OQ3 — `with_tenant_scope()` canonical helper home.** Background workers and migration runners need a canonical helper. Recommendation: file as a Track 5 (Infra) deliverable; helper lives in `@telecheck/auth-core` shared library at code-repo bootstrap.
-> 4. **OQ4 — Session-revocation cascade ordering on tenant_disabled.** When a tenant is disabled, all that tenant's sessions get `identity.session_revoked` Cat A events. For high-tenant-volume tenants (10k+ active sessions), the cascade may take minutes. Recommendation: process via background job with per-batch (1k sessions) progress checkpoints; emit per-batch Cat B `identity.tenant_session_revocation_batch_completed` progress events.
+> 4. **OQ4 — Session-revocation cascade ordering on tenant_disabled.** When a tenant is disabled, the cascade emits exactly ONE Cat B `identity.tenant_session_revocation_cascade` summary event (per R1 MED-2 closure; per-session events suppressed). For high-tenant-volume tenants (10k+ active sessions), per-batch Cat B `identity.tenant_session_revocation_batch_completed` progress events emit at 1k-session checkpoints. The per-session `session_state.revoked_at` rows still update individually; the summary + per-batch progress provide the canonical audit trail. Ratifier confirms the per-batch checkpoint cadence (recommended 1k); if a different cadence (e.g., 5k for higher-throughput tenants) is desired, file as follow-up SI.
 > 5. **OQ5 — Codex pre-ratification target for this v1.1 amendment.** Recommendation: 3-4 rounds (Engineering Spec amendment; multiple cross-SI surfaces).
 > 6. **OQ6 — Cross-SI dependency: P-018b scope (cross-referenced from SI-016 OQ6).** The ai_workflow_executions BEFORE INSERT trigger requires reading `app.tenant_id` from the executing session's GUC. This Identity Spec amendment defines the GUC is always set by middleware (per §3.6); SI-016's trigger therefore can rely on a non-null GUC. Recommendation: ratifier confirms cross-SI alignment; no further amendment to Identity Spec needed.
 
@@ -322,20 +431,32 @@ The following deltas apply against the existing v1.0 body. The amendments are wr
 
 ---
 
-## 5. Test coverage commitments (acceptance-criterion-grade)
+## 5. Test coverage commitments (acceptance-criterion-grade with concrete CI gates per R1 MED-3 closure)
 
-Merge-blocking integration tests at code-repo implementation (Track 1):
+Merge-blocking integration tests at code-repo implementation (Track 1). The canonical test-suite architecture is the existing `apps/api-server/__integration__/` directory in `arthurmenson/telecheckONE` (already established for SI-007 / SI-008 / SI-011 / TLC-021 integration tests). Each test below names the canonical file location, the CI job that runs it, and the merge-blocking gate that fails the PR if the test fails or is missing.
 
-| Test | Verifies | Sub-decision |
-|---|---|---|
-| Test 7.X | JWT-tenant-mismatch → 401 + Cat A + session revoked | §3.7 + Sub-decision 4 |
-| Test 7.Y | Missing JWT → 401 (tenant-blind per I-025) | §3.7 |
-| Test 7.Z | Revoked session → 401 + Cat C `identity.session_liveness_check_failed_revoked` | §3.7 |
-| Test 7.W | Expired session → 401 + Cat C `identity.session_liveness_check_failed_expired` | §3.7 |
-| Test 7.V | SECURITY DEFINER procedure with mismatched `app.tenant_id` → ERRCODE TLC32 + Cat A `identity.security_definer_tenant_guc_mismatch` | §11 + Sub-decision 5 |
-| Test 7.U | Bypass middleware on PHI handler → static-analyzer lint failure (merge-blocking) | §3.6 |
-| Test 7.T | Operator-mode-switcher → Cat B `identity.operator_mode_switched` | §6 + Sub-decision 6 |
-| Test 7.S | DR failover session freeze (Cold-DR Runbook §4 Step 1) → cascade Cat A `identity.session_revoked` with reason `dr_failover_session_freeze` per session | §3.8 |
+| Test ID | File location | CI job | Verifies | Sub-decision | Merge-blocking gate |
+|---|---|---|---|---|---|
+| Test 7.X | `apps/api-server/__integration__/identity/jwt_tenant_mismatch.test.ts` | `integration-identity` | JWT-tenant-mismatch → 401 + Cat A `identity.session_jwt_tenant_id_mismatch` + session revoked + Cat A `identity.patient_session_revoked` cascade | §3.7 + Sub-decision 4 | CI job `integration-identity` MUST PASS; the test asserts response status 401, response body MUST NOT contain any tenant_id, audit table MUST contain the Cat A event |
+| Test 7.Y | `apps/api-server/__integration__/identity/missing_jwt.test.ts` | `integration-identity` | Missing JWT → 401 (tenant-blind per I-025) | §3.7 | CI job `integration-identity` MUST PASS |
+| Test 7.Z | `apps/api-server/__integration__/identity/revoked_session.test.ts` | `integration-identity` | Revoked session → 401 + Cat C `identity.session_liveness_check_failed_revoked` | §3.7 | CI job `integration-identity` MUST PASS |
+| Test 7.W | `apps/api-server/__integration__/identity/expired_session.test.ts` | `integration-identity` | Expired session → 401 + Cat C `identity.session_liveness_check_failed_expired` | §3.7 | CI job `integration-identity` MUST PASS |
+| Test 7.V | `apps/api-server/__integration__/security_definer/i032_step0_guard.test.ts` | `integration-security-definer` | SECURITY DEFINER procedure with mismatched `app.tenant_id` → ERRCODE TLC32 + Cat A `identity.security_definer_tenant_guc_mismatch` emitted by application catch-handler in fresh transaction | §11 + Sub-decision 5 | CI job `integration-security-definer` MUST PASS; test asserts the audit row's transaction completes successfully even though the procedure transaction rolled back |
+| Test 7.U | `tools/static-analyzer/tests/tenant-scope-binding.test.ts` | `static-analyzer` | Bypass middleware on PHI handler → static-analyzer rule ID `TLC-SCOPE-001` fails the build | §3.6 + Sub-decision 1 | CI job `static-analyzer` MUST PASS; this is the canonical Layer 4 enforcement gate per Sub-decision 1 |
+| Test 7.T | `apps/api-server/__integration__/identity/operator_mode_switch.test.ts` | `integration-identity` | Operator-mode-switcher → Cat B `identity.operator_mode_switched` | §6 + Sub-decision 6 | CI job `integration-identity` MUST PASS |
+| Test 7.S | `apps/api-server/__integration__/dr/session_freeze_cascade.test.ts` | `integration-dr-failover` | DR failover session freeze → ONE Cat B `identity.dr_failover_session_freeze_cascade` summary event keyed by `'platform'`; per-session events NOT emitted (per R1 MED-2 cascade-summary pattern); `session_state.revoked_at` set on all rows | §3.8 | CI job `integration-dr-failover` MUST PASS; test asserts exactly ONE summary event + N session_state rows updated |
+
+**CI job pipeline mapping:** the four CI jobs above are added to the canonical PR CI pipeline (`.github/workflows/ci.yml`) at code-repo bootstrap. The PR cannot merge unless all four jobs pass. The static-analyzer rule `TLC-SCOPE-001` is added to `tools/static-analyzer/rules/` as a TypeScript AST-walker that identifies unscoped PHI access paths.
+
+**Static-analyzer rule IDs registered at this amendment:**
+- `TLC-SCOPE-001` — PHI access path not downstream of canonical middleware OR `with_tenant_scope()` wrapper OR SECURITY DEFINER procedure (Layer 4 enforcement).
+- `TLC-SCOPE-002` — SECURITY DEFINER procedure missing canonical STEP 0 block (verified by parsing the procedure body for the canonical NULLIF + RAISE pattern; Layer 3 enforcement).
+- `TLC-SCOPE-003` — SECURITY DEFINER procedure parameter list missing named `p_tenant_id` (verified by parsing function signature; Sub-decision 5 named-parameter convention).
+- `TLC-SCOPE-004` — Exception handler swallows TLC32 without re-raising (verified by AST walk of EXCEPTION blocks; Sub-decision 5 nested call contract).
+
+Each rule's existence + merge-blocking status is canonical at this amendment. Rule implementation lives in `tools/static-analyzer/rules/tlc-scope-*.ts` at code-repo bootstrap.
+
+**Acceptance for ratifier promotion:** the canonical CI pipeline + the four static-analyzer rules MUST exist (with passing test coverage) BEFORE this v1.1 amendment can be promoted to canonical bundle status. The Sprint 8 deliverable is the spec; the Track 1 deliverable is the CI + analyzer implementation. The spec is ratifier-targetable independently; the CI gate is acceptance-criterion-grade at code-repo implementation.
 
 ---
 
@@ -343,7 +464,7 @@ Merge-blocking integration tests at code-repo implementation (Track 1):
 
 | Cross-SI surface | Identity v1.1 surface | Relationship |
 |---|---|---|
-| SI-018 two-tier hybrid audit-chain partition | §3.7/§3.8/§11 audit events | All Cat A events route to P1; Cat B operator events route to P2 |
+| SI-018 two-tier hybrid audit-chain partition | §3.7/§3.8/§11 audit events | Per R1 MED-2 closure: Cat A patient-bound events route to P1 keyed by patient_id; Cat B non-patient-bound events (clinician/operator/cascade summaries) route to P2 keyed by tenant_id OR `'platform'`; classification split by actor type with explicit partition keys per the §3.8 table |
 | SI-016 ai_workflow_executions BEFORE INSERT trigger (OQ6 P-018b) | §3.6 middleware-GUC binding | Trigger reads `app.tenant_id` from middleware-set GUC; no separate trigger-level resolution |
 | P-018a/P-019a/P-021a procedure STEP 0 amendments | §11 I-032 STEP 0 contract | Identity Spec §11 codifies the canonical STEP 0 block; procedure-side amendments reference this canonical surface |
 | Cold-DR Runbook §4 Step 1 session-freeze | §3.8 dr_failover_session_freeze reason | Cold-DR cascade triggers session-revocation propagation |
@@ -354,6 +475,22 @@ Merge-blocking integration tests at code-repo implementation (Track 1):
 ## 7. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
+
+**v0.1 R1 closure 2026-05-19:** 3 HIGH + 3 MED findings closed inline (no architectural-judgment items; all in-scope correctness gaps in own draft):
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | HIGH-1 Mode 2 audit durability (procedure raise aborts the audit emission's transaction); HIGH-2 single-shot session-liveness check + in-flight revocation race; HIGH-3 entry-point enforcement across HTTP/gRPC/worker/admin/migration bypass paths; MED-1 STEP 0 `$1` brittleness for non-tenant-first-arg + overloaded + nested-call procedures; MED-2 Cat A/P1 classification overreach for non-patient-bound revocation cascades; MED-3 merge-blocking tests not actually merge-blocking-able without canonical CI gate definitions | All 6 closed inline |
+
+**R1 closure pattern recap:**
+- HIGH-1: Mode 2 moved from in-procedure audit emission to application-layer catch-and-emit in a fresh transaction (consistent with PR #11 engineering-review-grounded answer that application-layer audit emission satisfies I-003 + HIPAA technical-safeguards).
+- HIGH-2: in-flight revocation semantics specified explicitly (admission-time check only; admitted requests complete; subsequent requests rejected; cascade lag bounded; emergency-stop escape hatch documented).
+- HIGH-3: 5-layer enforcement model articulated (canonical middleware + RLS + I-032 STEP 0 + static analyzer + operator-tooling); `with_tenant_scope()` canonical location pinned (`@telecheck/auth-core`); CI rule IDs registered.
+- MED-1: `$1` replaced with named `p_tenant_id` convention; nested call + SAVEPOINT + EXCEPTION handler + overloaded procedure contracts specified.
+- MED-2: classification split by actor type (patient/clinician/operator/cascade) with explicit partition keys per SI-018 partition rule.
+- MED-3: 4 CI jobs named + 4 static-analyzer rule IDs registered (`TLC-SCOPE-001..004`); canonical test-suite location pinned (`apps/api-server/__integration__/`).
+
+No architectural-judgment items introduced inline; CLAUDE.md hard-floor item 6 honored. The 6 known OQs (§12) remain ratifier-targetable.
 
 ---
 
