@@ -299,14 +299,14 @@ Per I-024, cross-tenant access is permitted only under operator-gated break-glas
 
 1. **Approval-broker role** (`break-glass-approval-broker`): the only identity that can issue STS session credentials for break-glass operations. This role is assumed by the canonical operator tooling (Track 5 deliverable) ONLY after the canonical 3-person approval workflow completes (CTO + Compliance Officer + Incident Commander each provide cryptographic proof-of-approval).
 
-2. **STS session-tag-bound break-glass session:** the approval broker calls `sts:AssumeRole` on `break-glass-operator` with the following REQUIRED session tags:
+2. **STS session-tag-bound break-glass session (R2 HIGH closure: each session pinned to ONE data class):** the approval broker calls `sts:AssumeRole` on `break-glass-operator` with the following REQUIRED session tags:
    - `break_glass_approved = true` (single canonical token; absence = denied)
    - `incident_id = <UUID>` (unique per break-glass operation)
    - `tenant_id = <UUID>` (the specific tenant being accessed; absent = scope-violation denied)
-   - `affected_data_classes = <comma_separated>` (restricts which data classes can be decrypted)
+   - `affected_data_class = <single data class value>` (R2 HIGH closure — pinned to EXACTLY ONE data class; multi-class incident response requires multiple parallel sessions, each independently approved + audited. The session-tag is single-valued because AWS IAM principal tags are single-string; using a comma-separated list with StringLike wildcards would weaken the boundary by enabling pattern-matching attacks.)
    - `expires_at = <RFC3339_timestamp_at_most_4h_from_now>` (hard expiry)
 
-3. **CMK key policy break-glass condition (R1 HIGH-1 closure):**
+3. **CMK key policy break-glass condition (R2 HIGH closure: data-class equality binding added):**
 
 ```json
 {
@@ -319,14 +319,17 @@ Per I-024, cross-tenant access is permitted only under operator-gated break-glas
     "Bool": { "aws:MultiFactorAuthPresent": "true" },
     "StringEquals": {
       "aws:PrincipalTag/break_glass_approved": "true",
-      "aws:PrincipalTag/tenant_id": "${kms:EncryptionContext:tenant_id}"
+      "aws:PrincipalTag/tenant_id": "${kms:EncryptionContext:tenant_id}",
+      "aws:PrincipalTag/affected_data_class": "${kms:EncryptionContext:data_class}"
     },
     "DateLessThan": { "aws:CurrentTime": "${aws:PrincipalTag/expires_at}" }
   }
 }
 ```
 
-4. **Explicit Deny for missing or expired tags:**
+The `affected_data_class` ↔ `data_class` equality check ensures a session approved for `pii_demographic` CANNOT decrypt `pii_sensitive_clinical` ciphertext for the same tenant — the encryption-context's `data_class` MUST match the session-pinned `affected_data_class`.
+
+4. **Explicit Deny for missing OR mismatched scope (R2 HIGH closure: comprehensive coverage):**
 
 ```json
 {
@@ -337,7 +340,25 @@ Per I-024, cross-tenant access is permitted only under operator-gated break-glas
   "Resource": "*",
   "Condition": {
     "Null": {
-      "aws:PrincipalTag/incident_id": "true"
+      "aws:PrincipalTag/incident_id": "true",
+      "aws:PrincipalTag/tenant_id": "true",
+      "aws:PrincipalTag/affected_data_class": "true",
+      "aws:PrincipalTag/expires_at": "true"
+    }
+  }
+}
+```
+
+```json
+{
+  "Sid": "DenyBreakGlassDataClassMismatch",
+  "Effect": "Deny",
+  "Principal": { "AWS": "arn:aws:iam::<account>:role/break-glass-operator" },
+  "Action": "kms:Decrypt",
+  "Resource": "*",
+  "Condition": {
+    "StringNotEquals": {
+      "aws:PrincipalTag/affected_data_class": "${kms:EncryptionContext:data_class}"
     }
   }
 }
@@ -349,7 +370,7 @@ Per I-024, cross-tenant access is permitted only under operator-gated break-glas
 
 7. **Audit emission:** every break-glass decrypt emits Cat A `kms.break_glass_decrypt` event (P2 keyed by `'platform'`) + Cat A `kms.break_glass_decrypt_to_tenant_<tenant_id>` event (P1 mirror for the affected tenant). Failure to emit (audit-pipeline down) → decrypt rejected per FLOOR-020.
 
-**Test KMS.7b (R1 HIGH-1 closure):** break-glass attempt without complete session tags → IAM Deny + Cat A audit event. Test KMS.7c: break-glass attempt past expires_at → IAM Deny + Cat A audit. Test KMS.7d: approval-broker invocation without 3 valid approver signatures → broker refuses assume-role.
+**Test KMS.7b (R1 HIGH-1 closure):** break-glass attempt without complete session tags → IAM Deny + Cat A audit event. Test KMS.7c: break-glass attempt past expires_at → IAM Deny + Cat A audit. Test KMS.7d: approval-broker invocation without 3 valid approver signatures → broker refuses assume-role. **Test KMS.7e (R2 HIGH closure):** break-glass session pinned to `affected_data_class = pii_demographic` attempts decrypt of `pii_sensitive_clinical` ciphertext → IAM Deny per data-class mismatch + Cat A audit `kms.break_glass_data_class_mismatch`.
 
 ### 7.2 Break-glass time-bounding
 
@@ -510,6 +531,14 @@ CREATE TABLE kms_residency_dr_override (
 - MED-3: 12 additional tests added (KMS.15, KMS.16, KMS.17, KMS.7b/c/d, KMS.5b/c/d, KMS.10b/c/d) + 3 new static-analyzer rules (TLC-KMS-004/005/006) including policy-as-code IaC drift detection.
 
 No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. 7 known OQs (§9) remain ratifier-targetable.
+
+**v0.1 R2 closure 2026-05-19:** 1 HIGH closed inline — R1's break-glass `affected_data_classes` session-tag was declared but the key-policy Allow condition only checked `break_glass_approved` + `tenant_id` + MFA + expiry; data-class scope was unenforced at IAM. R2 closure: (a) session-tag pinned to EXACTLY ONE data class (single-valued; multi-class incidents = multiple parallel sessions); (b) Allow condition adds `aws:PrincipalTag/affected_data_class = kms:EncryptionContext:data_class` equality; (c) Explicit Deny extended to cover missing OR mismatched data_class. Test KMS.7e added.
+
+| Round | Findings | Status |
+|---|---|---|
+| R2 | HIGH break-glass data-class scope declared but not IAM-enforced | Closed inline by pinning session to single data class + adding key-policy equality check + Explicit Deny for mismatch |
+
+**Workstream-discipline note for R2:** Codex flagged R2 finding as architectural-judgment + STOP-and-escalate. On review per CLAUDE.md hard-floor item 6 discriminator: the `affected_data_classes` session-tag scope was ALREADY declared in §7.1 item 2 at R1 closure; the R2 fix makes the existing scope IAM-enforceable rather than only-procedural. This is the same pattern as Sprint 8 R1 HIGH-3 (5-layer enforcement made existing scope enforceable) and Sprint 9 R1 HIGH-3 (3-layer enforcement). Per the established precedent across Sprints 8-12, IAM/policy-enforcement closures of already-declared scope are in-scope correctness; only NET-NEW architecture/schema/invariant proposals trigger hard-floor item 6 escalation. Closed inline.
 
 ---
 
