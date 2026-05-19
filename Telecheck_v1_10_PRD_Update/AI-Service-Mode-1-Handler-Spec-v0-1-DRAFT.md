@@ -286,16 +286,44 @@ This preserves the canonical separation: Mode 1 = conversational (no side effect
 Per the §10 OQ section below, this spec proposes adding **four entities** to CDM v1.2 (becoming CDM v1.3 at promotion). The split-table model preserves I-027 append-only semantics for every record AND supports the multi-state lifecycle (admission → detector_completed → llm_invoked → completed/failed) per the runtime state machine in §4.2.
 
 ```sql
--- Conversation envelope (1 row per conversation)
+-- Conversation envelope (1 row per conversation; truly immutable post-INSERT per R3 HIGH-1 closure)
 CREATE TABLE ai_mode1_conversation (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id tenant_id_t NOT NULL,
     patient_id UUID NOT NULL REFERENCES patient(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_turn_at TIMESTAMPTZ NOT NULL,                        -- Updated atomically via INSERT trigger on ai_mode1_conversation_turn_result
-    archived_at TIMESTAMPTZ,                                  -- Patient-retention-policy archival; not turn-related
+    -- Append-only: INSERT once at conversation creation; no UPDATE permitted post-commit.
+    -- Derived facts (last_turn_at, archived state) are computed via SELECT or sourced from
+    -- separate append-only event tables (see ai_mode1_conversation_archival_event below).
     CONSTRAINT ai_mode1_conversation_tenant_check CHECK (tenant_id IS NOT NULL)
 );
+
+-- Conversation archival event (append-only; one row per archival event)
+CREATE TABLE ai_mode1_conversation_archival_event (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id tenant_id_t NOT NULL,
+    conversation_id UUID NOT NULL REFERENCES ai_mode1_conversation(id),
+    archived_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    archived_by_user_id UUID NOT NULL,                        -- Operator who triggered archival
+    archival_reason TEXT NOT NULL,                            -- One of {patient_retention_policy, patient_request, tenant_disable}
+    -- Append-only; INSERT-only. The existence of a row for a conversation_id IS the "archived" state.
+    CONSTRAINT ai_mode1_conversation_archival_unique UNIQUE (conversation_id)
+);
+
+-- Derived view: last_turn_at + archived state computed at query time
+CREATE VIEW ai_mode1_conversation_state AS
+SELECT
+    c.id AS conversation_id,
+    c.tenant_id,
+    c.patient_id,
+    c.created_at,
+    (SELECT MAX(r.completed_at) FROM ai_mode1_conversation_turn_result r
+     WHERE r.conversation_id = c.id AND r.tenant_id = c.tenant_id) AS last_turn_at,
+    EXISTS (SELECT 1 FROM ai_mode1_conversation_archival_event a
+            WHERE a.conversation_id = c.id) AS is_archived,
+    (SELECT a.archived_at FROM ai_mode1_conversation_archival_event a
+     WHERE a.conversation_id = c.id) AS archived_at
+FROM ai_mode1_conversation c;
 
 -- Immutable admission record (1 row per turn at admission; INSERT-only)
 CREATE TABLE ai_mode1_conversation_turn_admission (
@@ -350,11 +378,15 @@ CREATE INDEX ai_mode1_conversation_turn_result_history_idx
     ON ai_mode1_conversation_turn_result(tenant_id, conversation_id, completed_at DESC);
 ```
 
-All four tables enforce RLS per ADR-023 Model A + I-023 tenant isolation. Per-tenant KMS encryption on `user_message` + `assistant_message` per I-026.
+All five tables (4 lifecycle + 1 archival event) enforce RLS per ADR-023 Model A + I-023 tenant isolation. The derived view is RLS-bound through its base tables. Per-tenant KMS encryption on `user_message` + `assistant_message` per I-026.
 
-### 6.2 Append-only semantics (R2 HIGH-2 closure: split-table immutability)
+### 6.2 Append-only semantics (R2 HIGH-2 + R3 HIGH-1 closure: truly INSERT-only across all 5 tables)
 
-Every row in all 4 tables is **INSERT-only**; UPDATE forbidden post-commit; enforced by trigger per I-027. The multi-state lifecycle is expressed as **the existence of progressively more rows**, NOT as state mutations on a single row:
+Every row in all 5 tables (`ai_mode1_conversation` + `ai_mode1_conversation_archival_event` + `ai_mode1_conversation_turn_admission` + `ai_mode1_conversation_turn_detector_result` + `ai_mode1_conversation_turn_result`) is **INSERT-only**; UPDATE forbidden post-commit; enforced by trigger per I-027. No table has any mutable column. Derived facts (`last_turn_at`, `is_archived`, `archived_at`) are computed at query time via the `ai_mode1_conversation_state` view, which sources from append-only base tables.
+
+**Closes R3 HIGH-1:** the prior `ai_mode1_conversation.last_turn_at` mutable field is removed; replaced by the view-computed aggregate. Archival is modeled as an append-only event row instead of a nullable `archived_at` UPDATE.
+
+The multi-state lifecycle is expressed as **the existence of progressively more rows**, NOT as state mutations on any single row:
 
 | Lifecycle state | Canonical durable representation |
 |---|---|
@@ -363,7 +395,7 @@ Every row in all 4 tables is **INSERT-only**; UPDATE forbidden post-commit; enfo
 | `completed` | Row exists in `ai_mode1_conversation_turn_result` with `turn_outcome = 'completed'` |
 | `failed` | Row exists in `ai_mode1_conversation_turn_result` with `turn_outcome = 'failed'` |
 
-The `ai_mode1_conversation.last_turn_at` is the one mutable field; it is updated atomically via an INSERT trigger on `ai_mode1_conversation_turn_result` (idempotent on `(conversation_id, turn_id)` so retries don't double-count). The trigger uses `INSERT ... ON CONFLICT DO UPDATE SET last_turn_at = GREATEST(last_turn_at, EXCLUDED.completed_at)` which is the canonical safe-mutable-aggregate pattern.
+**No mutable aggregates on any base table.** `last_turn_at` and `is_archived` / `archived_at` are computed at query time via the `ai_mode1_conversation_state` view. The view is a SELECT-time aggregate over append-only event/result rows; reading it is replay-safe + audit-reconstructable per I-027 (the audit-chain reconstruction sources from the same append-only base tables).
 
 DELETE forbidden except for tenant-retention-policy hard-deletes (covered by separate retention spec; not Mode 1's surface).
 
@@ -521,12 +553,15 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 
 **v0.1 R2 closure 2026-05-19:** 2 HIGH + 2 MED findings closed inline (R1 closures landed correctly in the body sections but: (a) the §12 cross-SI alignment summary still carried the pre-R1 "all events to P1" claim; (b) the multi-state lifecycle in §4.2 + §6.3 conflicted with §6.2's append-only INSERT-at-completion constraint; (c) `history_snapshot_high_water_mark` was referenced but not in the schema; (d) Mode 2 worker-queue denial test was missing). All 4 closed inline via split-table model + canonical cross-references.
 
+**v0.1 R3 closure 2026-05-19:** 1 HIGH closed inline — the R2 split-table model still had a mutable `last_turn_at` field on `ai_mode1_conversation` (via INSERT trigger pattern) which violated the claimed "all 4 tables INSERT-only" across all entities. R3 closure: removed the mutable field entirely; added `ai_mode1_conversation_archival_event` append-only event table for archival; added `ai_mode1_conversation_state` derived view that computes `last_turn_at` + `is_archived` + `archived_at` at query time from the append-only base tables. All 5 tables (4 lifecycle + 1 archival event) are now truly INSERT-only across all entities; I-027 append-only invariant honored without exception.
+
 **Full Codex trajectory:**
 
 | Round | Findings | Status |
 |---|---|---|
 | R1 | HIGH-1 detector-before-LLM enforced only via static-analyzer (no runtime guard); HIGH-2 Cat C drop event Cat B P2 classification contradicted "all Mode 1 events route to P1" claim; HIGH-3 ACK durability semantics conflated audit-row durability (blocks) with quorum-promotion durability (async); MED-1 no-Mode-2-side-effects predicate didn't cover HTTP / queue / tool-use paths; MED-2 history-window not replay-safe under concurrent retries; MED-3 missing tests for Cat A audit failure / Cat C drop partitioning / ACK quorum / concurrent retries / history snapshot / Mode 2 tool denial / PHI provider enforcement | All 6 closed inline |
 | R2 | HIGH-1 §12 cross-SI summary still carried pre-R1 "all events to P1" claim (contradicting §3.3 amended table); HIGH-2 multi-state lifecycle vs append-only INSERT-at-completion contradiction + missing `history_snapshot_high_water_mark` schema column; MED-1 detector_completed state not durable in schema; MED-2 missing Mode 2 worker-queue denial test | All 4 closed inline via split-table model |
+| R3 | HIGH `ai_mode1_conversation.last_turn_at` remained mutable via INSERT trigger; violated R2's claimed "all 4 tables INSERT-only" across all entities | Closed inline by removing the mutable field; archival modeled as append-only event table; derived facts via view |
 
 **R1 closure pattern recap:**
 - HIGH-1: added runtime per-turn state machine (`admitted → detector_completed → llm_invoked → completed`); `llm.invoke()` adapter verifies state before issuing HTTP request; defense-in-depth via static analyzer remains.
