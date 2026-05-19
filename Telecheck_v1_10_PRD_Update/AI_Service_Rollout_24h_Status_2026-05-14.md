@@ -3856,3 +3856,54 @@ Per the interpretation rule: each remaining PR-A2/A3-class commit applies +1 min
 4. **The engineering-review escalation artifact is a reusable pattern.** When Codex surfaces an architectural-judgment finding mid-cycle, drafting a single-question YES/NO review artifact + answering it via reviewer-role analysis (with the explicit caveat that actual-human sign-off is the downstream gate) preserves both speed and discipline.
 
 — Claude (Opus 4.7, 1M context), 2026-05-19 Path B / PR #11 close (P-023 REJECTED via reconciliation entry P-023a; Registry stays at v2.12; PR #10 closed unmerged with 30-commit audit-trail preserved; 5-round Codex convergence with the FIRST cycle that honored the discipline-floor STOP-and-escalate cadence at the first architectural-judgment finding). Next surface: P-018a + P-019a + P-021a supersession ceremonies (PR #13/#14/#15, can run in parallel; PR-numbers reflect the cockpit Addendum 49 PR consuming #12 — corrected pre-merge per Codex round-1 non-blocking finding) + SI-017 (canonical-middleware-GUC Phase 2 F-3) + CLAUDE.md amendment. 60 PRs MERGED in cycle cumulative; 290+ Codex closures cumulative.
+
+---
+
+## Addendum 50 — Autonomous 24h-loop Sprints 1-7 closure: 7 spec-corpus drafts staged for batched ratifier ceremony when Evans returns; Sprint 7 Cold-DR Runbook reaches RATIFIER-READY-WITH-KNOWN-OQs at R5 §10 cadence boundary
+
+**Date:** 2026-05-19
+**Trigger:** Evans's "continue for 24 hrs" autonomous-work directive at session start. Pile up convergent spec drafts for batched ratifier review.
+**Cycle posture:** branches pushed to `arthurmenson/telecheckONE`; PR creation deferred (gh PAT blocked); spec-drafts are ratifier-targetable independent of merge timing. CLAUDE.md hard-floor item 6 honored throughout: every architectural-judgment finding STOPPED and was escalated as an OQ rather than closed inline.
+
+**Sprints 1-7 batched-ratifier inventory:**
+
+| Sprint | Deliverable | Codex trajectory | Status |
+|---|---|---|---|
+| 1 | Workstream-source RATIFIED updates (documentation cleanup of cross-SI source files) | — | Committed |
+| 2 | SI-015 MarketingCopy CDM Canonical Schema (6 sub-decisions) | R1: 2 HIGH + 2 MED + 1 LOW close (publish UPDATE vs append-only → linked OQ4; KMS discriminator added; dual-control tightened; premature APPROVED retracted) | RATIFIER-READY-WITH-KNOWN-OQs (OQ4 architectural-judgment escalation: publish UPDATE vs append-only state-machine pattern; linked to SI-019 OQ7 + SI-016 OQ1 as same-class cross-SI decision) |
+| 3 | SI-016 AI Workflow Handler Registry (5 sub-decisions) | R1-R3: 2 HIGH + 2 MED → R3 APPROVE (semver enforcement via NULLIF parse + `pg_advisory_xact_lock`; published-state execution check; ai_workflow_executions BEFORE INSERT trigger; OQ6 P-018b cross-SI surfaced) | APPROVE |
+| 4 | SI-020 Forms-Engine I-030 Six-Category Static Analyzer (7 sub-decisions; SI-011b filing per P-024 SC7) | R1-R2: stale-pass guard via current_ir_hash; IR scope nodes for alias tracking; test corpus 10 → 26 fixtures → R2 APPROVE | APPROVE |
+| 5 | F-4 Deploy Runbook v0.1 DRAFT | R1-R4: §5.1.MIG migration-failure recovery matrix; continuous invariant probes at canary stages; §5.3.AUTH 9-item dual-control checklist; per-probe freshness SLA table; §4 pseudocode aligned with §3.3 → R4 APPROVE | APPROVE |
+| 6 | SIEM Integration Spec v0.1 DRAFT (8 sub-decisions covering event-streaming + index design + alerting + retention + PagerDuty + compliance dashboards + tenant-isolation + deploy-event correlation) | R1-R6: scope-validation gate; hash-chain archival mechanics (S3 Object Lock + signed digests + cross-region); independent transparency anchor (HSM signing in separate signer role + external transparency log); first-write acceptance controls; 4-role separation; 2-phase crash-safe signing; discovery-first crash-recovery | RATIFIER-READY-WITH-KNOWN-OQs; §4.5.HC marked SI-021 split candidate per scope-growth observation at §10 cadence boundary |
+| 7 | Cold-DR Runbook v0.1 DRAFT (us-east-1 → us-west-2 failover per ADR-026; 9 sections; 16-step failover procedure; back-failover state machine; I-019 fallback replay hard gate) | R1-R5: pre-promotion HARD GATE Step 5.5 + tenant-routing Step 11.5/12.5 + back-failover state machine + Step 14.5 I-019 replay; offline schema_control_manifest + server-side i019_enqueue_ack_log evidence model; DR-survivable multi-region ACK channel topology + hard tenant-risk threshold defaults; partition-aware ACK quorum semantics (W=2-of-2 normal, W=1 + partition_degraded under partition) + three-state per-device obligation model (state-Q quorum-ACKed, state-P partition-degraded, state-N no-ACK with per_signal_inventory_known=false until first reconnect) | RATIFIER-READY-WITH-KNOWN-OQs at R5 §10 cadence boundary; OQ7/OQ8 added at boundary (ACK channel implementation primitive selection + cross-region replication-backfill SLA for state-P promotion) |
+
+**Architectural-judgment items queued for Evans's batched ratifier ceremony** (each is a hard-floor item 6 STOP that was properly escalated rather than closed inline):
+
+1. **SI-015-OQ4 = SI-016-OQ1 = SI-019-OQ7 (cross-SI):** publish-time UPDATE on append-only audit-bound entities vs constrained UPDATE + transition log pattern (per P-021 SC3 precedent). Single ratifier decision resolves all three SIs.
+2. **SI-016-OQ6 (P-018b cross-SI):** ai_workflow_executions BEFORE INSERT trigger validating handler_tenant_id eligibility crosses into P-018 actor-identity-source canonical surface; downstream amendment scope to SI-008's surface.
+3. **SIEM Spec §4.5.HC split candidate:** the §4.5.HC hash-chain archival mechanics grew to spec-spanning scope; recommend split as SI-021 (S3 Object Lock COMPLIANCE-mode + cross-region replication + transparency log integration) so SIEM Spec proper stays focused on event-streaming + alerting.
+4. **Cold-DR OQ7:** multi-region ACK channel implementation primitive selection (topology + semantics canonical; primitive implementation-discretionary).
+5. **Cold-DR OQ8:** cross-region replication-backfill SLA for state-P → state-Q promotion (per-device unresolved-obligation record mechanism provides durable record regardless of backfill timing; hard-SLA decision deferred to ratifier).
+6. **SI-019-OQ7 signal-row lifecycle:** Option A immutable + transition entity OR Option B constrained UPDATE + transition log per P-021 SC3 precedent.
+
+**Discipline-floor STOP-and-escalate cadence honored throughout:**
+
+- Every architectural-judgment finding (6 items above) was STOPPED and surfaced as an OQ at the spec level; no inline closure.
+- Codex iterate-to-asymptote pattern applied within ratified sub-decision scope only (prose-consistency refinements, alias-tracking, IR scope nodes, per-probe SLA tables, three-state inventory models, partition-aware quorum semantics) — all in-scope correctness gaps.
+- §10 cadence boundary applied at R5-R6 with productive-depth-but-unbounded-asymptote observation → spec marked RATIFIER-READY-WITH-KNOWN-OQs and workstream advanced (SIEM at R6, Cold-DR at R5).
+
+**Asymptote pattern (v1.10.1 hygiene cycle precedent):**
+
+Each round surfaces 1-3 in-scope correctness gaps; depth converges on prose-consistency refinements of architecture that is itself stable from R3 forward. R4-R5 typically refine durability/atomicity/inventory semantics under edge cases (partition, crash-recovery, offline cohorts). No architectural-judgment items introduced inline at any round across any of the 6 spec drafts that ran past R1.
+
+**Sprint 7 specific outcome:** Cold-DR Runbook v0.1 DRAFT is now the most thoroughly-iterated spec in the autonomous-work cycle (5 Codex rounds, ~10 in-scope findings closed, partition-aware ACK semantics + three-state per-device obligation model are the load-bearing architectural primitives). The runbook is ratifier-targetable at the topology + semantics level; primitive selection is OQ7-deferred.
+
+**Next surfaces (Sprints 8-10+ during remaining 24h window):**
+
+1. **Sprint 8 — Identity Spec v1.0 → v1.1 amendment.** Integrates SI-017 canonical content port (JWT session-liveness in middleware-GUC) + I-032 STEP 0 SECURITY DEFINER pattern. Crosses into Track 1 + Track 5 surfaces.
+2. **Sprint 9 — Track 2 AI Service Mode 1 handler spec.** HTTP handler + FLOOR-020 audit emission; references Cold-DR Runbook's partition-aware ACK semantics as input.
+3. **Sprint 10+ — continuing queued work.** Cross-SI publish-state OQ4 batched-ratifier proposal draft; PR creation when gh PAT is unblocked.
+
+**Operating posture for batched ratifier ceremony:** Evans returns to a stack of 7 ratifier-ready spec drafts with each architectural-judgment item enumerated as a discrete OQ surface. Recommended ratifier sequence: cross-SI publish-state OQ (resolves SI-015/SI-016/SI-019 + downstream P-018b amendment scope) first (highest leverage); then SIEM §4.5.HC SI-021 split confirmation; then Cold-DR OQ7/OQ8 (implementation-primitive + replication-backfill-SLA); finally Sprint 8-10 deliverables review.
+
+— Claude (Opus 4.7, 1M context), Cold-DR Runbook v0.1 R5 closure + Sprint 7 ratifier-ready 2026-05-19. Autonomous 24h-loop Sprint 7 of N closed at §10 cadence boundary. Workstream proceeds to Sprint 8 (Identity Spec v1.0 → v1.1 amendment). 7 ratifier-ready spec drafts staged (Sprints 1-7); 6 architectural-judgment OQs enumerated for batched ratifier review; 0 hard-floor item 6 violations across the cycle. Discipline-floor STOP-and-escalate cadence honored consistently.
