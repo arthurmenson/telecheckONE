@@ -1,7 +1,8 @@
 # SI-017 — Identity & Authentication Specification v1.0 → v1.1 Amendment
 
 **Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; Sprint 8 of autonomous 24h-loop work plan
+**Status:** RATIFIER-READY-WITH-KNOWN-OQs (R3 Codex APPROVE 2026-05-19); Sprint 8 of autonomous 24h-loop work plan
+**Codex iteration trajectory:** R1 (3 HIGH + 3 MED) → R2 (1 HIGH; Delta 7 patch-text reconciliation) → R3 APPROVE. Convergence depth: each round surfaced 1-3 in-scope correctness gaps; R3 confirmed Delta 7 patch text matches Sub-decision 5 exactly. No architectural-judgment items introduced inline at any round.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus Track 1 + Track 5 deliverable)
 **Target canonical surface:** `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Identity_Authentication_Spec_v1_0.md` (to be bumped to v1.1 at ratifier-promotion)
 **Companion documents:** Cold-DR Runbook v0.1 DRAFT (Sprint 7); SI-018 two-tier hybrid audit-chain partition (ratified 2026-05-19); P-018a/P-019a/P-021a procedure-side STEP 0 amendments (ratified 2026-05-19); SC6 P-023a SI-010 rejection (audit trail at PR #11 merge 1b49db7)
@@ -518,6 +519,9 @@ Each rule's existence + merge-blocking status is canonical at this amendment. Ru
 |---|---|---|
 | R1 | HIGH-1 Mode 2 audit durability (procedure raise aborts the audit emission's transaction); HIGH-2 single-shot session-liveness check + in-flight revocation race; HIGH-3 entry-point enforcement across HTTP/gRPC/worker/admin/migration bypass paths; MED-1 STEP 0 `$1` brittleness for non-tenant-first-arg + overloaded + nested-call procedures; MED-2 Cat A/P1 classification overreach for non-patient-bound revocation cascades; MED-3 merge-blocking tests not actually merge-blocking-able without canonical CI gate definitions | All 6 closed inline |
 | R2 | HIGH Delta 7 patch text still carried pre-R1 `$1` positional comparison + in-procedure Mode 2 audit emission (R1 narrative closures landed in Sub-decision text but not in the corresponding Delta patch-text block that is the ratifier-promotion surface) | Closed inline |
+| R3 | APPROVE — Delta 7 satisfies R3 closure checks (named `p_tenant_id`, Mode 2 application-layer catch-and-emit, reference procedure signatures show `(p_tenant_id, ...)`). No material findings. No defensible architectural-judgment issues. | RATIFIER-READY |
+
+**Status at R3 close:** RATIFIER-READY-WITH-KNOWN-OQs (OQ1-OQ6 listed §12). Sprint 8 closes at R3 with APPROVE verdict; workstream proceeds to Sprint 9 (Track 2 AI Service Mode 1 handler spec).
 
 **R1 closure pattern recap:**
 - HIGH-1: Mode 2 moved from in-procedure audit emission to application-layer catch-and-emit in a fresh transaction (consistent with PR #11 engineering-review-grounded answer that application-layer audit emission satisfies I-003 + HIPAA technical-safeguards).
