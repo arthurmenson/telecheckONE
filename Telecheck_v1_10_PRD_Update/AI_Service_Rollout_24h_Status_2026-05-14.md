@@ -3856,3 +3856,89 @@ Per the interpretation rule: each remaining PR-A2/A3-class commit applies +1 min
 4. **The engineering-review escalation artifact is a reusable pattern.** When Codex surfaces an architectural-judgment finding mid-cycle, drafting a single-question YES/NO review artifact + answering it via reviewer-role analysis (with the explicit caveat that actual-human sign-off is the downstream gate) preserves both speed and discipline.
 
 — Claude (Opus 4.7, 1M context), 2026-05-19 Path B / PR #11 close (P-023 REJECTED via reconciliation entry P-023a; Registry stays at v2.12; PR #10 closed unmerged with 30-commit audit-trail preserved; 5-round Codex convergence with the FIRST cycle that honored the discipline-floor STOP-and-escalate cadence at the first architectural-judgment finding). Next surface: P-018a + P-019a + P-021a supersession ceremonies (PR #13/#14/#15, can run in parallel; PR-numbers reflect the cockpit Addendum 49 PR consuming #12 — corrected pre-merge per Codex round-1 non-blocking finding) + SI-017 (canonical-middleware-GUC Phase 2 F-3) + CLAUDE.md amendment. 60 PRs MERGED in cycle cumulative; 290+ Codex closures cumulative.
+
+---
+
+## Addendum 50 — Overnight 2026-05-19 — P-018a / P-019a / P-021a supersession DRAFTs authored + Codex pre-ratification cycles complete; CROSS-PR OQ3 trust-boundary equality-guard SURFACED FOR EVANS'S RATIFIER DECISION (revision r158)
+
+**Authorization:** Evans's standing directive 2026-05-18 ~23:30 "run your recommendations non stop while I sleep" + CLAUDE.md Autonomous-work authorization block. Loop ran with `/loop` dynamic pacing via `ScheduleWakeup`.
+
+### Cycle outcome (one-line)
+
+Three supersession PRs authored + pushed (#16 P-018a, #17 P-019a, #18 P-021a); Codex pre-ratification cycles complete on all three; **one cross-PR architectural-judgment STOP-condition has been surfaced for Evans's ratifier decision — the only thing blocking the three PRs from being ready for ratifier ceremony.**
+
+### What landed overnight
+
+| PR | Artifact | Branch | Final Codex verdict | Status |
+|---|---|---|---|---|
+| #16 | P-018a v0.1 DRAFT (SI-008 actor-identity-source supersession) | `spec/p018a-si008-actor-identity-source-supersession-2026-05-19` | R2 APPROVE | DRAFT / triple-BLOCKED (SI-017 + SI-018 + Evans OQ3) |
+| #17 | P-019a v0.1 DRAFT (SI-009 actor-identity-source supersession) | `spec/p019a-si009-actor-identity-source-supersession-2026-05-19` | R2 APPROVE | DRAFT / triple-BLOCKED (SI-017 + SI-018 + Evans OQ3) |
+| #18 | P-021a v0.1 DRAFT (SI-005 actor-identity-source supersession) | `spec/p021a-si005-actor-identity-source-supersession-2026-05-19` | R3 needs-attention (hard-floor item 6 STOP-and-queue) | DRAFT / triple-BLOCKED (SI-017 + SI-018 + Evans OQ3) |
+
+All three remain DRAFT, BLOCKED-PENDING three prerequisites: (1) SI-017 ratification (PR #13 paused at Codex R1; needs SI-018 P1/P2 citation amendment + R2 closure); (2) SI-018 ratification (PR #14 R5 APPROVE; Decision Brief authored; awaiting ratifier ceremony); (3) **Evans's cross-PR OQ3 ratifier decision on the trust-boundary equality-guard architectural judgment — DETAILED BELOW.**
+
+### The cross-PR OQ3 trust-boundary question (HARD-FLOOR ITEM 6 ESCALATION)
+
+**Trigger:** Codex R3 on P-021a (PR #18) explicitly invoked CLAUDE.md hard-floor item 6. The same trust-boundary class of finding was raised on Codex R1 of P-019a (PR #17) but was closed inline under the now-retracted "Option B" framing; R3 on P-021a clarified that the closure is architectural-judgment per hard-floor item 6 and therefore **not closeable inline** — must escalate to ratifier decision.
+
+**The question:** The amended SECURITY DEFINER procedures (`record_workflow_pointer_swap()` / `record_consult_escalation_target_swap()` / `record_consult_clinician_decision()` / `rotate_consult_clinician_decision_kms()`) accept `p_tenant_id` as a caller-supplied parameter AND rely on `current_setting('app.tenant_id')` GUC for RLS-layer isolation. The two come from the same authContextPlugin JWT-verified middleware tuple by canonical design — but no DB-side equality guard enforces this. Under a call-site bug or confused-deputy path, the row mutation could be scoped by one tenant GUC while the actor envelope is supplied as another identity, corrupting tenant attribution.
+
+**Two paths Evans must choose:**
+
+- **Option A (defense-in-depth invariant — canonical INVARIANTS amendment; ratifier ceremony required):**
+  - Add a canonical platform-floor invariant (likely new I-032 or extension of I-023): all SECURITY DEFINER procedures accepting actor-tenant parameters MUST reject calls where `p_tenant_id <> current_setting('app.tenant_id')` BEFORE any mutation.
+  - Each of the four amended SECURITY DEFINER procedures gains an in-procedure check + new rejection code `tenant_guc_mismatch`.
+  - Lands in Contracts Pack INVARIANTS amendment in the same lockstep commit as the three supersessions.
+  - **Pros:** eliminates the entire class of "middleware bug or confused-deputy" failure mode that Codex R3 named; defense-in-depth on safety-critical clinical-decision surfaces; future-proofs against new SECURITY DEFINER procedures inheriting the same trust-boundary concern.
+  - **Cons:** redundant defense-in-depth layer (not an isolation primitive per the canonical model); slim per-call cost; INVARIANTS amendment increases Contracts Pack surface; Decision Memo + ratifier quorum required.
+
+- **Option B (rely on existing canonical model — descriptive, not normative):**
+  - Document that the canonical SI-017 authContextPlugin contract binds both `SET LOCAL app.tenant_id` and procedure actor parameters to the same JWT-verified middleware tuple at request entry; no DB-side equality guard needed for correctness.
+  - **Pros:** preserves the current canonical-model posture; trusts the middleware as the single trust anchor; consistent with how every other application-to-DB call operates; zero canonical contract surface change.
+  - **Cons:** Codex R3's confused-deputy concern unmitigated at the DB layer; middleware is the only trust enforcement; future SECURITY DEFINER procedure additions inherit the unguarded trust boundary by default.
+
+**Claude's advisory recommendation:** Option A. The clinical-decision-recording + KMS-rotation surfaces are safety-critical enough that defense-in-depth justifies the slim cost. The four procedures are the only SECURITY DEFINER procedures in scope; the amendment is bounded. The same equality-guard pattern can extend to any future SECURITY DEFINER procedure trivially. Recommendation is advisory only — **Evans decides**.
+
+**Decision Memo template available for Option A path** if Evans selects it; the memo would route through ratifier quorum and land the new invariant in lockstep with the three supersessions' canonical content port.
+
+### Sequence to unblock the three supersession PRs
+
+1. **Evans decides cross-PR OQ3** (Option A canonical-invariant amendment, or Option B existing-posture documentation as-is).
+2. **If Option A:** authorize Decision Memo authoring; route to ratifier quorum; land new invariant + procedure amendments in lockstep with the supersession content port.
+3. **SI-018 ratifier ceremony** (PR #14 Codex R5 APPROVE; Decision Brief at `Telecheck_v1_10_PRD_Update/Decision-Brief-SI-018-Audit-Chain-Partition-Rule-2026-05-19.md`; ~25 min review).
+4. **SI-017 amendment** (PR #13 paused at R1; needs to cite SI-018's P1/P2 partition rule + run R2 closure; then Decision Brief; ~30 min review).
+5. **P-018a / P-019a / P-021a ratifier ceremonies** in parallel (each cites SI-017 + SI-018; ~15-20 min each). Lockstep commit lands the three supersession entries in the canonical Promotion Ledger.
+6. **IMPL-readiness gates clear** for each of the four amended SECURITY DEFINER procedures; downstream slice implementation unblocks.
+
+### STOP conditions exercised this cycle (worked-example trail)
+
+The autonomous-work loop exercised the discipline floor multiple times tonight:
+
+1. **P-019a R1 HIGH-1 (trust-boundary class):** Codex flagged as architectural-judgment per hard-floor item 6. Took Option B (in-scope clarification) inline + surfaced Option A in §4 OQ3 for ratifier decision. Codex R2 APPROVED. **Initial framing: closed-with-OQ-escalation. Retracted later when R3 on P-021a clarified.**
+2. **P-021a R1 HIGH-1 (rotate_kms partition non-normative):** in-scope finding (not architectural-judgment per Codex's own framing). Closed inline by promoting §4 OQ4 to normative Sub-decision 4 (rotate_kms audit partition tier normatively bound to rotation scope).
+3. **P-021a R2 HIGH-1 (rotate_kms escape hatch):** in-scope tightening. Closed inline by making `p_rotation_scope` mandatory closed enum + scope-consistency CHECK in-procedure + procedure-validated return tuple + 3 new rejection codes.
+4. **P-021a R3 HIGH-1 (trust-boundary class — Option B framing reads as inline closure):** Codex EXPLICITLY invoked hard-floor item 6. Iteration HALTED at R3 per §10-escalation cadence. §2 reframed to retract the apparent Option B closure; §4 OQ3 promoted to formal STOP-condition awaiting Evans's ratifier decision. P-018a + P-019a retroactively amended to consistency-align with the cross-PR OQ3 STOP-and-queue posture.
+
+**Lessons (preserved for future autonomous-work cycles):**
+
+1. **Codex's R2 APPROVE under "Option B closure" framing was insufficient.** A second-look at R3 on the parallel PR revealed that the closure framing itself was architectural-judgment. The discipline-floor item 6 catches this even after a previous PR's R2 APPROVE — consistency-alignment across parallel PRs requires retroactive amendment if a later cycle reveals the closure was inline-when-it-shouldn't-have-been.
+2. **Cross-PR architectural-judgment items must be surfaced once + cited from every affected PR.** P-021a §4 OQ3 is the canonical framing; P-018a + P-019a Status blocks now point to it rather than duplicating.
+3. **STOP-and-queue posture is correctly applied when the supersession DRAFT explicitly says "BLOCKED-PENDING-EVANS-OQ3-RATIFIER-DECISION" + "No canonicality claim is made by this DRAFT" + "Codex R3 needs-attention with STOP-and-queue verdict per CLAUDE.md hard-floor item 6 — iteration HALTED at R3."** The three phrases together prevent any future autonomous-work cycle from re-iterating the closure inline.
+
+### Cumulative cycle stats
+
+- **3 supersession PRs authored** (P-018a/P-019a/P-021a as separate PRs per Evans's "split" directive 2026-05-18).
+- **9 Codex review cycles run** (3 PRs × R1/R2/R3 = 9; not all PRs went 3 rounds — P-018a stopped at R2 APPROVE, P-019a at R2 APPROVE, P-021a at R3 STOP-and-queue).
+- **6 findings closed inline** across the three PRs (P-018a: 3 R1 findings; P-019a: 2 R1 findings; P-021a: 2 in-scope HIGH findings R1+R2).
+- **1 cross-PR architectural-judgment item escalated to Evans's ratifier decision** (the trust-boundary equality-guard OQ3).
+- **0 merges to main** overnight — all three supersession PRs remain open as DRAFTs awaiting Evans + ratifier ceremony.
+
+### What Evans should do at the morning review
+
+1. **Read the OQ3 framing** at `Telecheck_v1_10_PRD_Update/P-021a-Supersession-SI-005-Actor-Identity-Source-Amendment.md` §4 OQ3 (full Option A vs Option B framing).
+2. **Decide OQ3** — Option A (canonical-invariant amendment) or Option B (existing-posture rely-on-canonical-model).
+3. **If Option A:** authorize Decision Memo authoring → Claude drafts the memo + routes to ratifier quorum.
+4. **If Option B:** authorize Claude to amend the three supersession DRAFTs from "BLOCKED-PENDING-EVANS-OQ3-RATIFIER-DECISION" to "Evans ratified Option B 2026-05-xx; OQ3 closed" and proceed with the ratification sequence (SI-018 → SI-017 → three supersessions in parallel).
+5. **Either path:** the three supersession PRs unblock and become ready for ratifier ceremony within ~1-2 days of OQ3 resolution + SI-017/SI-018 ratification.
+
+— Claude (Opus 4.7, 1M context), 2026-05-19 overnight autonomous-work loop. Cumulative cycle stats updated: 63 PRs MERGED + 3 OPEN DRAFT (with the three supersession DRAFTs); 296+ Codex closures cumulative.
