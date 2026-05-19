@@ -37,6 +37,180 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-021a — 2026-05-19 — SI-005 actor-identity-source supersession + I-032 STEP 0 + rotate_kms partition-tier normative binding (amends canonical P-021 Sub-decision #5 + audit-emission-location; preserves 11-step validation framework + all other P-021 sub-decisions)
+
+**Type:** Reconciliation entry (no Registry version bump from P-021a alone; consolidated lockstep bump v2.12 → v2.13 covers all 5 entries in this ceremony — see P-026 below for the Registry absorption detail).
+
+**Status:** **RATIFIED 2026-05-19** per Evans's specific per-item chat-message ratification: *"I ratify cross-PR OQ3 Option A including new invariant I-032 + canonical INVARIANTS v5.2→v5.3 + AUDIT_EVENTS v5.3→v5.5 amendments + procedure-side STEP 0 amendments on P-018a/P-019a/P-021a. I ratify SI-017-OQ-MISMATCH A2+B2+C ... I ratify SI-018 partition rule, SI-017 (with Sub-decision 4.5), P-018a, P-019a, P-021a — proceed with the canonical content port lockstep commit."*
+
+**Author:** Autonomous Claude. P-021a v0.1 DRAFT authored 2026-05-19 in PR #18 (`spec/p021a-si005-actor-identity-source-supersession-2026-05-19`); 3-round Codex pre-ratification trail (R1 closure inline at commit bbeefb7 — rotate_kms partition normative; R2 closure inline at commit 4497668 — Sub-decision 4 tightening with mandatory enum + procedure-validated return; R3 STOP-and-queue at commit 018ef75 — cross-PR OQ3 architectural-judgment per CLAUDE.md hard-floor item 6); cross-PR OQ3 resolved via Decision Memo `Telecheck_v1_10_PRD_Update/Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md` Option A adoption + I-032 STEP 0 applied per `Proposed-SECURITY-DEFINER-Procedure-Amendments-2026-05-19.md` §SI-005-record + §SI-005-rotate. Decision Brief: `Decision-Brief-P-021a-SI-005-Supersession-2026-05-19.md`.
+
+**Trigger:** SI-010 trust-anchor rejected per P-023a 2026-05-19; canonical P-021 Sub-decision #5 (line 515) referenced SI-010 primitives (`_session_actor_context` helpers); must amend onto canonical SI-017 middleware-GUC + JWT-verified-context model.
+
+**Promotion class:** reconciliation.
+
+**Sub-decision supersessions (5; all APPROVED):**
+
+1. **P-021 Sub-decision #5 (record_consult_clinician_decision actor-identity source) AMENDED:** caller-supplied JWT-verified actor parameters per SI-017; 11-step validation framework's auth-FIRST trust boundary is application middleware per I-023 layer 2; advisory-lock + idempotent-replay + audit-row consult-binding + atomic UPDATE + paired `consult_events` INSERT + unique_violation safety net preserved unchanged.
+2. **`rotate_consult_clinician_decision_kms()` procedure AMENDED** (same actor-identity-source pattern; per P-023 lines 257 + 263 enumeration as one of 4 SI-010-dependent procedures).
+3. **Audit-emission LOCATION within Sub-decision #5's 11-step validation framework AMENDED:** moves to application-layer immediately after procedure-success; D1/D2/D3 relabel of durability tiers (orthogonal to SI-018 P1/P2 partition tiers); `record_consult_clinician_decision()` audit lives in **P1 (patient-bound)** because `target_patient_id IS NOT NULL` per SI-018 canonical partition rule.
+4. **`rotate_consult_clinician_decision_kms()` audit partition tier NORMATIVELY BOUND to procedure-validated rotation scope** (closes Codex R1/R2 HIGH-1 inline): `p_rotation_scope` MANDATORY closed enum (`'single_patient' | 'batch_tenant'`) + `p_target_patient_id` MANDATORY with scope-consistency CHECK in-procedure + procedure returns `(affected_row_count, affected_patient_id_set)` for application-layer envelope construction. 3 new rejection codes (`invalid_rotation_scope`, `scope_target_mismatch`, `rotation_scope_violation`). P1 for single_patient; P2 for batch_tenant.
+5. **NEW STEP 0 — I-032 Tenant-GUC equality guard** added to BOTH procedures (cross-PR OQ3 Option A): rejects with `tenant_guc_mismatch` if `p_tenant_id <> current_setting('app.tenant_id', true)` BEFORE any other validation; application call site emits canonical Cat B `security.security_definer_tenant_guc_mismatch` audit + P0 alert.
+
+**Rejection code set update:**
+- `record_consult_clinician_decision`: 7 → 8 codes (added `tenant_guc_mismatch`).
+- `rotate_consult_clinician_decision_kms`: Sub-decision 4's 3 new codes + `tenant_guc_mismatch` = 4 codes for this procedure.
+
+**Preserved P-021 sub-decisions (unchanged):** CDM §4.27 Consult + §4.28 ConsultEvent entity expansions + 2 triple-composite FKs (FK 6 + FK 7) + 5 clinician-decision column groups + 8-column flat KMS envelope + two-tier append-only on consults + CDM state-transition validator + strict append-only triggers + 7 original rejection codes + AUDIT_EVENTS 3 net-new Cat A action IDs + DOMAIN_EVENTS amendments.
+
+**Critical preservation note:** the `consult_events` paired INSERT remains atomic INSIDE the procedure (per the unchanged "atomic UPDATE + paired `consult_events` INSERT" step of the 11-step validation). `consult_events` is a DOMAIN-EVENT table, not the `audit_events` table; domain-event atomicity is separate from audit-event emission and stays inside the procedure. Only the AUDIT-event emission (the `audit_events` INSERT) moves to the application layer.
+
+**Cross-artifact impact:** ZERO canonical-contract amendments by P-021a directly. Uses SI-017 (P-027 below) + SI-018 (P-026 below) + I-032 (codified in INVARIANTS v5.3 this commit) by reference.
+
+---
+
+### Entry P-019a — 2026-05-19 — SI-009 actor-identity-source supersession + I-032 STEP 0 (amends canonical P-019 Sub-decisions 3 + 4 + three-tier audit-durability sub-decision)
+
+**Type:** Reconciliation entry (no Registry version bump from P-019a alone; consolidated lockstep).
+
+**Status:** **RATIFIED 2026-05-19** per Evans's chat-message (same verbatim message as P-021a above).
+
+**Author:** Autonomous Claude. P-019a v0.1 DRAFT authored 2026-05-19 in PR #17 (`spec/p019a-si009-actor-identity-source-supersession-2026-05-19`); Codex R2 APPROVE; retroactive OQ3 alignment commit 6298f8e; I-032 STEP 0 applied per `Proposed-SECURITY-DEFINER-Procedure-Amendments-2026-05-19.md` §SI-009. Decision Brief: `Decision-Brief-P-019a-SI-009-Supersession-2026-05-19.md`.
+
+**Trigger:** SI-010 trust-anchor rejected per P-023a; canonical P-019 Sub-decision 3 (line 599) + Sub-decision 4 (line 600) referenced SI-010 primitives; must amend onto canonical model.
+
+**Promotion class:** reconciliation.
+
+**Sub-decision supersessions (4; all APPROVED):**
+
+1. **P-019 Sub-decision 3 (procedure design) AMENDED:** caller-supplied JWT-verified actor parameters per SI-017.
+2. **P-019 Sub-decision 4 (Server-trusted actor identity via SET LOCAL-bound `_session_actor_context`) SUPERSEDED ENTIRELY:** SI-010 primitives gone; replaced with canonical SI-017 authContextPlugin + pgbouncer transaction-mode + SET LOCAL discipline per System Architecture v1.2 §5.
+3. **P-019 three-tier audit-durability sub-decision AMENDED:** audit-emission LOCATION moves to application-layer; D1/D2/D3 relabel; this procedure's audit event lives in **P2 (tenant-governance)** because `target_patient_id IS NULL` (event is not patient-bound) per SI-018.
+4. **NEW STEP 0 — I-032 Tenant-GUC equality guard** added to `record_consult_consult_escalation_target_swap()`.
+
+**Rejection code set update:** add `tenant_guc_mismatch` to P-019's existing set.
+
+**Preserved P-019 sub-decisions:** 13-column SyncSession schema + 7-column `livekit_room_id` KMS envelope + four-predicate atomic UPDATE + 4-value cancellation_reason enum + triple-composite UNIQUE shape + FK 7 row shape unchanged.
+
+**Cross-artifact impact:** ZERO canonical-contract amendments by P-019a directly.
+
+---
+
+### Entry P-018a — 2026-05-19 — SI-008 actor-identity-source supersession + I-032 STEP 0 (amends canonical P-018 Sub-decisions 8 + 10 portions)
+
+**Type:** Reconciliation entry (no Registry version bump from P-018a alone; consolidated lockstep).
+
+**Status:** **RATIFIED 2026-05-19** per Evans's chat-message (same verbatim message as P-021a above).
+
+**Author:** Autonomous Claude. P-018a v0.1 DRAFT authored 2026-05-19 in PR #16 (`spec/p018a-si008-actor-identity-source-supersession-2026-05-19`); Codex R2 APPROVE; retroactive OQ3 alignment commit f65069f; I-032 STEP 0 applied per `Proposed-SECURITY-DEFINER-Procedure-Amendments-2026-05-19.md` §SI-008. Decision Brief: `Decision-Brief-P-018a-SI-008-Supersession-2026-05-19.md`.
+
+**Trigger:** SI-010 trust-anchor rejected per P-023a; canonical P-018 Sub-decision 8 (procedure design) + Sub-decision 10 (three-tier audit durability) referenced SI-010 primitives; must amend onto canonical model.
+
+**Promotion class:** reconciliation.
+
+**Sub-decision supersessions (3; all APPROVED):**
+
+1. **P-018 Sub-decision 8 (procedure design) AMENDED at actor-identity-source step:** caller-supplied JWT-verified actor parameters per SI-017.
+2. **P-018 Sub-decision 10 (three-tier audit durability) AMENDED:** audit-emission LOCATION moves from inside-procedure to application-layer; D1/D2/D3 relabel; this procedure's audit event lives in **P2 (tenant-governance)** per SI-018.
+3. **NEW STEP 0 — I-032 Tenant-GUC equality guard** added to `record_workflow_pointer_swap()`.
+
+**Rejection code set update:** 5 → 6 codes — `cas_mismatch`, `supersession_pointer_mismatch`, `chain_cycle`, `state_invalid`, `unauthenticated`, **`tenant_guc_mismatch`**.
+
+**Preserved P-018 sub-decisions:** 5-state vocab for `ai_workflow_executions.status` + Pattern A protocol-versioning pin + TOAST-BYTEA `recommendation` storage + 8-column flat KMS envelope + composite FK rules + bidirectional pointer invariant + CAS-and-supersession protocol + `supersedes_execution_id` IMMUTABLE post-INSERT + 5 original rejection codes + CDM §4.23 + AUDIT_EVENTS amendments + DOMAIN_EVENTS amendments unchanged.
+
+**Cross-artifact impact:** ZERO canonical-contract amendments by P-018a directly.
+
+---
+
+### Entry P-027 — 2026-05-19 — SI-017 ratification: Phase 2 F-3 JWT session-liveness check within canonical app.tenant_id middleware-GUC + Sub-decision 4.5 mismatch path (A2+B2+C ratification per SI-017-OQ-MISMATCH Decision Memo)
+
+**Type:** Content-change promotion.
+
+**Status:** **RATIFIED 2026-05-19** per Evans's chat-message (same verbatim message as P-021a above). Decision Brief: `Telecheck_v1_10_PRD_Update/Decision-Brief-SI-017-Phase-2-F3-JWT-Liveness-2026-05-19.md`. SI-017-OQ-MISMATCH Decision Memo: `Telecheck_v1_10_PRD_Update/Decision-Memo-SI-017-OQ-MISMATCH-A2-B2-C-Adopted-2026-05-19.md`.
+
+**Author:** Autonomous Claude. SI-017 v0.2 authored 2026-05-19 in PR #13 (`spec/si-017-phase2-f3-canonical-middleware-2026-05-19`) after SI-010 trust-anchor rejection (P-023a). Codex R1 closed by spawning SI-018 (parallel SI for audit-chain partition rule); Codex R2 HALTED at architectural-judgment per CLAUDE.md hard-floor item 6 on tenant-claim-mismatch path; resolved via SI-017-OQ-MISMATCH Decision Memo adopting A2+B2+C.
+
+**Trigger:** SI-010 (Session Actor Context DB Binding) was REJECTED per P-023a 2026-05-19. The canonical middleware-GUC tenant-binding pattern needed a replacement for the rejected DB-side trust anchor. SI-017 provides the canonical Phase 2 F-3 session-liveness check within the existing `app.tenant_id` middleware-GUC model (no DB-side trust anchor; application middleware is the single trust anchor per the canonical SI-017 authContextPlugin contract). Sub-decision 4.5 covers the JWT-replay-class attack-signal subpath as a separate Cat A event partitioned by session-row-tenant.
+
+**Promotion class:** content-change. AUDIT_EVENTS adds 2 new action IDs (1 Cat B + 1 Cat A).
+
+**Ratifier sub-decisions explicitly approved (6 of 6):**
+
+- **Sub-decision #1** authContextPlugin liveness check fires per-request after JWT verify: **APPROVED**
+- **Sub-decision #2** No cache at v1.0: **APPROVED**
+- **Sub-decision #3** Fail-closed (UnauthenticatedError + 401): **APPROVED**
+- **Sub-decision #4** `identity.session_liveness_check_failed` Cat B event, SI-018 P2 partition keyed on `tenant_id_claimed`: **APPROVED**
+- **Sub-decision #4.5** (NEW per A2+B2+C): `identity.session_jwt_tenant_id_mismatch` Cat A event, SI-018 P2 partition keyed on `auth.sessions.tenant_id` (session-row-tenant per B2), merge-blocking regression test per C: **APPROVED**
+- **Sub-decision #5** Performance — no cache; revisit in v1.1: **APPROVED**
+
+**Changes (physical content landing IN this commit):**
+
+1. **AUDIT_EVENTS Cat B `identity.session_liveness_check_failed`** added per Sub-decision 4.
+2. **AUDIT_EVENTS Cat A `identity.session_jwt_tenant_id_mismatch`** added per Sub-decision 4.5 (mutually exclusive with the Cat B event for the same request).
+3. **AUDIT_EVENTS bump** v5.3 → v5.5 (single lockstep with P-026 contributions; SI-018 partition rule structural + 3 new action IDs across P-026/P-027/I-032).
+
+**Codex pre-ratification trail (2 rounds + escalation; 2 substantive findings):** R1 (review-mpckt9xo-nbawh9): NO-SHIP; tenant-keyed audit primitive without canonical-contract authorization. → Closed via SI-018 spawn (P-026 below). R2 (review-mpcpoqbq-qjpw0j): NO-SHIP; tenant-claim mismatch unresolved (architectural-judgment per hard-floor item 6). → HALTED at R2; escalated as SI-017-OQ-MISMATCH; resolved via A2+B2+C Decision Memo; Sub-decision 4.5 applied this commit.
+
+**Cross-artifact impact:** AUDIT_EVENTS +2 action IDs. NO CDM changes. NO State Machines changes. NO INVARIANTS changes from SI-017 itself (I-032 is the parallel cross-PR OQ3 contribution codified in INVARIANTS v5.3 this commit).
+
+**Unblocks:** P-018a + P-019a + P-021a supersession entries cite SI-017's canonical authContextPlugin contract (also in this lockstep commit).
+
+---
+
+### Entry P-026 — 2026-05-19 — SI-018 ratification: canonical audit-chain partition rule (two-tier hybrid P1 patient-bound + P2 tenant-governance) + I-032 cross-PR OQ3 Option A invariant codification
+
+**Type:** Content-change promotion — **ratification-intent + physical content + Registry +1 minor bump LAND TOGETHER in this commit** per the lockstep invariant. The lockstep commit covers SI-018 + SI-017 + I-032 + the three supersessions (P-018a/P-019a/P-021a) — see those entries above for the supersession portions; this entry is the SI-018 + I-032 portion.
+
+**Status:** **RATIFIED 2026-05-19** per Evans's chat-message (same verbatim message as P-021a above). Decision Brief SI-018: `Telecheck_v1_10_PRD_Update/Decision-Brief-SI-018-Audit-Chain-Partition-Rule-2026-05-19.md`. Decision Memo cross-PR OQ3 Option A: `Telecheck_v1_10_PRD_Update/Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md`.
+
+**Author:** Autonomous Claude. SI-018 v0.2 authored 2026-05-19 in PR #14 after the SI-010 trust-anchor rejection cycle clarified the audit-chain partition gap; 5-round Codex convergence (R1 needs-attention on tier-3 violating I-027 + variable-tier non-determinism — closed by dropping tier 3, deterministic two-tier hybrid; R2–R4 prose-consistency closures inline; R5 APPROVE clean). I-032 codified in parallel per cross-PR OQ3 Decision Memo Option A ratification.
+
+**Trigger:** Codex R1 on SI-017 PR #13 (review-mpckt9xo-nbawh9) flagged that SI-017 was inventing a tenant-keyed audit-chain partition outside the canonical AUDIT_EVENTS contract. The fix required a canonical-contract amendment authorizing the partition rule. SI-018 is that amendment. Cross-PR OQ3 (the trust-boundary equality-guard question) raised on PR #17 R1 + PR #18 R3 hard-floor-item-6 escalations — resolved via Option A canonical-invariant amendment ratification adding I-032.
+
+**Promotion class:** content-change. AUDIT_EVENTS structural amendment (§"Hash chain" §Partitioning rewrite). INVARIANTS amendment (I-032). Single ceremony bumps both files + Registry in lockstep.
+
+**Ratifier sub-decisions explicitly approved IN P-026 scope:**
+
+**SI-018 contribution (3 of 3):**
+- Sub-decision #1 Two-tier hybrid partition (P1 patient-bound + P2 tenant-governance) deterministic per-event: **APPROVED**
+- Sub-decision #2 Per-event partition tier enumerated in each AUDIT_EVENTS catalog row (no caller choice; no application-state-derived routing): **APPROVED**
+- Sub-decision #3 Independent hash chains per partition tier + per partition_key; cross-partition linkage NOT supported at envelope time; checkpoint format canonicalized to `(tier, partition_key, latest_record_hash)` with integer-tier primary sort: **APPROVED**
+
+**I-032 contribution (cross-PR OQ3 Option A; 1 invariant):**
+- I-032 Tenant-GUC equality guard on SECURITY DEFINER procedures with actor-tenant parameters (STEP 0 equality guard; `tenant_guc_mismatch` rejection code; Cat B `security.security_definer_tenant_guc_mismatch` audit event partitioned per SI-018 P2 keyed on GUC-side `app.tenant_id`; ELEVATED severity; P0 ops alert): **APPROVED**
+
+**Changes (physical content landing IN this commit):**
+
+1. **AUDIT_EVENTS §"Hash chain" §Partitioning** rewritten with SI-018 two-tier hybrid canonical text (P1 patient-bound for `target_patient_id IS NOT NULL`; P2 tenant-governance for `target_patient_id IS NULL`).
+2. **AUDIT_EVENTS §"Chain construction" step 4** updated with both partition genesis hashes.
+3. **AUDIT_EVENTS §"Cross-partition checkpoint"** format canonicalized to `(tier, partition_key, latest_record_hash)` with integer-tier primary sort.
+4. **AUDIT_EVENTS new Cat B action ID** `security.security_definer_tenant_guc_mismatch` added (I-032 contribution; ELEVATED severity; SI-018 P2 partition keyed on GUC-side `app.tenant_id`).
+5. **AUDIT_EVENTS bump** v5.3 → v5.5 (single ceremony covering SI-018 structural + 3 new action IDs across this entry + P-027).
+6. **INVARIANTS new I-032** added per `Proposed-INVARIANTS-Amendment-I-032-2026-05-19.md`.
+7. **INVARIANTS bump** v5.2 → v5.3.
+
+**Codex pre-ratification trail (5 rounds; SI-018):**
+
+- R1: variable-tier rows not deterministic + tier-3 violation of I-027. → Closed by dropping tier 3, deterministic two-tier hybrid.
+- R2–R4: prose-consistency findings (missed tier-3 references; `linked_events[]` overloading; checkpoint sort ambiguity). → Closed inline.
+- R5: APPROVE clean.
+
+**Codex pre-ratification trail (cross-PR OQ3 / I-032):**
+
+- R1 on P-019a (review-mpcmsk90-zopinx) + R3 on P-021a (review-mpcn6wag-llvapb): both invoked CLAUDE.md hard-floor item 6 on trust-boundary equality-guard question. → STOP-and-queue per discipline floor; escalated to ratifier as cross-PR OQ3; resolved via Decision Memo Option A adoption.
+
+**Cross-artifact impact:** AUDIT_EVENTS canonical contract amendment (structural §"Hash chain" + 3 new action IDs across SI-018 + SI-017 + I-032 contributions). INVARIANTS canonical amendment (I-032). NO CDM changes. NO State Machines changes.
+
+**Registry absorption (lockstep PR-A2-class commit):** Registry v2.12 → v2.13 single bump covers ALL of the following landings in this lockstep commit:
+- SI-018 partition rule (AUDIT_EVENTS structural + 1 Cat B action ID)
+- SI-017 (AUDIT_EVENTS +2 action IDs: 1 Cat B + 1 Cat A)
+- I-032 (INVARIANTS amendment + 1 Cat B action ID; already counted in SI-018 line above)
+- P-018a / P-019a / P-021a (reconciliation entries; no Registry contribution themselves)
+
+Net contract-file bumps in this ceremony: AUDIT_EVENTS v5.3 → v5.5; INVARIANTS v5.2 → v5.3; Registry v2.12 → v2.13. No CDM bump (no entity changes); no State Machines bump (no state-machine changes); no other Contracts Pack file bumps.
+
+---
+
 ### Entry P-023a — 2026-05-19 — REJECTION of SI-010 trust-anchor layer (sub-ceremony 6 / P-023 reversal): unratified net-new platform-floor architecture authored in violation of Boot Sequence §9 + CLAUDE.md hard rules; security-posture regression on partially-compromised-application threat model
 
 **Type:** Reconciliation entry (NO Registry version bump in this commit per operating rule 4; this entry records a status change to a prior ratification-intent entry, not the promotion of new canonical content). The Registry remains at **v2.12** (the version landed by SC7 P-024 PR-A2/A3 2026-05-18); the v2.12 → v2.13 bump that PR #10 attempted is hereby abandoned and that PR's branch / commits are preserved as audit trail only.

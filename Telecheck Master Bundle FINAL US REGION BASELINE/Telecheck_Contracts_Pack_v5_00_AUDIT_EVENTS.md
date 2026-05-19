@@ -1,6 +1,8 @@
 # 00 · Audit Events
 
-**Status:** canonical · **Version:** 5.3 · **Owner:** engineering lead + compliance officer · **Consumers:** all services, compliance, clinical safety, patient-access
+**Status:** canonical · **Version:** 5.5 · **Owner:** engineering lead + compliance officer · **Consumers:** all services, compliance, clinical safety, patient-access
+
+**v5.5 amendments (2026-05-19, single-lockstep ratification ceremony covering SI-018 + SI-017 + I-032):** (a) §Hash chain §Partitioning rule replaced with canonical SI-018 two-tier hybrid partition rule (P1 patient-bound for `target_patient_id IS NOT NULL`; P2 tenant-governance for `target_patient_id IS NULL`); §Chain construction step 4 updated to reflect both partition genesis hashes; §Cross-partition checkpoint format canonicalized to `(tier, partition_key, latest_record_hash)` tuples with integer-tier primary sort. (b) 3 net-new action IDs added: `security.security_definer_tenant_guc_mismatch` (Cat B, ELEVATED severity — per I-032 ratification); `identity.session_liveness_check_failed` (Cat B — per SI-017 ratification Sub-decision 4); `identity.session_jwt_tenant_id_mismatch` (Cat A, ELEVATED severity — per SI-017 Sub-decision 4.5 / SI-017-OQ-MISMATCH A2+B2+C ratification). Per Evans's chat-message ratification 2026-05-19 + Decision Memos at `Telecheck_v1_10_PRD_Update/Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md` + `Telecheck_v1_10_PRD_Update/Decision-Memo-SI-017-OQ-MISMATCH-A2-B2-C-Adopted-2026-05-19.md`. Single ceremony bumps v5.3 → v5.4 (SI-018 structural) → v5.5 (3 new action IDs) in one commit per the lockstep invariant. All v5.3 amendments preserved.
 
 **v5.3 amendments (2026-05-11, P-011 / SI-001 closure):** (a) §I-012 closure rule authoritative I-012 action-class set amended — `prescribing.protocol_authorization_granted` added to the exact list; future-extension carve-out broadened to include `prescribing.*` confirmation actions added by an I-012-amending SI promotion. (b) §Category-A enum extended with 7 net-new action IDs (`medication_request.{drafted, submitted_for_review, interaction_evaluation_completed, discontinued, superseded, expired}` + `prescribing.protocol_authorization_granted`). All carry-forward enums from v5.2 preserved unchanged. Live emission and cross-artifact references for the new I-012 confirmation action MUST resolve against v5.3 or later. CDM v1.3 `audit_events.audit_i012_workload_evidence_required` CHECK constraint amended in lockstep to add the new action to its `action NOT IN (...)` list (database-level enforcement of the same authoritative set).
 
@@ -161,6 +163,7 @@ Like all Category A records, rejection events are tenant-scoped per `tenant_id`,
 | `ai_mode_2_physician_approve` | clinician | evaluation_id, clinician_id |
 | `ai_mode_2_physician_modify` | clinician | evaluation_id, clinician_id, modifications[], rationale |
 | `ai_mode_2_physician_decline` | clinician | evaluation_id, clinician_id, decline_reason |
+| `identity.session_jwt_tenant_id_mismatch` (added v5.5 2026-05-19 per SI-017 Sub-decision 4.5 / SI-017-OQ-MISMATCH A2+B2+C ratification) | system (authContextPlugin) | session_id, account_id, **tenant_id_claimed** (JWT-claim value — attacker-supplied), **tenant_id_actual** (`auth.sessions.tenant_id` — legitimate session-row-tenant), checked_at, pg_backend_pid, client_ip, user_agent. Envelope `tenant_id` = `auth.sessions.tenant_id` (session-row-tenant per B2 ratification; legitimately-owning tenant sees the attack signal on their chain). Partition tier **P1 is N/A — this is a P2 (tenant-governance) event** keyed on `SHA-256("GENESIS:TENANT:<auth.sessions.tenant_id>")` (NOT the claim-side `tenant_id_claimed`; prevents attacker-controlled partition placement). `severity = ELEVATED`. JWT-replay-class attack signal — Cat A inclusion makes the event eligible for SOC monitoring + threat-intelligence pipelines that filter Cat B governance noise. Mutually exclusive with `identity.session_liveness_check_failed` for the same request (mismatch path emits ONLY the Cat A event; the routine Cat B event is suppressed). Response shape (401 + opaque payload) matches a routine liveness-check failure for information-leak prevention. |
 
 ### Category B — Governance and configuration actions
 
@@ -186,6 +189,8 @@ Like all Category A records, rejection events are tenant-scoped per `tenant_id`,
 | `incident_opened` | operator | incident_id, severity, affected_services[], patient_impact_estimate |
 | `incident_resolved` | operator | incident_id, resolution_detail, root_cause, preventive_actions[] |
 | `signal_enforcement_trigger` | system | signal_type, threshold_exceeded, enforcement_action_taken |
+| `security.security_definer_tenant_guc_mismatch` (added v5.5 2026-05-19 per I-032 ratification; Cat B, **ELEVATED severity**) | application call site (NOT the procedure) | procedure_name, **p_tenant_id** (caller-supplied tenant parameter), **app_tenant_id** (`current_setting('app.tenant_id', true)` value), session_id, p_account_id, rejected_at, pg_backend_pid. Envelope `tenant_id` = `current_setting('app.tenant_id', true)` (the GUC-side value, NOT the claim-side `p_tenant_id` — places audit signal under session's actually-active tenant; prevents attacker-controlled partition placement per I-032 §"Audit-event emission contract"). Partition tier **P2** keyed on `SHA-256("GENESIS:TENANT:<current_setting('app.tenant_id', true)>")`. Trigger: a SECURITY DEFINER procedure subject to I-032 (Tenant-GUC equality guard) rejected a call where `p_tenant_id IS DISTINCT FROM current_setting('app.tenant_id', true)` — indicates middleware bug or confused-deputy path; system bug, not user error. P0 ops alert MUST be raised alongside. |
+| `identity.session_liveness_check_failed` (added v5.5 2026-05-19 per SI-017 ratification Sub-decision 4; Cat B, STANDARD severity) | system (authContextPlugin) | session_id, account_id, tenant_id_claimed, failure_reason (one of: `revoked`, `expired`, `missing`, `account_disabled`), checked_at, pg_backend_pid, client_ip, user_agent. Envelope `tenant_id` = `tenant_id_claimed` from JWT (session row may not exist — `failure_reason = 'missing'` case). Partition tier **P2** keyed on `SHA-256("GENESIS:TENANT:<tenant_id_claimed>")`. **Mismatch path exclusion:** this event is NOT emitted when JWT verifies but `auth.sessions.tenant_id IS DISTINCT FROM tenant_id_claimed` — that scenario emits the Cat A `identity.session_jwt_tenant_id_mismatch` event instead (mutually exclusive per SI-017 Sub-decision 4.5). |
 
 #### Research events (added v5.2 per ADR-028)
 
@@ -270,12 +275,28 @@ This pattern preserves I-003 (audit completeness) while enforcing I-029 (deliver
 
 ## Hash chain
 
-### Partitioning
+### Partitioning (canonical two-tier hybrid rule per SI-018, ratified 2026-05-19)
 
-Audit records are partitioned by `target_patient_id`. Each partition is an independent, ordered chain. This means:
-- Tamper detection is per-patient — modifying any record in a patient's chain breaks the chain for that patient
+Every `audit_events` row belongs to exactly ONE hash-chain partition. The partition tier is determined deterministically per-event by the row's `target_patient_id` envelope field:
+
+**Tier P1 — Patient-bound events.** Events with non-NULL `target_patient_id` belong to a patient-bound chain:
+```
+chain_partition_key = SHA-256("GENESIS:PATIENT:<target_patient_id>")
+```
+
+**Tier P2 — Tenant-governance events.** Events with `target_patient_id IS NULL` belong to a tenant-governance chain keyed on the row's `tenant_id` envelope field:
+```
+chain_partition_key = SHA-256("GENESIS:TENANT:<tenant_id>")
+```
+
+Per-event partition tier is enumerated for each action ID in the catalog below. An implementation that emits an audit row in the wrong partition fails the per-event regression test.
+
+**Determinism + I-027 preservation.** The partition is uniquely determined by the event's envelope (no caller choice; no application-state-derived routing). Append-only per I-027 is preserved — the partition rule does not allow rewriting historical partitions. P1 and P2 use independent hash chains; cross-partition linkage is NOT supported at envelope time (no `linked_events[]` field overload; cross-tenant or cross-patient correlation, where needed, is handled at query time).
+
+Each partition is an independent, ordered chain. This means:
+- Tamper detection is per-partition — modifying any record in a partition breaks the chain for that partition
 - There is no cross-partition serialization bottleneck
-- A single patient's audit chain can be verified independently
+- A single partition can be verified independently (a patient's chain in P1; a tenant's governance chain in P2)
 
 ### Chain construction
 
@@ -283,22 +304,27 @@ For each new audit record in a partition:
 1. Compute `record_hash` = SHA-256 of all fields except `hash_chain`
 2. Set `previous_hash` = `record_hash` of the most recent existing record in this partition
 3. Increment `sequence_number` from the most recent record
-4. For the first record in a partition, `previous_hash` = `SHA-256("GENESIS:<patient_id>")`
+4. For the first record in a partition, `previous_hash` = the partition's genesis hash:
+   - **P1:** `SHA-256("GENESIS:PATIENT:<target_patient_id>")`
+   - **P2:** `SHA-256("GENESIS:TENANT:<tenant_id>")`
 
 ### Verification
 
 Chain verification runs:
-- **On every read** of a patient's audit trail — if a hash gap is detected, the read returns an integrity error and pages on-call
-- **Nightly batch** for all active patient partitions — a background job walks each chain and reports any broken links
+- **On every read** of an audit trail — if a hash gap is detected, the read returns an integrity error and pages on-call. Patient self-access reads verify the P1 chain; governance-event reads verify the relevant P2 chain.
+- **Nightly batch** for all active partitions (both P1 and P2) — a background job walks each chain and reports any broken links
 - **On-demand** for regulatory inquiry or compliance audit
 
 ### Cross-partition checkpoint
 
-Every 24 hours, a checkpoint record is emitted that hashes across all active partitions:
+Every 24 hours, a checkpoint record is emitted that hashes across all active partitions across both tiers using the canonical `(tier, partition_key, latest_record_hash)` tuple format:
 ```
-checkpoint_hash = SHA-256(sorted_concat(latest_record_hash for each active partition))
+checkpoint_hash = SHA-256(sorted_concat(
+  (tier, partition_key, latest_record_hash)
+  for each active partition in P1 ∪ P2
+))
 ```
-This checkpoint is stored separately and provides a global integrity anchor. If any partition's chain is tampered with, the checkpoint hash will not match.
+Sort primary key is `tier` (integer 1 or 2, primary sort to prevent lexicographic ambiguity between `"P1"` and `"P10"`-style hypothetical values), secondary `partition_key`, tertiary `latest_record_hash` (deterministic ordering). The checkpoint is stored separately and provides a global integrity anchor across both partition tiers. If any partition's chain is tampered with, the checkpoint hash will not match.
 
 ---
 

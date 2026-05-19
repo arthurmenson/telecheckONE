@@ -1,6 +1,6 @@
 # 00 · Platform Invariants
 
-**Status:** canonical · **Version:** 5.2 · **Owner:** engineering lead + clinical safety officer · **Consumers:** everyone
+**Status:** canonical · **Version:** 5.3 · **Owner:** engineering lead + clinical safety officer · **Consumers:** everyone
 
 Platform invariants are non-negotiable structural guarantees. They are not configurable, not market-specific, and not overridable by any feature, admin surface, protocol activation, or operator action. They are the floor beneath the floor.
 
@@ -250,6 +250,41 @@ The audit chain MUST be queryable by ethics review boards, regulators, and the r
 
 ---
 
+### I-032 · Tenant-GUC equality guard on SECURITY DEFINER procedures with actor-tenant parameters
+
+Any `SECURITY DEFINER` procedure that accepts an actor-tenant parameter (`p_tenant_id` or any equivalently-named parameter holding the caller's authenticated tenant identifier) MUST reject the call where `p_tenant_id` IS DISTINCT FROM `current_setting('app.tenant_id', true)` BEFORE performing any data mutation, idempotency lookup, advisory-lock acquisition, or state read.
+
+**Rejection contract.**
+
+- The rejection MUST be **step 0** of the procedure's validation sequence (it precedes all other validation steps including the existing auth-FIRST patterns).
+- The rejection MUST use the canonical rejection code `tenant_guc_mismatch`.
+- The procedure MUST return the rejection tuple WITHOUT raising a SQL exception (the application call site needs to receive structured rejection data so it can emit the canonical audit event + P0 alert; raising would abort the application transaction prematurely).
+
+**Audit-event emission contract.**
+
+- The application call site (NOT the procedure) MUST emit a Cat B audit event with `action_id = 'security.security_definer_tenant_guc_mismatch'` immediately after receiving the rejection tuple, BEFORE responding to the upstream request.
+- The audit event envelope MUST use `tenant_id = current_setting('app.tenant_id', true)` (the GUC-side value; NOT the caller-supplied `p_tenant_id`). Placing the audit signal under the session's actually-active tenant rather than the claimed-tenant prevents attacker-controlled partition placement — the legitimate tenant whose session/GUC is in use sees the mismatch in their audit chain; the attacker-claimed tenant does not.
+- The audit event MUST be partitioned per **I-027 + the SI-018 canonical AUDIT_EVENTS partition rule** at P2 (tenant-governance): `chain_partition_key = SHA-256("GENESIS:TENANT:<current_setting('app.tenant_id', true)>")`.
+- The audit event severity MUST be ELEVATED (mismatch is an attack-signal-class event, not routine).
+
+**Operational contract.**
+
+- On `tenant_guc_mismatch` rejection the application MUST raise a P0 ops alert with sufficient context (procedure name, GUC value, claim value, session_id, account_id) for an on-call engineer to triage.
+- The canonical SI-017 authContextPlugin contract guarantees that `SET LOCAL app.tenant_id` and procedure actor parameters are sourced from the SAME JWT-verified middleware tuple at request entry. I-032 enforces this invariant at the DB layer as defense-in-depth: a `tenant_guc_mismatch` in production indicates a middleware bug or confused-deputy path and is treated as a system bug (not user error).
+
+**Scope of application.**
+
+- I-032 applies to ALL existing SECURITY DEFINER procedures that accept an actor-tenant parameter: `record_workflow_pointer_swap()` (SI-008), `record_consult_escalation_target_swap()` (SI-009), `record_consult_clinician_decision()` (SI-005), `rotate_consult_clinician_decision_kms()` (SI-005). Each procedure's source code amendment lands in lockstep with this I-032 codification per the supersession entries P-018a, P-019a, P-021a.
+- I-032 applies to ALL future SECURITY DEFINER procedures that accept an actor-tenant parameter. Reviewers MUST flag any new SECURITY DEFINER procedure that omits the STEP 0 equality guard.
+
+**Why.** SECURITY DEFINER procedures bypass RLS via PostgreSQL `SECURITY DEFINER` privilege. Tenant-isolation enforcement therefore moves from RLS-layer (where the GUC enforces automatically via row-level policies) to procedure-layer (where the procedure must enforce explicitly). The canonical SI-017 authContextPlugin contract treats application middleware as the single trust anchor for both `SET LOCAL app.tenant_id` and procedure actor parameters. I-032 codifies the parallel-trust-path equality as a DB-layer MUST, eliminating the class of "middleware bug or confused-deputy path" failure mode that Codex flagged on PR #17 P-019a R1 (review-mpcmsk90-zopinx) and PR #18 P-021a R3 (review-mpcn6wag-llvapb). Per Decision Memo `Telecheck_v1_10_PRD_Update/Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md`: clinical-decision-recording + KMS-rotation + AI-workflow-execution + sync-session-escalation surfaces are safety-critical enough to justify the slim defense-in-depth cost.
+
+**Verification.** Each amended SECURITY DEFINER procedure ships with a regression test asserting: (a) matching `p_tenant_id`/GUC call succeeds; (b) mismatching call returns `tenant_guc_mismatch` rejection tuple WITHOUT mutating any row; (c) application call site emits exactly one `security.security_definer_tenant_guc_mismatch` Cat B audit event partitioned per SI-018 P2 keyed on the GUC value (NOT the claim value); (d) P0 ops alert raised exactly once per mismatch.
+
+**Related.** I-023 (3-layer tenant-isolation enforcement); SI-017 (authContextPlugin contract — the trust anchor I-032 is defense-in-depth for); SI-018 (audit-chain partition rule — the partition contract I-032's audit event uses); P-018a/P-019a/P-021a (the supersession entries that apply I-032 to each affected procedure).
+
+---
+
 ## Operating with the invariants
 
 ### When writing a feature spec
@@ -306,6 +341,7 @@ Invariants I-001, I-003, I-004, I-006–I-018, I-020–I-022 are **equally non-n
 
 ## Document control
 
+- **v5.3 (2026-05-19 per Evans's chat-message ratification of cross-PR OQ3 Option A)** — Adds **I-032 (Tenant-GUC equality guard on SECURITY DEFINER procedures with actor-tenant parameters)** per `Telecheck_v1_10_PRD_Update/Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md`. Codifies the procedure-side STEP 0 equality guard between `p_tenant_id` parameter and `current_setting('app.tenant_id', true)` GUC as defense-in-depth on top of the SI-017 authContextPlugin trust-anchor contract. Adopted in response to Codex hard-floor-item-6 architectural-judgment findings on P-019a R1 (review-mpcmsk90-zopinx) and P-021a R3 (review-mpcn6wag-llvapb). Applies to four existing SECURITY DEFINER procedures (SI-005's record_consult_clinician_decision + rotate_consult_clinician_decision_kms; SI-008's record_workflow_pointer_swap; SI-009's record_consult_escalation_target_swap) per supersession entries P-018a, P-019a, P-021a. Applies to all future SECURITY DEFINER procedures accepting actor-tenant parameters. No existing invariants modified or removed; v5.3 is purely additive.
 - **v5.2 (2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact)** — Adds I-029 (Research data export gates: active DSA + active research consent + k-anonymity ≥ k_min), I-030 (Research consent declination has zero impact on care), I-031 (Research data export at high-sensitivity audit class). Per ADR-028 (Research Data Partnership Posture A as Release 2 goal). No existing invariants modified or removed; v5.2 is purely additive. ID numbering: planning freeze v1.3 originally proposed I-024..I-026 for these; v1.5 hotfix renumbered to I-029..I-031 per Codex pre-acceptance HIGH-1 (ID collision with existing canonical I-024 cross-tenant break-glass, I-025 information-leak prevention, I-026 tenant configuration governance, I-027 audit envelope, I-028 single physical region). Substantive additions originally documented in `Telecheck_v1_10_PRD_Update/Phase3_INVARIANTS_v1_10_Edits_2026-05-01.md`; physical merge applied 2026-05-02 per v1.10.1 hygiene cycle.
 - **v5.1 (refreshed 2026-04-26 per ADR-026, US Region Migration Cycle U-003)** — Adds I-028 (Single physical region, single database, single schema; tenant isolation by logical means). Locks the single-region/single-DB/single-schema architectural posture as an invariant per ADR-026 locked decisions. No existing invariants modified or removed; additive only. No version bump (v5.1 retained; entry-level addition consistent with v5.1 additive discipline).
 - **v5.0** — Initial Platform Invariants. 22 invariants codified.
