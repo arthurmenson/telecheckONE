@@ -1,7 +1,7 @@
 # SI-015 — MarketingCopy CDM canonical schema + governance-review binding
 
-**Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; not yet routed to ratifier
+**Version:** 0.2 DRAFT (R1 STOP-and-queue 2026-05-19)
+**Status:** **DRAFT / BLOCKED-PENDING-EVANS-PERSISTENCE-MODEL-RATIFIER-DECISION (architectural; same class as SI-019 OQ7).** Codex R1 (2026-05-19, review-mpd2d9y3-xmyv3o) flagged the same canonical contradiction as SI-019 R1: Sub-decision 1 declares `marketing_copy_version` strict append-only per I-013 + I-016 (BEFORE UPDATE + BEFORE DELETE triggers) BUT Sub-decision 5's `publish_marketing_copy_version` procedure requires UPDATEs (`superseded_at` on prior row + `published_at` on new row). The contradiction is the same class as SI-019 OQ7 (interaction_signal): immutable-entity-vs-publish-UPDATE. Per CLAUDE.md hard-floor item 6, this is architectural-judgment requiring ratifier escalation. Iteration HALTED at R1. **Recommendation: a single ratifier decision on the architectural pattern (Option A immutable-entity + transition entity; OR Option B constrained-update + transition log per P-021 SC3 precedent) resolves BOTH SI-015 AND SI-019 simultaneously.** See `SI-019-Med-Interaction-Slice-PRD-v2-Implementation-Readiness-Extension.md` §5 OQ7 for the full Option A vs Option B framing. The R1 MED-1 + MED-2 + HIGH-2 procedural findings are closed inline below.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; ratifier-input artifact)
 **Owner:** Clinical Content Author (existing role from Forms-Intake slice precedent) + Compliance Officer
 **Related artifacts:**
@@ -28,7 +28,18 @@ SI-011 UMBRELLA (SC7 P-024 ratification 2026-05-18) filed SI-015 as a NEW depend
 
 ---
 
-## 2. Proposed sub-decisions (6; all APPROVED RECOMMENDATION)
+## 2. Proposed sub-decisions (6 total; APPROVED RECOMMENDATION status varies — see per-decision tags below; Sub-decisions 1 + 5 are PERSISTENCE-MODEL-DEPENDENT on the Evans OQ4 ratifier decision)
+
+**Per-decision APPROVED recommendation status (closes Codex R1 HIGH-2 premature-APPROVED finding):**
+
+| Sub-decision | APPROVED status | Conditioned on |
+|---|---|---|
+| 1. CDM new entity `marketing_copy_version` | **PERSISTENCE-MODEL-DEPENDENT** | Resolves under Option A (immutable + transition entity) OR Option B (constrained-update + transition log); both options enumerated in OQ4 |
+| 2. AUDIT_EVENTS +2 Cat B action IDs | **APPROVED** | Independent of persistence model |
+| 3. DOMAIN_EVENTS +2 additive event types | **APPROVED** | Independent of persistence model |
+| 4. RBAC +2 role definitions | **APPROVED** | Independent of persistence model |
+| 5. SECURITY DEFINER `publish_marketing_copy_version` | **PERSISTENCE-MODEL-DEPENDENT** | Sub-decision 1's persistence-model decision determines whether STEP 5/6 are UPDATEs (Option B) or INSERTs into a transition entity (Option A) |
+| 6. Tenant-threading per ADR-023 + I-023 + I-032 | **APPROVED** | Independent of persistence model |
 
 ### Sub-decision 1: CDM §4 new entity `marketing_copy_version`
 
@@ -39,8 +50,10 @@ One row per immutable version of a marketing copy artifact. Columns:
 - `surface_id` ULID FK (the marketing surface this copy version applies to — referenced from `marketing.surface_rendered` audit event)
 - `surface_type` enum (`landing_page | email_header | sms_template | in_app_banner | ad_creative_class` — extensible)
 - `country_of_care` ISO 3166-1 alpha-2 (the country this version is approved for; CCR-driven)
-- `copy_payload` JSONB (the actual content — text + image references + CTA destinations; KMS-encrypted at rest if `contains_phi` is true OR if country regulatory requires)
-- `copy_payload_kms_envelope` 8-column flat KMS envelope (mirroring SI-005 precedent) — NULLABLE; populated only when KMS encryption applies
+- `copy_payload` JSONB — the actual content (text + image references + CTA destinations). MUST be NULL when `encryption_required = true`; the encrypted form lives in `copy_payload_kms_envelope` per the discriminator below.
+- `encryption_required` BOOLEAN NOT NULL — explicit discriminator column (closes Codex R1 MED-1). Derivation rule: `encryption_required = (contains_phi = true) OR (country_regulatory_encryption_required(country_of_care) = true)`; the runtime CCR resolver computes the second predicate per country-of-care. CHECK constraint at the row level: `(encryption_required = true AND copy_payload IS NULL AND copy_payload_kms_envelope IS NOT NULL) OR (encryption_required = false AND copy_payload IS NOT NULL AND copy_payload_kms_envelope IS NULL)`. INSERT REJECTED on violation. Makes the conditional rule canonically enforceable from the schema alone + auditable post-hoc by querying `encryption_required` directly.
+- `contains_phi` BOOLEAN NOT NULL — clinical-content-author asserts whether the copy contains any patient-identifying information; feeds the `encryption_required` derivation.
+- `copy_payload_kms_envelope` 8-column flat KMS envelope (mirroring SI-005 precedent) — populated only when `encryption_required = true`; NULL otherwise per the CHECK constraint above
 - `claim_classes` text[] (the §13.2 claim classes this copy makes — e.g., `efficacy_claim`, `safety_claim`, `regulatory_disclaimer`, `pricing_claim`)
 - `governance_review_reference_id` ULID NOT NULL — references the §13.2 review artifact (Decision Brief / approval record)
 - `governance_review_reviewer_ids` ULID[] NOT NULL — the named human reviewers per §13.2
@@ -87,8 +100,9 @@ Per cycle precedent (SI-005's `record_consult_clinician_decision`, SI-008's `rec
 Validation steps:
 - STEP 0: I-032 Mode 1 NULL/blank-GUC RAISE + Mode 2 mismatch structured-rejection (per canonical I-032 v5.3)
 - STEP 1: auth-FIRST per I-023 layer 2
-- STEP 2: caller-role check (caller has `marketing_copy.approver` role OR is named on `governance_review_reviewer_ids`)
-- STEP 3: dual-control assertion (caller ≠ `created_by_account_id` per I-015)
+- STEP 2: caller-role check (caller MUST hold `marketing_copy.approver` role — closes Codex R1 MED-2; `governance_review_reviewer_ids` membership alone is INSUFFICIENT for the publish authorization)
+- STEP 3: dual-control assertion (caller ≠ `created_by_account_id` per I-015 — second control beyond STEP 2 role check)
+- STEP 3.5: reviewer-of-record assertion (caller MUST be listed in `governance_review_reviewer_ids` for this row, AS WELL AS holding `marketing_copy.approver` from STEP 2; STEP 2's RBAC + STEP 3.5's per-row reviewer-of-record together prevent both (a) non-approvers from publishing AND (b) approvers from publishing a version they were not the named reviewer for)
 - STEP 4: governance-review-window assertion (`now() BETWEEN governance_review_approval_timestamp AND governance_review_approval_validity_until`)
 - STEP 5: prior-version supersession atomic UPDATE (`superseded_at = now()` on the currently-published row for the same `(tenant_id, surface_id)`)
 - STEP 6: new-row published_at UPDATE
@@ -124,10 +138,36 @@ If all 6 sub-decisions ratify, the lockstep PR-A2-class commit lands:
 
 ## 4. Open questions for ratifier
 
-1. **Does `copy_payload` require KMS encryption at rest unconditionally, or conditionally per country/contains_phi?** Recommendation: conditional (KMS-encrypted only when `contains_phi = true` OR country regulatory requires; default plaintext for routine marketing copy).
+1. **Does `copy_payload` require KMS encryption at rest unconditionally, or conditionally per country/contains_phi?** Recommendation: conditional (KMS-encrypted only when `contains_phi = true` OR country regulatory requires; default plaintext for routine marketing copy). **Sub-decision 1 R1 closure now codifies the discriminator (`encryption_required` BOOLEAN NOT NULL + CHECK constraint) so this OQ is RESOLVED inline.**
 2. **What is the `governance_review_approval_validity_until` source-of-truth?** Recommendation: CCR-driven via `marketing_governance_review_cadence_months` key per ADR-027 + §13.2 (e.g., US = 6 months, Ghana = 12 months); the SI-015 entity row captures the validity_until at version-publish time (immutable per I-013).
 3. **Cross-surface inheritance** — when a tenant has 100 marketing surfaces, must every surface re-author copy independently, or can a "shared library" pattern reuse claim text? Recommendation: per-surface independent at v1.0; library pattern deferred to future SI (separate scope).
-4. **Codex pre-ratification target:** 3 rounds + 1 verification = 4 total. STOP-and-escalate per discipline floor on architectural-judgment.
+
+### Open Question 4 (SI-015-OQ-PERSISTENCE-MODEL = SI-019-OQ-SIGNAL-LIFECYCLE) — **STOP-CONDITION; HARD-FLOOR ITEM 6 ESCALATION; AWAITING EVANS'S RATIFIER DECISION**
+
+**Trigger:** Codex R1 on SI-015 v0.1 (2026-05-19, review-mpd2d9y3-xmyv3o) flagged the same canonical contradiction as Codex R1 on SI-019 v0.1 (review-mpcvz3wr-593vo1): a CDM entity declared strict append-only per I-013 + I-016 + I-003 BUT a SECURITY DEFINER procedure that UPDATEs the entity for state-machine progression.
+
+**Cross-SI architectural decision (same question; ratifier should answer once for both):**
+
+- **Option A — Immutable entity + append-only transition entity:** the primary CDM entity stays strict append-only; a separate transition-log entity captures state changes via INSERT only. Pattern matches SI-008 `audit_events` model. Both SI-015 (marketing_copy_version) and SI-019 (interaction_signal) get a parallel transition entity.
+
+- **Option B — Constrained UPDATE + transition log:** the primary CDM entity gains a `state` column with a constrained-UPDATE trigger (rejects all UPDATEs except the canonical state-machine transitions); a transition-log entity captures the transitions for audit. Pattern matches P-021 SC3 ratified `consults` two-tier append-only model (Tier 0 identity immutable + Tier 1 payload immutable + Tier 2 state-machine progression). Both SI-015 and SI-019 would adopt this pattern.
+
+**Claude's advisory recommendation:** Option B. Reasoning:
+
+1. **Direct precedent.** P-021 SC3 ratified exactly this pattern for `consults` at 2026-05-17 (two-tier append-only with state-machine transitions). Both SI-015 and SI-019 are structurally analogous (single entity row with lifecycle state).
+2. **I-013 + I-016 interpretation.** P-021 SC3's ratification established the interpretation "audit-history is append-only + entity state progression via guarded transitions is permitted." Option B inherits this; Option A would require a different interpretation (every audit-relevant row immutable forever).
+3. **Read-path simplicity.** "Get current state" is a frequent read; Option B is a direct column read, Option A requires a JOIN to the transition entity.
+4. **Migration story.** Option B preserves the existing v1.0 entity shapes; Option A would require restructuring.
+
+**If Evans selects Option A:** SI-015 Sub-decision 1 simplifies (no UPDATE triggers needed on marketing_copy_version), Sub-decision 5 procedure rewrites to INSERT into a transition entity instead of UPDATE; +1 entity each on SI-015 + SI-019.
+
+**If Evans selects Option B:** SI-015 Sub-decision 1 adds a `state` column + constrained-UPDATE trigger pattern (matches P-021), Sub-decision 5 procedure stays as authored; +1 transition-log entity each on SI-015 + SI-019.
+
+**This decision applies cross-SI: ratifying it once resolves both SI-015 Sub-decisions 1 + 5 AND SI-019 Sub-decisions 1 + 5 + 8 (interaction_signal lifecycle).**
+
+**Decision Memo template available for either Option** if Evans signals which path he prefers.
+
+5. **Codex pre-ratification target:** 3 rounds + 1 verification = 4 total. STOP-and-escalate per discipline floor on architectural-judgment.
 
 ---
 
