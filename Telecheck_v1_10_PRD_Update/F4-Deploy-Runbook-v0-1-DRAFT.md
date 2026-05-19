@@ -130,7 +130,23 @@ The following probes run continuously during every canary stage (not stage-condi
 
 **Stage-demotion criterion (extended):** ≥2 consecutive 1-min windows with ANY gate or probe failure.
 
-**Missing-telemetry = failed probe:** any 60s window without a probe result is treated as probe failure, not silent success. The telemetry pipeline's health is itself part of the canary gate.
+**Per-probe freshness semantics (closes Codex R2 HIGH-1 — probes have different SLAs; the global "60s = failure" rule is replaced by per-probe SLA windows):**
+
+| Probe | Result-freshness SLA | Gate-check cadence | "Missing telemetry" definition |
+|---|---|---|---|
+| I-019 crisis-detection | 30s freshness window | Every 60s | No event in 2 consecutive 60s windows for the canary cohort |
+| I-023 cross-tenant isolation | 30s freshness window | Every 60s | No synthetic-probe result in 2 consecutive 60s windows |
+| Cross-tenant cache/state-leakage | 30s freshness window | Every 60s | No probe result in 2 consecutive 60s windows |
+| Service-health (Datadog/CloudWatch) | 30s freshness window | Every 30s | 2 consecutive missing health-check responses |
+| **I-027 audit-chain integrity** | **5-min SLA** (chain-traversal completion within 5 min) | **At every stage-promotion checkpoint** + every 5-min interval during soak | **Most-recent successful result is older than 10 min (i.e., 2× SLA) at any check, OR most-recent result reports a chain failure** |
+
+The I-027 probe's longer cadence reflects the cost of full-chain traversal across active partitions; per-stage-promotion-checkpoint enforcement ensures every promotion has a fresh successful result within the SLA window. Continuous 1-min canary windows DO NOT require a fresh I-027 result every 60s — only the per-stage-promotion checkpoints do.
+
+**Stage-promotion criterion (refined per R2 HIGH-1):** all 1-min-window error/latency/short-SLA-probe gates pass during the soak period AND a successful I-027 audit-chain result is observed within 10 min of the promotion attempt AND no probe reports an explicit failure.
+
+**Stage-demotion criterion (refined per R2 HIGH-1):** ≥2 consecutive 1-min windows with ANY short-SLA gate or probe failure, OR an explicit I-027 chain-failure report (not staleness alone within the 10-min window).
+
+**Missing-telemetry rule (refined per R2 HIGH-1):** for short-SLA probes (I-019, I-023, cache/state, service-health), 2 consecutive 60s windows without a probe result = failed probe. For the I-027 probe, staleness beyond 10 min (2× SLA) = failed probe. The telemetry pipeline's health is part of the canary gate, but each probe has its own SLA window — not all probes share a 60s definition.
 
 **Auto-rollback triggers (any one fires → automatic rollback per §5):**
 
@@ -330,7 +346,7 @@ Retrospective output: blameless writeup + action items + runbook amendments if a
 ## 7. Open questions for ratifier review
 
 1. **OQ1 — Deploy frequency policy.** Recommendation: weekly cadence at launch with on-demand exceptions for safety-critical fixes; multi-deploy-per-day allowed only with operator + approver consent. Should this be canonical or operator-discretion?
-2. **OQ2 — Migration revert authorization.** §5.3 currently allows operator + approver to authorize a destructive migration revert. Should this require additional sign-off (e.g., CTO or Compliance Officer for migrations touching PHI-bearing tables)? Recommendation: YES for PHI-bearing tables; the operator + approver pair is sufficient for non-PHI migrations.
+2. **OQ2 — Migration revert authorization (RESOLVED via §5.3.AUTH R1 closure; closes Codex R2 MED-1):** the prior OQ2 framing asked "should this require additional sign-off?" §5.3.AUTH now codifies the canonical binding rule: destructive reverts require CTO sign-off; PHI-bearing reverts require Compliance Officer sign-off; operator+approver alone is INSUFFICIENT for those cases. This OQ is RESOLVED; future ratifier review may revisit the matrix but the current rule is binding.
 3. **OQ3 — Cross-region failover (us-east-1 → us-west-2 cold-DR) in this runbook?** Recommendation: separate runbook (cold-DR runbook); this runbook is for primary-region deploys only.
 4. **OQ4 — Codex pre-ratification target for the runbook itself.** Recommendation: 2 rounds + 1 verification = 3 total. Runbook is operations spec; less architectural-risk than SIs.
 5. **OQ5 — Adversarial-review-the-runbook-itself cadence.** Recommendation: per-deploy (cheap; Codex runs in ~1 min). Master Completion Plan §"Acceleration tactics" explicitly calls this out.
