@@ -1,7 +1,7 @@
 # SI-017 — Phase 2 F-3 JWT session-liveness check within the canonical `app.tenant_id` middleware-GUC tenant-binding model
 
-**Version:** 0.2 DRAFT (R1 closure 2026-05-19; cites SI-018 P2 partition rule)
-**Status:** **DRAFT / BLOCKED-PENDING-SI-018-RATIFICATION.** SI-017 ratification cannot precede SI-018 ratification because SI-017's audit event partition (P2 tenant-governance) depends on SI-018's canonical AUDIT_EVENTS partition-rule amendment. SI-018 is at PR #14 Codex R5 APPROVE; Decision Brief authored; awaiting ratifier ceremony.
+**Version:** 0.2 DRAFT (R1 closure 2026-05-19; cites SI-018 P2 partition rule. R2 needs-attention 2026-05-19 with STOP-and-queue verdict on tenant-claim-mismatch path; iteration HALTED at R2 per CLAUDE.md hard-floor item 6 + §10-escalation cadence)
+**Status:** **DRAFT / BLOCKED-PENDING-SI-018-RATIFICATION + EVANS-SI-017-OQ-MISMATCH-RATIFIER-DECISION.** SI-017 ratification cannot proceed until: (1) SI-018 ratifies (PR #14 Codex R5 APPROVE; Decision Brief authored); (2) Evans decides the SI-017 tenant-claim-mismatch architectural judgment (audit category Cat A vs Cat B for mismatch path; partition routing to claimed-tenant vs session-row-tenant; see §6 Open Question 3 / SI-017-OQ-MISMATCH below).
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (spec-repo workstream folder; to be ported to `arthurmenson/telecheck-app:docs/` after Codex pre-ratification cycle stabilizes the design, per established SI source-file precedent from SI-005/SI-007/SI-008/SI-009/SI-010/SI-013)
 **Owner:** Identity slice owner
 **Related artifacts:**
@@ -99,7 +99,7 @@ New AUDIT_EVENTS action ID under §Category-B (governance auth-proof events). De
 - `target_patient_id`: NULL (this is a platform-scope governance event, not patient-scope; same treatment as the rejected SI-010's identity-lifecycle events).
 - `resource_type`: `'session'`.
 - `resource_id`: the JWT `session_id` (which is also the table PK).
-- `tenant_id` envelope field: `tenant_id_claimed` from JWT (same value as detail.tenant_id_claimed); if the session row exists, it's verified that `auth.sessions.tenant_id = tenant_id_claimed` matches — if mismatch, that's a separate `tenant_id_claim_mismatch` failure mode (Codex pre-ratification round will likely surface this — captured as Open Question 6.3).
+- `tenant_id` envelope field: `tenant_id_claimed` from JWT (same value as detail.tenant_id_claimed); if the session row exists, it is verified that `auth.sessions.tenant_id = tenant_id_claimed` matches — if mismatch, that is a separate `tenant_id_claim_mismatch` failure mode. **The mismatch path is now a STOP-CONDITION awaiting Evans's ratifier decision per Codex R2 HIGH-1 hard-floor item 6 escalation (see §6 Open Question 3 / SI-017-OQ-MISMATCH below).** The mismatch path affects audit-partition routing (claimed-tenant partition vs session-row-tenant partition), audit category (Cat A potential-attack-signal vs Cat B failed-liveness), and is therefore a canonical-contract decision that cannot be closed inline within SI-017 v0.2.
 - Hash-chain partition: **SI-018 partition tier P2 (tenant-governance)** per the SI-018 v0.2 canonical audit-chain partition rule (PR #14 Codex R5 APPROVE; Decision Brief at `Telecheck_v1_10_PRD_Update/Decision-Brief-SI-018-Audit-Chain-Partition-Rule-2026-05-19.md`). Concretely: `chain_partition_key = SHA-256("GENESIS:TENANT:<tenant_id_claimed>")`; Cat B governance-class. SI-018 authorizes the two-tier hybrid partition (P1 patient-bound for `target_patient_id IS NOT NULL` events; P2 tenant-governance for `target_patient_id IS NULL` events) as the canonical AUDIT_EVENTS partition contract amendment. This SI's `identity.session_liveness_check_failed` event is P2 because it has no patient subject. **Closes Codex SI-017 R1 HIGH-1 finding** ("Tenant-keyed audit hash chain is a new audit primitive" was correctly flagged; this revision now cites the SI-018 canonical authorization rather than asserting the partition independently). The rejected SI-010's `identity_lifecycle` partition is NOT introduced; SI-018's P2 (tenant-governance) is a more general, canonical-contract-authorized partition that covers this event and other Cat B governance events alongside.
 
 **Audit emission pattern (application-layer, per engineering review answer):** the authContextPlugin issues the `INSERT INTO audit_events ...` over a dedicated application-tier audit-writer pool connection (NOT the request-handler's tenant-scoped connection — the rejected request has no tenant context to write under). The audit INSERT commits before the 401 response is sent. If the audit INSERT itself fails (audit DB unreachable), the plugin still raises `UnauthenticatedError` AND additionally raises a P0 ops alert; the request is rejected with 503 instead of 401 in that case. The information-leak surface is acceptable because 503 = service unavailable conveys nothing about session state.
@@ -207,14 +207,38 @@ Sub-decision 2 includes `account_active` as a checked column. But the `accounts`
 
 **Recommendation for ratifier:** single failure surface at the liveness gate; the `failure_reason` discriminates. Simpler audit-chain shape. Could split later if reviewers want separate `identity.session_account_disabled` event.
 
-### Open Question 3: `tenant_id_claim_mismatch` as a separate failure reason?
+### Open Question 3 (SI-017-OQ-MISMATCH): `tenant_id_claim_mismatch` audit category, partition routing, and merge-blocking regression test — **STOP-CONDITION; HARD-FLOOR ITEM 6 ESCALATION; AWAITING EVANS'S RATIFIER DECISION**
 
-If `auth.sessions.tenant_id` ≠ JWT `tenant_id` claim, that's a JWT-replay-class attack signal (someone replayed a JWT from one tenant's account against another tenant's session ID). Should this be:
-- (a) Folded into `failure_reason = 'missing'` (since the JWT's session_id doesn't match a session that the JWT's tenant could have issued)?
-- (b) A separate `failure_reason = 'tenant_id_claim_mismatch'` with elevated severity?
-- (c) A separate Cat A audit event (since it's an active-attack signal, not just a session-state event)?
+**Trigger:** Codex R2 on SI-017 v0.2 (2026-05-19, review-mpcpoqbq-qjpw0j) explicitly invoked CLAUDE.md hard-floor item 6 on this question. R2 verdict: "Tenant mismatch failure remains unresolved while the audit partition is derived from the untrusted JWT tenant claim... This is architectural judgment, so it should stop and queue per the stated hard-floor." Iteration HALTED at R2 per the §10-escalation cadence.
 
-**Recommendation for ratifier:** option (c) — a separate Cat A `identity.session_jwt_tenant_id_mismatch` event with elevated severity, distinct from the routine `identity.session_liveness_check_failed` Cat B event. JWT-replay-class attacks deserve their own audit-chain entry. But this expands SI-017's scope to 2 new audit events; ratifier may prefer to defer this to a separate SI-018 if scope discipline is a concern.
+**The scenario:** JWT verifies successfully, but the JWT's `tenant_id` claim ≠ `auth.sessions.tenant_id` for the JWT's `session_id`. This is a JWT-replay-class attack signal (someone replayed a JWT from one tenant's account against another tenant's session ID).
+
+**Three architectural decisions required (any path Evans picks must concretize ALL three):**
+
+**A. Audit category for the mismatch event:**
+- Option A1: Cat B (same as routine `identity.session_liveness_check_failed`; mismatch is a failure-mode variant)
+- Option A2: Cat A (separate `identity.session_jwt_tenant_id_mismatch` event; JWT-replay-class attack signal deserves elevated severity + separate audit-chain entry)
+- Option A3: Both (Cat B for the liveness failure + Cat A for the attack signal; two audit rows per failed request)
+
+**B. Partition routing for the mismatch event:**
+- Option B1: P2 keyed by `tenant_id_claimed` (JWT-claim-derived). **Risk Codex flagged:** "routing the event to SHA-256('GENESIS:TENANT:<tenant_id_claimed>') can place an attack signal in the claimed tenant partition rather than the session row's canonical tenant partition" — attacker may control which tenant partition gets the audit log.
+- Option B2: P2 keyed by `auth.sessions.tenant_id` (session-row-derived; canonical-tenant partition). The mismatch event lands in the partition of the tenant that legitimately owns the session_id, not the partition the attacker claimed.
+- Option B3: Two audit rows (one to each partition) for cross-tenant attack-detection redundancy.
+
+**C. Merge-blocking regression test:**
+- Required regression test pinning the audit envelope + partition for the mismatch path; without it the implementation can drift. Codex R2 explicitly required this.
+
+**Claude's advisory recommendation (advisory only; ratifier decides):** Combination A2 + B2 + C — separate Cat A event partitioned by `auth.sessions.tenant_id` (session-row-tenant). Reasoning: (a) attack signals justify Cat A; (b) the legitimately-owning tenant should see the attack signal in their audit chain, not the attacker-claimed tenant; (c) the merge-blocking regression test is non-negotiable per Codex R2's explicit requirement.
+
+**Implementation impact if A2 + B2 + C chosen:**
+- SI-017 scope expands from 1 new Cat B action ID to 2 (1 Cat B `identity.session_liveness_check_failed` + 1 Cat A `identity.session_jwt_tenant_id_mismatch`).
+- AUDIT_EVENTS version bump shape unchanged (still adds 2 action IDs in one ratification ceremony).
+- Mismatch path Sub-decision needs to be authored as a new Sub-decision 4.5 (between current 4 and 5) with exact envelope fields + partition key source + regression test obligation.
+- §7 regression test list needs new entry: "Mismatch path emits Cat A event with `chain_partition_key = SHA-256('GENESIS:TENANT:<auth.sessions.tenant_id>')`; replay across tenants asserts the audit row lands in legitimate-owner tenant partition."
+
+**Alternative: defer to a separate SI** (SI-019 or similar) if Evans prefers scope discipline. Risk: leaves SI-017 with an undefined mismatch behavior at ratification; implementers may use any of the 9 (A1/A2/A3) × (B1/B2/B3) combinations.
+
+**Recommendation:** decide all three (A + B + C) at the SI-017 ratifier ceremony (single combined decision). Do not defer.
 
 ### Open Question 4: Codex pre-ratification rounds — how many before ratifier ceremony?
 
