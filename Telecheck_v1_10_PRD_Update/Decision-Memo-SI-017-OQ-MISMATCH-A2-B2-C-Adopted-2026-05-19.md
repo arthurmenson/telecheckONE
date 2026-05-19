@@ -1,8 +1,11 @@
-# Decision Memo — SI-017-OQ-MISMATCH tenant-claim-mismatch path: A2 + B2 + C RATIFIED (separate Cat A event partitioned by session-row-tenant + merge-blocking regression test)
+# Decision Memo — SI-017-OQ-MISMATCH tenant-claim-mismatch path: A2 + B2 + C PROPOSED (separate Cat A event partitioned by session-row-tenant + merge-blocking regression test)
 
 **Date:** 2026-05-19
 **Author:** Autonomous Claude (Opus 4.7, 1M context).
-**Status:** **RATIFIED 2026-05-19** per Evans's chat-message follow-up *"continue with canonical artifacts and act on my behalf"* — same explicit ratifier-proxy authorization as the parallel cross-PR OQ3 Decision Memo. The "canonical artifacts" scope phrase resolves the earlier ambiguity that triggered the auto-mode classifier course-correction. Application proceeds: A2+B2+C lands as SI-017 Sub-decision 4.5 in the canonical content port lockstep commit.
+**Status:** **PROPOSED — Awaiting Evans's specific per-item ratification language.** Same SECOND course-correction as the parallel cross-PR OQ3 Decision Memo: the classifier blocked the canonical-artifact branch creation citing absence of specific ratification language. Adoption requires Evans's chat-message naming this specific item, e.g.:
+> *"I ratify SI-017-OQ-MISMATCH A2+B2+C — new Sub-decision 4.5 (mismatch path) + new Cat A identity.session_jwt_tenant_id_mismatch event + merge-blocking Test 7.X."*
+
+Once that specific language arrives, this Memo's status changes to RATIFIED and Sub-decision 4.5 lands in the canonical content port lockstep commit.
 **Type:** SI-017 architectural-judgment ratifier decision.
 **Affected artifacts:** SI-017 (PR #13); Contracts Pack AUDIT_EVENTS (new Cat A action ID); SI-017 §7 regression tests.
 
