@@ -29,11 +29,14 @@ All four procedures gain this identical STEP 0 inserted as the FIRST validation 
 -- application call site emits the canonical Cat B audit event + P0 alert.
 
 -- Mode 1: NULL GUC → RAISE (environmental failure; error-stream layer handles)
+-- NOTE: <procedure_name_literal> is a per-procedure string literal — each of the four
+-- SECURITY DEFINER procedures supplies its own canonical procedure name when copying this
+-- template (TG_NAME is trigger-only and is NOT used here). Per-procedure literals below.
 IF current_setting('app.tenant_id', true) IS NULL THEN
   RAISE EXCEPTION 'I-032 Mode 1: app.tenant_id GUC not set on connection; SI-017 authContextPlugin contract violated'
     USING ERRCODE = 'P0001',
-          DETAIL  = format('procedure=%I session_id=%s account_id=%s',
-                           TG_NAME, p_session_id, p_account_id),
+          DETAIL  = format('procedure=%L session_id=%s account_id=%s',
+                           '<procedure_name_literal>', p_session_id, p_account_id),
           HINT    = 'middleware misconfiguration or unauthenticated call path bypassing authContextPlugin';
 END IF;
 
@@ -51,6 +54,19 @@ END IF;
 The `<procedure_return_type>` placeholder is the existing return-tuple type of each procedure; the Mode 2 rejection tuple fills with the rejection flag + rejection_code + NULLs for all other fields. The Mode 1 RAISE aborts before the RETURN statement so the return-type is irrelevant for Mode 1. Per-procedure return-type details below.
 
 **Mode 1 / Mode 2 mutual-exclusion property.** The two modes are mutually exclusive by the GUC's NULL/non-NULL state: a NULL GUC always takes Mode 1; a non-NULL GUC with mismatched `p_tenant_id` always takes Mode 2; a non-NULL GUC with matching `p_tenant_id` proceeds past STEP 0 to the existing validation chain. Per-procedure regression tests obligated for both modes per I-032 §Verification.
+
+**Per-procedure `<procedure_name_literal>` bindings:**
+
+| Procedure | `<procedure_name_literal>` value |
+|---|---|
+| `record_workflow_pointer_swap` (SI-008) | `'record_workflow_pointer_swap'` |
+| `record_consult_escalation_target_swap` (SI-009) | `'record_consult_escalation_target_swap'` |
+| `record_consult_clinician_decision` (SI-005) | `'record_consult_clinician_decision'` |
+| `rotate_consult_clinician_decision_kms` (SI-005) | `'rotate_consult_clinician_decision_kms'` |
+
+Each procedure copies the common STEP 0 SQL above and substitutes its own literal value for `<procedure_name_literal>`. PostgreSQL `%L` format specifier produces a properly-quoted SQL literal (e.g., `'record_consult_clinician_decision'`) in the DETAIL string; future SECURITY DEFINER procedures gaining I-032 STEP 0 add a row to this table and supply their own literal — the template stays stable.
+
+**Why not pg_proc lookup?** A dynamic lookup via `current_setting('plpgsql.current_function_name')` or `pg_get_functiondef(oid)` introspection adds per-call overhead + catalog lookup risk + naming ambiguity for overloaded procedures. Per-procedure literal substitution is the canonical pattern.
 
 ## 2. Per-procedure application
 
