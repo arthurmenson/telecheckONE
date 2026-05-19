@@ -19,9 +19,18 @@ After the last existing invariant block (I-031 per v1.10 cycle additions), inser
 
 Update the §"Invariant inventory" table at the top of the file to include the new row.
 
-## 2. Canonical text (post-R5 NULLIF normalization; matches canonical INVARIANTS v5.3 verbatim)
+## 2. Non-authoritative summary of canonical I-032 (NOT verbatim; for ratification audit-trail context only)
 
-**Note:** This file was authored 2026-05-19 as a PROPOSED text-for-canonical-application reference. The canonical I-032 landed in INVARIANTS v5.3 via commit 6cf8551 + Mode 1/Mode 2 split applied at commit a0c4835 + NULLIF normalization applied at commit 47d9792 (R5 HIGH-1 closure). The text below now matches the canonical INVARIANTS v5.3 verbatim; the **authoritative source remains `Telecheck_Contracts_Pack_v5_00_INVARIANTS.md` I-032**, not this file. This PROPOSED file is retained as historical reference for the ratification audit-trail.
+**CRITICAL READING NOTE — the canonical source-of-truth for I-032 is `Telecheck_Contracts_Pack_v5_00_INVARIANTS.md` (INVARIANTS v5.3), NOT this file.** This file was authored 2026-05-19 as the original PROPOSED text-for-canonical-application reference; the canonical text has since been amended through multiple Codex R-rounds (R3 Mode 1/Mode 2 split + R5 NULLIF normalization + R6 sync attempt) and the wording below has DIVERGED from canonical INVARIANTS in several ways (audit-envelope bullet phrasing, rationale prose, scope/operational/verification sections summarized). **Engineers + implementers + reviewers MUST consult canonical INVARIANTS v5.3 I-032 (lines ~253-310) for the authoritative text.** The block below is retained as a non-authoritative summary for the ratification audit-trail; reading it as canonical specification will produce divergence from the actual canonical contract.
+
+**Known wording deltas vs canonical INVARIANTS v5.3 I-032 as of R7 closure 2026-05-19:**
+- Audit-envelope bullet: this summary writes `tenant_id = NULLIF(...)`; canonical writes `tenant_id = current_setting('app.tenant_id', true)` (the canonical text implicitly assumes Mode 2's non-NULL precondition from the surrounding context, so the NULLIF wrap is unnecessary at the envelope line).
+- Scope/Operational/Verification sections are compressed-to-pointer in this summary; canonical INVARIANTS carries the full text.
+- The full rationale paragraph (Codex finding pointers, Decision Memo citation) is present in canonical INVARIANTS but truncated here.
+
+If a verbatim mirror is needed for tooling that depends on this file: copy the canonical I-032 block from INVARIANTS v5.3 directly; do not maintain two copies.
+
+The summary below is preserved as authored at this file's creation (with subsequent R-round amendments) for ratification audit-trail purposes only:
 
 > **I-032 — Tenant-GUC equality guard on SECURITY DEFINER procedures with actor-tenant parameters**
 >
