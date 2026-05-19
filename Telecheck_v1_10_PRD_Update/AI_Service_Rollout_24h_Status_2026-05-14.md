@@ -3942,3 +3942,61 @@ The autonomous-work loop exercised the discipline floor multiple times tonight:
 5. **Either path:** the three supersession PRs unblock and become ready for ratifier ceremony within ~1-2 days of OQ3 resolution + SI-017/SI-018 ratification.
 
 — Claude (Opus 4.7, 1M context), 2026-05-19 overnight autonomous-work loop. Cumulative cycle stats updated: 63 PRs MERGED + 3 OPEN DRAFT (with the three supersession DRAFTs); 296+ Codex closures cumulative.
+
+---
+
+## Addendum 51 — 2026-05-19 morning — SI-017 R1 closure + R2 STOP-and-queue at hard-floor item 6 (SECOND ratifier-decision item this cycle)
+
+**Authorization:** continuation of the autonomous-work loop per Evans's standing directive. Next critical-path item picked = SI-017 amendment to cite SI-018 P2 partition rule (in-scope work not dependent on the cross-PR OQ3 already queued for Evans).
+
+### Cycle outcome (one-line)
+
+SI-017 R1 HIGH-1 closed inline by citing SI-018 canonical P2 partition rule; **SI-017 R2 returned a SECOND hard-floor item 6 architectural-judgment finding (tenant-claim-mismatch path)** — iteration HALTED at R2 per the §10-escalation cadence; new ratifier-decision item SI-017-OQ-MISMATCH added to the morning-review queue alongside the cross-PR OQ3 from Addendum 50.
+
+### What landed
+
+| Commit | Branch | Description |
+|---|---|---|
+| `1f703e1` | `spec/si-017-phase2-f3-canonical-middleware-2026-05-19` | SI-017 v0.1 → v0.2 R1 closure: cite SI-018 P2 partition rule; cross-artifact impact rewritten with SI-018 prerequisite framing; Status block BLOCKED-PENDING-SI-018-RATIFICATION |
+| `03bdd54` | same | SI-017 v0.2 R2 STOP-and-queue: §6 OQ3 reframed to formal STOP-condition with three architectural decisions (A audit category, B partition routing, C merge-blocking regression test); Status block double-BLOCKED with SI-017-OQ-MISMATCH |
+
+### The SI-017-OQ-MISMATCH ratifier-decision item
+
+**Trigger:** Codex R2 on SI-017 v0.2 (review-mpcpoqbq-qjpw0j) explicitly invoked CLAUDE.md hard-floor item 6: "Tenant mismatch failure remains unresolved while the audit partition is derived from the untrusted JWT tenant claim... This is architectural judgment, so it should stop and queue per the stated hard-floor."
+
+**The scenario:** JWT verifies successfully, but the JWT's `tenant_id` claim ≠ `auth.sessions.tenant_id` for the JWT's `session_id`. This is a JWT-replay-class attack signal (someone replayed a JWT from one tenant's account against another tenant's session ID).
+
+**Three architectural decisions required (Evans must pick one combination):**
+
+**A. Audit category:** A1 Cat B (failure-mode variant) / A2 Cat A (separate attack-signal event) / A3 Both
+**B. Partition routing:** B1 claimed-tenant (attacker-influenced — Codex flagged this risk) / B2 session-row-tenant (legitimate-owner) / B3 Both
+**C. Merge-blocking regression test:** required per Codex R2 (non-negotiable component)
+
+**Claude's advisory recommendation:** A2 + B2 + C — separate Cat A `identity.session_jwt_tenant_id_mismatch` event partitioned by `auth.sessions.tenant_id` (session-row-tenant). Rationale: attack signals justify Cat A; the legitimately-owning tenant should see the attack signal in their audit chain, not the attacker-claimed tenant; merge-blocking test pins the contract for implementers.
+
+### Cumulative ratifier-decision queue for Evans's morning review
+
+Two architectural-judgment items now awaiting Evans's decision:
+
+1. **Cross-PR OQ3 (from Addendum 50)** — trust-boundary equality-guard `p_tenant_id` vs `current_setting('app.tenant_id')` for the four amended SECURITY DEFINER procedures. Option A canonical-invariant amendment vs Option B existing-posture documentation. Framing at `Telecheck_v1_10_PRD_Update/P-021a-Supersession-SI-005-Actor-Identity-Source-Amendment.md` §4 OQ3.
+
+2. **SI-017-OQ-MISMATCH (this Addendum)** — tenant-claim-mismatch path audit category + partition routing + merge-blocking regression test. Three decisions (A + B + C) at the SI-017 ratifier ceremony. Framing at `Telecheck_v1_10_PRD_Update/SI-017-Phase-2-F3-JWT-Liveness-Canonical-Middleware-GUC-Model.md` §6 OQ3 / SI-017-OQ-MISMATCH.
+
+### STOP conditions exercised this cycle (extended worked-example trail)
+
+The autonomous-work loop has now exercised CLAUDE.md hard-floor item 6 STOP-and-queue posture THREE times this cycle:
+
+1. **P-021a R3 (overnight, Addendum 50)** — Codex explicitly invoked hard-floor item 6 on trust-boundary equality-guard; iteration HALTED at R3. → cross-PR OQ3.
+2. **SI-017 R2 (this morning)** — Codex explicitly invoked hard-floor item 6 on tenant-claim-mismatch path; iteration HALTED at R2. → SI-017-OQ-MISMATCH.
+
+Both honored the discipline floor: do NOT iterate inline past an architectural-judgment finding; surface to Evans as a formal ratifier-decision item with concretized options + advisory recommendation.
+
+### What's still unblocked for autonomous work
+
+- **Decision Brief for SI-017** can be authored after Evans resolves SI-017-OQ-MISMATCH (decision content depends on Evans's A/B/C choice).
+- **SI-018 Decision Brief** is already authored (Addendum 50); SI-018 ratifier ceremony is ready to run.
+- **Decision Briefs for the three supersession PRs (P-018a/P-019a/P-021a)** are pending Evans's OQ3 + SI-017/SI-018 ratification.
+
+**No further critical-path SI/supersession work can proceed without Evans's input.** The loop is now genuinely blocked on Evans. Other Master Completion Plan track work (Track 1 Clinical Care, Track 2 AI Service, Track 4 Mobile, Track 5 Infra) may have unblocked items but those are typically multi-day implementation work, not single-PR-cycle items.
+
+— Claude (Opus 4.7, 1M context), 2026-05-19 morning autonomous-work continuation. Cumulative cycle stats updated: 63 PRs MERGED + 4 OPEN DRAFT (3 supersessions + SI-017); 298 Codex closures cumulative; 2 architectural-judgment items queued for Evans's morning review.
