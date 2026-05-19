@@ -1,7 +1,8 @@
 # Cold-DR Runbook (us-east-1 → us-west-2 failover)
 
 **Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; Track 5 Infra/Ops deliverable per Master Completion Plan §"Track 5 (operates AHEAD of code)"
+**Status:** RATIFIER-READY-WITH-KNOWN-OQs (post-R5 Codex iterate-to-asymptote close at §10 cadence boundary, 2026-05-19); Track 5 Infra/Ops deliverable per Master Completion Plan §"Track 5 (operates AHEAD of code)"
+**Codex iteration trajectory:** R1 (3 HIGH + 2 MED) → R2 (2 HIGH + 1 MED) → R3 (2 HIGH + 1 MED) → R4 (2 HIGH + 1 MED) → R5 (1 HIGH + 1 MED). Convergence depth: each round surfaced 1-3 in-scope correctness gaps with the partition-behavior + per-device obligation model becoming progressively more precise across rounds. Asymptote pattern consistent with v1.10.1 hygiene cycle precedent. R5 marks the §10 cadence boundary; remaining work captured as known OQs in §8.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus operations deliverable)
 **Owner:** SRE Lead + Incident Commander (named per active incident)
 **Companion documents:** F-4 Deploy Runbook v0.1 DRAFT, SIEM Integration Spec v0.1 DRAFT, ADR-026 (single-region+cold-DR architecture), Ghana Launch Playbook v1.2, GOVERNANCE_CONTROLS Contracts Pack v5.2
@@ -473,12 +474,28 @@ This rewrite ensures the I-019 replay gate is provable under realistic offline-d
 4. **OQ4 — Back-failover 7-day soak override criteria.** Recommendation: operator + IC + CTO can override only for documented platform-stability concerns; default 7-day soak holds otherwise.
 5. **OQ5 — Codex pre-ratification target for this runbook.** Recommendation: 2-3 rounds. Operations spec.
 6. **OQ6 — Cross-SI dependency on SIEM §4.5.HC.** This runbook references SIEM Integration Spec §4.5.HC for S3 manifest verification (Step 8). If §4.5.HC splits into SI-021 per the SIEM Spec R6 close-out observation, this runbook's reference updates to SI-021. Operational dependency unchanged.
+7. **OQ7 — Multi-region ACK channel implementation primitive selection (added at R5 ratifier-ready boundary).** This runbook commits to the canonical topology (multi-region writeable append-only store; AWS DynamoDB Global Tables OR equivalent; separate from primary RDS) and to the partition semantics (W=2-of-2 in normal operation, W=1 + partition_degraded=true under partition). The specific primitive (DynamoDB Global Tables vs Aurora Global Database vs a CRDT layer over S3 vs custom) is implementation-discretionary subject to the topology + semantics being preserved. Recommendation: file as follow-up SI when the AI Service deployment kicks off; the topology + semantics in this runbook are ratifier-targetable independent of the primitive choice.
+8. **OQ8 — Cross-region replication-backfill SLA for state-P promotion (added at R5 ratifier-ready boundary).** When partition-degraded entries are written under W=1, they remain state-P until the failed region recovers + replication backfill promotes them to quorum-ACKed. The runbook does not specify a maximum SLA for this backfill; in practice it is bounded by the regional recovery time + AWS replication backfill rate. Recommendation: ratifier confirms that no per-signal hard-SLA is required for state-P → state-Q promotion (the per-device unresolved-obligation record + i019_pending_replay mechanism provides the durable record regardless of backfill timing). If a hard-SLA is desired, file as follow-up SI.
 
 ---
 
 ## 9. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
+
+**v0.1 R1-R5 closure 2026-05-19 (background Codex iteration during 24h-loop Sprint 7):**
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | 3 HIGH (pre-promotion integrity gate; tenant-routing gate split; back-failover state machine) + 2 MED (I-019 replay hard gate; abort decision tree) | All closed inline |
+| R2 | 2 HIGH (offline schema_control_manifest; tenant-routing split into infra-only + app-level post-scale-up) + 1 MED (server-side i019_enqueue_ack_log evidence model) | All closed inline |
+| R3 | 2 HIGH (DR-survivable multi-region ACK channel topology; hard tenant-risk threshold defaults) + 1 MED (5%/20% warning/block hard-defaults) | All closed inline |
+| R4 | 2 HIGH (quorum-correct ACK durability; Step 14.5 two-source inventory UNION) + 1 MED (20% override authority normalization) | All closed inline |
+| R5 | 1 HIGH (partition-aware quorum: W=2-of-2 in normal operation, W=1 + partition_degraded under partition) + 1 MED (three-state per-device obligation model: state-Q quorum-ACKed, state-P partition-degraded, state-N no-ACK with per_signal_inventory_known=false until first reconnect) | All closed inline |
+
+**Status at R5 close:** RATIFIER-READY-WITH-KNOWN-OQs (OQ1-OQ8 listed §8). Per §10 cadence boundary commitment, Cold-DR Runbook is marked ratifier-ready and the workstream proceeds to Sprint 8 (Identity Spec v1.0 → v1.1 amendment integrating SI-017 canonical content port + I-032 STEP 0 SECURITY DEFINER pattern).
+
+**Asymptote observation:** R1-R5 trajectory follows the v1.10.1 hygiene cycle precedent — each round surfaces 1-3 in-scope correctness gaps on partition-behavior + per-device obligation model semantics; depth converges on prose-consistency refinements of architecture that is itself stable from R3 forward. No architectural-judgment items were introduced inline at any round; the canonical topology (multi-region CRDT-style append-only store separate from primary RDS) has held from R3 forward, with R4-R5 refining durability semantics under partition.
 
 ---
 
