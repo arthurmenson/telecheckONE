@@ -19,28 +19,28 @@ The canonical P-018 SI-008 entry was ratified at sub-ceremony 2 of the Q2 2026 r
 
 SI-010 was subsequently REJECTED via Promotion Ledger entry P-023a (2026-05-19). The procedure's design itself stands — KMS envelope, CAS-and-supersession protocol, bidirectional pointer invariant, three-tier audit durability framework, 5 rejection codes, etc., all remain ratified. But the specific sub-decision tying the procedure's actor-identity source to SI-010 helpers must be amended onto the canonical middleware-GUC + JWT-verified-context model.
 
-P-018a is that amendment. **Scope is explicitly narrow:** one sub-decision changes (actor-identity-source); all other P-018 sub-decisions stand unchanged.
+P-018a is that amendment. **Scope is explicitly narrow:** two P-018 sub-decisions are amended — Sub-decision 8 (procedure design) for actor-identity-source, and Sub-decision 10 (audit durability) for audit-emission location. All other P-018 sub-decisions stand unchanged. The two amendments are tightly coupled because the audit-emission-location change is a direct downstream consequence of moving actor identity out of the procedure (the audit envelope's actor fields come from the same JWT-verified application context as the procedure parameters).
 
 ---
 
 ## 2. Proposed Promotion Ledger entry text (this will append to the canonical ledger when ratified)
 
-### Entry P-018a — 2026-05-19 (authored; ratification date TBD) — SI-008 actor-identity-source supersession: amend `record_workflow_pointer_swap()` to source actor identity from canonical middleware-GUC + JWT-verified-context per SI-017 + SI-018 (supersedes P-018 sub-decision 8 portion; preserves all other P-018 sub-decisions unchanged)
+### Entry P-018a — 2026-05-19 (authored; ratification date TBD) — SI-008 actor-identity-source supersession: amend `record_workflow_pointer_swap()` to source actor identity from canonical middleware-GUC + JWT-verified-context per SI-017 + SI-018 (supersedes P-018 Sub-decisions 8 + 10 portions; preserves all other P-018 sub-decisions unchanged)
 
-**Type:** Reconciliation entry (no Registry version bump; supersedes a specific sub-decision of an existing canonical entry without introducing new canonical content beyond what SI-017 and SI-018 already establish).
+**Type:** Reconciliation entry (no Registry version bump; supersedes specific sub-decisions of an existing canonical entry without introducing new canonical content beyond what SI-017 and SI-018 already establish).
 
-**Status:** **RATIFIED IN INTENT [DATE TBD]** (workstream lead chat-message sign-off pending; ratifier ceremony pending SI-017 + SI-018 ratification first). **CANONICAL** after the ratifier ceremony completes.
+**Status:** **DRAFT / BLOCKED-PENDING-SI-017-RATIFICATION + SI-018-RATIFICATION.** Promotion to RATIFIED IN INTENT requires workstream lead chat-message sign-off; promotion to CANONICAL requires the ratifier ceremony, which cannot run until SI-017 + SI-018 ratify first. **No canonicality claim is made by this DRAFT.**
 
 **Author:** Autonomous Claude (P-018a v0.1 DRAFT authored 2026-05-19 in workstream folder; Decision Brief artifact to follow after SI-017 + SI-018 ratify; ratifier ceremony scheduled after prerequisites complete).
 
-**Trigger:** SI-010 trust-anchor layer rejected per Promotion Ledger entry P-023a 2026-05-19. The P-018 SI-008 procedure design referenced SI-010 helpers for actor-identity derivation; that reference must be amended onto the canonical model now that SI-017 (Phase 2 F-3 within canonical middleware-GUC) and SI-018 (audit-chain partition rule) are ratified.
+**Trigger:** SI-010 trust-anchor layer rejected per Promotion Ledger entry P-023a 2026-05-19. The P-018 SI-008 procedure design referenced SI-010 helpers for actor-identity derivation; that reference must be amended onto the canonical model once SI-017 (Phase 2 F-3 within canonical middleware-GUC) and SI-018 (audit-chain partition rule) ratify. P-018a is BLOCKED-PENDING those prerequisites.
 
 **Promotion class:** reconciliation — supersedes a specific sub-decision of P-018, preserves all other P-018 sub-decisions, no new canonical content beyond what SI-017 + SI-018 already establish.
 
 **Sub-decision supersessions** (the only material change vs the canonical P-018 entry):
 
 1. **P-018 Sub-decision 8 (record_workflow_pointer_swap() SECURITY DEFINER procedure) is AMENDED:** the procedure's actor-identity source changes from "SI-010 `current_actor_*()` helpers reading from `_session_actor_context` table" (rejected per P-023a) to **"caller-supplied actor identity parameters (p_account_id, p_tenant_id, p_role, p_admin_home_tenant_id, p_session_id) sourced from the authContextPlugin's JWT-verified middleware-resolved actor context per SI-017."** The application bears the trust-boundary responsibility for these parameters (same as every RPC the platform issues per the canonical model); the procedure does NOT re-verify identity (no procedure-side trust anchor; SI-010 rejected).
-2. **P-018 Sub-decision 10 (three-tier audit durability) is AMENDED:** Tier 1 audit emission moves from inside-procedure (rejected per P-023a) to **application-layer immediately after procedure-success return per the engineering-review-grounded canonical pattern** (per `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-I-003-Atomic-Audit-Inside-vs-Application-Layer-Audit-2026-05-19.md`'s unanimous NO answer). Tier 2 (`audit_swap_rejection_log` autonomous-transaction backstop) and Tier 3 (caller-required-commit-boundary contract) are unchanged. The audit-event partition tier is **tier 2** per SI-018's canonical partition rule (`tenant_id` of the operating tenant; governance-class Cat B).
+2. **P-018 Sub-decision 10 (three-tier audit durability) is AMENDED:** The audit-emission-LOCATION changes; the three-tier durability FRAMEWORK is preserved. Specifically, **durability tier D1** (formerly "Tier 1") audit emission moves from inside-procedure (rejected per P-023a) to **application-layer immediately after procedure-success return per the engineering-review-grounded canonical pattern** (per `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-I-003-Atomic-Audit-Inside-vs-Application-Layer-Audit-2026-05-19.md`'s unanimous NO answer). **Durability tier D2** (`audit_swap_rejection_log` autonomous-transaction backstop) and **durability tier D3** (caller-required-commit-boundary contract) are unchanged. The relabeling D1/D2/D3 (durability tiers) vs SI-018's P1/P2 (partition tiers) is a notational disambiguation — the underlying P-018 framework is preserved; it is renamed in this entry only to avoid collision with SI-018's two-tier partition vocabulary. Per SI-018, this procedure's `audit_events` record is **partition tier P2 (tenant-governance)**: `target_patient_id` IS NULL; `tenant_id` is the operating tenant; `chain_partition_key = SHA-256("GENESIS:TENANT:<tenant_id>")`; Cat B governance-class.
 
 **Preserved P-018 sub-decisions** (unchanged from the canonical P-018 entry):
 
@@ -101,15 +101,20 @@ AFTER (canonical application-layer pattern per engineering review):
   managed transaction. Audit envelope identity comes from the
   JWT-verified application context.
 
-  The three-tier audit durability framework is preserved:
-  - Tier 1: application-issued audit INSERT (was inside-procedure)
-  - Tier 2: audit_swap_rejection_log autonomous-transaction backstop
-    (unchanged; survives caller rollback)
-  - Tier 3: caller-required-commit-boundary contract (unchanged)
+  The three-tier audit DURABILITY framework is preserved (renamed
+  D1/D2/D3 in this entry to disambiguate from SI-018's partition tiers):
+  - D1: application-issued audit INSERT (was inside-procedure pre-P-023a)
+  - D2: audit_swap_rejection_log autonomous-transaction backstop
+        (unchanged; survives caller rollback)
+  - D3: caller-required-commit-boundary contract (unchanged)
 
-  The audit event partition tier is tier 2 per SI-018's canonical
-  partition rule (target_patient_id NULL; tenant_id is the operating
-  tenant; governance-class Cat B audit event).
+  Independently, per SI-018's two-tier audit-chain PARTITION rule, this
+  procedure's audit_events record lives in P2 (tenant-governance):
+    target_patient_id IS NULL
+    tenant_id         = operating tenant
+    chain_partition_key = SHA-256("GENESIS:TENANT:<tenant_id>")
+    category          = Cat B governance-class
+  Durability tiers and partition tiers are orthogonal axes.
 ```
 
 **Engineering review grounding** (per the engineering-review prompt at `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-I-003-Atomic-Audit-Inside-vs-Application-Layer-Audit-2026-05-19.md`): unanimous NO answer confirmed that application-layer audit emission within the same application-managed transaction satisfies I-003 audit-immutability + HIPAA technical-safeguards + the BAA chain contractual posture. DB-side atomic audit inside the SECURITY DEFINER procedure is NOT required. P-018a applies that engineering-review answer to SI-008's procedure design.
