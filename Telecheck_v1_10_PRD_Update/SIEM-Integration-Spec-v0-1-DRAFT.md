@@ -204,15 +204,44 @@ Per AUDIT_EVENTS v5.5 §Retention canonical policy:
 3. **Tier-transition attestations.** Each tier transition emits a Cat B audit event `audit_retention.tier_transition_executed` with payload: `partition_key, source_tier, target_tier, transition_record_range, boundary_hash, attesting_operator_id, attestation_timestamp`. The attestation itself becomes part of the canonical audit chain.
 4. **Retention of link dependencies for full legal period.** All hash linkages (predecessor/successor pointers) are retained across the full retention period (per the table above; up to max(10y, regulatory) for Cat A) — even if intermediate events have been archived to cold storage. A chain verification at year-9 must traverse all hot/warm/cold tiers without gaps.
 5. **Scheduled chain-verification job.** A weekly background job traverses every active partition's chain across all tiers (hot → warm → cold) and reports any broken link. Job results published to the SIEM as Cat B audit events; failures trigger P0 alerts (per Sub-decision 3).
-6. **Manifest immutability (concrete enforcement per R2 HIGH-2 closure).** Per-tier manifests are stored with the following enforced controls:
+6. **Manifest immutability (concrete enforcement; R2 HIGH-2 + R3 HIGH-1 + R3 MED-1 closures).** Per-tier manifests are stored with the following enforced controls, with independence-of-verification + first-write acceptance controls per R3:
+
+   **Storage controls:**
    - **S3 Object Lock COMPLIANCE mode** with object versioning enabled on every manifest bucket. Compliance mode prevents deletion or modification of manifest objects even by privileged actors (including the root account) for the duration of the legal retention period.
    - **Retention lock** sized to the canonical legal retention period per Cat A / Cat B (max(10y, regulatory) / 7y). Once a manifest object is written, no modification or delete is permitted until the retention lock expires.
    - **Bucket policy restricts write to a dedicated service role** (`audit-archive-writer`); the role has `s3:PutObject` only (no `s3:DeleteObject`, no `s3:PutBucketLifecycle` for the manifest prefix). All other accounts including platform_admin lack write access to the manifest prefix.
-   - **Signed manifest digests anchored in Cat B audit events.** Every manifest object's SHA-256 digest is recorded in a Cat B audit event `audit_retention.manifest_persisted` at the time of write. The digest persists in the canonical audit chain — independently retained from the manifest object itself. Verification compares the live manifest object's current digest against the audit-event-recorded digest; mismatch indicates tampering.
-   - **Cross-region replication** of manifest objects from us-east-1 to us-west-2 cold DR (per ADR-026); both copies S3-Object-Lock-COMPLIANCE-mode protected. Tampering on one region's manifest detected by cross-region digest comparison.
-   - **Independent verification job** (separate from the weekly chain-verification job in #5 above) runs monthly: re-computes each manifest object's digest, compares against the Cat B audit-event-recorded digest + cross-region copy's digest. Any mismatch triggers P0 alert per Sub-decision 3.
 
-These concrete controls make manifest immutability provable: a lifecycle bug or privileged actor cannot replace a manifest without (a) leaving the original Object Lock retention intact (which they cannot delete) AND (b) producing a new digest that mismatches the Cat B audit event AND (c) producing a mismatch with the cross-region copy. Each is independently verifiable.
+   **First-write acceptance controls (R3 MED-1 closure; prevents forged-first-write from becoming immutable):**
+   - **Deterministic key naming.** Manifest objects use deterministic keys (`<partition_tier>/<partition_key>/<sequence_range_start>-<sequence_range_end>.manifest.json`); duplicates are detectable by key.
+   - **Create-only semantics.** Write uses `If-None-Match: *` (S3 conditional PUT) — overwrite of an existing key REJECTED at the S3 layer. A second writer attempt on the same key fails before retention lock applies.
+   - **Monotonic sequence + range validation by an independent verifier role.** Before `audit-archive-writer` PUTs the manifest, a separate `audit-archive-verifier` role validates: (a) the proposed manifest's `sequence_range_start = predecessor_manifest.sequence_range_end + 1` (no gaps); (b) the proposed manifest's first-record `previous_hash = predecessor_manifest.last-record record_hash` (boundary continuity); (c) all `(sequence_number, record_id, record_hash, previous_hash)` tuples in the manifest are consistent with the audit DB CDC stream's actual records (count + content match). Verifier emits a Cat B `audit_retention.manifest_pre_write_verified` audit event before writer's PUT proceeds.
+   - **Separate writer + verifier + signer IAM roles.** The 3 roles are issued to separate humans (or automated pipelines with separate KMS keys); no single compromised role can produce a self-consistent fraudulent manifest.
+
+   **Independent transparency anchor (R3 HIGH-1 closure; eliminates circular tamper-detection):**
+   - **HSM-backed asymmetric signing.** A dedicated signing key in AWS KMS (or hardware HSM) — held under a key policy that PERMITS `kms:Sign` only by a `audit-archive-signer` role, separate from `audit-archive-writer`. The signer role is held by a different human/automated pipeline than the writer.
+   - **Signing process.** After the manifest object is PUT + Object-Locked, the signer computes the manifest's SHA-256 digest + signs it with the HSM-backed key, producing a digital signature. The signature is stored in TWO places independently:
+     - (i) As a Cat B audit event `audit_retention.manifest_persisted` — same as before, but now contains the SIGNATURE (not just the digest). The Cat B audit chain is one anchor.
+     - (ii) Append-only external transparency log (e.g., AWS QLDB ledger OR an external public certificate-transparency-style log) — INDEPENDENT of the audit chain. The transparency log entry: `{manifest_key, manifest_digest, signature, timestamp, signer_role_id}`. The transparency log is append-only by design + write access restricted to the signer role + cryptographically chained (each log entry references the previous).
+   - **Verification process (monthly + on-demand).** The independent verification job:
+     - (a) Re-computes each manifest object's SHA-256 digest from current S3 contents
+     - (b) Verifies the signature against the HSM public key (the public key is published in a separate immutable location for the verifier's lookup)
+     - (c) Compares the digest against the Cat B audit-event-recorded digest AND the transparency-log-recorded digest AND the cross-region copy's digest. ALL FOUR sources must agree.
+     - (d) If any disagreement: P0 alert + freeze the affected partition + open an incident with the audit-archive trio (writer/verifier/signer) for triage.
+   - **Independence proof.** The transparency log is anchored OUTSIDE the audit chain (a different storage system with a different write-access policy). A compromised audit-archive-writer cannot retroactively forge a transparency-log entry because that requires the signer's HSM-backed key. A compromised signer cannot forge a manifest because that requires `audit-archive-writer` IAM (and Object Lock prevents post-write modification). A compromised verifier cannot accept a forged first-write because the manifest digest signature is required AND the verifier's role doesn't grant signing rights.
+
+   **Cross-region replication of manifest objects** from us-east-1 to us-west-2 cold DR (per ADR-026); both copies S3-Object-Lock-COMPLIANCE-mode protected. Tampering on one region's manifest detected by cross-region digest comparison AND by mismatch with the transparency-log signature.
+
+   **Failure-mode coverage matrix (R3 closure):**
+
+   | Tamper vector | Detected by |
+   |---|---|
+   | Post-write object modification | S3 Object Lock prevents; cross-region digest mismatch |
+   | Compromised audit-archive-writer (forged first write) | Separate verifier role validates pre-write; signer role required for signature; transparency-log entry requires HSM-backed key |
+   | Compromised signer (forged signature on a real manifest) | Verifier role would have rejected the writer's PUT if predecessor-boundary-hash didn't match; the manifest itself is correct, only the signature is suspect → verification flags signature-without-content mismatch |
+   | Compromised verifier (accepts a bad pre-write) | Writer + signer roles still required; transparency-log requires signer's HSM key; if signer is honest, a bad pre-write fails to sign |
+   | Coordinated compromise of all three roles | Cross-region replication + external transparency log + HSM key audit trail provide forensic evidence; this is the failure mode all defense-in-depth designs accept exists |
+
+   The trio of separated roles (writer + verifier + signer) + HSM-backed independent signing + external transparency log + cross-region replication makes manifest immutability provable against single-role compromise. Coordinated compromise of all three roles + the transparency log is the only path that defeats the design — and that's the canonical "out of scope" failure mode that any audit system accepts.
 
 These archival mechanics ensure that I-027 chain verification remains valid when archived Cat A/Cat B evidence is retrieved for regulatory inquiry, including across the hot/warm/cold tier boundaries that are the highest-risk integrity surface.
 
