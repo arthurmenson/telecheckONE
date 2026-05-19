@@ -185,11 +185,10 @@ Per I-019 platform-floor invariant (preserved at v1.0), every Mode 1 turn MUST i
 
 The detector runs BEFORE the LLM call. Enforcement is at **two layers**:
 
-1. **Runtime state-machine precondition (primary enforcement):** the Mode 1 handler maintains a per-turn in-memory `turn_state` machine with strict ordering:
-   - `admitted` → `detector_completed` → `llm_invoked` → `completed` | `failed`.
-   - The `llm.invoke()` call site verifies `turn_state == detector_completed` BEFORE invoking; an attempt to call LLM in any other state raises a runtime invariant violation that fails the turn with 500 `mode1.internal_error` + emits Cat A `ai.mode1.invariant_violation_detector_ordering` event.
-   - The state machine is enforced at the `llm.invoke()` adapter layer — every adapter (Anthropic, Azure-OpenAI, OpenAI) verifies the state before issuing the HTTP request to the provider.
-   - The per-turn `detector_result` (severity + detector_completed_at) is persisted to the `ai_mode1_conversation_turn` row at the `detector_completed` transition via INSERT-only semantics; the LLM call reads from that row to bind the LLM context to the detector result.
+1. **Runtime state-machine precondition + durable DB-row correspondence (primary enforcement):** the Mode 1 handler maintains a per-turn `turn_state` machine with strict ordering, where each state corresponds to the existence of a specific DB row per §6.2:
+   - `admitted` (DB: row exists in `ai_mode1_conversation_turn_admission`) → `detector_completed` (DB: row exists in `ai_mode1_conversation_turn_detector_result`) → `llm_invoked` → `completed` (DB: row exists in `ai_mode1_conversation_turn_result` with `turn_outcome = 'completed'`) | `failed` (DB: row exists in `ai_mode1_conversation_turn_result` with `turn_outcome = 'failed'`).
+   - The `llm.invoke()` call site verifies a `ai_mode1_conversation_turn_detector_result` row exists for the turn_id BEFORE invoking; this is a SELECT executed within the same transaction as the LLM-invocation-decision; absence of the row → runtime invariant violation fails the turn with 500 `mode1.internal_error` + emits Cat A `ai.mode1.invariant_violation_detector_ordering` event.
+   - The state machine is enforced at the `llm.invoke()` adapter layer — every adapter (Anthropic, Azure-OpenAI, OpenAI) verifies the durable DB state before issuing the HTTP request to the provider. This is process-restart-safe + retry-safe + feature-flag-safe because the precondition is a durable DB row, not an in-memory variable.
 
 2. **Static-analyzer rule `TLC-AI-001` (secondary guard):** verifies at PR open that no code path can call `llm.invoke()` outside the Mode 1 handler's canonical state-machine wrapper. Merge-blocking at CI.
 
@@ -282,71 +281,123 @@ This preserves the canonical separation: Mode 1 = conversational (no side effect
 
 ## 6. Conversation-state durability
 
-### 6.1 `ai_mode1_conversation` entity (proposed CDM amendment)
+### 6.1 `ai_mode1_conversation` entities (proposed CDM amendment; R2 HIGH-2 closure: split-table immutable lifecycle)
 
-Per the §10 OQ section below, this spec proposes adding two entities to CDM v1.2 (becoming CDM v1.3 at promotion):
+Per the §10 OQ section below, this spec proposes adding **four entities** to CDM v1.2 (becoming CDM v1.3 at promotion). The split-table model preserves I-027 append-only semantics for every record AND supports the multi-state lifecycle (admission → detector_completed → llm_invoked → completed/failed) per the runtime state machine in §4.2.
 
 ```sql
+-- Conversation envelope (1 row per conversation)
 CREATE TABLE ai_mode1_conversation (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id tenant_id_t NOT NULL,
     patient_id UUID NOT NULL REFERENCES patient(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_turn_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    archived_at TIMESTAMPTZ,
-    -- RLS: tenant_id = current_setting('app.tenant_id')
+    last_turn_at TIMESTAMPTZ NOT NULL,                        -- Updated atomically via INSERT trigger on ai_mode1_conversation_turn_result
+    archived_at TIMESTAMPTZ,                                  -- Patient-retention-policy archival; not turn-related
     CONSTRAINT ai_mode1_conversation_tenant_check CHECK (tenant_id IS NOT NULL)
 );
 
-CREATE TABLE ai_mode1_conversation_turn (
+-- Immutable admission record (1 row per turn at admission; INSERT-only)
+CREATE TABLE ai_mode1_conversation_turn_admission (
     id UUID PRIMARY KEY,                                      -- = turn_id (client-generated)
     tenant_id tenant_id_t NOT NULL,
     conversation_id UUID NOT NULL REFERENCES ai_mode1_conversation(id),
     patient_id UUID NOT NULL REFERENCES patient(id),
     user_message TEXT NOT NULL,                               -- Encrypted at rest per per-tenant KMS
-    assistant_message TEXT,                                   -- Encrypted at rest; null if turn failed
-    crisis_severity TEXT,                                     -- Null if no crisis; one of {self_harm, imminent_harm, medical_emergency}
-    crisis_server_signal_id UUID,                             -- Null if no crisis; references i019_enqueue_ack_log
-    provider TEXT NOT NULL,                                   -- LLM provider ID
-    model_id TEXT NOT NULL,
-    prompt_token_count INT NOT NULL,
-    completion_token_count INT,                               -- Null if turn failed pre-LLM
-    total_latency_ms INT NOT NULL,
-    turn_status TEXT NOT NULL,                                -- One of {admitted, llm_called, completed, failed}
-    failure_class TEXT,                                       -- Null if not failed
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- RLS: tenant_id = current_setting('app.tenant_id')
-    CONSTRAINT ai_mode1_conversation_turn_unique UNIQUE (conversation_id, id)
+    request_body_hash BYTEA NOT NULL,                         -- SHA-256 of canonicalized request body for idempotency-conflict detection
+    history_snapshot_high_water_mark TIMESTAMPTZ NOT NULL,    -- MAX(ai_mode1_conversation_turn_result.completed_at) at admission for this conversation
+    conversation_history_window INT NOT NULL,                 -- N value from request (or default 20)
+    client_capabilities JSONB,
+    admitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Append-only enforced by trigger; no UPDATE permitted post-commit
+    CONSTRAINT ai_mode1_conversation_turn_admission_unique UNIQUE (conversation_id, id)
 );
 
-CREATE INDEX ai_mode1_conversation_turn_lookup_idx
-    ON ai_mode1_conversation_turn(tenant_id, conversation_id, created_at DESC);
+-- Immutable detector record (1 row per turn after detector completes; INSERT-only)
+CREATE TABLE ai_mode1_conversation_turn_detector_result (
+    turn_id UUID PRIMARY KEY REFERENCES ai_mode1_conversation_turn_admission(id),
+    tenant_id tenant_id_t NOT NULL,
+    detector_version TEXT NOT NULL,
+    severity TEXT,                                            -- Null if no crisis; one of {self_harm, imminent_harm, medical_emergency}
+    crisis_server_signal_id UUID,                             -- Set if crisis emitted; references i019_enqueue_ack_log
+    detector_latency_ms INT NOT NULL,
+    completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    -- Append-only; the existence of this row IS the canonical "detector_completed" state
+);
+
+-- Immutable result record (1 row per turn at completion or failure; INSERT-only)
+CREATE TABLE ai_mode1_conversation_turn_result (
+    turn_id UUID PRIMARY KEY REFERENCES ai_mode1_conversation_turn_admission(id),
+    tenant_id tenant_id_t NOT NULL,
+    conversation_id UUID NOT NULL REFERENCES ai_mode1_conversation(id),
+    patient_id UUID NOT NULL REFERENCES patient(id),
+    assistant_message TEXT,                                   -- Encrypted at rest; null if turn failed
+    provider TEXT,                                            -- Null if turn failed pre-LLM
+    model_id TEXT,
+    prompt_token_count INT,
+    completion_token_count INT,
+    total_latency_ms INT NOT NULL,
+    turn_outcome TEXT NOT NULL,                               -- One of {completed, failed}
+    failure_class TEXT,                                       -- Null if completed; one of {llm_provider_unavailable, crisis_detector_unavailable, internal_error, crisis_signal_enqueue_failed}
+    failure_phase TEXT,                                       -- Null if completed; one of {pre_detector, pre_llm, during_llm, post_llm}
+    completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    -- Append-only; the existence of this row IS the canonical "completed/failed" state
+);
+
+CREATE INDEX ai_mode1_conversation_turn_admission_lookup_idx
+    ON ai_mode1_conversation_turn_admission(tenant_id, conversation_id, admitted_at DESC);
+CREATE INDEX ai_mode1_conversation_turn_result_history_idx
+    ON ai_mode1_conversation_turn_result(tenant_id, conversation_id, completed_at DESC);
 ```
 
-Both tables enforce RLS per ADR-023 Model A + I-023 tenant isolation. Per-tenant KMS encryption on `user_message` + `assistant_message` per I-026.
+All four tables enforce RLS per ADR-023 Model A + I-023 tenant isolation. Per-tenant KMS encryption on `user_message` + `assistant_message` per I-026.
 
-### 6.2 Append-only semantics
+### 6.2 Append-only semantics (R2 HIGH-2 closure: split-table immutability)
 
-`ai_mode1_conversation_turn` is append-only per I-027:
-- INSERT only; UPDATE forbidden post-commit (enforced by trigger).
-- DELETE forbidden except for tenant-retention-policy hard-deletes (covered by separate retention spec; not Mode 1's surface).
-- The `assistant_message` and `turn_status` are written at turn-completion in the SAME transaction as the INSERT (not a subsequent UPDATE) — the canonical pattern is: build the row in-memory, INSERT once at turn-completion.
+Every row in all 4 tables is **INSERT-only**; UPDATE forbidden post-commit; enforced by trigger per I-027. The multi-state lifecycle is expressed as **the existence of progressively more rows**, NOT as state mutations on a single row:
 
-### 6.3 Conversation-history-window contract (R1 MED-2 closure: replay-safe under concurrent retries)
+| Lifecycle state | Canonical durable representation |
+|---|---|
+| `admitted` | Row exists in `ai_mode1_conversation_turn_admission` |
+| `detector_completed` | Row exists in `ai_mode1_conversation_turn_detector_result` for same `turn_id` |
+| `completed` | Row exists in `ai_mode1_conversation_turn_result` with `turn_outcome = 'completed'` |
+| `failed` | Row exists in `ai_mode1_conversation_turn_result` with `turn_outcome = 'failed'` |
+
+The `ai_mode1_conversation.last_turn_at` is the one mutable field; it is updated atomically via an INSERT trigger on `ai_mode1_conversation_turn_result` (idempotent on `(conversation_id, turn_id)` so retries don't double-count). The trigger uses `INSERT ... ON CONFLICT DO UPDATE SET last_turn_at = GREATEST(last_turn_at, EXCLUDED.completed_at)` which is the canonical safe-mutable-aggregate pattern.
+
+DELETE forbidden except for tenant-retention-policy hard-deletes (covered by separate retention spec; not Mode 1's surface).
+
+**Runtime state-machine state ↔ DB-row existence correspondence (closes R2 MED-1):**
+
+- The runtime state-machine `admitted` state IS the existence of the `ai_mode1_conversation_turn_admission` row. Adapter guards consume this row's existence as the precondition.
+- The runtime `detector_completed` state IS the existence of the `ai_mode1_conversation_turn_detector_result` row. The LLM adapter MUST verify this row exists for the turn_id BEFORE issuing the HTTP request to the provider (per §4.2 runtime invariant).
+- The runtime `completed` / `failed` state IS the existence of the `ai_mode1_conversation_turn_result` row. The idempotency-cache reads from this row for already-completed turns.
+
+This correspondence ensures the durable representation matches the runtime state machine across process restarts, retries, and provider-adapter execution paths.
+
+**Concurrent admission retry semantics (R1 MED-2 + R2 HIGH-2 closure refined):**
+
+- Two concurrent requests with the same `turn_id`: both attempt to INSERT into `ai_mode1_conversation_turn_admission` with the same primary key; one succeeds (the winner of the database-level uniqueness check), the other receives a duplicate-key error.
+- The losing attempt then SELECTs the existing admission row to compare request_body_hash:
+  - If hashes match: poll `ai_mode1_conversation_turn_result` for up to 30s; return the result row's response (or wait for in-flight completion).
+  - If hashes differ: return 409 `mode1.turn_id_conflict` immediately.
+- This is the canonical concurrency-safe pattern; advisory locks are unnecessary because the primary-key uniqueness check at INSERT is itself the canonical mutex.
+
+### 6.3 Conversation-history-window contract (R1 MED-2 + R2 HIGH-2 closure: replay-safe under concurrent retries via split-table model)
 
 When the request specifies `conversation_history_window: N`, the handler:
 
-1. **At turn-admission (atomic per-turn admission record):**
-   - INSERTs a row into `ai_mode1_conversation_turn` with `turn_status = 'admitted'`, taking an advisory lock on `(tenant_id, conversation_id, turn_id)` via `pg_try_advisory_xact_lock` to prevent concurrent same-turn retries.
-   - If the lock is already held (concurrent retry): the second attempt SELECTs the in-flight turn row, waits up to 30s for completion (poll every 1s), then returns the cached response if the in-flight turn completed; or returns 409 `mode1.turn_id_conflict` if the in-flight turn's request body differs.
-   - Captures a `history_high_water_mark` = `MAX(created_at)` from `ai_mode1_conversation_turn` where `conversation_id = $1 AND created_at < now()` AT admission time, and persists it into the turn row's `history_snapshot_high_water_mark` column.
-2. **SELECTs the last N turns** of `ai_mode1_conversation_turn` for the conversation_id WHERE `created_at <= history_snapshot_high_water_mark` (ORDER BY created_at DESC LIMIT N). **The high-water-mark snapshot ensures the same N turns are used on every retry**, even if intervening turns have committed between admission and retry.
-3. Constructs the LLM prompt with those N prior turns + the current `user_message`.
+1. **At turn-admission:**
+   - Computes `history_snapshot_high_water_mark` = `MAX(completed_at)` from `ai_mode1_conversation_turn_result` where `conversation_id = $1 AND completed_at < now()` AT admission time (this is a transactionally-consistent timestamp at the moment of admission).
+   - Computes `request_body_hash` = SHA-256 of canonicalized request body.
+   - INSERTs into `ai_mode1_conversation_turn_admission` with primary key = `turn_id`. The INSERT either succeeds (this is the winning attempt) OR fails with duplicate-key (concurrent retry — handled per §6.2 retry semantics).
+2. **SELECTs the last N turns** from `ai_mode1_conversation_turn_result` (joined to `ai_mode1_conversation_turn_admission` for `user_message`) for the conversation_id WHERE `completed_at <= history_snapshot_high_water_mark` (ORDER BY completed_at DESC LIMIT N). **The high-water-mark snapshot ensures the same N turns are used on every retry**, even if intervening turns have completed between admission and retry.
+3. Constructs the LLM prompt with those N prior (admission.user_message + result.assistant_message) pairs + the current `user_message`.
 4. The default N=20 is the canonical balance between context-quality + LLM-cost; the max N=50 caps per-turn cost.
 
-**Replay-safety invariant:** for a given `(tenant_id, conversation_id, turn_id)`, the LLM prompt is deterministically reconstructable from `history_snapshot_high_water_mark` + the in-place `user_message` field. Subsequent retries see the same prompt and (if the LLM is deterministic-mode + token-stream is cached) the same `assistant_message`. The canonical idempotency-cache (per §2.5) stores the final response keyed by `(tenant_id, conversation_id, turn_id)`; once cached, retries return the cached response without re-invoking the LLM.
+**Replay-safety invariant:** for a given `(tenant_id, conversation_id, turn_id)`, the LLM prompt is deterministically reconstructable from `history_snapshot_high_water_mark` (persisted on the admission row) + the immutable `user_message` field on the admission row. Subsequent retries see the same prompt and (once `ai_mode1_conversation_turn_result` row exists) the same `assistant_message`. The canonical idempotency-cache reads from `ai_mode1_conversation_turn_result` keyed by `(tenant_id, conversation_id, turn_id)`; once present, retries return the cached response without re-invoking the LLM.
 
-**Test M1.5 + M1.14 (per §11) verify replay-safety under concurrent retries.**
+**Test M1.5 + M1.14 + M1.18 (per §11) verify replay-safety under concurrent retries.**
 
 ---
 
@@ -439,6 +490,7 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 | Test M1.17 | `apps/api-server/__integration__/ai/mode1_phi_provider_enforcement.test.ts` | `integration-ai-mode1` | Tenant with PHI flag + `ai_provider = 'openai'` (non-HIPAA) → static-analyzer rule TLC-AI-003 fails at PR open; runtime: such a configuration is rejected at tenant-config admission with Cat A `tenant_config.phi_provider_violation` | §7.1, TLC-AI-003 |
 | Test M1.18 | `apps/api-server/__integration__/ai/mode1_history_snapshot_replay.test.ts` | `integration-ai-mode1` | Turn admitted at T0 captures history_snapshot_high_water_mark; intervening turn commits at T1; retry of T0's turn at T2 uses same snapshot, returns same prompt + same cached response | §6.3 R1 MED-2 |
 | Test M1.19 | `apps/api-server/__integration__/ai/mode1_egress_allow_list.test.ts` | `integration-ai-mode1` | Mode 1 service attempting to HTTP-call `POST /ai/mode-2/*` → blocked at service-mesh layer; integration test verifies the policy is enforced (test runs against the canonical service-mesh fixture) | §5.1 Layer 2 |
+| Test M1.20 | `apps/api-server/__integration__/ai/mode1_queue_denial.test.ts` | `integration-ai-mode1` | Mode 1 attempting to enqueue to a `mode2-*` worker queue → blocked by (a) static-analyzer rule TLC-AI-002 at PR open AND (b) runtime queue-ACL rejection (the BullMQ wrapper enforces an allow-list per service-role); verifies both layers (R2 MED-2 closure) | §5.1 Layer 3 + TLC-AI-002 |
 
 **Static-analyzer rule IDs registered at this amendment:**
 - `TLC-AI-001` — Mode 1 handler calling LLM before crisis detector (detector-before-LLM ordering invariant; verifies runtime state-machine guard exists per R1 HIGH-1 closure).
@@ -453,7 +505,7 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 |---|---|---|
 | SI-016 ai_workflow_handler_registry (Sprint 3) | §5.2 Mode 1 → Mode 2 handoff | Mode 1 NEVER invokes Mode 2 handlers directly; handoff is via API surface only |
 | SI-017 Identity Spec v1.1 (Sprint 8) | §2.4 401 tenant-blind; §6.1 RLS tenant binding | Mode 1 handler is downstream of canonical middleware-GUC; RLS enforces tenant isolation |
-| SI-018 two-tier hybrid audit-chain partition | §3.3 partition key routing | All Mode 1 audit events route to P1 keyed by patient_id |
+| SI-018 two-tier hybrid audit-chain partition | §3.3 partition key routing | Per the canonical per-event partition table in §3.3 (R1 HIGH-2 closure): Mode 1 emits BOTH P1 patient-bound events (turn lifecycle + crisis-detection per-turn forensics) AND P2 tenant-bound governance/observability events (`mode2_handoff_proposed` + `audit.cat_c_drop_observed` aggregates). §3.3 is the canonical source; do NOT assume "all Mode 1 events route to P1" |
 | Cold-DR Runbook (Sprint 7) | §4.4 multi-region ACK channel + crisis-signal emission | Crisis signals use the partition-aware multi-region ACK channel; three-state per-device obligation model applies during DR |
 | ADR-029 AI workload taxonomy | §1 + §5 Mode 1 = conversational-assistant workload class | Mode 1 + Mode 2 distinction is the canonical ADR-029 split |
 | I-019 crisis-detection-always-on | §4 detector contract + fail-closed | The canonical Mode 1 implementation of I-019 platform floor |
@@ -465,11 +517,16 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
 
-**v0.1 R1 closure 2026-05-19:** 3 HIGH + 3 MED findings closed inline (all in-scope correctness gaps; no architectural-judgment items requiring ratifier escalation):
+**v0.1 R1 closure 2026-05-19:** 3 HIGH + 3 MED findings closed inline (all in-scope correctness gaps; no architectural-judgment items requiring ratifier escalation).
+
+**v0.1 R2 closure 2026-05-19:** 2 HIGH + 2 MED findings closed inline (R1 closures landed correctly in the body sections but: (a) the §12 cross-SI alignment summary still carried the pre-R1 "all events to P1" claim; (b) the multi-state lifecycle in §4.2 + §6.3 conflicted with §6.2's append-only INSERT-at-completion constraint; (c) `history_snapshot_high_water_mark` was referenced but not in the schema; (d) Mode 2 worker-queue denial test was missing). All 4 closed inline via split-table model + canonical cross-references.
+
+**Full Codex trajectory:**
 
 | Round | Findings | Status |
 |---|---|---|
 | R1 | HIGH-1 detector-before-LLM enforced only via static-analyzer (no runtime guard); HIGH-2 Cat C drop event Cat B P2 classification contradicted "all Mode 1 events route to P1" claim; HIGH-3 ACK durability semantics conflated audit-row durability (blocks) with quorum-promotion durability (async); MED-1 no-Mode-2-side-effects predicate didn't cover HTTP / queue / tool-use paths; MED-2 history-window not replay-safe under concurrent retries; MED-3 missing tests for Cat A audit failure / Cat C drop partitioning / ACK quorum / concurrent retries / history snapshot / Mode 2 tool denial / PHI provider enforcement | All 6 closed inline |
+| R2 | HIGH-1 §12 cross-SI summary still carried pre-R1 "all events to P1" claim (contradicting §3.3 amended table); HIGH-2 multi-state lifecycle vs append-only INSERT-at-completion contradiction + missing `history_snapshot_high_water_mark` schema column; MED-1 detector_completed state not durable in schema; MED-2 missing Mode 2 worker-queue denial test | All 4 closed inline via split-table model |
 
 **R1 closure pattern recap:**
 - HIGH-1: added runtime per-turn state machine (`admitted → detector_completed → llm_invoked → completed`); `llm.invoke()` adapter verifies state before issuing HTTP request; defense-in-depth via static analyzer remains.
