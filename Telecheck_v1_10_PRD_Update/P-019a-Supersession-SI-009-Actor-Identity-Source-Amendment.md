@@ -10,7 +10,7 @@
 - SI-017 v0.1 DRAFT (Phase 2 F-3 within canonical middleware-GUC model; prerequisite)
 - SI-018 v0.2 DRAFT (audit-chain partition rule; prerequisite)
 - P-018a v0.1 DRAFT (parallel supersession; same pattern applied to SI-008 procedure)
-- Existing canonical Promotion Ledger entry P-019 — SI-009 `record_consult_escalation_target_swap()` SECURITY DEFINER procedure (lines 575–576 of current ledger; the entry P-019a supersedes specific sub-decisions of)
+- Existing canonical Promotion Ledger entry P-019 — SI-009 `record_consult_escalation_target_swap()` SECURITY DEFINER procedure (entry header at line 575; **Sub-decision 3** at line 599 of current ledger; **Sub-decision 4** at line 600; the entry P-019a supersedes specific sub-decisions of P-019)
 
 ---
 
@@ -20,8 +20,8 @@ Same trigger as P-018a (see `P-018a-Supersession-SI-008-Actor-Identity-Source-Am
 
 P-019 SI-009 specifically has TWO sub-decisions referencing SI-010 primitives (more than P-018 or P-021 because P-019 line 576 explicitly enumerated the actor-identity-derivation in a separate sub-decision):
 
-- **P-019 Sub-decision 3** (`record_consult_escalation_target_swap()` SECURITY DEFINER procedure): "DEFERRED to SI-010 landing per IMPL-readiness gate (the procedure cannot reference `_session_actor_context` helpers that don't exist...)"
-- **P-019 Sub-decision 4** (Server-trusted actor identity via SET LOCAL-bound `_session_actor_context`): "caller-supplied actor identity REMOVED; procedure derives from `current_actor_*()` helpers... DEFERRED to SI-010 landing."
+- **P-019 Sub-decision 3** (line 599; `record_consult_escalation_target_swap()` SECURITY DEFINER procedure): "DEFERRED to SI-010 landing per IMPL-readiness gate (the procedure cannot reference `_session_actor_context` helpers that don't exist...)"
+- **P-019 Sub-decision 4** (line 600; Server-trusted actor identity via SET LOCAL-bound `_session_actor_context`): "caller-supplied actor identity REMOVED; procedure derives from `current_actor_*()` helpers... DEFERRED to SI-010 landing."
 
 Both must be amended onto the canonical model. **Scope is explicitly narrow:** three P-019 sub-decisions are amended — Sub-decision 3 (procedure design), Sub-decision 4 (Server-trusted actor identity), and the three-tier audit durability sub-decision (Sub-decision number per canonical P-019 entry; audit-emission-location downstream of actor-identity-source). All other P-019 sub-decisions stand unchanged (including the 7-column `livekit_room_id` KMS envelope, four-predicate atomic UPDATE, 4-value cancellation_reason enum, etc.). The three amendments are tightly coupled: the audit-emission-location change is a direct consequence of moving actor identity out of the procedure (audit envelope actor fields come from the same JWT-verified application context as the procedure parameters).
 
@@ -81,6 +81,43 @@ AFTER (canonical middleware-GUC model per SI-017):
     -- at the row level (canonical CDM v1.2 contract)
 ```
 
+**Trust-posture documentation (per SI-017 canonical model; addresses Codex R1 HIGH-1 finding on PR #17):**
+
+Codex R1 raised a trust-boundary concern: the procedure relies on
+`current_setting('app.tenant_id')` for RLS isolation while simultaneously
+accepting `p_tenant_id` as a caller-supplied parameter; without a binding
+guarantee, a route bug or stale context could route the UPDATE under one
+tenant and the audit envelope under another. The canonical SI-017
+middleware-GUC model resolves this by construction, not by DB-side guard:
+
+1. **Single trust anchor.** Both `app.tenant_id` (set via `SET LOCAL`) and
+   the procedure's actor parameters originate from the **same authContextPlugin
+   middleware request scope**. The plugin verifies the JWT once per request,
+   resolves the (account_id, tenant_id, role, admin_home_tenant_id, session_id)
+   tuple, and (a) emits `SET LOCAL app.tenant_id = <tenant_id>` on the connection
+   and (b) passes those same values as parameters to any SECURITY DEFINER call
+   made within the same request. There is no separate trust path; both surfaces
+   are bound to the same JWT-verified tuple at middleware entry.
+
+2. **No cross-request bleed.** pgbouncer transaction-mode + `SET LOCAL` (per
+   System Architecture v1.2 §5) guarantee per-request scope on the GUC.
+   Connection reuse cannot leak a previous request's `app.tenant_id`.
+
+3. **Audit attribution integrity.** Because both the data UPDATE's RLS gate
+   AND the audit envelope's actor fields derive from the same JWT-verified
+   middleware tuple, attributing an `audit_events` row to a different tenant
+   than the row it describes would require the middleware to set `app.tenant_id`
+   to one value while passing different actor parameters to the same call site
+   — which the canonical authContextPlugin contract does not permit.
+
+4. **Procedure does NOT add a DB-side equality guard** (e.g., `IF
+   p_tenant_id <> current_setting('app.tenant_id') THEN RAISE`). The
+   canonical model treats the application middleware as the trust anchor
+   (per I-023 layer 2); a DB-side equality check would be a redundant
+   defense-in-depth layer, not an isolation primitive. **The ratifier
+   may choose to add one as a defensive guard at ratification — see §4
+   Open Question 3.**
+
 Three-tier audit durability amendment: same shape as P-018a §2 (durability D1 moves to application; D2 + D3 unchanged; SI-018 partition tier P2).
 
 **Engineering review grounding:** same as P-018a — application-layer audit emission satisfies I-003 + HIPAA + BAA chain posture per the unanimous NO answer at `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-I-003-Atomic-Audit-Inside-vs-Application-Layer-Audit-2026-05-19.md`.
@@ -128,6 +165,15 @@ SI-009.1 is a separate successor SI (P-020 target; pre-ratification gate pending
 ### Open Question 2: Codex pre-ratification target
 
 **Recommendation:** 2 rounds + 1 verification = 3 total. STOP-and-escalate per the discipline floor.
+
+### Open Question 3: DB-side equality guard on `p_tenant_id` vs `current_setting('app.tenant_id')` (Codex R1 HIGH-1 escalation)
+
+Codex's R1 review on PR #17 raised an architectural-judgment finding (per CLAUDE.md hard-floor item 6) noting that the supersession trusts caller-supplied `p_tenant_id` while RLS isolation uses `current_setting('app.tenant_id')` GUC, without a binding guarantee between them. Two paths exist:
+
+- **Option A (defense-in-depth invariant — canonical-contract amendment):** Add a canonical platform-floor invariant (or extend I-023) requiring that all SECURITY DEFINER procedures accepting actor-tenant parameters reject calls where `p_tenant_id <> current_setting('app.tenant_id')` via a procedure-side equality guard. This would be a NEW canonical invariant, requires ratifier-level sign-off, and would land in a Contracts Pack INVARIANTS amendment in lockstep.
+- **Option B (document existing posture — within-scope clarification):** Document that the canonical SI-017 authContextPlugin contract binds both `SET LOCAL app.tenant_id` and the procedure's actor parameters to the same JWT-verified middleware tuple at request entry, so no DB-side equality guard is needed for correctness (defense-in-depth is OPTIONAL). **§2 trust-posture documentation has applied Option B.**
+
+**Recommendation:** Surface this question to Evans at the morning review. Recommendation is Option B (canonical model already binds both surfaces to the same trust anchor; Option A would be a defense-in-depth layer, not an isolation primitive). If Evans wants Option A, escalate to ratifier ceremony with a Decision Memo proposing the new invariant.
 
 ---
 
