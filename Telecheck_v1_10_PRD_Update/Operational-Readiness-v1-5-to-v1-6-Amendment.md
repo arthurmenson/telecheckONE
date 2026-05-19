@@ -1,7 +1,8 @@
 # Operational Readiness Tracker v1.5 → v1.6 Amendment
 
 **Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; Sprint 17 of autonomous 24h-loop work plan
+**Status:** RATIFIER-READY-WITH-KNOWN-OQs (R4 prose-consistency close 2026-05-19); Sprint 17 of autonomous 24h-loop work plan
+**Codex iteration trajectory:** R1 (2 HIGH + 2 MED) → R2 (1 HIGH + 1 MED) → R3 (1 HIGH §7 placeholder) → R4 (1 HIGH §7-to-catalog binding). All 8 findings closed inline; 0 architectural-judgment items closed inline; 6 known OQs remain ratifier-targetable.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus Track 5 deliverable)
 **Owner:** SRE Lead + Compliance Officer + Engineering Lead (tri-owner per readiness-checklist's operational + regulatory + engineering scope)
 **Companion documents:** `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Operational_Readiness_Todo_v1_5.md` (target canonical surface); Sprint 5 F-4 Deploy Runbook; Sprint 6 SIEM Integration Spec; Sprint 7 Cold-DR Runbook; Sprint 13 KMS Architecture Spec; Sprint 16 Notification Spec v1.2 amendment; Ghana Launch Playbook v1.2.
@@ -176,43 +177,43 @@ Drill failures trigger P0 incident review + remediation tracking. The gating eff
 
 ### Sub-decision 4 — Per-tenant launch-readiness sub-checklist
 
-**Decision shape:** for each day-1 tenant (Telecheck-US / Heros Health + Telecheck-Ghana / Heros Health Ghana), the following per-tenant readiness sub-checklist MUST be 100% green BEFORE that tenant goes live:
+**Decision shape (R4 HIGH closure: catalog is the authoritative source):** for each day-1 tenant (Telecheck-US / Heros Health + Telecheck-Ghana / Heros Health Ghana), the following per-tenant readiness sub-checklist MUST be 100% green BEFORE that tenant goes live. **Each bullet below is bound to a specific catalog item ID (P-1 through P-19) in `Telecheck_v1_10_PRD_Update/v1-6-evidence-rubric-catalog.md` §4. The catalog is the authoritative source for evidence verification; tenant go-live sign-off is INVALID unless every referenced P-item has current attestation evidence per the catalog's Test ID + Environment + Pass threshold + Owner + Freshness + Attestation fields.**
 
 **Per-tenant identity / RLS:**
 
-- [ ] Tenant CMK provisioned + multi-region replica verified.
-- [ ] Tenant service IAM role with STS session-tag binding verified.
-- [ ] RLS policies enforced on every PHI table per ADR-023 Model A.
-- [ ] Tenant-routing infrastructure (DNS + ALB + service mesh) wired + cutover-tested.
+- [ ] **(P-1)** Tenant CMK provisioned + multi-region replica verified.
+- [ ] **(P-2)** Tenant service IAM role with STS session-tag binding verified.
+- [ ] **(P-3)** RLS policies enforced on every PHI table per ADR-023 Model A.
+- [ ] **(P-4)** Tenant-routing infrastructure (DNS + ALB + service mesh) wired + cutover-tested.
 
 **Per-tenant data + clinical:**
 
-- [ ] CCR keys provisioned per tenant (sms_provider_primary / sms_provider_fallback / ai_provider / kms_residency_policy / etc).
-- [ ] Country-of-care protocols loaded (Ghana Protocol Library v1.0 OR US protocol library).
-- [ ] Crisis-line resource content localized (Ghana crisis line + US crisis line numbers configured in notification templates).
-- [ ] Clinician roster provisioned with licenses verified (Ghana Medical and Dental Council OR US state boards).
+- [ ] **(P-5)** CCR keys provisioned per tenant (sms_provider_primary / sms_provider_fallback / ai_provider / kms_residency_policy / etc).
+- [ ] **(P-6)** Country-of-care protocols loaded (Ghana Protocol Library v1.0 OR US protocol library).
+- [ ] **(P-7)** Crisis-line resource content localized (Ghana crisis line + US crisis line numbers configured in notification templates).
+- [ ] **(P-8)** Clinician roster provisioned with licenses verified (Ghana Medical and Dental Council OR US state boards).
 
 **Per-tenant operations + audit:**
 
-- [ ] Audit-event aggregation routed to tenant-specific dashboards + retention policies configured.
-- [ ] Tenant operator (e.g., Telecheck-Ghana operator) onboarded with operator-mode-switcher access per Sprint 8 SI-017 §3.6.
-- [ ] Per-tenant DR drill executed within last 90 days (or pre-launch).
-- [ ] Per-tenant crisis-detection chaos drill executed within last 30 days (or pre-launch).
+- [ ] **(P-9)** Audit-event aggregation routed to tenant-specific dashboards + retention policies configured.
+- [ ] **(P-10)** Tenant operator (e.g., Telecheck-Ghana operator) onboarded with operator-mode-switcher access per Sprint 8 SI-017 §3.6.
+- [ ] **(P-11)** Per-tenant DR drill executed within last 90 days (or pre-launch).
+- [ ] **(P-12)** Per-tenant crisis-detection chaos drill executed within last 30 days (or pre-launch).
 
 **Per-tenant data-boundary + lifecycle proof (R1 HIGH-2 closure: critical for multi-tenant PHI launch):**
 
-- [ ] **Tenant-scoped backup/restore tested.** Restore a snapshot of the tenant's data into a test environment + verify no cross-tenant data leaks; verify RLS + tenant-scoped queries match production behavior. Test artifact: `backup-restore-isolation-test-tenant-<id>.report.md` filed.
-- [ ] **Migration/import isolation tested.** Patient data import path (e.g., new-patient onboarding bulk import) tested with multi-tenant fixtures; verify all imported rows carry correct tenant_id; verify RLS rejects cross-tenant queries against imported data. Test artifact: `migration-isolation-test-tenant-<id>.report.md` filed.
-- [ ] **Export/data-portability isolation tested.** Patient data export path (e.g., HIPAA portability request fulfillment) tested; verify exported bundle contains ONLY the requesting patient's data; verify no cross-tenant data appears even when patient_id collisions exist across tenants (UUIDs make this rare but the test verifies the bound). Test artifact: `export-isolation-test-tenant-<id>.report.md` filed.
-- [ ] **Retention/deletion policy execution tested.** Run a synthetic retention sweep on test environment; verify the canonical retention procedure deletes only the targeted tenant's expired data; verify cross-tenant retention sweeps cannot be triggered without I-024 break-glass. Test artifact: `retention-isolation-test-tenant-<id>.report.md` filed.
-- [ ] **Audit-log tenant partitioning integrity verified.** Run a SIEM audit query for the test tenant + verify ALL returned events are tenant-bound (P1/P2 partitioning consistent with SI-018); run a cross-tenant query as the tenant's service identity and verify it is rejected. Test artifact: `audit-partition-isolation-test-tenant-<id>.report.md` filed.
-- [ ] **Cross-tenant negative tests passed** across the following paths:
+- [ ] **(P-13) Tenant-scoped backup/restore tested.** Restore a snapshot of the tenant's data into a test environment + verify no cross-tenant data leaks; verify RLS + tenant-scoped queries match production behavior. Test artifact: `backup-restore-isolation-test-tenant-<id>.report.md` filed.
+- [ ] **(P-14) Migration/import isolation tested.** Patient data import path (e.g., new-patient onboarding bulk import) tested with multi-tenant fixtures; verify all imported rows carry correct tenant_id; verify RLS rejects cross-tenant queries against imported data. Test artifact: `migration-isolation-test-tenant-<id>.report.md` filed.
+- [ ] **(P-15) Export/data-portability isolation tested.** Patient data export path (e.g., HIPAA portability request fulfillment) tested; verify exported bundle contains ONLY the requesting patient's data; verify no cross-tenant data appears even when patient_id collisions exist across tenants (UUIDs make this rare but the test verifies the bound). Test artifact: `export-isolation-test-tenant-<id>.report.md` filed.
+- [ ] **(P-16) Retention/deletion policy execution tested.** Run a synthetic retention sweep on test environment; verify the canonical retention procedure deletes only the targeted tenant's expired data; verify cross-tenant retention sweeps cannot be triggered without I-024 break-glass. Test artifact: `retention-isolation-test-tenant-<id>.report.md` filed.
+- [ ] **(P-17) Audit-log tenant partitioning integrity verified.** Run a SIEM audit query for the test tenant + verify ALL returned events are tenant-bound (P1/P2 partitioning consistent with SI-018); run a cross-tenant query as the tenant's service identity and verify it is rejected. Test artifact: `audit-partition-isolation-test-tenant-<id>.report.md` filed.
+- [ ] **(P-18) Cross-tenant negative tests passed** across the following paths:
   - HTTP API endpoints: attempt cross-tenant data access via path-parameter manipulation → 404 tenant-blind per I-025.
   - Batch worker queues: enqueue cross-tenant job → rejected by tenant-id binding.
   - DR-failover replay: in-flight tenant-A data does not appear in tenant-B post-cutover.
   - Analytics/reporting: tenant-A analytics query cannot access tenant-B data even under aggregation paths.
   Test artifact: `cross-tenant-negative-test-suite-tenant-<id>.report.md` filed.
-- [ ] **Cross-tenant data-mixing canary (R2 MED-1 closure: containment + TTL):** a continuous canary process inserts test markers into a dedicated `synthetic_canary` table per tenant + queries the opposing tenant periodically (and vice versa); markers MUST NOT appear in opposing tenant's results. **Containment guarantees:**
+- [ ] **(P-19) Cross-tenant data-mixing canary (R2 MED-1 closure: containment + TTL):** a continuous canary process inserts test markers into a dedicated `synthetic_canary` table per tenant + queries the opposing tenant periodically (and vice versa); markers MUST NOT appear in opposing tenant's results. **Containment guarantees:**
   - **Synthetic-only:** the canary writes ONLY to `synthetic_canary` table, NEVER to any PHI table (patient / consult / medication_request / etc).
   - **Exclusion-by-table:** the `synthetic_canary` table is explicitly excluded from clinical UIs, analytics queries, portability exports, retention sweeps, billing aggregation, audit-retention archival. The exclusion is enforced via dedicated boolean column `is_canary = true` on every row + a static-analyzer rule `TLC-OPS-001` that fails any code path reading from `synthetic_canary` outside the canary-monitor service.
   - **TTL:** each canary marker row has `expires_at = now() + 30 min`; the canary cleanup worker deletes expired rows every 5 minutes (idempotent; safe under DR partition).
@@ -315,6 +316,9 @@ No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honor
 |---|---|---|
 | R2 | HIGH-1 evidence-rubric catalog referenced but not in branch diff (R1 MED-1 closure incomplete); MED-1 cross-tenant canary lacks containment (could pollute live tenant data) | Both closed inline |
 | R3 | HIGH §7 per-tenant launch-gate rubric was placeholder ("catalogued at promotion time"); R2 closure incomplete for the highest-risk gate items | Closed inline: §7 expanded with full rubric for 19 per-tenant items (P-1 to P-19) covering identity/RLS + data/clinical + ops/audit + data-boundary/lifecycle + cross-tenant negative tests + canary; every item has Test ID + Environment + Pass threshold + Tenant scope + Owner + Freshness + Attestation path |
+| R4 | HIGH §7 bullets not explicitly bound to P-1..P-19 catalog items; authority/traceability split | Closed inline: each §7 bullet now prefixed with **(P-N)** referencing the catalog item; binding statement at §7 head makes catalog authoritative for per-tenant launch-gate evidence |
+
+**Status at R4 close:** RATIFIER-READY-WITH-KNOWN-OQs. Sprint 17 closes at R4 prose-consistency clean.
 
 **R2 closure pattern recap:**
 - HIGH-1: Created `Telecheck_v1_10_PRD_Update/v1-6-evidence-rubric-catalog.md` v0.1 DRAFT as a companion artifact in this branch; catalog includes full rubric for all 22 items (14 infrastructure + 6 security + 12 per-tenant). Referenced from amendment §3 + §4 + §7.
