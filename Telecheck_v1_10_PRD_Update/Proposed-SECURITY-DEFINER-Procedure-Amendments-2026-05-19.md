@@ -28,20 +28,31 @@ All four procedures gain this identical STEP 0 inserted as the FIRST validation 
 -- I-032 is named for: returns the rejection tuple WITHOUT raising; the
 -- application call site emits the canonical Cat B audit event + P0 alert.
 
--- Mode 1: NULL GUC → RAISE (environmental failure; error-stream layer handles)
+-- GUC normalization: PostgreSQL custom GUCs return '' (empty string) on RESET
+-- app.tenant_id or SET LOCAL app.tenant_id TO '', NOT NULL. The NULLIF() wrapper
+-- collapses both truly-unset and blank-string to NULL so Mode 1 detects EVERY
+-- missing-context case. Both Mode 1 and Mode 2 use the SAME NULLIF expression
+-- for consistent treatment; the expression is inlined (no DECLARE block) to
+-- avoid restructuring the outer procedure's existing BEGIN/END framing.
+
+-- Mode 1: missing GUC (NULL or empty string) → RAISE (environmental failure;
+-- error-stream layer handles via P0001 SQLSTATE catch in application middleware)
 -- NOTE: <procedure_name_literal> is a per-procedure string literal — each of the four
 -- SECURITY DEFINER procedures supplies its own canonical procedure name when copying this
 -- template (TG_NAME is trigger-only and is NOT used here). Per-procedure literals below.
-IF current_setting('app.tenant_id', true) IS NULL THEN
-  RAISE EXCEPTION 'I-032 Mode 1: app.tenant_id GUC not set on connection; SI-017 authContextPlugin contract violated'
+IF NULLIF(current_setting('app.tenant_id', true), '') IS NULL THEN
+  RAISE EXCEPTION 'I-032 Mode 1: app.tenant_id GUC not set (or blank) on connection; SI-017 authContextPlugin contract violated'
     USING ERRCODE = 'P0001',
           DETAIL  = format('procedure=%L session_id=%s account_id=%s',
                            '<procedure_name_literal>', p_session_id, p_account_id),
-          HINT    = 'middleware misconfiguration or unauthenticated call path bypassing authContextPlugin';
+          HINT    = 'middleware misconfiguration or unauthenticated call path bypassing authContextPlugin (NULL/empty GUC both treated as missing per NULLIF normalization)';
 END IF;
 
--- Mode 2: non-NULL GUC + mismatch → structured rejection
-IF p_tenant_id IS DISTINCT FROM current_setting('app.tenant_id', true) THEN
+-- Mode 2: non-NULL/non-empty GUC + mismatch → structured rejection
+-- (Mode 1 above guaranteed the GUC is neither NULL nor empty; mismatch check uses the
+-- same NULLIF expression to keep the comparison consistent — even though the result is
+-- guaranteed non-NULL here, the NULLIF preserves the canonical normalization.)
+IF p_tenant_id IS DISTINCT FROM NULLIF(current_setting('app.tenant_id', true), '') THEN
   RETURN ROW(
     TRUE,                                   -- rejected
     'tenant_guc_mismatch'::text,            -- rejection_code
