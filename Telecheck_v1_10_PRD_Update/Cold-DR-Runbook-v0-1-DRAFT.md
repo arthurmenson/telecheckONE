@@ -386,7 +386,22 @@ Tenant communications cadence: status page update at T-0, T+90 (mid-failover), T
 
 Per R2 MED-1 closure: a "every device queue must report drained=true" gate is unreliable because devices may be offline indefinitely. The gate is rewritten around **server-side durable enqueue/ack metadata** + a **bounded reachable-device cohort** + **explicit offline-device exception path**.
 
-**Server-side enqueue metadata (required pre-DR; canonical I-019 platform-floor extension).** Per I-019 + I-017 platform floor, every device's local-fallback queue's enqueue action also emits a synchronous "enqueue acknowledgment" to the platform via a separate lightweight ACK channel (independent of the main write path). The platform's `i019_enqueue_ack_log` table records (device_id, local_signal_id, emit_timestamp, ack_received_at) per enqueue. This server-side log is the authoritative record of "what was emitted on devices during the read-only window," NOT the device-side queue.
+**Server-side enqueue metadata (required pre-DR; canonical I-019 platform-floor extension; R3 HIGH-1 closure adds DR-survivable topology).**
+
+Per I-019 + I-017 platform floor, every device's local-fallback queue's enqueue action emits an "enqueue acknowledgment" to the platform via a dedicated multi-region ACK channel. **R3 HIGH-1 closure: the ACK channel topology is DR-survivable by design.**
+
+**ACK channel canonical topology:**
+
+- **Multi-region writeable endpoint:** the ACK channel accepts writes at BOTH us-east-1 and us-west-2 endpoints concurrently (CRDT-style append-only store; AWS DynamoDB Global Tables OR equivalent multi-region database; not the primary RDS that is failed-over). Devices send ACKs to the geographically nearest reachable endpoint via DNS round-robin or active-active load balancing.
+- **Durability:** each ACK write is durable with quorum across both regions; an ACK is acknowledged to the device only when at least 1 region has accepted it.
+- **Retry semantics on the device:** if the ACK channel is unreachable from a device, the device retries with exponential backoff; the device's local queue does NOT mark a signal as ACK'd until the platform-side acknowledgment is received. Unacknowledged local emissions remain in the device queue as pending.
+- **Two-source authoritative inventory:** the platform-side authoritative inventory is the union of:
+  - (a) `i019_enqueue_ack_log` entries received via the multi-region ACK channel (the authoritative-server-side record of acknowledged-by-platform emissions)
+  - (b) Per-device locally-pending-not-yet-acknowledged emissions, which devices report on their first successful reconnect-and-write (the "pending obligation" set; first-class pending obligations per R2 MED-1 closure refined)
+- **Reconciliation:** when a device reconnects, its first action is to upload its local queue (including any signals that were emitted but never ACK'd during the outage); the platform reconciles against the ACK log + records previously-unacknowledged signals as `i019_pending_replay` entries.
+- **DR topology guarantee:** because the ACK channel writes to a multi-region store separate from the primary RDS, the ACK channel remains writeable from BOTH regions during the entire DR window. ACKs from devices during T+0 to T+90 are durably recorded.
+
+**Why this closes R3 HIGH-1:** the ACK channel is no longer "synchronous platform write path that may be unreachable." It is a region-independent multi-region store with its own DR topology. Devices that successfully ACK during DR have authoritative inventory in `i019_enqueue_ack_log`. Devices that fail to ACK during DR retain their local pending obligations + reconcile on reconnect. No signal is silent or invisible.
 
 **Step 14.5 (HARD GATE between Step 14 post-failover-verify and Step 16 mark-complete): I-019 fallback replay drain — server-side evidence.**
 
@@ -403,11 +418,30 @@ $ dr-tool verify-i019-fallback-replay --target us-west-2 --window T+0 to T+failo
 # Offline-device cohort (unreachable at the 4h deadline): noted with explicit non-failure semantics + scheduled reconciliation.
 ```
 
-**Offline-device exception path (R2 MED-1 closure):**
+**Offline-device exception path (R2 MED-1 closure + R3 MED-1 hard-threshold definition):**
 - **Unreachable devices** (no successful write within 4h of cutover): they retain their server-side `i019_enqueue_ack_log` entries; the platform writes a `i019_pending_replay` table row per (device_id, local_signal_id) noting the deferred replay.
 - **Persisted per-device replay obligation:** a background reconciliation job runs every 60 min on `i019_pending_replay` and drains entries as offline devices reconnect.
-- **Tenant risk reporting:** for tenants with >N% offline-device cohort relative to total devices, a tenant-level Cat B `audit_retention.i019_offline_cohort_warning` audit event is emitted; tenant operator surfaces a per-tenant offline-cohort dashboard for clinical review.
-- **Failover-completion criteria with offline devices:** failover can be marked complete IF (a) all reachable-cohort devices drained successfully AND (b) offline-device cohort size is below the tenant-risk-threshold AND (c) `i019_pending_replay` reconciliation job is running AND (d) Privacy Officer + Compliance Officer review acknowledges the offline cohort.
+- **Tenant risk reporting:** for tenants with >5% offline-device cohort relative to total active devices, a tenant-level Cat B `audit_retention.i019_offline_cohort_warning` audit event is emitted; tenant operator surfaces a per-tenant offline-cohort dashboard for clinical review.
+
+**Tenant-risk threshold hard-default (R3 MED-1 closure):**
+
+| Threshold | Hard-default value | Authority to change |
+|---|---|---|
+| Offline-device cohort warning threshold | **5%** of active devices per tenant | Tenant operator may LOWER (tighter); RAISE requires Compliance Officer + Privacy Officer + CTO ratifier sign-off |
+| Offline-device cohort BLOCK threshold for failover-completion | **20%** of active devices per tenant | Hard ceiling; CANNOT be exceeded without named CTO + Compliance Officer + Incident Commander sign-off + per-tenant residual-risk acceptance |
+| Per-tenant denominator | active devices (= devices that issued ≥1 successful write to the platform in the 7 days preceding T-0 of the failover event) | Canonical denominator; not operator-discretionary |
+
+**Failover-completion criteria with offline devices (R3 MED-1 hard-gate):**
+
+A) Reachable-device cohort drained successfully (per Step 14.5 (c)) — REQUIRED.
+B) Offline-device cohort size ≤ 20% per active tenant — REQUIRED unless explicit CTO + Compliance Officer + Incident Commander sign-off with per-tenant residual-risk acceptance (the latter is a written, named-approver artifact attached to the deploy ticket).
+C) `i019_pending_replay` reconciliation job is running — REQUIRED.
+D) Privacy Officer + Compliance Officer review acknowledges the offline cohort — REQUIRED if offline cohort >5% on any tenant.
+E) Tenant-level Cat B `audit_retention.i019_offline_cohort_warning` emitted for every tenant with offline cohort >5% — REQUIRED.
+
+**Authority + override path:**
+- **If offline cohort >20% on any tenant:** Step 16 mark-complete is BLOCKED by default. Override requires: explicit chat-message ratification from CTO + Compliance Officer + Incident Commander (3 named humans) + a written residual-risk acceptance attached to the deploy ticket per tenant exceeding 20%. Privacy Officer review is advisory (informs the CTO/CO/IC decision; not a separate gate).
+- **The 20% ceiling is canonical hard-default** per this runbook; any future amendment to this threshold requires ratifier-quorum review per CLAUDE.md hard-floor item 3 (canonical patient-safety threshold; not operator-discretionary).
 
 **Step 14.5 result interpretation (refined per R2 MED-1):**
 - **All reachable devices drained + ordered + deduped + isolated within 60 min + offline cohort below threshold**: failover proceeds to Step 16 mark-complete.
