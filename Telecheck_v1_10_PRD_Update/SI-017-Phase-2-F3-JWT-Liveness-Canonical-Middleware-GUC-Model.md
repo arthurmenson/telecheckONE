@@ -1,13 +1,15 @@
 # SI-017 — Phase 2 F-3 JWT session-liveness check within the canonical `app.tenant_id` middleware-GUC tenant-binding model
 
-**Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; not yet routed to ratifier
+**Version:** 0.2 DRAFT (R1 closure 2026-05-19; cites SI-018 P2 partition rule)
+**Status:** **DRAFT / BLOCKED-PENDING-SI-018-RATIFICATION.** SI-017 ratification cannot precede SI-018 ratification because SI-017's audit event partition (P2 tenant-governance) depends on SI-018's canonical AUDIT_EVENTS partition-rule amendment. SI-018 is at PR #14 Codex R5 APPROVE; Decision Brief authored; awaiting ratifier ceremony.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (spec-repo workstream folder; to be ported to `arthurmenson/telecheck-app:docs/` after Codex pre-ratification cycle stabilizes the design, per established SI source-file precedent from SI-005/SI-007/SI-008/SI-009/SI-010/SI-013)
 **Owner:** Identity slice owner
 **Related artifacts:**
 - Decision Memo: `Telecheck_v1_10_PRD_Update/Decision-Memo-SC6-P-023-SI-010-Ratify-or-Reject-Unratified-Trust-Anchor-Layer-2026-05-19.md` (SI-010 rejection that prompted SI-017)
 - Engineering Review Request: `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-I-003-Atomic-Audit-Inside-vs-Application-Layer-Audit-2026-05-19.md` (established that application-layer audit emission is canonical)
 - Promotion Ledger entry P-023a (rejection of SI-010 trust-anchor layer)
+- **SI-018 v0.2 DRAFT** (audit-chain partition rule; prerequisite for SI-017 — establishes the canonical P1/P2 partition contract that this SI's audit event depends on): `Telecheck_v1_10_PRD_Update/SI-018-Audit-Chain-Partition-Rule-for-Non-Patient-Governance-Events.md`
+- Decision Brief SI-018: `Telecheck_v1_10_PRD_Update/Decision-Brief-SI-018-Audit-Chain-Partition-Rule-2026-05-19.md`
 
 ---
 
@@ -98,7 +100,7 @@ New AUDIT_EVENTS action ID under §Category-B (governance auth-proof events). De
 - `resource_type`: `'session'`.
 - `resource_id`: the JWT `session_id` (which is also the table PK).
 - `tenant_id` envelope field: `tenant_id_claimed` from JWT (same value as detail.tenant_id_claimed); if the session row exists, it's verified that `auth.sessions.tenant_id = tenant_id_claimed` matches — if mismatch, that's a separate `tenant_id_claim_mismatch` failure mode (Codex pre-ratification round will likely surface this — captured as Open Question 6.3).
-- Hash-chain partition: standard tenant-keyed hash chain (the rejected SI-010's `identity_lifecycle` partition is NOT introduced; this event lands in the canonical per-tenant chain, alongside the existing `identity.session.issued` / `identity.otp.{issued, consumed}` Cat B events that ratified at P-014 SI-002).
+- Hash-chain partition: **SI-018 partition tier P2 (tenant-governance)** per the SI-018 v0.2 canonical audit-chain partition rule (PR #14 Codex R5 APPROVE; Decision Brief at `Telecheck_v1_10_PRD_Update/Decision-Brief-SI-018-Audit-Chain-Partition-Rule-2026-05-19.md`). Concretely: `chain_partition_key = SHA-256("GENESIS:TENANT:<tenant_id_claimed>")`; Cat B governance-class. SI-018 authorizes the two-tier hybrid partition (P1 patient-bound for `target_patient_id IS NOT NULL` events; P2 tenant-governance for `target_patient_id IS NULL` events) as the canonical AUDIT_EVENTS partition contract amendment. This SI's `identity.session_liveness_check_failed` event is P2 because it has no patient subject. **Closes Codex SI-017 R1 HIGH-1 finding** ("Tenant-keyed audit hash chain is a new audit primitive" was correctly flagged; this revision now cites the SI-018 canonical authorization rather than asserting the partition independently). The rejected SI-010's `identity_lifecycle` partition is NOT introduced; SI-018's P2 (tenant-governance) is a more general, canonical-contract-authorized partition that covers this event and other Cat B governance events alongside.
 
 **Audit emission pattern (application-layer, per engineering review answer):** the authContextPlugin issues the `INSERT INTO audit_events ...` over a dedicated application-tier audit-writer pool connection (NOT the request-handler's tenant-scoped connection — the rejected request has no tenant context to write under). The audit INSERT commits before the 401 response is sent. If the audit INSERT itself fails (audit DB unreachable), the plugin still raises `UnauthenticatedError` AND additionally raises a P0 ops alert; the request is rejected with 503 instead of 401 in that case. The information-leak surface is acceptable because 503 = service unavailable conveys nothing about session state.
 
@@ -134,12 +136,15 @@ Platform Admin break-glass sessions (per I-024) are scoped via `X-Tenant-Id` hea
 
 ## 5. Cross-artifact impact summary
 
+**Prerequisite SI-018:** SI-017 is structurally downstream of SI-018. SI-018's AUDIT_EVENTS partition-rule amendment lands FIRST (the canonical P1/P2 two-tier hybrid partition is the contract surface that SI-017's `identity.session_liveness_check_failed` event sits in). SI-017's own AUDIT_EVENTS bump only adds the single new action ID + envelope; the partition contract itself is SI-018's.
+
 ### AUDIT_EVENTS impact
 
-**Contracts Pack `Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md`** (currently v5.3 canonical):
+**Contracts Pack `Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md`** (currently v5.3 canonical; SI-018 bumps v5.3 → v5.4 to land the partition-rule amendment):
 
-- **1 new Cat B action ID:** `identity.session_liveness_check_failed`. Detail payload + envelope rules per Sub-decision 4 above. Hash-chain partition: standard tenant-keyed chain (the rejected SI-010's `identity_lifecycle` partition is NOT introduced).
-- Version bump: v5.3 → v5.4. (This will be the SECOND attempt at AUDIT_EVENTS v5.4 — the first attempt, in the SI-010 trust-anchor PR #10, included 4 new Cat B IDs and was rejected. SI-017's v5.4 includes ONLY the single `identity.session_liveness_check_failed` event, with the canonical envelope pattern matching SI-002's auth-proof events. The version number v5.4 may be re-used since the prior PR #10's v5.4 changes never landed on main.)
+- **1 new Cat B action ID:** `identity.session_liveness_check_failed`. Detail payload + envelope rules per Sub-decision 4 above. Hash-chain partition: **SI-018 partition tier P2 (tenant-governance)** per the SI-018 canonical partition rule; `chain_partition_key = SHA-256("GENESIS:TENANT:<tenant_id_claimed>")`. SI-017 ratification is BLOCKED-PENDING SI-018 ratification (SI-018 establishes the canonical partition-rule amendment to AUDIT_EVENTS that SI-017 depends on).
+- Version bump: **v5.4 → v5.5** (assuming SI-018 lands v5.3 → v5.4 first per the prerequisite ordering). The version sequence is: (a) SI-018 ratifier ceremony lands AUDIT_EVENTS v5.3 → v5.4 with the partition-rule amendment; (b) SI-017 ratifier ceremony then lands AUDIT_EVENTS v5.4 → v5.5 with the single new Cat B action ID. If SI-017 + SI-018 were to be consolidated into a single ratifier ceremony, the combined bump would be v5.3 → v5.4 directly (partition rule + single new action ID in one amendment). Default is separate ceremonies per Codex SI-017 R1 HIGH-1's explicit "STOP and escalate to ratifier" instruction on the partition-rule decision.
+- **Note on prior PR #10 v5.4:** The first attempt at AUDIT_EVENTS v5.4 was in SI-010 trust-anchor PR #10 (rejected per P-023a) and included 4 new Cat B IDs. Those changes never landed on main. The version number v5.4 is freely available for SI-018's partition-rule amendment.
 
 ### CDM impact
 
