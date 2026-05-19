@@ -23,7 +23,7 @@ P-019 SI-009 specifically has TWO sub-decisions referencing SI-010 primitives (m
 - **P-019 Sub-decision 3** (`record_consult_escalation_target_swap()` SECURITY DEFINER procedure): "DEFERRED to SI-010 landing per IMPL-readiness gate (the procedure cannot reference `_session_actor_context` helpers that don't exist...)"
 - **P-019 Sub-decision 4** (Server-trusted actor identity via SET LOCAL-bound `_session_actor_context`): "caller-supplied actor identity REMOVED; procedure derives from `current_actor_*()` helpers... DEFERRED to SI-010 landing."
 
-Both must be amended onto the canonical model. **Scope is explicitly narrow:** two sub-decisions change (procedure design + actor-identity-derivation); all other P-019 sub-decisions stand unchanged (including the 7-column `livekit_room_id` KMS envelope, four-predicate atomic UPDATE, 4-value cancellation_reason enum, etc.).
+Both must be amended onto the canonical model. **Scope is explicitly narrow:** three P-019 sub-decisions are amended — Sub-decision 3 (procedure design), Sub-decision 4 (Server-trusted actor identity), and the three-tier audit durability sub-decision (Sub-decision number per canonical P-019 entry; audit-emission-location downstream of actor-identity-source). All other P-019 sub-decisions stand unchanged (including the 7-column `livekit_room_id` KMS envelope, four-predicate atomic UPDATE, 4-value cancellation_reason enum, etc.). The three amendments are tightly coupled: the audit-emission-location change is a direct consequence of moving actor identity out of the procedure (audit envelope actor fields come from the same JWT-verified application context as the procedure parameters).
 
 ---
 
@@ -33,11 +33,11 @@ Both must be amended onto the canonical model. **Scope is explicitly narrow:** t
 
 **Type:** Reconciliation entry (no Registry version bump).
 
-**Status:** **RATIFIED IN INTENT [DATE TBD]** (workstream lead chat-message sign-off pending; ratifier ceremony pending SI-017 + SI-018 ratification first). **CANONICAL** after ratifier ceremony.
+**Status:** **DRAFT / BLOCKED-PENDING-SI-017-RATIFICATION + SI-018-RATIFICATION.** Promotion to RATIFIED IN INTENT requires workstream lead chat-message sign-off; promotion to CANONICAL requires the ratifier ceremony, which cannot run until SI-017 + SI-018 ratify first. **No canonicality claim is made by this DRAFT.**
 
 **Author:** Autonomous Claude (P-019a v0.1 DRAFT authored 2026-05-19).
 
-**Trigger:** Same as P-018a — SI-010 trust-anchor layer rejected per P-023a; P-019's references to SI-010 primitives must amend onto the canonical model.
+**Trigger:** Same as P-018a — SI-010 trust-anchor layer rejected per P-023a; P-019's references to SI-010 primitives must amend onto the canonical model once SI-017 and SI-018 ratify.
 
 **Promotion class:** reconciliation — supersedes specific sub-decisions of P-019, preserves all other P-019 sub-decisions, no new canonical content beyond SI-017 + SI-018.
 
@@ -45,7 +45,7 @@ Both must be amended onto the canonical model. **Scope is explicitly narrow:** t
 
 1. **P-019 Sub-decision 3 (record_consult_escalation_target_swap() SECURITY DEFINER procedure) is AMENDED:** the procedure's actor-identity source changes from "SI-010 `current_actor_*()` helpers reading from `_session_actor_context` table" (rejected per P-023a) to **"caller-supplied actor identity parameters (p_account_id, p_tenant_id, p_role, p_admin_home_tenant_id, p_session_id) sourced from the authContextPlugin's JWT-verified middleware-resolved actor context per SI-017."** Application bears trust-boundary responsibility (same as every RPC per I-023 layer 2). Procedure does NOT re-verify identity at the DB layer.
 2. **P-019 Sub-decision 4 (Server-trusted actor identity via SET LOCAL-bound _session_actor_context) is SUPERSEDED ENTIRELY:** the original sub-decision specifically named the SI-010 primitives (`_session_actor_context` table; `current_actor_*()` helpers; `SET LOCAL` binding pattern). The amendment replaces this with **"actor identity is supplied as procedure parameters by the application's JWT-verified middleware-resolved context per SI-017's Phase 2 F-3 canonical liveness check; cross-request bleed on pooled connections is prevented by pgbouncer transaction-mode + middleware that always issues SET LOCAL app.tenant_id per request (canonical model's existing guarantee per System Architecture v1.2 §5)."** The R5+R6 closures of SI-010's original Codex pre-ratification cycle (2026-05-15) that motivated the procedure-side trust-anchor are addressed differently: the canonical model's per-request SET LOCAL discipline (formalized in middleware) is the trust boundary; the procedure trusts caller-supplied parameters that the application has already JWT-verified.
-3. **P-019 three-tier audit durability sub-decision is AMENDED (same pattern as P-018a):** Tier 1 audit emission moves from inside-procedure to application-layer immediately after procedure-success per the engineering-review-grounded canonical pattern. Tiers 2 + 3 preserved. Audit event partition tier is **tier 2** per SI-018's canonical rule (`tenant_id` of operating tenant; governance-class Cat B).
+3. **P-019 three-tier audit durability sub-decision is AMENDED (same pattern as P-018a):** The three-tier P-019 audit-DURABILITY framework is preserved; only the audit-emission LOCATION changes. Relabeled D1/D2/D3 in this entry to disambiguate from SI-018's partition tiers P1/P2 (notational only — underlying P-019 framework preserved). Durability tier **D1** audit emission moves from inside-procedure to application-layer immediately after procedure-success per the engineering-review-grounded canonical pattern. **D2** and **D3** preserved. Per SI-018's two-tier audit-chain PARTITION rule, this procedure's audit_events record lives in **P2 (tenant-governance)**: `target_patient_id IS NULL`; `tenant_id` is the operating tenant; `chain_partition_key = SHA-256("GENESIS:TENANT:<tenant_id>")`; Cat B governance-class. Durability tiers and partition tiers are orthogonal axes.
 
 **Preserved P-019 sub-decisions** (unchanged from the canonical P-019 entry):
 
@@ -81,7 +81,7 @@ AFTER (canonical middleware-GUC model per SI-017):
     -- at the row level (canonical CDM v1.2 contract)
 ```
 
-Three-tier audit durability amendment: same shape as P-018a §2 (Tier 1 moves to application; Tiers 2 + 3 unchanged; partition tier 2).
+Three-tier audit durability amendment: same shape as P-018a §2 (durability D1 moves to application; D2 + D3 unchanged; SI-018 partition tier P2).
 
 **Engineering review grounding:** same as P-018a — application-layer audit emission satisfies I-003 + HIPAA + BAA chain posture per the unanimous NO answer at `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-I-003-Atomic-Audit-Inside-vs-Application-Layer-Audit-2026-05-19.md`.
 
