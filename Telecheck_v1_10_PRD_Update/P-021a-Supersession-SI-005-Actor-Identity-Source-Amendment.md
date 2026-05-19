@@ -28,7 +28,7 @@ Same trigger as P-018a / P-019a. SI-010 rejection per P-023a requires amending P
 
 **Type:** Reconciliation entry (no Registry version bump).
 
-**Status:** **DRAFT / BLOCKED-PENDING-SI-017-RATIFICATION + SI-018-RATIFICATION.** Promotion to RATIFIED IN INTENT requires workstream lead chat-message sign-off; promotion to CANONICAL requires the ratifier ceremony, which cannot run until SI-017 + SI-018 ratify first. **No canonicality claim is made by this DRAFT.**
+**Status:** **DRAFT / BLOCKED-PENDING-SI-017-RATIFICATION + SI-018-RATIFICATION + EVANS-OQ3-RATIFIER-DECISION.** Promotion to RATIFIED IN INTENT requires workstream lead chat-message sign-off; promotion to CANONICAL requires the ratifier ceremony, which cannot run until (1) SI-017 + SI-018 ratify, AND (2) Evans decides §4 Open Question 3 (Option A canonical-invariant amendment vs Option B existing-posture documentation) per the architectural-judgment escalation. **No canonicality claim is made by this DRAFT.** **Codex pre-ratification status: R3 needs-attention with STOP-and-queue verdict per CLAUDE.md hard-floor item 6 — iteration HALTED at R3 per the §10-escalation cadence; OQ3 is the hard-floor item awaiting Evans's ratifier decision.**
 
 **Author:** Autonomous Claude (P-021a v0.1 DRAFT authored 2026-05-19).
 
@@ -67,9 +67,15 @@ Same trigger as P-018a / P-019a. SI-010 rejection per P-023a requires amending P
 
 **Engineering review grounding:** same as P-018a / P-019a — application-layer audit emission satisfies I-003 + HIPAA + BAA chain posture.
 
-**Trust-posture documentation (per SI-017 canonical model; pre-emptive Option B closure of the trust-boundary class of finding flagged on P-019a R1 HIGH-1):**
+**Trust-posture description (NEUTRAL — does NOT pre-decide §4 Open Question 3; STOP-condition per CLAUDE.md hard-floor item 6 / Codex R3 verdict 2026-05-19):**
 
-Both `current_setting('app.tenant_id')` (set via `SET LOCAL` by authContextPlugin) AND the procedure's actor parameters (`p_account_id`, `p_tenant_id`, `p_role`, `p_admin_home_tenant_id`, `p_session_id`) originate from the **same authContextPlugin middleware request scope**. The plugin verifies the JWT once per request, resolves the tuple, and (a) emits `SET LOCAL app.tenant_id = <tenant_id>` on the connection and (b) passes those same values as parameters to any SECURITY DEFINER call within the same request. There is no separate trust path; both surfaces are bound to the same JWT-verified tuple at middleware entry. pgbouncer transaction-mode + `SET LOCAL` (per System Architecture v1.2 §5) guarantee per-request scope on the GUC. The procedure does NOT add a DB-side equality guard between `p_tenant_id` and `current_setting('app.tenant_id')`; that would be a redundant defense-in-depth layer, not an isolation primitive. **The ratifier may choose to add one as a defensive guard at ratification — see §4 Open Question 3.**
+This subsection describes the **existing canonical SI-017 model** for context; it does NOT take a position on whether the canonical model is sufficient. The Option A vs Option B decision is **escalated to Evans's ratifier ceremony decision per §4 OQ3** and the supersession is BLOCKED-PENDING that decision.
+
+**Existing canonical model (descriptive):** Per the SI-017 authContextPlugin contract, both `current_setting('app.tenant_id')` (set via `SET LOCAL`) AND the procedure's actor parameters (`p_account_id`, `p_tenant_id`, `p_role`, `p_admin_home_tenant_id`, `p_session_id`) originate from the **same authContextPlugin middleware request scope**. The plugin verifies the JWT once per request, resolves the tuple, and (a) emits `SET LOCAL app.tenant_id = <tenant_id>` on the connection and (b) passes those same values as parameters to any SECURITY DEFINER call within the same request. pgbouncer transaction-mode + `SET LOCAL` (per System Architecture v1.2 §5) guarantee per-request scope on the GUC.
+
+**Codex R3 STOP-and-queue verdict 2026-05-19:** Codex R3 verdict explicitly flagged that the canonical-model description alone is INSUFFICIENT to ship P-021a because a call-site bug or confused-deputy path could pass `p_tenant_id` that diverges from `current_setting('app.tenant_id')`. The supersession therefore **does NOT decide** whether a DB-side equality guard is required; the architectural-judgment is queued per §4 OQ3.
+
+**No Option B closure is claimed by this DRAFT.** The earlier framing in §2 v0.1 + R1 closure that read as Option B closure has been retracted at R3.
 
 **Patient-bound audit-chain partition tier (P1) note:** Unlike P-018a + P-019a which place their audit events in P2 (tenant-governance because they are not patient-bound), P-021a's `record_consult_clinician_decision()` event is patient-bound clinical evidence (Cat A) and therefore lives in P1 (patient-bound) per SI-018's canonical partition rule. The `rotate_consult_clinician_decision_kms()` event partition tier is **normatively bound to rotation scope** per Sub-decision 4 above (P1 for single-patient; P2 for batch/tenant-governance).
 
@@ -119,14 +125,18 @@ The P-021 11-step validation framework's auth-FIRST step originally relied on SI
 
 **Recommendation:** 2 rounds + 1 verification. STOP-and-escalate per discipline floor.
 
-### Open Question 3: DB-side equality guard on `p_tenant_id` vs `current_setting('app.tenant_id')` (mirrors P-019a OQ3)
+### Open Question 3: DB-side equality guard on `p_tenant_id` vs `current_setting('app.tenant_id')` — **STOP-CONDITION; HARD-FLOOR ITEM 6 ESCALATION; AWAITING EVANS'S RATIFIER DECISION**
 
-Same trust-boundary class of question as P-019a §4 OQ3:
+Trust-boundary class of question; **Codex R1 (PR #17 P-019a) + R3 (PR #18 P-021a) both flagged as architectural-judgment per CLAUDE.md hard-floor item 6**. Two paths:
 
-- **Option A (defense-in-depth invariant — canonical-contract amendment; hard-stop architectural judgment per CLAUDE.md hard-floor item 6):** Add a canonical platform-floor invariant requiring all SECURITY DEFINER procedures accepting actor-tenant parameters to reject calls where `p_tenant_id <> current_setting('app.tenant_id')`. Would land in a Contracts Pack INVARIANTS amendment.
-- **Option B (document existing posture — within-scope clarification):** Document that the canonical SI-017 authContextPlugin contract binds both `SET LOCAL app.tenant_id` and procedure actor parameters to the same JWT-verified middleware tuple. **§2 trust-posture documentation has applied Option B.**
+- **Option A (defense-in-depth invariant — canonical INVARIANTS amendment):** Add a canonical platform-floor invariant requiring all SECURITY DEFINER procedures accepting actor-tenant parameters to reject calls where `p_tenant_id <> current_setting('app.tenant_id')` before any mutation. Implementation: lands in a Contracts Pack INVARIANTS amendment (likely new I-032 or extension of I-023); each SECURITY DEFINER procedure across SI-005, SI-008, SI-009 adds an in-procedure check + new rejection code `tenant_guc_mismatch`. **Requires ratifier-level decision; routes through Decision Memo to ratifier quorum.**
+- **Option B (rely on existing canonical model — descriptive, not normative):** The SI-017 authContextPlugin contract is the trust anchor; both `SET LOCAL app.tenant_id` and procedure actor parameters bind to the same JWT-verified tuple at request entry. No DB-side equality guard required for correctness; defense-in-depth is OPTIONAL.
 
-**Recommendation:** Surface to Evans at the morning review (same question shape as P-019a). Recommendation is Option B (canonical model already binds both surfaces). If Evans wants Option A, escalate to ratifier ceremony with a Decision Memo proposing the new invariant.
+**STOP-and-queue posture:** P-021a v0.1 DRAFT does **NOT** decide Option A vs Option B. The supersession is **BLOCKED-PENDING-EVANS-OQ3-RATIFIER-DECISION** in addition to SI-017 + SI-018 ratification.
+
+**Recommendation (advisory only; ratifier decides):** Option B is the canonical-model-consistent path; Option A is a defense-in-depth tightening that may be warranted given the safety-critical clinical-decision surface. The trade-off Evans weighs: (1) Option A adds DB-layer redundancy + a slim per-call cost; eliminates the entire class of "middleware bug or confused-deputy" failure mode that R3 names; future-proofs against new SECURITY DEFINER procedure additions that inherit the same trust-boundary concern. (2) Option B preserves the current canonical-model posture; trusts the middleware as the single trust anchor; consistent with how every other application-to-DB call operates. **Decision Memo template available for Option A path if Evans selects it.**
+
+**Same OQ3 retroactively applies to P-018a (PR #16) + P-019a (PR #17):** Although both passed Codex R2 APPROVE with Option B documentation, Codex R3 on P-021a clarified that the trust-boundary closure is architectural-judgment per hard-floor item 6 + therefore NOT closeable inline. P-018a + P-019a v0.1 DRAFTs are also BLOCKED-PENDING-EVANS-OQ3-RATIFIER-DECISION; a follow-up commit on each will mark them with the same OQ3 STOP-and-queue posture for consistency.
 
 ### Open Question 4: `rotate_consult_clinician_decision_kms()` audit event partition tier — RESOLVED in §2 Sub-decision 4
 
