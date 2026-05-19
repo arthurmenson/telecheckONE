@@ -28,7 +28,7 @@ Same trigger as P-018a / P-019a. SI-010 rejection per P-023a requires amending P
 
 **Type:** Reconciliation entry (no Registry version bump).
 
-**Status:** **DRAFT / BLOCKED-PENDING-SI-017-RATIFICATION + SI-018-RATIFICATION + EVANS-OQ3-RATIFIER-DECISION.** Promotion to RATIFIED IN INTENT requires workstream lead chat-message sign-off; promotion to CANONICAL requires the ratifier ceremony, which cannot run until (1) SI-017 + SI-018 ratify, AND (2) Evans decides §4 Open Question 3 (Option A canonical-invariant amendment vs Option B existing-posture documentation) per the architectural-judgment escalation. **No canonicality claim is made by this DRAFT.** **Codex pre-ratification status: R3 needs-attention with STOP-and-queue verdict per CLAUDE.md hard-floor item 6 — iteration HALTED at R3 per the §10-escalation cadence; OQ3 is the hard-floor item awaiting Evans's ratifier decision.**
+**Status:** **RATIFIED 2026-05-19** per Evans's specific per-item chat-message ratification + canonical content port lockstep commit (branch `spec/canonical-content-port-si018-si017-supersessions-2026-05-19` HEAD `82c61a0`, Codex R8 APPROVE). Canonical content lives in `Telecheck_Promotion_Ledger.md` entry **P-021a** (SI-005 actor-identity-source supersession + I-032 STEP 0 + rotate_kms partition-tier normative binding). Cross-PR OQ3 resolved via Option A Decision Memo at `Telecheck_v1_10_PRD_Update/Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md` adopting I-032. This source file is the ratifier-input + audit-trail artifact; the canonical Promotion Ledger entry P-021a is implementation-authoritative.
 
 **Author:** Autonomous Claude (P-021a v0.1 DRAFT authored 2026-05-19).
 
