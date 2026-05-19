@@ -89,8 +89,11 @@ Streams 1+2 are best-effort observability; stream 3 is the canonical compliance 
 
 ### Sub-decision 1: Event-source canonical schemas
 
+**Cross-stream `scope` envelope field (R2 HIGH-1 closure).** EVERY record entering the SIEM pipeline — across all three streams (metrics + logs + audit CDC) — carries the `scope` enum field (`tenant | platform`). This is the canonical SIEM envelope field; ingestion-time validation rejects records without it (per Sub-decision 1.5). The schemas below add `scope` to each stream.
+
 **(1.1) Datadog metrics schema:** standard Datadog tagging convention applied to all metrics:
-- `tenant_id` (REQUIRED on every metric emit) — Telecheck-{country} per ADR-023; metric series partitioned by tenant for per-tenant dashboards
+- `scope` (REQUIRED; cross-stream envelope field per R2 HIGH-1 closure) — enum `tenant | platform`
+- `tenant_id` (REQUIRED when `scope = tenant`; MUST BE absent when `scope = platform`) — Telecheck-{country} per ADR-023; metric series partitioned by tenant for per-tenant dashboards
 - `service` (REQUIRED) — service name (e.g., `auth-service`, `forms-engine`, `interaction-engine`)
 - `environment` (REQUIRED) — `production` | `staging` | `dev`
 - `region` — `us-east-1` (primary) | `us-west-2` (cold DR)
@@ -129,7 +132,7 @@ Rejected records are quarantined to a separate index (`siem_validation_quarantin
 
 This makes tenant isolation provable at ingestion time, not just at query time. Every record's scope is canonical metadata; routing follows scope deterministically.
 
-**(1.3) Audit DB CDC stream schema:** identical to canonical `audit_events` row shape per AUDIT_EVENTS v5.5 (§Audit record schema + §Hash chain partitioning + 3 new 2026-05-19 action IDs); replicated 1:1 from the audit DB to the SIEM via Postgres CDC (logical replication or Debezium).
+**(1.3) Audit DB CDC stream schema:** identical to canonical `audit_events` row shape per AUDIT_EVENTS v5.5 (§Audit record schema + §Hash chain partitioning + 3 new 2026-05-19 action IDs); replicated 1:1 from the audit DB to the SIEM via Postgres CDC (logical replication or Debezium). **`scope` envelope field is derived at CDC time per R2 HIGH-1 closure:** `scope = 'tenant'` when `target_patient_id IS NOT NULL OR tenant_id IS NOT NULL`; `scope = 'platform'` only for the reserved future platform-scope partition tier (which is currently deferred per AUDIT_EVENTS §Hash chain §Partitioning open-question note; until ratified, no audit_events rows carry `scope = 'platform'`).
 
 **Promotion class:** content-change addition to a SIEM contract (new in this spec).
 
@@ -201,7 +204,15 @@ Per AUDIT_EVENTS v5.5 §Retention canonical policy:
 3. **Tier-transition attestations.** Each tier transition emits a Cat B audit event `audit_retention.tier_transition_executed` with payload: `partition_key, source_tier, target_tier, transition_record_range, boundary_hash, attesting_operator_id, attestation_timestamp`. The attestation itself becomes part of the canonical audit chain.
 4. **Retention of link dependencies for full legal period.** All hash linkages (predecessor/successor pointers) are retained across the full retention period (per the table above; up to max(10y, regulatory) for Cat A) — even if intermediate events have been archived to cold storage. A chain verification at year-9 must traverse all hot/warm/cold tiers without gaps.
 5. **Scheduled chain-verification job.** A weekly background job traverses every active partition's chain across all tiers (hot → warm → cold) and reports any broken link. Job results published to the SIEM as Cat B audit events; failures trigger P0 alerts (per Sub-decision 3).
-6. **Manifest immutability.** Per-tier manifests are append-only; once a manifest entry is written it is never modified. Manifest checksum is itself part of the manifest header for tamper detection.
+6. **Manifest immutability (concrete enforcement per R2 HIGH-2 closure).** Per-tier manifests are stored with the following enforced controls:
+   - **S3 Object Lock COMPLIANCE mode** with object versioning enabled on every manifest bucket. Compliance mode prevents deletion or modification of manifest objects even by privileged actors (including the root account) for the duration of the legal retention period.
+   - **Retention lock** sized to the canonical legal retention period per Cat A / Cat B (max(10y, regulatory) / 7y). Once a manifest object is written, no modification or delete is permitted until the retention lock expires.
+   - **Bucket policy restricts write to a dedicated service role** (`audit-archive-writer`); the role has `s3:PutObject` only (no `s3:DeleteObject`, no `s3:PutBucketLifecycle` for the manifest prefix). All other accounts including platform_admin lack write access to the manifest prefix.
+   - **Signed manifest digests anchored in Cat B audit events.** Every manifest object's SHA-256 digest is recorded in a Cat B audit event `audit_retention.manifest_persisted` at the time of write. The digest persists in the canonical audit chain — independently retained from the manifest object itself. Verification compares the live manifest object's current digest against the audit-event-recorded digest; mismatch indicates tampering.
+   - **Cross-region replication** of manifest objects from us-east-1 to us-west-2 cold DR (per ADR-026); both copies S3-Object-Lock-COMPLIANCE-mode protected. Tampering on one region's manifest detected by cross-region digest comparison.
+   - **Independent verification job** (separate from the weekly chain-verification job in #5 above) runs monthly: re-computes each manifest object's digest, compares against the Cat B audit-event-recorded digest + cross-region copy's digest. Any mismatch triggers P0 alert per Sub-decision 3.
+
+These concrete controls make manifest immutability provable: a lifecycle bug or privileged actor cannot replace a manifest without (a) leaving the original Object Lock retention intact (which they cannot delete) AND (b) producing a new digest that mismatches the Cat B audit event AND (c) producing a mismatch with the cross-region copy. Each is independently verifiable.
 
 These archival mechanics ensure that I-027 chain verification remains valid when archived Cat A/Cat B evidence is retrieved for regulatory inquiry, including across the hot/warm/cold tier boundaries that are the highest-risk integrity surface.
 
