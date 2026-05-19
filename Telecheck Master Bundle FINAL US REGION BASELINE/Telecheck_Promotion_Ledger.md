@@ -41,7 +41,9 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 **Type:** Reconciliation entry (no Registry version bump from P-021a alone; consolidated lockstep bump v2.12 → v2.13 covers all 5 entries in this ceremony — see P-026 below for the Registry absorption detail).
 
-**Status:** **RATIFIED 2026-05-19** per Evans's specific per-item chat-message ratification: *"I ratify cross-PR OQ3 Option A including new invariant I-032 + canonical INVARIANTS v5.2→v5.3 + AUDIT_EVENTS v5.3→v5.5 amendments + procedure-side STEP 0 amendments on P-018a/P-019a/P-021a. I ratify SI-017-OQ-MISMATCH A2+B2+C ... I ratify SI-018 partition rule, SI-017 (with Sub-decision 4.5), P-018a, P-019a, P-021a — proceed with the canonical content port lockstep commit."*
+**Status:** **RATIFIED 2026-05-19** per Evans's specific per-item chat-message ratification (verbatim, unabridged):
+
+> *"I ratify cross-PR OQ3 Option A including new invariant I-032 + canonical INVARIANTS v5.2→v5.3 + AUDIT_EVENTS v5.3→v5.5 amendments + procedure-side STEP 0 amendments on P-018a/P-019a/P-021a. I ratify SI-017-OQ-MISMATCH A2+B2+C including new Sub-decision 4.5 + Cat A identity.session_jwt_tenant_id_mismatch event + merge-blocking Test 7.X. I ratify SI-018 partition rule, SI-017 (with Sub-decision 4.5), P-018a, P-019a, P-021a — proceed with the canonical content port lockstep commit."*
 
 **Author:** Autonomous Claude. P-021a v0.1 DRAFT authored 2026-05-19 in PR #18 (`spec/p021a-si005-actor-identity-source-supersession-2026-05-19`); 3-round Codex pre-ratification trail (R1 closure inline at commit bbeefb7 — rotate_kms partition normative; R2 closure inline at commit 4497668 — Sub-decision 4 tightening with mandatory enum + procedure-validated return; R3 STOP-and-queue at commit 018ef75 — cross-PR OQ3 architectural-judgment per CLAUDE.md hard-floor item 6); cross-PR OQ3 resolved via Decision Memo `Telecheck_v1_10_PRD_Update/Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md` Option A adoption + I-032 STEP 0 applied per `Proposed-SECURITY-DEFINER-Procedure-Amendments-2026-05-19.md` §SI-005-record + §SI-005-rotate. Decision Brief: `Decision-Brief-P-021a-SI-005-Supersession-2026-05-19.md`.
 
@@ -73,7 +75,9 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 **Type:** Reconciliation entry (no Registry version bump from P-019a alone; consolidated lockstep).
 
-**Status:** **RATIFIED 2026-05-19** per Evans's chat-message (same verbatim message as P-021a above).
+**Status:** **RATIFIED 2026-05-19** per Evans's specific per-item chat-message ratification (verbatim, unabridged; same message that ratified P-021a + P-019a + P-018a + P-027 + P-026 simultaneously this commit):
+
+> *"I ratify cross-PR OQ3 Option A including new invariant I-032 + canonical INVARIANTS v5.2→v5.3 + AUDIT_EVENTS v5.3→v5.5 amendments + procedure-side STEP 0 amendments on P-018a/P-019a/P-021a. I ratify SI-017-OQ-MISMATCH A2+B2+C including new Sub-decision 4.5 + Cat A identity.session_jwt_tenant_id_mismatch event + merge-blocking Test 7.X. I ratify SI-018 partition rule, SI-017 (with Sub-decision 4.5), P-018a, P-019a, P-021a — proceed with the canonical content port lockstep commit."*
 
 **Author:** Autonomous Claude. P-019a v0.1 DRAFT authored 2026-05-19 in PR #17 (`spec/p019a-si009-actor-identity-source-supersession-2026-05-19`); Codex R2 APPROVE; retroactive OQ3 alignment commit 6298f8e; I-032 STEP 0 applied per `Proposed-SECURITY-DEFINER-Procedure-Amendments-2026-05-19.md` §SI-009. Decision Brief: `Decision-Brief-P-019a-SI-009-Supersession-2026-05-19.md`.
 
@@ -100,7 +104,9 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 **Type:** Reconciliation entry (no Registry version bump from P-018a alone; consolidated lockstep).
 
-**Status:** **RATIFIED 2026-05-19** per Evans's chat-message (same verbatim message as P-021a above).
+**Status:** **RATIFIED 2026-05-19** per Evans's specific per-item chat-message ratification (verbatim, unabridged; same message that ratified P-021a + P-019a + P-018a + P-027 + P-026 simultaneously this commit):
+
+> *"I ratify cross-PR OQ3 Option A including new invariant I-032 + canonical INVARIANTS v5.2→v5.3 + AUDIT_EVENTS v5.3→v5.5 amendments + procedure-side STEP 0 amendments on P-018a/P-019a/P-021a. I ratify SI-017-OQ-MISMATCH A2+B2+C including new Sub-decision 4.5 + Cat A identity.session_jwt_tenant_id_mismatch event + merge-blocking Test 7.X. I ratify SI-018 partition rule, SI-017 (with Sub-decision 4.5), P-018a, P-019a, P-021a — proceed with the canonical content port lockstep commit."*
 
 **Author:** Autonomous Claude. P-018a v0.1 DRAFT authored 2026-05-19 in PR #16 (`spec/p018a-si008-actor-identity-source-supersession-2026-05-19`); Codex R2 APPROVE; retroactive OQ3 alignment commit f65069f; I-032 STEP 0 applied per `Proposed-SECURITY-DEFINER-Procedure-Amendments-2026-05-19.md` §SI-008. Decision Brief: `Decision-Brief-P-018a-SI-008-Supersession-2026-05-19.md`.
 
@@ -126,7 +132,9 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 **Type:** Content-change promotion.
 
-**Status:** **RATIFIED 2026-05-19** per Evans's chat-message (same verbatim message as P-021a above). Decision Brief: `Telecheck_v1_10_PRD_Update/Decision-Brief-SI-017-Phase-2-F3-JWT-Liveness-2026-05-19.md`. SI-017-OQ-MISMATCH Decision Memo: `Telecheck_v1_10_PRD_Update/Decision-Memo-SI-017-OQ-MISMATCH-A2-B2-C-Adopted-2026-05-19.md`.
+**Status:** **RATIFIED 2026-05-19** per Evans's specific per-item chat-message ratification (verbatim, unabridged; same message that ratified P-021a + P-019a + P-018a + P-027 + P-026 simultaneously this commit):
+
+> *"I ratify cross-PR OQ3 Option A including new invariant I-032 + canonical INVARIANTS v5.2→v5.3 + AUDIT_EVENTS v5.3→v5.5 amendments + procedure-side STEP 0 amendments on P-018a/P-019a/P-021a. I ratify SI-017-OQ-MISMATCH A2+B2+C including new Sub-decision 4.5 + Cat A identity.session_jwt_tenant_id_mismatch event + merge-blocking Test 7.X. I ratify SI-018 partition rule, SI-017 (with Sub-decision 4.5), P-018a, P-019a, P-021a — proceed with the canonical content port lockstep commit."* Decision Brief: `Telecheck_v1_10_PRD_Update/Decision-Brief-SI-017-Phase-2-F3-JWT-Liveness-2026-05-19.md`. SI-017-OQ-MISMATCH Decision Memo: `Telecheck_v1_10_PRD_Update/Decision-Memo-SI-017-OQ-MISMATCH-A2-B2-C-Adopted-2026-05-19.md`.
 
 **Author:** Autonomous Claude. SI-017 v0.2 authored 2026-05-19 in PR #13 (`spec/si-017-phase2-f3-canonical-middleware-2026-05-19`) after SI-010 trust-anchor rejection (P-023a). Codex R1 closed by spawning SI-018 (parallel SI for audit-chain partition rule); Codex R2 HALTED at architectural-judgment per CLAUDE.md hard-floor item 6 on tenant-claim-mismatch path; resolved via SI-017-OQ-MISMATCH Decision Memo adopting A2+B2+C.
 
@@ -159,9 +167,13 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ### Entry P-026 — 2026-05-19 — SI-018 ratification: canonical audit-chain partition rule (two-tier hybrid P1 patient-bound + P2 tenant-governance) + I-032 cross-PR OQ3 Option A invariant codification
 
+**P-NUM supersession note (closes Codex Scope C MED-2 on PR canonical-content-port branch):** This entry consumes the P-026 slot for SI-018 + I-032. The prior parked mapping at the P-012 slot repurposing note (line 948, embedded within P-013 entry's SUPERSEDED annotation block 2026-05-17) said *"SI-014 → P-026 (SC9 upcoming, parked until ADR-030)"* and *"P-027 are unclaimed gap slots from cascade re-numbering."* That parked mapping is now **SUPERSEDED 2026-05-19** by this lockstep ratification ceremony: **P-026 = SI-018 (this entry); P-027 = SI-017 (next entry below).** **SI-014's new target slot is P-028** (next-available after P-027), still parked pending ADR-030 ratification — no other change to SI-014's status. The append-only invariant is preserved by annotating here rather than editing the prior parked-slot text at line 948.
+
 **Type:** Content-change promotion — **ratification-intent + physical content + Registry +1 minor bump LAND TOGETHER in this commit** per the lockstep invariant. The lockstep commit covers SI-018 + SI-017 + I-032 + the three supersessions (P-018a/P-019a/P-021a) — see those entries above for the supersession portions; this entry is the SI-018 + I-032 portion.
 
-**Status:** **RATIFIED 2026-05-19** per Evans's chat-message (same verbatim message as P-021a above). Decision Brief SI-018: `Telecheck_v1_10_PRD_Update/Decision-Brief-SI-018-Audit-Chain-Partition-Rule-2026-05-19.md`. Decision Memo cross-PR OQ3 Option A: `Telecheck_v1_10_PRD_Update/Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md`.
+**Status:** **RATIFIED 2026-05-19** per Evans's specific per-item chat-message ratification (verbatim, unabridged; same message that ratified P-021a + P-019a + P-018a + P-027 + P-026 simultaneously this commit):
+
+> *"I ratify cross-PR OQ3 Option A including new invariant I-032 + canonical INVARIANTS v5.2→v5.3 + AUDIT_EVENTS v5.3→v5.5 amendments + procedure-side STEP 0 amendments on P-018a/P-019a/P-021a. I ratify SI-017-OQ-MISMATCH A2+B2+C including new Sub-decision 4.5 + Cat A identity.session_jwt_tenant_id_mismatch event + merge-blocking Test 7.X. I ratify SI-018 partition rule, SI-017 (with Sub-decision 4.5), P-018a, P-019a, P-021a — proceed with the canonical content port lockstep commit."* Decision Brief SI-018: `Telecheck_v1_10_PRD_Update/Decision-Brief-SI-018-Audit-Chain-Partition-Rule-2026-05-19.md`. Decision Memo cross-PR OQ3 Option A: `Telecheck_v1_10_PRD_Update/Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md`.
 
 **Author:** Autonomous Claude. SI-018 v0.2 authored 2026-05-19 in PR #14 after the SI-010 trust-anchor rejection cycle clarified the audit-chain partition gap; 5-round Codex convergence (R1 needs-attention on tier-3 violating I-027 + variable-tier non-determinism — closed by dropping tier 3, deterministic two-tier hybrid; R2–R4 prose-consistency closures inline; R5 APPROVE clean). I-032 codified in parallel per cross-PR OQ3 Decision Memo Option A ratification.
 
