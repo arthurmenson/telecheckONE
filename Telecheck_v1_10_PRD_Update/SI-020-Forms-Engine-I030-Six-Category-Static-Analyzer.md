@@ -83,7 +83,13 @@ type ExpressionIR =
   | { op: 'literal'; value: any }
   | { op: 'identifier'; name: string }     // references a variable/field
   | { op: 'and' | 'or' | 'not' | 'eq' | 'neq' | 'lt' | 'gt' | 'in'; args: ExpressionIR[] }
-  | { op: 'function_call'; name: string; args: ExpressionIR[] };
+  | { op: 'function_call'; name: string; args: ExpressionIR[] }
+  // Declaration + scope nodes (added R1 closure for HIGH-2 alias tracking):
+  | { op: 'let_binding'; name: string; rhs: ExpressionIR; scope_id: string }   // single-assignment let-binding within a scope
+  | { op: 'scope_ref'; name: string; scope_id: string }                         // reference to a let-bound name within a scope
+  | { op: 'scope_block'; scope_id: string; bindings: LetBindingIR[]; body: ExpressionIR };
+
+type LetBindingIR = { name: string; rhs: ExpressionIR };
 
 // L2/L3/L4 each have similar AST-like IRs with ExpressionIR nodes inside.
 type BranchingLogicIR = { rules: BranchingRuleIR[] };
@@ -123,18 +129,21 @@ The 6 forbidden-dependency categories per FORMS_ENGINE v5.2 §I-030 enforcement.
 
 **Detection rule R6 — Surface visibility:** walk `surface_registry.surfaces[*].visibility_condition`; reject on `research_consent_status` reference for any surface_id that is not a registered consent-block surface.
 
-### Sub-decision 2.7: Alias-tracking (CLOSES the "rename-trick evasion" failure mode)
+### Sub-decision 2.7: Alias-tracking (CLOSES the "rename-trick evasion" failure mode; per Codex R1 HIGH-2 the IR schema is extended above with explicit declaration/assignment/scope nodes so the analyzer can operate canonically)
 
 A naive analyzer that only matches the literal string `research_consent_status` can be evaded by aliasing — e.g., a form author writes `let x = research_consent_status; ... if (x === 'declined') ...`. The analyzer MUST track aliases through assignment expressions.
 
+**Pre-requisite — canonical IR contains aliasing primitives.** Per Sub-decision 1 (extended in R1 closure), the canonical `ExpressionIR` schema now includes `let_binding`, `scope_ref`, and `scope_block` nodes; the IR transform from authoring source REQUIRES every `let`/`var`/`const` assignment to be normalized into a `let_binding` node within an enclosing `scope_block`. An IR that contains any non-let-binding assignment construct is malformed and is rejected by the analyzer with `i030_ir_malformed`.
+
 **Alias-tracking algorithm:**
 
-1. Build a per-IR-subtree symbol table mapping `identifier_name → set_of_source_identifiers`.
-2. On any `let`/`var`/`const` assignment (or equivalent IR), the new identifier inherits the source identifier set. If the RHS expression references `research_consent_status` (directly or transitively), the new identifier joins the "tainted" set.
-3. Any reference to a tainted identifier in a rule condition (per R1-R6) IS a violation.
-4. Tainting is transitive across all aliasing operations until the identifier exits scope.
+1. Walk the IR depth-first, maintaining a per-scope symbol table: `Map<(scope_id, identifier_name), TaintSet>` where `TaintSet ⊆ {'research_consent_status_direct', 'research_consent_status_transitive'}`.
+2. On encountering a `let_binding` node: compute the TaintSet of `rhs` recursively (taint propagates from any `identifier` or `scope_ref` whose name resolves to a tainted entry); assign `(scope_id, name) → TaintSet` in the symbol table.
+3. On encountering an `identifier` or `scope_ref` node inside a rule condition (per R1-R6): look up the TaintSet in the enclosing scope chain; if TaintSet is non-empty, the rule condition is tainted.
+4. On encountering a `function_call` node: if the analyzer cannot resolve the function body (e.g., external function), conservatively treat the result as tainted IF any argument is tainted (function-summary inference is deferred to future SI; v1.0 is conservative).
+5. Tainted rule conditions in R1-R6 produce the per-category rejection code.
 
-**Alias-tracking is conservatively over-approximating:** if the analyzer cannot prove an identifier is NOT tainted, it treats it as tainted (false-positive is preferred over false-negative for I-030 enforcement).
+**Alias-tracking is conservatively over-approximating:** if the analyzer cannot prove an identifier is NOT tainted, it treats it as tainted (false-positive is preferred over false-negative for I-030 enforcement). The `i030_alias_taint_indeterminate` rejection code covers the indeterminate cases (e.g., function-call results where the analyzer cannot resolve the function body and one or more arguments are tainted — although per the conservative rule the analyzer rejects with the per-category code; `_indeterminate` is reserved for genuinely-undecidable cases like control-flow-dependent function calls).
 
 ### Sub-decision 3: Rejection-code enum
 
@@ -159,13 +168,36 @@ The static analyzer runs at form-version-publish time as a HARD GATE:
 
 ### Sub-decision 4.5: CDM new columns on form-version entity (cross-SI to existing Forms-Intake CDM scope)
 
-Adds 4 new columns to the canonical form-version entity (per Forms/Intake Engine Slice PRD v2.1):
+Adds 5 new columns to the canonical form-version entity (per Forms/Intake Engine Slice PRD v2.1; R1 closure added `current_ir_hash`):
+- `current_ir_hash` VARCHAR(64) NOT NULL — SHA-256 of the form's CURRENT canonical IR; updated on every IR change. Closes Codex R1 HIGH-1 (stale-analyzer-pass-bypass) by providing a comparable hash for the publish-transition CHECK.
 - `i030_analyzer_passed_at` TIMESTAMPTZ NULL — populated on analyzer-pass
 - `i030_analyzer_version` VARCHAR(40) NULL — semver of the analyzer that passed
-- `i030_analyzer_ir_hash` VARCHAR(64) NULL — SHA-256 of the IR that was analyzed (for audit reproducibility)
+- `i030_analyzer_ir_hash` VARCHAR(64) NULL — SHA-256 of the IR that was analyzed (snapshot at pass-time; immutable until cleared)
 - `i030_analyzer_rejection_codes` TEXT[] NULL — populated on analyzer-reject; cleared on subsequent pass
 
-CHECK constraint: `(i030_analyzer_passed_at IS NOT NULL) = (form_version_publication_state IN ('published', 'deprecated', 'retired'))` — no form-version can be published without an analyzer-pass.
+**Stale-pass guard (R1 HIGH-1 closure):** Whenever the form's IR is modified (any change to `current_ir_hash`), the BEFORE UPDATE trigger MUST clear `i030_analyzer_passed_at + i030_analyzer_version + i030_analyzer_ir_hash + i030_analyzer_rejection_codes` to NULL. Re-running the analyzer on the new IR produces a new pass result.
+
+**Publish-transition CHECK constraint (extended for R1 HIGH-1 closure):**
+
+```sql
+CHECK (
+  (form_version_publication_state = 'pending_analysis'
+    AND i030_analyzer_passed_at IS NULL)
+  OR
+  (form_version_publication_state = 'pending_publish'
+    AND i030_analyzer_passed_at IS NOT NULL
+    AND i030_analyzer_ir_hash = current_ir_hash)  -- stale-pass guard
+  OR
+  (form_version_publication_state IN ('published', 'deprecated', 'retired')
+    AND i030_analyzer_passed_at IS NOT NULL
+    AND i030_analyzer_ir_hash = current_ir_hash)  -- stale-pass guard at publish-time too
+)
+```
+
+The `i030_analyzer_ir_hash = current_ir_hash` clause is the critical guard. If the IR changes between analyzer-pass and publish attempt, the trigger clears the pass columns AND the IR-hash mismatch causes the CHECK to fail; publish is hard-blocked until re-analysis.
+
+**New regression test (R1 HIGH-1 closure):**
+- T-STALE: form passes analyzer at IR_hash A → IR modified to hash B → attempt publish → expect rejection with `i030_analyzer_passed_but_ir_changed`
 
 ### Sub-decision 5: AUDIT_EVENTS — 2 new Cat B action IDs
 
@@ -185,16 +217,40 @@ Canonical test corpus (positive + negative) MUST ship with the analyzer:
 - T+4: form with L2/L3/L4 rules using non-consent fields (`age`, `weight`, `medication_list`, etc.)
 
 **Negative corpus (analyzer-reject required for each; verifies each detection rule fires):**
+
+**Direct-reference negative tests (one per category):**
 - T-1: L2 BranchingLogic with `research_consent_status` reference → expect `i030_l2_branching_consent_dependency`
 - T-2: L3 Eligibility with `research_consent_status` → expect `i030_l3_eligibility_consent_dependency`
 - T-3: L4 ApprovalGovernance with `research_consent_status` → expect `i030_l4_approval_consent_dependency`
 - T-4: L1 non-consent-block variant conditioned on `research_consent_status` → expect `i030_l1_presentation_consent_dependency`
 - T-5: Intake-flow transition conditioned on `research_consent_status` → expect `i030_intake_flow_consent_dependency`
 - T-6: Surface visibility conditioned on `research_consent_status` → expect `i030_surface_visibility_consent_dependency`
-- T-7: Aliased reference `let x = research_consent_status; ... if (x === 'declined')` in L2 rule → expect `i030_l2_branching_consent_dependency` (via alias-taint)
-- T-8: Transitive aliasing chain `a = research_consent_status; b = a; c = b; ... if (c)` → expect detection through full chain
-- T-9: Malformed IR (missing required field) → expect `i030_ir_malformed`
-- T-10: Indeterminate-taint case (e.g., aliased through a function call the analyzer cannot fully resolve) → expect `i030_alias_taint_indeterminate`
+
+**Alias-via-let-binding negative tests (one per category; closes Codex R1 MED-1):**
+- T-1A: L2 BranchingLogic with aliased reference (`let x = research_consent_status; ... if (x === 'declined')`) → expect `i030_l2_branching_consent_dependency`
+- T-2A: L3 Eligibility with aliased reference → expect `i030_l3_eligibility_consent_dependency`
+- T-3A: L4 ApprovalGovernance with aliased reference → expect `i030_l4_approval_consent_dependency`
+- T-4A: L1 non-consent-block variant with aliased reference → expect `i030_l1_presentation_consent_dependency`
+- T-5A: Intake-flow transition with aliased reference → expect `i030_intake_flow_consent_dependency`
+- T-6A: Surface visibility with aliased reference → expect `i030_surface_visibility_consent_dependency`
+
+**Transitive alias-chain negative tests (one per category):**
+- T-1T: L2 with `a = research_consent_status; b = a; c = b; if (c)` → expect `i030_l2_branching_consent_dependency`
+- T-2T: L3 with transitive alias chain → expect `i030_l3_eligibility_consent_dependency`
+- T-3T: L4 with transitive alias chain → expect `i030_l4_approval_consent_dependency`
+- T-4T: L1 with transitive alias chain → expect `i030_l1_presentation_consent_dependency`
+- T-5T: Intake-flow with transitive alias chain → expect `i030_intake_flow_consent_dependency`
+- T-6T: Surface visibility with transitive alias chain → expect `i030_surface_visibility_consent_dependency`
+
+**Indeterminate-taint negative tests (one per category):**
+- T-1I: L2 with consent-tainted arg passed to unresolvable function call → expect `i030_l2_branching_consent_dependency` (conservative reject; over-approximation) or `i030_alias_taint_indeterminate` (genuinely-undecidable; e.g., control-flow-dependent function call)
+- T-2I through T-6I: analogous per category
+
+**Malformed-IR + Stale-pass:**
+- T-9: Malformed IR (missing required field, or non-canonical assignment construct outside let_binding) → expect `i030_ir_malformed`
+- T-STALE: form passes analyzer at IR_hash A → IR modified to hash B → attempt publish → expect publish rejection with `i030_analyzer_passed_but_ir_changed` (per Sub-decision 4.5 stale-pass guard)
+
+**Total negative corpus size:** 6 direct + 6 alias + 6 transitive + 6 indeterminate + 2 (malformed + stale) = **26 mandatory negative fixtures** (was 10 in v0.1). All MUST pass for analyzer release.
 
 The test corpus is mandatory: any analyzer release that fails any positive or negative test is blocked from production.
 
