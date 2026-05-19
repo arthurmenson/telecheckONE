@@ -163,7 +163,13 @@ The handler registry's state transitions follow the Sprint 10 batched-ratifier p
    - **Normal disablement** (`retraction_class = 'normal'`): admitted invocations drain to completion; no fence check required mid-execution. Used for scheduled-deprecation of a handler version.
    - **Safety retraction** (`retraction_class = 'safety'`): admitted invocations MUST be fenced at the next state-machine transition boundary; no further side effects. Used when a handler version is discovered to be unsafe (e.g., clinical-protocol bug). The retraction adds the revision to `revoked_revisions` immediately.
 
-5. **The execution lease has a 24-hour expiry**; invocations that haven't reached a terminal state in that window are terminated (Cat A `ai.mode2.invocation_lease_expired` event). This prevents zombie pending-state invocations.
+5. **The execution lease covers ACTIVE HANDLER EXECUTION ONLY** — the time when the handler's code is actively running on a server. The lease has a 60-minute hard ceiling (R2 HIGH closure refinement). Lease semantics:
+   - Lease is acquired at admission + held while the handler executes (the L4 dispatch / L3 execution / L2 proposal generation).
+   - **Upon transition to a pending_* state, the execution lease is RELEASED** (the handler is no longer running; the workflow is awaiting human resolution).
+   - **The pending-token TTL (§7.2 — 7-day human-review window) is the authoritative timeout for pending_* states.** Lease expiry does NOT apply to pending_* states.
+   - If the handler's active execution exceeds 60 minutes without reaching either a terminal state OR a pending_* state: the lease expires, invocation transitions to `failed` with `failure_class = 'execution_lease_expired'`, Cat A `ai.mode2.invocation_lease_expired` event emitted.
+   - **For pending_* states:** the canonical 7-day pending-token TTL applies per §7.2. When the 7-day TTL elapses without resolution, the invocation transitions to `abandoned_expired` per §2.5; Cat B `ai.mode2.workflow_abandoned` emitted; subsequent token resolution returns 410 `mode2.review_token_expired`; subsequent replay of the same invocation_id returns the terminal `abandoned_expired` response.
+   - This separation (lease for execution + TTL for pending-states) resolves the §3.2-vs-§7.2 timeout conflict per R2 HIGH closure; the two timeouts cover distinct phases of the invocation lifecycle.
 
 **Test M2.22 (R1 HIGH-3 closure verification):** simulates safety-retraction during a long-running L3 invocation; asserts the invocation aborts at the next state-machine boundary with the correct Cat A audit event.
 
@@ -422,7 +428,8 @@ Rate-limit state is held per-region; cross-region sync via the multi-region ACK 
 | Test M2.29 | `apps/api-server/__integration__/ai/mode2_token_hash_storage.test.ts` | `integration-ai-mode2` | Inspect ai_mode2_pending_token table: raw token NEVER stored; only SHA-256 hash + binding metadata (R1 MED-2) | §7.2 |
 | Test M2.30 | `apps/api-server/__integration__/ai/mode2_egress_allow_list.test.ts` | `integration-ai-mode2` | Mode 2 service attempting HTTP-call to `POST /ai/mode-1/*` → blocked at service-mesh layer (R1 MED-1) | §6.1 |
 | Test M2.31 | `apps/api-server/__integration__/ai/mode2_queue_denial.test.ts` | `integration-ai-mode2` | Mode 2 attempting to enqueue to `mode1-*` worker queue → static-analyzer rule TLC-AI-005 fails + runtime queue-ACL rejection (R1 MED-1) | §6.1 |
-| Test M2.32 | `apps/api-server/__integration__/ai/mode2_invocation_lease_expiry.test.ts` | `integration-ai-mode2` | Invocation in pending_* state >24h without resolution → lease expires → terminal state transition + Cat A `invocation_lease_expired` (R1 HIGH-3) | §3.2 |
+| Test M2.32 | `apps/api-server/__integration__/ai/mode2_execution_lease_expiry.test.ts` | `integration-ai-mode2` | Active handler execution >60min without reaching terminal or pending_* state → execution lease expires → invocation transitions to failed with `execution_lease_expired` + Cat A audit event (R2 HIGH closure) | §3.2 |
+| Test M2.33 | `apps/api-server/__integration__/ai/mode2_pending_token_ttl_vs_execution_lease.test.ts` | `integration-ai-mode2` | Pending_* state continues for >60min: invocation REMAINS in pending state (execution lease was released at handler-completion); pending-token still valid through day 7; transitions to abandoned_expired at 7-day TTL, NOT 60-minute lease (R2 HIGH closure verification of the lease-vs-TTL separation) | §3.2, §7.2 |
 
 **Static-analyzer rule IDs registered:**
 - `TLC-AI-005` — Mode 2 handler mutating Mode 1 surfaces via DB INSERT/UPDATE/DELETE OR HTTP OR queue OR LLM tool-call OR SECURITY DEFINER procedure (Mode 2 → Mode 1 boundary; expanded per R1 MED-1).
@@ -467,6 +474,12 @@ Rate-limit state is held per-region; cross-region sync via the multi-region ACK 
 - MED-3: 15 additional tests added (M2.18-M2.32) covering all R1-closure verification paths.
 
 No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. The 7 known OQs (§10) remain ratifier-targetable.
+
+**v0.1 R2 closure 2026-05-19:** 1 HIGH closed inline — R1 introduced a 24h execution-lease in §3.2 that conflicted with the 7-day pending-token TTL in §7.2 (ambiguous timeout semantics for L2/L3 pending states). R2 closure: execution lease covers ACTIVE HANDLER EXECUTION only (60-minute hard ceiling); RELEASED on transition to pending_* state; pending-token TTL (7-day) is the authoritative timeout for pending_* states. Tests M2.32 + M2.33 verify the lease-vs-TTL separation.
+
+| Round | Findings | Status |
+|---|---|---|
+| R2 | HIGH execution-lease vs pending-token-TTL timeout conflict | Closed inline by separating execution lease (handler-runtime; 60min) from pending-token TTL (human-review; 7 days); lease released on transition to pending_* state |
 
 ---
 
