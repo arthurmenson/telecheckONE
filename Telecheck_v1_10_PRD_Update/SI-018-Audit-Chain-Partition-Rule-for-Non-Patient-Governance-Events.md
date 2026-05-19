@@ -83,18 +83,17 @@ The hash-chain partition key is determined by the following ordered fallback:
 
 ## 4. Sub-decisions
 
-### Sub-decision 1: Three-tier hybrid partition rule (APPROVED RECOMMENDATION)
+### Sub-decision 1: Two-tier hybrid partition rule (APPROVED RECOMMENDATION — revised v0.2 from v0.1's three-tier design per Codex R1 HIGH-2 closure dropping tier 3 to preserve I-027)
 
 As stated in §3 above. The single substantive sub-decision of SI-018.
 
-### Sub-decision 2: GENESIS hash format extended to embed tier discriminator (APPROVED RECOMMENDATION)
+### Sub-decision 2: GENESIS hash format extended to embed tier discriminator (APPROVED RECOMMENDATION — revised v0.2 per Codex R1 HIGH-2 closure removing tier 3 GENESIS format)
 
 Per §3 above:
 - `SHA-256("GENESIS:PATIENT:<patient_id>")` for tier 1
 - `SHA-256("GENESIS:TENANT:<tenant_id>")` for tier 2
-- `SHA-256("GENESIS:_PLATFORM_")` for tier 3
 
-The PATIENT prefix is added to the existing tier 1 format for symmetry. The format change is internal to the GENESIS-hash computation function; chain verification logic must compute the same value to verify the first record. No verified deployed implementation exists at the spec-corpus stage, so the format change has no implementation cost.
+The PATIENT prefix is added to the existing tier 1 format for symmetry with the tier 2 TENANT prefix. The format change is internal to the GENESIS-hash computation function; chain verification logic must compute the same value to verify the first record. No verified deployed implementation exists at the spec-corpus stage, so the format change has no implementation cost. **No tier-3 GENESIS format is defined; the v0.1 `SHA-256("GENESIS:_PLATFORM_")` format is dropped per the Codex R1 HIGH-2 closure (I-027 preservation; see §3 rationale).**
 
 ### Sub-decision 3: Retroactive normative pinning of the ~20 existing Cat B governance events (APPROVED RECOMMENDATION — revised v0.2 per Codex PR #14 R1 HIGH-1 closure to make every row deterministic)
 
@@ -204,7 +203,7 @@ NONE.
 
 ### I-027 / INVARIANTS impact
 
-NONE per Sub-decision 5. The three-tier rule is consistent with I-027.
+NONE per Sub-decision 5. The two-tier rule strictly preserves I-027 (no null-tenant audit records permitted; tier 3 was dropped to eliminate the cross-artifact conflict that v0.1's three-tier design would have created).
 
 ### System Architecture impact
 
