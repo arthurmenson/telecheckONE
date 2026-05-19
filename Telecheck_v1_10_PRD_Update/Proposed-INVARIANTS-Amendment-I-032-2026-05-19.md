@@ -19,44 +19,38 @@ After the last existing invariant block (I-031 per v1.10 cycle additions), inser
 
 Update the §"Invariant inventory" table at the top of the file to include the new row.
 
-## 2. Canonical text to insert verbatim
+## 2. Canonical text (post-R5 NULLIF normalization; matches canonical INVARIANTS v5.3 verbatim)
+
+**Note:** This file was authored 2026-05-19 as a PROPOSED text-for-canonical-application reference. The canonical I-032 landed in INVARIANTS v5.3 via commit 6cf8551 + Mode 1/Mode 2 split applied at commit a0c4835 + NULLIF normalization applied at commit 47d9792 (R5 HIGH-1 closure). The text below now matches the canonical INVARIANTS v5.3 verbatim; the **authoritative source remains `Telecheck_Contracts_Pack_v5_00_INVARIANTS.md` I-032**, not this file. This PROPOSED file is retained as historical reference for the ratification audit-trail.
 
 > **I-032 — Tenant-GUC equality guard on SECURITY DEFINER procedures with actor-tenant parameters**
 >
-> **Statement.** Any `SECURITY DEFINER` procedure that accepts an actor-tenant parameter (`p_tenant_id` or any equivalently-named parameter holding the caller's authenticated tenant identifier) MUST reject the call where `p_tenant_id` IS DISTINCT FROM `current_setting('app.tenant_id', true)` BEFORE performing any data mutation, idempotency lookup, advisory-lock acquisition, or state read.
+> **Statement.** Any `SECURITY DEFINER` procedure that accepts an actor-tenant parameter (`p_tenant_id` or any equivalently-named parameter holding the caller's authenticated tenant identifier) MUST reject the call BEFORE performing any data mutation, idempotency lookup, advisory-lock acquisition, or state read. The check has two failure modes; the procedure's response differs per mode:
 >
-> **Rejection contract.**
-> - The rejection MUST be **step 0** of the procedure's validation sequence (i.e., it precedes all other validation steps including the existing auth-FIRST patterns).
-> - The rejection MUST use the canonical rejection code `tenant_guc_mismatch`.
-> - The procedure MUST return the rejection tuple WITHOUT raising a SQL exception (the application call site needs to receive structured rejection data so it can emit the canonical audit event + P0 alert; raising would abort the application transaction prematurely).
+> - **Mode 1 — Missing GUC (RAISE):** If `NULLIF(current_setting('app.tenant_id', true), '')` IS NULL (the session-bound GUC was never set OR was set to an empty string OR was RESET — PostgreSQL custom GUCs return `''` rather than NULL on RESET, so the NULLIF normalization is required to detect all missing-context variants), the procedure MUST `RAISE EXCEPTION 'I-032 Mode 1: app.tenant_id GUC not set (or blank) on connection; SI-017 authContextPlugin contract violated'` with SQLSTATE `P0001` and abort the application transaction. Operational response: application middleware catches the P0001 SQL exception and routes the failure to the platform error stream + P0 ops alert with sufficient context (procedure name, session_id, account_id, client_ip, user_agent, pg_backend_pid). No tenant-scoped audit envelope is constructible without a tenant identifier; I-003 audit-completeness is preserved at the error-stream / ops-alert layer. Any proposed platform-scope audit-chain partition tier is an audit-chain primitive extension requiring ratifier-quorum review under a separate SI.
+> - **Mode 2 — Mismatch (structured-rejection case):** If `NULLIF(current_setting('app.tenant_id', true), '')` is non-NULL AND `p_tenant_id` IS DISTINCT FROM that normalized value, the procedure MUST reject with the canonical rejection code `tenant_guc_mismatch` (structured rejection tuple; no SQL exception). The application call site receives the rejection tuple and emits the `security.security_definer_tenant_guc_mismatch` Cat B ELEVATED audit event at SI-018 P2 partition keyed on the non-NULL normalized GUC value.
 >
-> **Audit-event emission contract.**
-> - The application call site (NOT the procedure) MUST emit a Cat B audit event with `action_id = 'security.security_definer_tenant_guc_mismatch'` immediately after receiving the rejection tuple, BEFORE responding to the upstream request.
-> - The audit event envelope MUST use **`tenant_id = current_setting('app.tenant_id', true)`** (the GUC-side value; NOT the caller-supplied `p_tenant_id`). Placing the audit signal under the session's actually-active tenant rather than the claimed-tenant prevents attacker-controlled partition placement — the legitimate tenant whose session/GUC is in use sees the mismatch in their audit chain; the attacker-claimed tenant does not.
-> - The audit event MUST be partitioned per **SI-018 P2 (tenant-governance)** with `chain_partition_key = SHA-256("GENESIS:TENANT:<current_setting('app.tenant_id', true)>")`.
-> - The audit event severity MUST be ELEVATED (mismatch is an attack-signal-class event, not routine).
+> Both Mode 1 and Mode 2 use the SAME `NULLIF(current_setting('app.tenant_id', true), '')` normalization for consistent treatment.
 >
-> **Operational contract.**
-> - On `tenant_guc_mismatch` rejection the application MUST raise a P0 ops alert with sufficient context (procedure name, GUC value, claim value, session_id, account_id) for an on-call engineer to triage.
-> - The canonical SI-017 authContextPlugin contract guarantees that `SET LOCAL app.tenant_id` and procedure actor parameters are sourced from the SAME JWT-verified middleware tuple at request entry. I-032 enforces this invariant at the DB layer as defense-in-depth: a `tenant_guc_mismatch` in production indicates a middleware bug or confused-deputy path and is treated as a system bug (not user error).
+> **Rejection contract (Mode 2 only; Mode 1 raises).**
+> - The Mode 2 rejection MUST be **step 0** of the procedure's validation sequence (Mode 1 NULL check precedes Mode 2 mismatch check; both precede all other validation steps including the existing auth-FIRST patterns).
+> - The Mode 2 rejection MUST use the canonical rejection code `tenant_guc_mismatch`.
+> - The Mode 2 procedure MUST return the rejection tuple WITHOUT raising a SQL exception.
 >
-> **Scope of application.**
-> - I-032 applies to ALL existing SECURITY DEFINER procedures that accept an actor-tenant parameter: `record_workflow_pointer_swap()` (SI-008), `record_consult_escalation_target_swap()` (SI-009), `record_consult_clinician_decision()` (SI-005), `rotate_consult_clinician_decision_kms()` (SI-005). Each procedure's source code amendment lands in the same lockstep commit as I-032 per the lockstep invariant.
-> - I-032 applies to ALL future SECURITY DEFINER procedures that accept an actor-tenant parameter. Reviewers MUST flag any new SECURITY DEFINER procedure that omits the STEP 0 equality guard.
+> **Audit-event emission contract (Mode 2 only).**
+> - The application call site (NOT the procedure) MUST emit a Cat B audit event with `action_id = 'security.security_definer_tenant_guc_mismatch'` immediately after receiving the Mode 2 rejection tuple, BEFORE responding to the upstream request.
+> - The audit event envelope MUST use `tenant_id = NULLIF(current_setting('app.tenant_id', true), '')` (the normalized GUC-side value, non-NULL in Mode 2 by definition; NOT the caller-supplied `p_tenant_id`).
+> - The audit event MUST be partitioned per SI-018 P2 (tenant-governance): `chain_partition_key = SHA-256("GENESIS:TENANT:<normalized-GUC-value>")`.
+> - The audit event severity MUST be ELEVATED.
+> - On Mode 2 rejection, the application MUST raise a P0 ops alert in addition to emitting the audit event.
 >
-> **Rationale.**
-> SECURITY DEFINER procedures bypass RLS via PostgreSQL `SECURITY DEFINER` privilege. Tenant-isolation enforcement therefore moves from RLS-layer (where the GUC enforces automatically via row-level policies) to procedure-layer (where the procedure must enforce explicitly). The canonical SI-017 authContextPlugin contract treats application middleware as the single trust anchor for both `SET LOCAL app.tenant_id` and procedure actor parameters. I-032 codifies the parallel-trust-path equality as a DB-layer MUST, eliminating the class of "middleware bug or confused-deputy path" failure mode that Codex flagged on PR #17 P-019a R1 (review-mpcmsk90-zopinx) and PR #18 P-021a R3 (review-mpcn6wag-llvapb). Per the Decision Memo `Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md`: clinical-decision-recording + KMS-rotation + AI-workflow-execution + sync-session-escalation surfaces are safety-critical enough to justify the slim defense-in-depth cost.
+> **Scope of application.** Same as canonical I-032 — see `Telecheck_Contracts_Pack_v5_00_INVARIANTS.md` for the authoritative scope list.
 >
-> **Verification.**
-> Each amended SECURITY DEFINER procedure ships with a regression test asserting:
-> 1. Call with `p_tenant_id = current_setting('app.tenant_id')` → succeeds (or proceeds past STEP 0 to existing validation).
-> 2. Call with `p_tenant_id <> current_setting('app.tenant_id')` → returns `tenant_guc_mismatch` rejection tuple WITHOUT mutating any row.
-> 3. Application call site emits exactly one `security.security_definer_tenant_guc_mismatch` Cat B audit event partitioned per SI-018 P2 keyed on the GUC value (NOT the claim value).
-> 4. P0 ops alert raised exactly once per mismatch.
+> **Verification.** Regression tests for both modes per the canonical I-032 §Verification (M1.1a/M1.1b/M1.1c covering never-issued + RESET + blank-string variants of Mode 1; M2.1-M2.4 covering Mode 2; M.X mutual-exclusion). Authoritative test obligations in canonical INVARIANTS file.
 >
-> **Originated:** v1.10 ratification cycle, 2026-05-19. Ratified per `Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md` (pending Evans's chat-message confirmation as of authoring time).
+> **Originated:** v1.10 ratification cycle, 2026-05-19. Ratified per Evans's chat-message ratification 2026-05-19 (verbatim quote in Promotion Ledger P-026 entry's Status block).
 >
-> **Related:** I-023 (3-layer tenant-isolation enforcement); SI-017 (authContextPlugin contract — the trust anchor I-032 is defense-in-depth for); SI-018 (audit-chain partition rule — the partition contract I-032's audit event uses); P-018a/P-019a/P-021a (the supersession entries that apply I-032 to each affected procedure).
+> **Related:** I-023; SI-017; SI-018; P-018a/P-019a/P-021a.
 
 ## 3. Invariant inventory table row to add
 
