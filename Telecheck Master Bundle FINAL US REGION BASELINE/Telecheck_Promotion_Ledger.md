@@ -37,6 +37,65 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-023a — 2026-05-19 — REJECTION of SI-010 trust-anchor layer (sub-ceremony 6 / P-023 reversal): unratified net-new platform-floor architecture authored in violation of Boot Sequence §9 + CLAUDE.md hard rules; security-posture regression on partially-compromised-application threat model
+
+**Type:** Reconciliation entry (NO Registry version bump in this commit per operating rule 4; this entry records a status change to a prior ratification-intent entry, not the promotion of new canonical content). The Registry remains at **v2.12** (the version landed by SC7 P-024 PR-A2/A3 2026-05-18); the v2.12 → v2.13 bump that PR #10 attempted is hereby abandoned and that PR's branch / commits are preserved as audit trail only.
+
+**Status:** **REJECTED 2026-05-19** (Evans's chat-message decision following review of the 2026-05-19 Decision Memo `Telecheck_v1_10_PRD_Update/Decision-Memo-SC6-P-023-SI-010-Ratify-or-Reject-Unratified-Trust-Anchor-Layer-2026-05-19.md`). This entry SUPERSEDES the prior P-023 "RATIFIED IN INTENT 2026-05-17" status. Per ledger operating rule 1 (append-only) the original P-023 entry is preserved unchanged below for audit trail; its status is now read in conjunction with this P-023a entry, which is the current authoritative state. Evans's verbatim instruction: *"ok great lets go with the recommendations and continue"* directing execution of the Decision Memo's §6 REJECT branch.
+
+**Author:** Autonomous Claude (escalation only; no authoring authority over the rejection itself — Evans's instruction is the decision). Decision Memo authored 2026-05-19 documenting verification gate (no authorizing SI or ADR exists for the SI-010 trust-anchor layer in the bundle baseline) + reframed lead question (binary ratify-or-reject) + security-posture evaluation.
+
+**Trigger:** Two independent grounds for rejection, either sufficient on its own:
+
+1. **Procedural defect.** SI-010 introduced net-new platform-floor architecture (a procedure-side actor-context primitive that competes with the canonical `current_setting('app.tenant_id')` GUC contract established in System Architecture v1.2 §5 lines 139–143; CDM v1.2 line 1016 + 11 RLS policy DDL blocks; INVARIANTS v5.2 I-023 layer 2 line 152; INVARIANTS v5.2 I-027 line 187) without an authorizing SI, ADR, or amendment to any of the four displaced contracts. Authoring this layer in SC6 violated Boot Sequence §9 and CLAUDE.md "do not author new schemas/architecture — flag via §12 escalation" + "do not invent; open a Spec Issue; STOP" hard rules. Sub-decision authority covers refinement of an already-ratified-direction design; it does not extend to introduction of net-new platform-floor primitives. The SC6 sub-decision ceremony ratified the design pattern in good faith without surfacing that the design itself was out-of-scope to author.
+
+2. **Security-posture regression on partially-compromised-application threat model.** The `bind_actor_context()` procedure accepts caller-supplied `p_account_id`, `p_tenant_id`, `p_role`, `p_admin_home_tenant_id`, `p_session_id`, `p_nonce` parameters. Under the round-15 three-role GRANT layering with `INHERIT FALSE`, an application connection (`telecheck_app_role`) can `SET LOCAL ROLE bind_actor_context_role` and `CALL bind_actor_context(arbitrary_actor_identity)`. A SQL-injection-class attacker holding application-role SQL execution can forge actor identity including `role = platform_admin` and `tenant_id = any_tenant`, then read/mutate cross-tenant PHI while the audit chain (`identity.actor_context_bound` Cat B event) certifies the forged identity as if real. The canonical model's worst-case SQLi impact is bounded by the compromised tenant; the SI-010 model's worst-case SQLi impact is bounded by the platform, with audit-chain corruption as a downstream consequence (I-027 violation cascade). Codex Round 30 HIGH-1 finding flagged this; the three proposed mitigations (a/b/c) were either ineffective (option (a) — same hole, different parameter), required a new key-management ADR (option (b)), or required a new deployment-topology ADR (option (c) — and also reintroduced the `(pg_backend_pid, txid)` discriminator problem closed at Round 13). No mitigation is a one-pattern fix within the existing layer.
+
+**Rejection scope (what is reverted / what stays):**
+
+- **Reverted (never landed on `main` — was branch-local on `spec/p023-pra2-canonical-content-port-2026-05-18`):**
+  - Contracts Pack AUDIT_EVENTS v5.3 → v5.4 amendment (4 new Cat B IDs: `identity.actor_context_bound`, `identity.session_liveness_check_failed`, `identity.actor_context_unbound_rejected`, `identity.audit_recovery_link`).
+  - Identity & Authentication Spec v1.0 → v1.1 amendment (new §3.6 "Server-side actor context (per SI-010)").
+  - Artifact Registry v2.12 → v2.13 bump.
+  - Promotion Ledger P-023 RATIFIED-IN-INTENT → CANONICAL transition.
+- **Preserved (was already canonical pre-PR #10; unaffected by this rejection):**
+  - Promotion Ledger P-024 CANONICAL (SC7 SI-011 UMBRELLA landed 2026-05-18 via PR #9 merge `ee979bb`; Artifact Registry v2.11 → v2.12 bump landed there; this entry stays).
+  - Promotion Ledger entries P-001 through P-022 + P-024 unchanged.
+- **Preserved as audit trail (NOT MERGED; NOT DELETED):**
+  - Branch `spec/p023-pra2-canonical-content-port-2026-05-18` at HEAD `a25d802` with all 30 commits documenting the Codex per-PR adversarial-review cycle (R1–R30). PR #10 is closed-without-merge.
+  - The branch is the evidence file for "here is what we tried inside the unratified layer and here is why each closure attempt either failed or introduced a new defect." When SI-017 (Phase 2 F-3 within the canonical model) is authored, the SI-010 cycle artifacts inform "what design space has been explored and rejected."
+
+**Promotion class:** reconciliation. No new artifact content lands; this entry records a status change against P-023 (RATIFIED-IN-INTENT → REJECTED) and updates Artifact Registry §3 row 64 + §8 changelog + Last-updated header in lockstep to reflect the rejection. Registry version unchanged (v2.12). No Contracts Pack, CDM, OpenAPI, State Machines, RBAC, or System Architecture amendments in this commit — all canonical surfaces remain at their pre-SC6-PR-A2/A3 state.
+
+**Count math after this rejection:**
+
+- **CANONICAL:** P-001 through P-011 + P-024 (12 entries).
+- **REJECTED:** P-023 (this entry).
+- **Awaiting canonical-content-port landings:** 9 entries — P-012, P-013, P-014, P-015, P-016, P-018, P-019, P-021, P-025. (The count is 9; the prior 2026-05-18 SC6 PR-A2/A3 close-out paragraph's "8 remaining" wording was a count error — corrected in the Decision Memo §8 and again here.)
+- All 9 RATIFIED-IN-INTENT entries continue to hold pending their own future PR-A2/A3-class lockstep commits. Next landing's base Registry version is **v2.12** (the v2.13 base that PR #10 would have produced never landed; the cascade arithmetic from the top-of-Ledger interpretation rule resets to the SC7-only post-landing state for any future canonical-content-port commit).
+
+**Downstream impact on already-ratified SECURITY DEFINER procedures (re-targeting onto the canonical model):**
+
+The SI-010 source narrative claimed the trust-anchor layer "unblocks four procedures across three SIs": SI-005 `record_consult_clinician_decision()` + `rotate_consult_clinician_decision_kms()` (P-021 procedures); SI-008 `record_workflow_pointer_swap()` (P-018 procedure); SI-009 `record_consult_escalation_target_swap()` (P-019 procedure). On review of those three SIs' own ratified specs: **none of the four procedures' canonical specifications references `bind_actor_context()`, `current_actor_*()` helpers, `_session_actor_context`, or any SI-010 primitive.** The "unblocks" claim was authored in the SI-010 source as forward-looking; the four procedures' actual ratified specs accept actor identity through standard application-supplied parameter conventions or read it from the canonical `current_setting('app.tenant_id')` + JWT-bound audit envelope. The four procedures' IMPL-readiness gate is therefore re-targeted onto the canonical model — they were never structurally dependent on SI-010, only narratively claimed to be. P-018, P-019, P-021 ratifications stand unchanged.
+
+**Open follow-ups (separate from this rejection commit; tracked for execution after the rejection PR merges):**
+
+1. **File SI-017** — Phase 2 F-3 JWT session-liveness check within the canonical `app.tenant_id` middleware model. Scope: liveness check folded into the existing tenant-resolution middleware step before `SET LOCAL app.tenant_id`; no procedure-side actor-context table; no role-elevation pattern; no caller-supplied tenant primitive. Route through standard SI authoring + Codex pre-ratification + ratifier ceremony per the proper Boot Sequence §9 channel. Target ratification slot: next available P-NUM after P-025 cascade settles.
+2. **Propose CLAUDE.md amendment** — add explicit STOP condition under "Autonomous-work authorization (Evans standing directive, 2026-05-16+)" §"Hard floor — STOP and surface" item list: *"Any Codex finding that proposes net-new architecture, schema, or invariant amendment beyond the ratified sub-decision scope of the SI under review is a hard STOP requiring ratifier escalation. Do not close it inline."* Rationale: the 30-iteration Codex cycle on PR #10 demonstrated that an autonomous Claude session will continue iterating past the 2-rounds-then-§10-escalation cadence when each individual finding appears closeable, even when the cumulative effect is to extend unratified architecture. The cadence is not optional.
+3. **Lesson capture** — append to the next Promotion Ledger reconciliation entry or workstream-discipline note a short retrospective: sub-decision authority does not extend to net-new platform-floor architecture; the SI-010 sub-ceremony failed to surface that defect; future ratifier ceremonies should explicitly verify "is this SI in scope to author or does it require its own SI + ADR channel" as a pre-quorum check.
+
+**Reference artifacts:**
+
+- Decision Memo: `Telecheck_v1_10_PRD_Update/Decision-Memo-SC6-P-023-SI-010-Ratify-or-Reject-Unratified-Trust-Anchor-Layer-2026-05-19.md` (this rejection's authoritative reasoning, security-posture evaluation, and §8 actions-in-place enumeration).
+- SI-010 source (preserved as audit-trail input only; NOT implementation-authoritative): `arthurmenson/telecheck-app:docs/SI-010-Session-Actor-Context-DB-Binding.md` v0.6.
+- Sub-Ceremony 6 Decision Brief (preserved as audit-trail input; NOT implementation-authoritative): `arthurmenson/telecheck-app:docs/Decision-Brief-Sub-Ceremony-6-SI-010-2026-05-17.md`.
+- PR #10 branch (preserved as audit trail; NOT MERGED): `arthurmenson/telecheckONE:spec/p023-pra2-canonical-content-port-2026-05-18` HEAD `a25d802`.
+- Canonical model authority (the contracts the rejection preserves): System Architecture v1.2 §5; CDM v1.2 line 1016 + RLS policies; INVARIANTS v5.2 I-023 + I-024 + I-027; ADR-023 multi-tenancy Model A.
+
+**Registry absorption:** No Registry version bump in this commit (reconciliation entry). Artifact Registry §3 row 64 + §8 changelog + Last-updated header are updated in lockstep with this Promotion Ledger entry to record P-023 status change RATIFIED-IN-INTENT → REJECTED and to correct the post-SC7-landing "8 remaining" count error to the accurate "9 awaiting canonical-content-port" state. Registry remains at v2.12.
+
+---
+
 ### Entry P-025 — 2026-05-18 — SI-013 ratification-intent: CCR crisis-helpline key namespace expansion + paired Cat B AUDIT_EVENTS amendment + safety-floor invariants (sub-ceremony 8 of Q2 2026 ratifier ceremony; standalone scoping; AUDIT_EVENTS + CCR_RUNTIME co-bump; CDM-exempt + DOMAIN_EVENTS-exempt)
 
 **Type:** Content-change promotion — **ratification-intent recorded in PR-A1⁗‴ commit; physical content + Registry + CCR_RUNTIME + AUDIT_EVENTS bumps land together in a future PR-A2⁗‴/A3⁗‴-class lockstep commit** per the lockstep invariant. Destination version follows the ordering-dependent rule per top-of-Ledger interpretation rule (now updated to cover 8 sub-ceremonies / 11 entries).
