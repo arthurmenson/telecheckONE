@@ -8,18 +8,36 @@
 
 ## 1. Common STEP 0 specification (applied to all four procedures)
 
-All four procedures gain this identical STEP 0 inserted as the FIRST validation block, before any existing step (idempotency, advisory lock, state read, auth-FIRST, etc.):
+All four procedures gain this identical STEP 0 inserted as the FIRST validation block, before any existing step (idempotency, advisory lock, state read, auth-FIRST, etc.). **Per I-032 R3 closure 2026-05-19, STEP 0 has TWO distinct failure modes (Mode 1 RAISE + Mode 2 structured-rejection) that the procedure evaluates in order:**
 
 ```sql
--- STEP 0: I-032 Tenant-GUC equality guard
--- Reject the call if the caller-supplied actor-tenant parameter disagrees with the
--- session's bound app.tenant_id GUC. The canonical SI-017 authContextPlugin contract
--- guarantees both surfaces derive from the same JWT-verified middleware tuple, so a
--- mismatch indicates a middleware bug or confused-deputy path (system bug, not user
--- error). The rejection is structured (not RAISE) so the application call site receives
--- the rejection tuple and can emit the canonical security.security_definer_tenant_guc_mismatch
--- Cat B audit event + P0 ops alert.
+-- STEP 0: I-032 Tenant-GUC equality guard (Mode 1 missing-GUC + Mode 2 mismatch)
+--
+-- The canonical SI-017 authContextPlugin contract guarantees that both
+-- SET LOCAL app.tenant_id AND the procedure's p_tenant_id parameter derive
+-- from the same JWT-verified middleware tuple at request entry. I-032
+-- enforces this invariant at the DB layer as defense-in-depth.
+--
+-- Mode 1 (NULL GUC) is an environmental failure at a layer below the
+-- procedure's structured-rejection contract: no tenant-scoped audit
+-- envelope is constructible when the canonical tenant context is itself
+-- absent. The procedure RAISEs a SQL exception; application middleware
+-- catches and routes to the platform error stream + P0 ops alert.
+--
+-- Mode 2 (non-NULL GUC + mismatch) is the structured-rejection case
+-- I-032 is named for: returns the rejection tuple WITHOUT raising; the
+-- application call site emits the canonical Cat B audit event + P0 alert.
 
+-- Mode 1: NULL GUC → RAISE (environmental failure; error-stream layer handles)
+IF current_setting('app.tenant_id', true) IS NULL THEN
+  RAISE EXCEPTION 'I-032 Mode 1: app.tenant_id GUC not set on connection; SI-017 authContextPlugin contract violated'
+    USING ERRCODE = 'P0001',
+          DETAIL  = format('procedure=%I session_id=%s account_id=%s',
+                           TG_NAME, p_session_id, p_account_id),
+          HINT    = 'middleware misconfiguration or unauthenticated call path bypassing authContextPlugin';
+END IF;
+
+-- Mode 2: non-NULL GUC + mismatch → structured rejection
 IF p_tenant_id IS DISTINCT FROM current_setting('app.tenant_id', true) THEN
   RETURN ROW(
     TRUE,                                   -- rejected
@@ -30,7 +48,9 @@ IF p_tenant_id IS DISTINCT FROM current_setting('app.tenant_id', true) THEN
 END IF;
 ```
 
-The `<procedure_return_type>` placeholder is the existing return-tuple type of each procedure; the I-032 rejection tuple fills with the rejection flag + rejection_code + NULLs for all other fields. Per-procedure return-type details below.
+The `<procedure_return_type>` placeholder is the existing return-tuple type of each procedure; the Mode 2 rejection tuple fills with the rejection flag + rejection_code + NULLs for all other fields. The Mode 1 RAISE aborts before the RETURN statement so the return-type is irrelevant for Mode 1. Per-procedure return-type details below.
+
+**Mode 1 / Mode 2 mutual-exclusion property.** The two modes are mutually exclusive by the GUC's NULL/non-NULL state: a NULL GUC always takes Mode 1; a non-NULL GUC with mismatched `p_tenant_id` always takes Mode 2; a non-NULL GUC with matching `p_tenant_id` proceeds past STEP 0 to the existing validation chain. Per-procedure regression tests obligated for both modes per I-032 §Verification.
 
 ## 2. Per-procedure application
 
@@ -113,7 +133,7 @@ if (result.rejected && result.rejection_code === 'tenant_guc_mismatch') {
 
 ## 4. Codex verification scope (Scope B per the master Bundle file)
 
-> Verify that all four SECURITY DEFINER procedure specs (P-018a SI-008, P-019a SI-009, P-021a SI-005 record + P-021a SI-005 rotate) have STEP 0 equality guard as the FIRST validation step (before idempotency, advisory lock, state read) per I-032; that `tenant_guc_mismatch` is in each procedure's rejection code set; that the rejection emits the audit event via application-layer call site post-rejection (NOT in-procedure RAISE); that the audit event uses `current_setting('app.tenant_id', true)` for the envelope `tenant_id` and partition_key (NOT the caller-supplied `p_tenant_id`); that P0 ops alert is required on `tenant_guc_mismatch`; that the regression tests pin these contract points.
+> Verify that all four SECURITY DEFINER procedure specs (P-018a SI-008, P-019a SI-009, P-021a SI-005 record + P-021a SI-005 rotate) have STEP 0 equality guard as the FIRST validation step (before idempotency, advisory lock, state read) per I-032; that STEP 0 evaluates Mode 1 (NULL GUC) before Mode 2 (mismatch) per the I-032 R3 closure; that Mode 1 RAISEs a SQL exception with proper ERRCODE/DETAIL/HINT; that Mode 2 returns the rejection tuple structurally with `tenant_guc_mismatch` rejection code (NO in-procedure RAISE on Mode 2); that `tenant_guc_mismatch` is in each procedure's rejection code set; that the Mode 2 audit event uses `current_setting('app.tenant_id', true)` (non-NULL in Mode 2 by definition) for the envelope `tenant_id` and partition_key (NOT the caller-supplied `p_tenant_id`); that the Mode 1 RAISE is handled at the application error-stream layer (not the procedure-level audit-emission contract); that P0 ops alert is required on BOTH Mode 1 and Mode 2; that the regression tests pin Mode 1/Mode 2 mutual-exclusion contract points per I-032 §Verification.
 
 ---
 
