@@ -33,7 +33,7 @@ Both must be amended onto the canonical model. **Scope is explicitly narrow:** t
 
 **Type:** Reconciliation entry (no Registry version bump).
 
-**Status:** **DRAFT / BLOCKED-PENDING-SI-017-RATIFICATION + SI-018-RATIFICATION.** Promotion to RATIFIED IN INTENT requires workstream lead chat-message sign-off; promotion to CANONICAL requires the ratifier ceremony, which cannot run until SI-017 + SI-018 ratify first. **No canonicality claim is made by this DRAFT.**
+**Status:** **DRAFT / BLOCKED-PENDING-SI-017-RATIFICATION + SI-018-RATIFICATION + EVANS-CROSS-PR-OQ3-RATIFIER-DECISION (trust-boundary equality-guard architectural judgment; see P-021a §4 OQ3).** Promotion to RATIFIED IN INTENT requires workstream lead chat-message sign-off; promotion to CANONICAL requires the ratifier ceremony, which cannot run until (1) SI-017 + SI-018 ratify AND (2) Evans decides the cross-PR OQ3 (Option A canonical-invariant amendment vs Option B existing-posture documentation; see `P-021a-Supersession-SI-005-Actor-Identity-Source-Amendment.md` §4 OQ3 for the full framing). **No canonicality claim is made by this DRAFT.** **Note:** This PR passed Codex R2 APPROVE 2026-05-19 under the now-retracted Option B framing; the cross-PR OQ3 STOP-and-queue posture is added retroactively after Codex R3 on P-021a (PR #18) clarified that the trust-boundary closure is architectural-judgment per CLAUDE.md hard-floor item 6 and therefore NOT closeable inline. This PR's own §4 OQ3 (originally framed as recommend-Option-B-escalate-Option-A) was the earliest surfacing of the cross-PR question; Codex R3 on P-021a confirmed it is hard-stop.
 
 **Author:** Autonomous Claude (P-019a v0.1 DRAFT authored 2026-05-19).
 
