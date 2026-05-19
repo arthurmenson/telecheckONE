@@ -103,17 +103,27 @@ $ dr-tool verify-replica-lag --target us-west-2
 # Fails if lag > 15 min (RPO breach)
 ```
 
-**Step 5.5: PRE-PROMOTION integrity verification on the read-only replica (HARD GATE per R1 HIGH-1 closure).**
+**Step 5.5: PRE-PROMOTION integrity verification on the read-only replica (HARD GATE per R1 HIGH-1 + R2 HIGH-2 closures; verified against offline authoritative manifest, not against potentially-unreachable us-east-1 primary).**
+
+**Offline authoritative schema manifest (R2 HIGH-2 closure).** Per ADR-026 cold-DR posture, a canonical `schema_control_manifest_v<n>.json` artifact is replicated to us-west-2 daily as part of routine RDS snapshot replication. The manifest contains:
+- Full DDL fingerprint (SHA-256 of `pg_dump --schema-only`)
+- Enumerated trigger list with body hashes (I-016 + I-013 + SI-016 semver + SI-020 form-version + I-032 SECURITY DEFINER STEP 0 triggers)
+- Enumerated RLS policy list per table with policy body hashes per ADR-023
+- Enumerated custom function list with body hashes
+- Manifest signed by the audit-archive-signer per SIEM §4.5.HC (HSM-backed asymmetric signature anchored in transparency log)
+
+Step 5.5 verifies the us-west-2 replica against this offline manifest. The previously-running us-east-1 primary is NOT a required source.
 
 ALL of the following MUST pass BEFORE Step 6 promotion:
 
 ```bash
-$ dr-tool pre-promotion-verify --target us-west-2 --read-only
-# (a) Schema/extensions/triggers/RLS verification: pg_dump schema diff between us-east-1 (if reachable) and us-west-2 replica; all custom functions present; all triggers active including I-016 + I-013 append-only triggers; all RLS policies enabled per ADR-023; SI-016 semver triggers active; SI-020 form-version analyzer triggers active.
+$ dr-tool pre-promotion-verify --target us-west-2 --read-only --schema-manifest <signed_manifest_path>
+# (a) Schema/extensions/triggers/RLS verification: pg_dump schema fingerprint of us-west-2 replica MUST match the offline signed schema_control_manifest's DDL fingerprint. All enumerated triggers/RLS policies/custom functions present + body hashes match.
 # (b) I-027 audit-chain integrity full-traversal on the read-only replica: every active P1 + P2 partition chain verified from genesis to current head.
 # (c) Archived manifest boundary-hash verification per SIEM Integration Spec §4.5.HC: most-recent archived manifest's last-record_hash matches the audit_events table's predecessor-boundary-hash at the WAL position being promoted.
 # (d) Multi-region KMS key access spot-check on the replica's auth context (verify that the replica side can decrypt at least 1 sample PHI envelope per tenant cohort without errors).
 # (e) Reports each gate's pass/fail with measurement values for retrospective record.
+# Schema manifest signature is HSM-verified BEFORE the comparison runs; signature failure aborts the gate.
 ```
 
 **ANY failure of (a)-(d) ABORTS the failover BEFORE Step 6 promotion.** The DR Operator + IC + on-call SRE escalate to: stay in us-east-1 (if reachable) OR declare extended outage + invoke alternate recovery (e.g., point-in-time-recovery from snapshot to a new replica). The read-only replica is NOT promoted with known integrity violations.
@@ -181,20 +191,19 @@ $ dr-tool dns-cutover --target us-west-2 --confirm-ic-approver-handles
 # Verifies DNS propagation via multiple resolvers
 ```
 
-**Step 11.5: Tenant-routing verification gate BEFORE traffic admission (closes Codex R1 HIGH-2).**
-
-DNS propagation proves DNS records changed; it does NOT prove tenant routing is preserved. Per R1 HIGH-2 closure, the following tenant-routing checks MUST pass BEFORE Step 13 opens traffic:
+**Step 11.5 (infra-only precheck; closes R2 HIGH-1 by splitting the gate): DNS + ALB infrastructure verification (services NOT yet up).**
 
 ```bash
-$ dr-tool verify-tenant-routing --target us-west-2 --enumerate-all-tenants
+$ dr-tool verify-tenant-routing --target us-west-2 --infra-only
 # (a) Enumerate canonical tenant domains: heroshealth.com → Telecheck-US; ghana.heroshealth.com → Telecheck-Ghana; any custom-domain mappings per the tenant_custom_domains registry.
-# (b) For each tenant domain: send a probe request with the canonical Host header; verify the request resolves to the us-west-2 ALB; verify the ALB listener rules + TLS certificate + host-header routing direct the request to the correct application service + the correct tenant_id is set in the resulting app.tenant_id GUC.
-# (c) Cross-tenant isolation probe per F-4 §3.3 Sub-decision: 200 synthetic requests/min across tenant boundaries (tenant_A-authenticated session → tenant_B resources) MUST all receive tenant-blind 404 per I-025.
-# (d) Custom-domain certificate validation: every active tenant with a custom domain has a valid TLS cert in us-west-2 (cert manager replication MUST be verified pre-DR; this step validates it took).
-# (e) Reports per-tenant routing PASS/FAIL with measurement values.
+# (b) DNS-only verification: for each tenant domain, resolve the A/CNAME records via 3 independent resolvers; verify all resolve to the us-west-2 ALB IP/hostname.
+# (c) ALB listener configuration verification: for each tenant domain's expected ALB listener rule, verify the rule exists + targets the correct target-group naming (the target groups themselves will be empty until Step 12 scales services up).
+# (d) Custom-domain TLS certificate validation: every active tenant with a custom domain has a valid TLS cert ACL'd in us-west-2 + the cert covers the domain + the cert is not expired.
+# (e) Reports infrastructure-level PASS/FAIL.
+# Application-level tenant_id GUC + cross-tenant isolation probes are DEFERRED to Step 12.5 (post-scale-up).
 ```
 
-**ANY tenant-routing FAIL before Step 13 BLOCKS traffic admission.** The DR Operator + IC + on-call SRE escalate: investigate the misrouting; do NOT open traffic until all tenants verify PASS.
+ANY infra-level FAIL at Step 11.5 BLOCKS proceeding to Step 12.
 
 **Step 12: Bring up app services in us-west-2.**
 
@@ -204,6 +213,21 @@ $ dr-tool scale-up --target us-west-2 --services ALL
 # Health checks must pass before traffic is admitted
 # Per F-4 Deploy Runbook §3.3 service-health probe, missing 2 consecutive intervals = service-not-ready (does NOT promote; differs from F-4 stage promotion)
 ```
+
+**Step 12.5 (post-scale-up app-level tenant-routing verification; closes R2 HIGH-1 split-gate second half).**
+
+After Step 12 services are healthy + before Step 13 opens traffic, this hard gate verifies app-level tenant_id propagation:
+
+```bash
+$ dr-tool verify-tenant-routing --target us-west-2 --app-level --post-scale-up
+# (a) For each tenant domain: send a synthetic authenticated probe request with the canonical Host header; verify the request hits a healthy app service in us-west-2; verify the authContextPlugin sets the correct app.tenant_id GUC on the connection per the canonical SI-017 contract.
+# (b) Verify a synthetic tenant_A-authenticated request to tenant_A's authenticated endpoints returns tenant_A's data (not cross-tenant); 50 sample requests/tenant.
+# (c) Cross-tenant isolation probe per F-4 §3.3: 200 synthetic requests/min across tenant boundaries (tenant_A-authenticated session → tenant_B resources) MUST all receive tenant-blind 404 per I-025.
+# (d) I-032 STEP 0 Mode 1/Mode 2 sanity check: synthetic SECURITY DEFINER call with mismatched p_tenant_id vs app.tenant_id MUST be rejected with tenant_guc_mismatch.
+# (e) Reports per-tenant app-level routing PASS/FAIL.
+```
+
+ANY app-level tenant-routing FAIL at Step 12.5 BLOCKS Step 13 traffic admission. Investigation + remediation required.
 
 **Step 13: Open traffic incrementally.**
 
@@ -358,31 +382,40 @@ Tenant communications cadence: status page update at T-0, T+90 (mid-failover), T
 
 **No DR scenario justifies suspending I-019 enforcement.** Any deviation requires Privacy Officer + Compliance Officer + CTO retrospective sign-off.
 
-### I-019 fallback replay hard gate (closes Codex R1 MED-2)
+### I-019 fallback replay hard gate (closes Codex R1 MED-2 + R2 MED-1; server-side evidence model, not device-side truth)
 
-Per R1 MED-2 closure, the failover is NOT COMPLETE until queued crisis-detection signals from the T+15 to T+90 read-only window are verifiably processed in us-west-2 with no loss, no duplication, no reordering, and per-tenant isolation preserved.
+Per R2 MED-1 closure: a "every device queue must report drained=true" gate is unreliable because devices may be offline indefinitely. The gate is rewritten around **server-side durable enqueue/ack metadata** + a **bounded reachable-device cohort** + **explicit offline-device exception path**.
 
-**Step 14.5 (HARD GATE between Step 14 post-failover-verify and Step 16 mark-complete): I-019 fallback replay drain.**
+**Server-side enqueue metadata (required pre-DR; canonical I-019 platform-floor extension).** Per I-019 + I-017 platform floor, every device's local-fallback queue's enqueue action also emits a synchronous "enqueue acknowledgment" to the platform via a separate lightweight ACK channel (independent of the main write path). The platform's `i019_enqueue_ack_log` table records (device_id, local_signal_id, emit_timestamp, ack_received_at) per enqueue. This server-side log is the authoritative record of "what was emitted on devices during the read-only window," NOT the device-side queue.
+
+**Step 14.5 (HARD GATE between Step 14 post-failover-verify and Step 16 mark-complete): I-019 fallback replay drain — server-side evidence.**
 
 ```bash
 $ dr-tool verify-i019-fallback-replay --target us-west-2 --window T+0 to T+failover_complete
-# (a) Inventory queued-on-device crisis-detection signals from the read-only window:
-#     each device's local-fallback queue reports its pending-signal count + timestamps to the platform on first successful write after cutover
-# (b) Verify replay completeness: every queued signal received by us-west-2 within 60 min of cutover (no signals stuck on devices longer than necessary)
-# (c) Verify ordering: replayed signals processed in original emit-timestamp order per tenant + per patient
-# (d) Verify deduplication: signals are idempotent on (device_id, local_signal_id, emit_timestamp); duplicate emissions on retry produce a single canonical audit row
-# (e) Verify per-tenant isolation: a tenant_A device's queued signals NEVER route to tenant_B audit chain (cross-check against canonical I-023 + I-025)
-# (f) Replay latency measurement: P99 replay latency from device emission to platform processing recorded
-# (g) Per-tenant queue drain verification: every active tenant's queue reports drained = true before failover marks complete
-# Fails if ANY tenant queue not drained within 60 min of cutover OR ANY ordering/dedup/isolation violation
+# (a) Server-side inventory: query i019_enqueue_ack_log for every (device_id, local_signal_id) pair acknowledged during the read-only window. This is the authoritative "expected" inventory — NOT device-reported.
+# (b) Reachable-device cohort definition: a device is "reachable" if it has issued at least 1 successful write to the platform within 4h of cutover; this defines the cohort whose replay is GATING for failover completion.
+# (c) Bounded drain SLA: for the reachable-device cohort, every expected (device_id, local_signal_id) per (a) MUST have a corresponding processed audit row within 60 min of cutover (4h escalation deadline).
+# (d) Verify ordering: replayed signals processed in original emit-timestamp order per tenant + per patient.
+# (e) Verify deduplication: signals are idempotent on (device_id, local_signal_id); duplicate emissions on retry produce a single canonical audit row.
+# (f) Verify per-tenant isolation: a tenant_A device's queued signals NEVER route to tenant_B audit chain (cross-check against canonical I-023 + I-025).
+# (g) Replay latency measurement: P99 replay latency from device emission to platform processing recorded (vs the i019_enqueue_ack_log timestamps).
+# Reachable-cohort drain: fails if ANY reachable-device queue not drained within 60 min (4h escalation deadline).
+# Offline-device cohort (unreachable at the 4h deadline): noted with explicit non-failure semantics + scheduled reconciliation.
 ```
 
-**Step 14.5 result interpretation:**
-- **All tenants drained + ordered + deduped + isolated within 60 min**: failover proceeds to Step 16 mark-complete.
-- **Some queues not drained within 60 min**: extend deadline to 4h; if still not drained, escalate to Incident Commander + Privacy Officer + Compliance Officer review; Step 16 mark-complete BLOCKED until queue resolution.
-- **Any ordering / dedup / isolation violation**: P0 alert; quarantine the affected tenant cohort; the failover is not marked complete; named manual review of every affected signal per crisis-response runbook (separate document).
+**Offline-device exception path (R2 MED-1 closure):**
+- **Unreachable devices** (no successful write within 4h of cutover): they retain their server-side `i019_enqueue_ack_log` entries; the platform writes a `i019_pending_replay` table row per (device_id, local_signal_id) noting the deferred replay.
+- **Persisted per-device replay obligation:** a background reconciliation job runs every 60 min on `i019_pending_replay` and drains entries as offline devices reconnect.
+- **Tenant risk reporting:** for tenants with >N% offline-device cohort relative to total devices, a tenant-level Cat B `audit_retention.i019_offline_cohort_warning` audit event is emitted; tenant operator surfaces a per-tenant offline-cohort dashboard for clinical review.
+- **Failover-completion criteria with offline devices:** failover can be marked complete IF (a) all reachable-cohort devices drained successfully AND (b) offline-device cohort size is below the tenant-risk-threshold AND (c) `i019_pending_replay` reconciliation job is running AND (d) Privacy Officer + Compliance Officer review acknowledges the offline cohort.
 
-This gate ensures that the T+15 to T+90 read-only window's I-019 local-fallback pathway DOES NOT leak crisis signals — the foundational guarantee of I-019 (crisis-detection-always-on) is preserved across the DR boundary not just by best-effort queue mechanics but by hard verification before failover completion.
+**Step 14.5 result interpretation (refined per R2 MED-1):**
+- **All reachable devices drained + ordered + deduped + isolated within 60 min + offline cohort below threshold**: failover proceeds to Step 16 mark-complete.
+- **Reachable-cohort queues not drained within 60 min**: extend deadline to 4h; if still not drained, escalate to IC + Privacy Officer + Compliance Officer review; Step 16 BLOCKED until reachable-cohort drained.
+- **Offline cohort exceeds tenant-risk threshold**: Privacy Officer + Compliance Officer + Incident Commander must review per-tenant impact + sign off on whether failover-completion may proceed despite the offline cohort. The `i019_pending_replay` reconciliation continues regardless.
+- **Any ordering / dedup / isolation violation**: P0 alert; quarantine the affected tenant cohort; the failover is not marked complete; named manual review of every affected signal per crisis-response runbook.
+
+This rewrite ensures the I-019 replay gate is provable under realistic offline-device conditions — using server-side acknowledgment evidence as the authoritative record, not device-side self-reporting that may never reconnect.
 
 ---
 
