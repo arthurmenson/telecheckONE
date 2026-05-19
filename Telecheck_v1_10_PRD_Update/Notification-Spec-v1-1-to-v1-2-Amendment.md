@@ -1,7 +1,8 @@
 # Notification Spec v1.1 → v1.2 Amendment
 
 **Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; Sprint 16 of autonomous 24h-loop work plan
+**Status:** RATIFIER-READY-WITH-KNOWN-OQs (R4 Codex prose-consistency clean post-OQ1 reconciliation 2026-05-19); Sprint 16 of autonomous 24h-loop work plan
+**Codex iteration trajectory:** R1 (3 HIGH + 2 MED) → R2 (1 HIGH SMS fallback UNIQUE conflict) → R3 (1 HIGH 24h re-dispatch contradiction) → R4 (1 HIGH OQ1 contradicted R3 closure; cleaned up). All 7 findings closed inline; 0 architectural-judgment items closed inline.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus Track 2 deliverable)
 **Owner:** AI Service Lead + Clinical Lead + SRE Lead (tri-owner per crisis-detection cross-channel propagation + I-019 platform floor scope)
 **Companion documents:** `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Notification_Spec_v1_1.md` (target canonical surface); Sprint 9 AI Service Mode 1 Handler (I-019 crisis-signal-emitted Cat A trigger); Sprint 7 Cold-DR Runbook (partition-aware multi-region ACK channel for crisis signals); Sprint 8 Identity Spec v1.1 (SI-017 middleware-GUC + tenant-scoped notification preferences); Sprint 13 KMS Architecture (notification payload encryption at rest); Contracts Pack v5.2 CCR_RUNTIME (SMS provider per tenant); I-017 emergency-information-always-accessible invariant; I-019 crisis-detection-always-on invariant.
@@ -388,7 +389,7 @@ New events per Sub-decisions 1-6:
 
 ## 6. Open questions for ratifier
 
-1. **OQ1 — Crisis-notification idempotency key scope.** Recommendation: dedupe on `(tenant_id, patient_id, server_signal_id)` per Sprint 9 §4.1. Re-dispatch on same signal_id within a 24h window suppressed; after 24h, dispatch allowed. Ratifier confirms 24h window.
+1. **OQ1 — Crisis-notification idempotency key scope (per R3 closure):** dedupe on `(tenant_id, patient_id, server_signal_id, channel)` per §3 SD1 ledger canonical UNIQUE. Re-dispatch on same `(signal_id, channel)` within 24h of `terminal_failed` is permitted via state-machine transition `terminal_failed → accepted` reusing the existing `notification_id` (new `provider_attempt` rows with `attempt_seq` incrementing). Re-dispatch beyond 24h is FORBIDDEN for same `(signal_id, channel)`; a fresh `server_signal_id` (Mode 1 re-detection) is required. Ratifier confirms the 24h window length + the redispatch_trigger taxonomy (`operator_initiated` | `client_retry` | `automated_retry`).
 2. **OQ2 — Operator escalation 5-minute SLA tolerance.** Recommendation: 5min fixed; not partition-extended. Ratifier confirms.
 3. **OQ3 — Marketing-opt-out boundary verification mechanism.** Recommendation: static-analyzer rule + content-policy review; crisis-resource content must pass content-policy review for crisis-line-only language; no marketing-tracking pixels or promotional URLs. Ratifier confirms scope.
 4. **OQ4 — `tenant.sms_provider_primary` + `tenant.sms_provider_fallback` CCR key activation.** Cross-references Contracts Pack v5.2 CCR_RUNTIME extension; ratifier confirms.
@@ -438,6 +439,9 @@ No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honor
 |---|---|---|
 | R2 | HIGH SMS provider fallback conflict with channel-scoped UNIQUE constraint (same `sms` channel can't have two ledger rows; primary→Vonage fallback semantics impossible to represent) | Closed inline by splitting provider attempts into `notification_crisis_provider_attempt` child table keyed by `(notification_id, provider, attempt_seq)`; channel obligation aggregates across attempts |
 | R3 | HIGH 24h same-signal re-dispatch contradiction (R1 closure said "NEW notification_id" but UNIQUE constraint forbids this) | Closed inline by reusing existing notification_id; re-dispatch transitions channel-obligation state machine from `terminal_failed` → `accepted` and adds new provider_attempt rows. Beyond 24h: new server_signal_id (Mode 1 re-detection) required. Cat A `crisis_redispatch_admitted` event added |
+| R4 | HIGH ratifier-facing §6 OQ1 preserved the pre-R3 idempotency wording (would have locked in the wrong contract at ratifier review) | Cleaned up inline: OQ1 reworded to match R3 closure exactly — channel-scoped dedup + 24h same-ledger-row re-dispatch + beyond-24h forbidden without fresh server_signal_id |
+
+**Status at R4 close:** RATIFIER-READY-WITH-KNOWN-OQs. Sprint 16 closes at R4 prose-consistency clean.
 
 ---
 
