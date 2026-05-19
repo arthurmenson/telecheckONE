@@ -105,11 +105,23 @@ This amendment consolidates **all role additions + scope amendments** that surfa
 - **Restrictions:** session duration ≤4h; max session bound by STS expires_at session tag; tenant + data-class scope IAM-enforced.
 - **Audit:** Cat A `kms.break_glass_decrypt` event on every decrypt invocation (P2 keyed by 'platform' + P1 mirror keyed by affected patient_id when applicable).
 
-**Roles R-8a, R-8b, R-8c: HSM-signing identities** — Sprint 13 §7.1.
+**Roles R-8a, R-8b, R-8c: HSM-signing identities** — Sprint 13 §7.1; R1 HIGH-4 closure: degraded-mode quorum + alternate signers.
 
 - **Purpose:** three independent HSM-backed signing identities for break-glass approval signatures: `hsm_signer_cto`, `hsm_signer_compliance_officer`, `hsm_signer_incident_commander`. Each signs incident-id-bound approval tokens that the approval-broker validates.
-- **Restrictions:** mutually exclusive — no single human may hold more than one of these signing keys; cross-role separation-of-duties invariant (§4 below).
-- **Audit:** Cat A `rbac.hsm_signing_invocation` event on every signing operation.
+- **Restrictions:** mutually exclusive per Inv-1.
+- **Audit:** Cat A `rbac.hsm_signing_invocation` event on every signing operation (P2 keyed by 'platform').
+
+**Degraded-mode quorum (R1 HIGH-4 closure: 2-of-3 emergency policy):**
+
+The canonical break-glass approval requires ALL 3 signatures (CTO + CO + IC). If one HSM hardware fails OR one signing principal is unreachable mid-incident, the canonical approval is blocked. To prevent denial-of-recovery in this scenario, the amendment adds an **emergency 2-of-3 degraded mode** with stricter controls:
+
+- **Pre-registered alternate signers:** each of {CTO, CO, IC} has a pre-registered alternate (`hsm_signer_cto_alt`, etc) with the same human-identity-binding requirements (Inv-1 extends to alternates: no human holds both primary and alternate). Alternates may sign if the primary is unreachable.
+- **Emergency 2-of-3 path:** if after 30 minutes of incident declaration no primary-signature trio is reachable, the canonical alternate-promotion procedure activates 2-of-3 mode: the approval-broker accepts 2 valid signatures from any combination of {primary,alternate} × {CTO,CO,IC} provided the 2 signatures cover at least 2 of the 3 roles (e.g., 2 CTO signatures alone do NOT satisfy 2-of-3).
+- **Stricter emergency expiry:** sessions issued under 2-of-3 mode have `expires_at` capped at 2 hours (vs 4 hours under canonical 3-of-3).
+- **Mandatory post-incident review:** every 2-of-3 emergency assumption emits Cat A `kms.break_glass_emergency_2_of_3_invoked` (P2 keyed by 'platform') + triggers mandatory post-incident 7-day review by remaining quorum holder (the one signer not present).
+- **Key/HSM replacement runbook:** the canonical runbook for HSM hardware replacement preserves Inv-1 human-identity binding (replaced HSM gets new IAM principal ARN with same `human_id` tag); replacement procedure documented in `runbooks/hsm-key-rotation.md`.
+
+**Why 2-of-3 not 1-of-3:** single-signer emergency mode would defeat dual-control. 2-of-3 with role-distinct constraint preserves the canonical "at least 2 distinct stakeholders agreed" principle while tolerating single-point-of-failure for the third signer.
 
 ### Group D — Compliance + ratifier roles
 
@@ -142,19 +154,49 @@ This amendment consolidates **all role additions + scope amendments** that surfa
 
 ---
 
-## 4. Cross-role separation-of-duties invariants (NEW)
+## 4. Cross-role separation-of-duties invariants (NEW; R1 HIGH-1 + HIGH-3 closure: human-level binding + chaos/operator composition)
 
-The following invariants MUST be enforced at role-grant time + verified by static-analyzer rules:
+**Canonical human-identity binding (R1 HIGH-1 closure):** every privileged IAM principal in this amendment is bound to a single canonical `human_id` via the `iam_principal_human_binding` table:
+
+```sql
+CREATE TABLE iam_principal_human_binding (
+    iam_principal_arn TEXT PRIMARY KEY,                            -- e.g., 'arn:aws:iam::<acct>:role/hsm_signer_cto/<personal-suffix>'
+    human_id UUID NOT NULL,                                        -- Canonical employee/contractor identifier
+    bound_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    bound_by_user_id UUID NOT NULL,                                -- Compliance Officer who registered the binding
+    revoked_at TIMESTAMPTZ,                                        -- Soft-deletion on offboarding (binding rows are append-only)
+    CONSTRAINT iam_principal_human_binding_role_human_unique UNIQUE (iam_principal_arn, human_id)
+);
+```
+
+Every IAM principal has `aws:PrincipalTag/human_id` set at role-creation time (immutable per-principal-creation). Cross-role separation-of-duties checks evaluate `human_id` from the binding, NOT the IAM principal ARN.
 
 | Invariant | Description | Enforcement |
 |---|---|---|
-| Inv-1 | No single human holds more than one of: `hsm_signer_cto`, `hsm_signer_compliance_officer`, `hsm_signer_incident_commander` | Static rule TLC-RBAC-001; grant-time check |
-| Inv-2 | `break-glass-approval-broker` and `break-glass-operator` cannot be held by the same human; the approval-broker invokes assume-role on break-glass-operator but is structurally a separate identity | IAM trust-policy + static rule TLC-RBAC-002 |
-| Inv-3 | `platform_operator` and `tenant_operator_<tenant_id>` modes are mutually exclusive at a single point in time (one principal can hold both grants but operates in only one mode per session; transitions via operator-mode-switcher per Sprint 8 SI-017 §6) | Application-layer enforcement at middleware-GUC binding |
-| Inv-4 | `chaos_drill_operator` cannot also be `break-glass-operator` (chaos drills must not exercise break-glass paths) | Static rule TLC-RBAC-003 |
-| Inv-5 | `ai_mode2_l4_authorized` scope cannot be self-granted; the granting principal MUST be CTO + Compliance Officer (dual-control); the receiving principal MUST be a clinician or scheduled_job | Grant-procedure verification |
-| Inv-6 | `country_regulatory_counsel_<country>` scope is country-specific; counsel cannot sign override for a country they are not credentialed in | Trust-policy condition; per-country-bar-membership-attestation table |
-| Inv-7 | Emergency deploy carve-out approvers (CTO + IC OR CO + EL) cannot include the same principal twice; dual-control requires two DISTINCT humans | Application-layer enforcement at release-ticket carve-out invocation |
+| Inv-1 | No single `human_id` holds more than one of: `hsm_signer_cto`, `hsm_signer_compliance_officer`, `hsm_signer_incident_commander` | Static rule TLC-RBAC-001; grant-time DB constraint `UNIQUE (human_id) WHERE role_id IN (...)`; IAM AssumeRole trust-policy condition rejecting AssumeRole when source-and-target principals resolve to same human_id |
+| Inv-2 | No single `human_id` holds both `break-glass-approval-broker` AND `break-glass-operator`; approval-broker invokes AssumeRole on break-glass-operator but is structurally + identity-wise a separate identity | IAM trust-policy + static rule TLC-RBAC-002 + AssumeRole rejection when source_human_id = target_human_id |
+| Inv-3 (R1 HIGH-2 closure: transactionally-fenced active-mode lease) | `platform_operator` and `tenant_operator_<tenant_id>` modes are mutually exclusive at a single point in time per `human_id`. The active mode is server-side state in `operator_active_mode_lease` table with monotonic `mode_version` and 5-min `lease_expires_at`; every request + SECURITY DEFINER procedure verifies current `mode_version` against the JWT's mode claim; stale modes are rejected with Cat A audit | Server-side lease table + canonical middleware-GUC binding revalidation + SECURITY DEFINER STEP 0a mode-version check (per §6 enforcement-point §5) |
+| Inv-4 | `chaos_drill_operator` cannot also be `break-glass-operator` | Static rule TLC-RBAC-003 + human_id-level enforcement per Inv-1 pattern |
+| Inv-5 | `ai_mode2_l4_authorized` scope cannot be self-granted; the granting principal MUST be CTO + Compliance Officer (dual-control); the receiving principal MUST be a clinician or scheduled_job | Grant-procedure verification + DB constraint on `l4_scope_grant.granting_human_id_1 != l4_scope_grant.granting_human_id_2 != l4_scope_grant.granted_human_id` |
+| Inv-6 | `country_regulatory_counsel_<country>` scope is country-specific; counsel cannot sign override for a country they are not credentialed in | Trust-policy condition; per-country-bar-membership-attestation table FK enforcement |
+| Inv-7 | Emergency deploy carve-out approvers (CTO + IC OR CO + EL) cannot include the same principal twice; dual-control requires two DISTINCT humans | Application-layer enforcement at release-ticket carve-out invocation + DB constraint `approver_1_human_id != approver_2_human_id` |
+| **Inv-8 (R1 HIGH-3 closure: chaos/operator composition)** | `chaos_drill_operator` cannot be active in the same session as `tenant_operator_<*>` or `platform_operator`. The session-active-role lease verifies single-active-role-mode: a chaos session is exclusive | Server-side session-active-role lease check at SECURITY DEFINER STEP 0; chaos SECURITY DEFINER procedures additionally verify `synthetic_tenant_scope=true` AND `operator_mode=none` AND `chaos_drill_active=true` |
+
+**Inv-3 implementation detail (R1 HIGH-2 closure):**
+
+```sql
+CREATE TABLE operator_active_mode_lease (
+    human_id UUID PRIMARY KEY,                                     -- One active mode per human at any time
+    active_mode TEXT NOT NULL,                                     -- 'tenant_operator' | 'platform_operator' | 'chaos_drill_operator' | 'none'
+    active_tenant_id tenant_id_t,                                  -- Set if active_mode='tenant_operator'; NULL otherwise
+    mode_version BIGINT NOT NULL,                                  -- Monotonic; bumped on every mode transition
+    mode_acquired_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    lease_expires_at TIMESTAMPTZ NOT NULL,                         -- 5min from mode_acquired_at; refreshed on operator activity
+    CHECK (active_mode = 'tenant_operator' AND active_tenant_id IS NOT NULL OR active_mode != 'tenant_operator')
+);
+```
+
+Every authenticated request emits a `mode_version` claim in the JWT (set at mode-switch time). The SECURITY DEFINER procedures check `mode_version` matches the current server-side `operator_active_mode_lease.mode_version`; stale JWTs (post-switch) are rejected with Cat A audit `rbac.stale_mode_version_rejected`.
 
 ---
 
@@ -172,11 +214,25 @@ Existing 12-role table extended with 11 new roles (R-1 through R-11 per §3 abov
 
 Insertion: full §4 above.
 
-### Delta 4 — §5 Role grant/revoke procedures
+### Delta 4 — §5 Role grant/revoke procedures (R1 MED-1 closure: split tenant-scoped + platform-scoped grant procedures)
 
-Every existing grant/revoke procedure amended to add:
-- I-032 STEP 0 tenant-GUC guard (per Sprint 8 SI-017 §11 contract).
-- Cat A audit emission on grant + revoke (via Sprint 14 §3 SD1 same-tx outbox pattern; downstream subscribers include SIEM + identity-service for cache invalidation).
+Grant/revoke procedures are split by scope to handle the canonical partitioning correctly:
+
+**Tenant-scoped role grants** (e.g., `tenant_operator_<tenant_id>`, `country_regulatory_counsel_<country>`, `research_consent_operator`):
+- Procedure: `grant_tenant_scoped_role(p_tenant_id, p_human_id, p_role_id, p_granting_human_id)`.
+- STEP 0a: caller-role check (granting principal must be authorized to grant `p_role_id`).
+- STEP 0b: I-032 tenant-GUC guard.
+- Cat A audit emission with `partition_key=tenant_id`, routed to P2 keyed by `tenant_id`.
+- Same-tx outbox row with subscriber list = [`identity-service` (cache invalidation), `siem-pipeline`, `audit-archival`].
+
+**Platform-scoped role grants** (e.g., `platform_operator`, `break-glass-approval-broker`, `break-glass-operator`, `hsm_signer_*`, `ai_mode2_l4_authorized` for scheduled_job):
+- Procedure: `grant_platform_scoped_role(p_human_id, p_role_id, p_granting_human_id_1, p_granting_human_id_2)` (dual-control mandatory).
+- STEP 0a: caller-role check (BOTH granting principals must have platform-grant authority).
+- NO I-032 tenant-GUC check (platform-scope is not tenant-scoped; canonical `app.tenant_id` is set to `'platform'` sentinel per Sprint 8 §6 Sub-decision 6).
+- Cat A audit emission with `partition_key='platform'`, routed to P2 keyed by `'platform'`.
+- Same-tx outbox row with subscriber list = [`identity-service`, `siem-pipeline`, `audit-archival`, `compliance-dashboard`].
+
+**Per-grant `scope_type` field** (`tenant` | `platform`) is mandatory in the same transaction as the role-mutation row; SIEM dashboards filter by `scope_type` for compliance reporting.
 
 ### Delta 5 — §6 (NEW) RBAC enforcement points + canonical check sequence
 
@@ -196,7 +252,8 @@ Defense-in-depth: enforcement points 1-5 are independently sufficient for most c
 |---|---|---|---|
 | `rbac.role_granted` | A | tenant_id, granting_user_id, granted_user_id, role_id, granted_at | P1 if user is patient; P2 keyed by tenant_id otherwise |
 | `rbac.role_revoked` | A | tenant_id, revoking_user_id, revoked_user_id, role_id, revoked_at | P1 if user is patient; P2 keyed by tenant_id otherwise |
-| `rbac.role_assumed` | C (sampled at 1%) | session_id, role_id, assumed_at | P1 if user is patient; P2 keyed by tenant_id otherwise |
+| `rbac.role_assumed_routine` (non-privileged roles only) | C (sampled at 1%) | session_id, role_id, assumed_at | P1 if user is patient; P2 keyed by tenant_id otherwise |
+| `rbac.role_assumed_privileged` (R1 MED-2 closure: unsampled Cat A) | A | session_id, role_id, source_role, principal_arn, human_id, tenant_id_or_platform, affected_scope, assumed_at | P2 keyed by tenant_id OR 'platform' per role scope. Privileged role set: `break-glass-approval-broker`, `break-glass-operator`, `hsm_signer_*`, `platform_operator`, `ai_mode2_l4_authorized` invocations, `country_regulatory_counsel_*` |
 | `rbac.role_separation_violation_detected` | A | tenant_id, violating_principal, conflicting_role_pair, detected_at | P2 keyed by 'platform' |
 | `rbac.l4_scope_granted` | A | granting_users[CTO,CO], granted_user_id, workflow_type_scope, granted_at | P2 keyed by tenant_id |
 | `rbac.l4_scope_revoked` | A | revoking_user_id, revoked_user_id, workflow_type_scope, revoked_at | P2 keyed by tenant_id |
@@ -238,6 +295,22 @@ Defense-in-depth: enforcement points 1-5 are independently sufficient for most c
 ## 8. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
+
+**v0.1 R1 closure 2026-05-19:** 4 HIGH + 2 MED closed inline:
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | HIGH-1 separation-of-duties relied on IAM identities without human-level binding; HIGH-2 Inv-3 platform/tenant operator mode race-prone; HIGH-3 chaos vs operator composition not forbidden; HIGH-4 HSM signer model no degraded-mode path; MED-1 platform-scoped grant audit routing underspecified; MED-2 role-assumed audit sampled + missing routing fields | All 6 closed inline |
+
+**R1 closure pattern recap:**
+- HIGH-1: `iam_principal_human_binding` table + `aws:PrincipalTag/human_id` immutable per-principal-creation; Inv-1/Inv-2/Inv-4 reformulated to enforce human_id-level separation; DB constraints + IAM trust-policy reject AssumeRole on same human_id.
+- HIGH-2: `operator_active_mode_lease` server-side state with monotonic `mode_version` + 5-min lease + JWT-claim revalidation at every request + SECURITY DEFINER STEP 0a mode-version check.
+- HIGH-3: Inv-8 added — chaos session cannot compose with tenant/platform operator; chaos SECURITY DEFINER procedures verify `chaos_drill_active=true AND operator_mode='none' AND synthetic_tenant_scope=true`.
+- HIGH-4: pre-registered alternates (`hsm_signer_cto_alt` etc.; same human-identity binding rules); emergency 2-of-3 mode after 30-min incident threshold with 2-hr session cap (vs 4-hr canonical); 2-signature requirement covers ≥2 distinct roles; mandatory post-incident 7-day review by remaining quorum holder.
+- MED-1: split `grant_tenant_scoped_role` + `grant_platform_scoped_role` procedures; mandatory `scope_type` field; partition_key per scope (tenant_id vs 'platform').
+- MED-2: split `rbac.role_assumed_routine` (Cat C 1% sampled) vs `rbac.role_assumed_privileged` (Cat A unsampled; full principal_id + human_id + tenant_id_or_platform + source_role + affected_scope detail).
+
+No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. 5 known OQs remain ratifier-targetable.
 
 ---
 
