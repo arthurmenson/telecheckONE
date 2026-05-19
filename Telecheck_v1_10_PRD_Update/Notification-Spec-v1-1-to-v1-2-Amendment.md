@@ -61,6 +61,8 @@ This amendment integrates **five architectural shifts** into the canonical Notif
 5. **Idempotency + canonical dispatch ledger (R1 HIGH-1 closure):** the crisis-notification subsystem dedupes via a canonical dispatch ledger keyed at the (tenant + patient + signal + channel) granularity:
 
 ```sql
+-- Channel-scoped obligation: one row per (signal, channel); represents the canonical
+-- "must deliver to this channel" obligation. State summarizes across all provider attempts.
 CREATE TABLE notification_crisis_dispatch_ledger (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),                  -- = notification_id; encryption-context binding key
     tenant_id tenant_id_t NOT NULL,
@@ -69,11 +71,51 @@ CREATE TABLE notification_crisis_dispatch_ledger (
     channel TEXT NOT NULL,                                          -- 'push' | 'sms' | 'email' | 'in_app'
     severity TEXT NOT NULL,
     dispatch_obligation_state TEXT NOT NULL,                        -- See R1 HIGH-2 closure state machine §3 SD2
-    -- Append-only; state transitions recorded in notification_crisis_dispatch_event
     CONSTRAINT notification_crisis_dispatch_ledger_unique
         UNIQUE (tenant_id, patient_id, server_signal_id, channel)
 );
+
+-- Per-provider-attempt detail (R2 HIGH closure: distinct provider invocations within the same channel obligation).
+-- An SMS channel obligation with primary=Twilio → fallback=Vonage produces TWO attempt rows;
+-- the channel-obligation state aggregates over these attempts.
+CREATE TABLE notification_crisis_provider_attempt (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id tenant_id_t NOT NULL,
+    notification_id UUID NOT NULL REFERENCES notification_crisis_dispatch_ledger(id),
+    provider TEXT NOT NULL,                                         -- 'twilio' | 'vonage' | 'africas_talking' | 'fcm' | 'apns' | 'ses'
+    attempt_seq INT NOT NULL,                                       -- 1 = primary; 2 = fallback; 3 = secondary fallback
+    provider_request_id TEXT,                                       -- Set once provider invocation completes (request-id from provider response)
+    attempt_state TEXT NOT NULL,                                    -- 'pending' | 'invoked' | 'delivered' | 'failed' | 'reconciled'
+    invoked_at TIMESTAMPTZ,
+    delivered_at TIMESTAMPTZ,
+    failed_at TIMESTAMPTZ,
+    failure_reason TEXT,
+    CONSTRAINT notification_crisis_provider_attempt_unique
+        UNIQUE (notification_id, provider, attempt_seq)
+);
 ```
+
+**Per-attempt semantics (R2 HIGH closure):**
+
+- The channel-obligation row in `notification_crisis_dispatch_ledger` represents the canonical "must deliver to this channel"; it is created once per (signal, channel) and its `dispatch_obligation_state` aggregates across all provider attempts on the same channel.
+- Each provider invocation (primary OR fallback OR secondary-fallback) is a row in `notification_crisis_provider_attempt`. The `attempt_seq` is monotonic per `notification_id`; `attempt_seq=1` is the primary provider; `attempt_seq=2` is the first fallback; etc.
+- The aggregated channel state transitions:
+  - Any attempt reaches `delivered` → channel obligation transitions to `delivery_confirmed`.
+  - All attempts terminal-failed AND no further fallback providers configured → channel obligation transitions to `terminal_failed`.
+  - At least one attempt in `pending`/`invoked` → channel obligation in `provider_invocation_pending`/`provider_invoked` accordingly.
+- Provider webhook reconciliation matches by `provider_request_id` on the specific `notification_crisis_provider_attempt` row. Duplicate webhook arrivals dedup against `attempt_state IN ('delivered', 'failed')`.
+
+**SMS primary→fallback flow (concrete R2 HIGH closure):**
+
+1. Crisis-notification subsystem creates the channel-obligation row for `channel='sms'` (notification_id=N, state='accepted').
+2. Attempt-1 invokes Twilio: `notification_crisis_provider_attempt` row with `(notification_id=N, provider='twilio', attempt_seq=1, attempt_state='invoked', provider_request_id=...)`. Channel obligation transitions to `provider_invoked`.
+3. Twilio returns terminal failure (provider 5xx OR webhook delivery_failed): attempt-1 row transitions to `failed`.
+4. Crisis-notification subsystem creates attempt-2 invoking Vonage: `(notification_id=N, provider='vonage', attempt_seq=2, attempt_state='invoked', provider_request_id=...)`. Channel obligation REMAINS in `provider_invoked` (still in flight via fallback).
+5. Vonage delivers: attempt-2 row transitions to `delivered`; channel obligation transitions to `delivery_confirmed`.
+
+The channel-obligation UNIQUE constraint is preserved (one row per signal+channel); the provider-attempts table captures the multi-attempt path within the same channel obligation.
+
+**Audit:** every `notification_crisis_provider_attempt` state transition emits Cat A `notification.provider_attempt_state_transition` event (P1 keyed by patient_id) with attempt_seq + provider + state. The aggregated channel-obligation state transitions also emit Cat A per §3 SD2 state machine.
 
 The UNIQUE constraint on `(tenant_id, patient_id, server_signal_id, channel)` is the canonical dedup. Re-delivery of the same signal_id from multi-region ACK channel replay attempts to INSERT a row with the same key + fails with conflict → the second attempt looks up the existing `notification_id` + treats the operation as a no-op.
 
@@ -310,8 +352,8 @@ New events per Sub-decisions 1-6:
 | Test N.4 | `apps/api-server/__integration__/notification/crisis_quiet_hours_override.test.ts` | `integration-notification` | Patient in 10pm-7am quiet-hours window → crisis notification dispatches anyway + Cat A `opt_out_override_for_emergency` event | §3 SD4 |
 | Test N.5 | `apps/api-server/__integration__/notification/crisis_transactional_optout_override.test.ts` | `integration-notification` | Patient opted out of transactional SMS → crisis SMS dispatches anyway + override audit | §3 SD4 |
 | Test N.6 | `apps/api-server/__integration__/notification/crisis_marketing_optout_preserved.test.ts` | `integration-notification` | Patient with marketing opt-out → no marketing content in crisis notification; crisis-resource content only | §3 SD4 |
-| Test N.7 | `apps/api-server/__integration__/notification/sms_provider_routing.test.ts` | `integration-notification` | Tenant.sms_provider_primary=Twilio → SMS dispatched via Twilio; primary failure → Vonage fallback automatically | §3 SD3 |
-| Test N.8 | `apps/api-server/__integration__/notification/sms_provider_ccr_ghana.test.ts` | `integration-notification` | Telecheck-Ghana tenant → Africa's Talking primary; primary failure → Vonage fallback | §3 SD3 |
+| Test N.7 | `apps/api-server/__integration__/notification/sms_provider_routing.test.ts` | `integration-notification` | Tenant.sms_provider_primary=Twilio → SMS dispatched via Twilio (attempt_seq=1); Twilio terminal failure → Vonage fallback as attempt_seq=2 ROW under the SAME channel-obligation row; both attempts audited; channel obligation transitions delivery_confirmed on Vonage success (R2 HIGH closure) | §3 SD3 |
+| Test N.8 | `apps/api-server/__integration__/notification/sms_provider_ccr_ghana.test.ts` | `integration-notification` | Telecheck-Ghana tenant → Africa's Talking attempt_seq=1; primary failure → Vonage attempt_seq=2; channel obligation UNIQUE constraint preserved (R2 HIGH closure) | §3 SD3 |
 | Test N.9 | `apps/api-server/__integration__/notification/payload_encryption_at_rest.test.ts` | `integration-notification` | PHI-bearing notification payload encrypted at rest via Sprint 13 KMS pii_conversation; delivery decrypts at dispatch; database inspection confirms ciphertext | §3 SD5 |
 | Test N.10 | `apps/api-server/__integration__/notification/crisis_undeliverable_escalation.test.ts` | `integration-notification` | All channels fail to deliver crisis within 5min → Cat A `crisis_undeliverable_5min` + P0 PagerDuty operator alert | §3 SD6 |
 | Test N.11 | `apps/api-server/__integration__/notification/crisis_dr_partition_degraded.test.ts` | `integration-notification` | Simulated regional outage → crisis dispatch records with partition_degraded=true; surviving region delivers; reconciliation on recovery promotes to quorum | §3 SD2 |
@@ -371,6 +413,12 @@ New events per Sub-decisions 1-6:
 - MED-2: 9 enumerated suspension reasons with per-reason override decision (`payment_overdue` / `inactivity` / `voluntary_pause` / `clinician_hold` overridden; `abuse_or_fraud` / `legal_hold` / `identity_compromise` / `deceased` / `tenant_offboarding` NOT overridden — operator-initiated alternative paths instead).
 
 No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. 7 known OQs remain ratifier-targetable.
+
+**v0.1 R2 closure 2026-05-19:** 1 HIGH closed inline — SMS primary→fallback within the same `sms` channel conflicted with the channel-scoped UNIQUE constraint on `notification_crisis_dispatch_ledger`. R2 closure: added `notification_crisis_provider_attempt` child table keyed by `(notification_id, provider, attempt_seq)` to capture distinct provider invocations within the same channel obligation. Channel-obligation row remains UNIQUE per (signal, channel); aggregated state transitions across attempts. Tests N.7 + N.8 updated to verify attempt_seq=1 → attempt_seq=2 flow on primary-provider failure.
+
+| Round | Findings | Status |
+|---|---|---|
+| R2 | HIGH SMS provider fallback conflict with channel-scoped UNIQUE constraint (same `sms` channel can't have two ledger rows; primary→Vonage fallback semantics impossible to represent) | Closed inline by splitting provider attempts into `notification_crisis_provider_attempt` child table keyed by `(notification_id, provider, attempt_seq)`; channel obligation aggregates across attempts |
 
 ---
 
