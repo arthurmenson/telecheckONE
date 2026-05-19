@@ -72,14 +72,24 @@ I-026 + I-023 require per-tenant KMS keys: NO two tenants share a CMK. This is s
 
 ## 3. Multi-region key replication (resolves Cold-DR OQ2)
 
-### 3.1 AWS KMS multi-region key topology
+### 3.1 AWS KMS multi-region key topology (R1 HIGH-2 closure: cryptographic interoperability ≠ operational accessibility)
 
 Each tenant CMK is created as an AWS KMS **multi-region key** with:
 
 - **Primary replica** in us-east-1 (the canonical primary region per ADR-026).
 - **Replica copy** in us-west-2 (the canonical cold-DR region per ADR-026).
-- The two replicas share the same key material + key ID + key policy; either can decrypt ciphertext encrypted by the other.
-- Replication is automatic and managed by AWS KMS (not by the application layer).
+- The two replicas share the same **key material + key ID** (cryptographic interoperability — ciphertext encrypted under one is decryptable under the other).
+
+**Important distinction (R1 HIGH-2 closure):** AWS KMS multi-region keys share **key material**, but each replica has its OWN access policy (the key policy must be explicitly applied to each replica via separate APIs). The operational accessibility of the replica is NOT automatic — it depends on the policy + grants being correctly applied to each region.
+
+**Canonical replica-policy provisioning (R1 HIGH-2 closure):**
+
+1. **Policy-as-code:** every CMK's key policy is generated from a single canonical Terraform/CDK module (`telecheck-tenant-cmk` IaC artifact); the same artifact provisions both the us-east-1 primary AND the us-west-2 replica.
+2. **Drift detection:** the canonical CI pipeline runs a daily policy-drift check that fetches the effective key policy from both regions per tenant CMK + diffs against the canonical IaC artifact. Drift → Cat A `kms.replica_policy_drift_detected` event + P0 SRE alert.
+3. **Pre-failover canary decrypts:** Cold-DR Step 7 (per Cold-DR Runbook §4) executes a per-tenant canary decrypt against the us-west-2 replica using a synthetic test ciphertext. Failure on any tenant's canary blocks failover for that tenant.
+4. **Replica-policy verification at Cold-DR Step 7:** the verification is NOT a sanity check; it is a HARD GATE — a tenant whose us-west-2 replica policy fails verification is excluded from failover with operator-gated decision.
+
+**Operational accessibility invariant (rewritten):** during DR failover, every authorized decrypt operation succeeds against the surviving region's CMK replica **iff** (a) the replica's key policy is current (no drift) AND (b) the IAM grants/roles in the surviving region match the primary region. Cryptographic interoperability is necessary but not sufficient; operational accessibility requires explicit policy-as-code drift-free state.
 
 ### 3.2 Region-pinning per tenant (CCR-driven)
 
@@ -160,11 +170,55 @@ Every Encrypt and Decrypt operation MUST include the canonical encryption contex
 
 The IAM policy's `Condition` block enforces `tenant_id` equality at the AWS KMS API layer. **An application bug that constructs the wrong encryption context (e.g., passing tenant_A's CMK with tenant_B's encryption context) fails at AWS KMS** with InvalidCiphertextException — providing a third defense-in-depth layer beyond RLS + I-032 STEP 0.
 
-### 4.3 Service role per tenant
+### 4.3 Service role per tenant + STS session-tag binding (R1 HIGH-3 closure)
 
 Each tenant has a dedicated IAM role `tenant-<tenant_id>-service` granted decrypt access to ONLY that tenant's CMK. This role is assumed by the application's service identity when handling requests for that tenant; the assumption is mediated by the canonical middleware-GUC binding (SI-017 §3.6).
 
-**Cross-tenant role-assumption attempts** are blocked at the IAM layer (assume-role policies enumerate the canonical app identity as the only allowed principal). Attempted cross-tenant assume-role → Cat A `kms.cross_tenant_role_assume_attempted` event.
+**STS session-tag binding (R1 HIGH-3 closure):** the application-principal-to-tenant-role assumption MUST carry STS session tags that bind the request tenant to the assumed role. Without this, the shared app principal could assume the wrong tenant role under a confused-deputy bug. The canonical trust policy:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowAppAssumeOnlyMatchingTenant",
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::<account>:role/telecheck-app-service" },
+      "Action": ["sts:AssumeRole", "sts:TagSession"],
+      "Condition": {
+        "StringEquals": {
+          "sts:RequestTag/tenant_id": "<tenant_id_for_this_role>"
+        },
+        "StringEqualsIfExists": {
+          "aws:SourceIdentity": "telecheck-app-service"
+        }
+      }
+    }
+  ]
+}
+```
+
+The CMK key policy then adds an equality check (per §4.1) between the principal's session tag and the encryption-context tenant_id:
+
+```json
+"Condition": {
+  "StringEquals": {
+    "aws:PrincipalTag/tenant_id": "<tenant_id>",
+    "kms:EncryptionContext:tenant_id": "<tenant_id>"
+  }
+}
+```
+
+**End-to-end binding chain** (the canonical CMK isolation invariant):
+1. Request arrives; middleware-GUC sets `app.tenant_id` per SI-017 §3.6.
+2. Application calls STS AssumeRole on `tenant-<tenant_id>-service` with `sts:TagSession` carrying `tenant_id` from `app.tenant_id`.
+3. STS trust policy verifies `sts:RequestTag/tenant_id = <tenant_id_for_this_role>`; AssumeRole succeeds only if the request tenant matches the role's bound tenant.
+4. Decrypt call passes `kms:EncryptionContext:tenant_id` from the same `app.tenant_id`.
+5. CMK key policy verifies `aws:PrincipalTag/tenant_id = kms:EncryptionContext:tenant_id`; decrypt succeeds only if all three (request, role, context) bind to the same tenant.
+
+**Cross-tenant role-assumption attempts** are now blocked at the IAM layer by the tenant-id session-tag check (a middleware-bug or confused-deputy path that attempts to assume the wrong tenant role with the wrong session tag is denied at STS). Attempted cross-tenant assume-role → Cat A `kms.cross_tenant_role_assume_attempted` event.
+
+**Test KMS.15 (R1 HIGH-3 closure verification):** confused-deputy simulation — middleware sets `app.tenant_id = tenant_A`, application bug attempts to assume `tenant-<tenant_B>-service` role → STS denies with tenant_id session-tag mismatch + Cat A audit event.
 
 ---
 
@@ -201,7 +255,7 @@ Every decrypt failure (regardless of cause) emits a Cat A `kms.decrypt_failed` e
 | Key tier | Cadence | Procedure |
 |---|---|---|
 | Tenant CMK | Annual (12-month interval from creation) + on-demand on compromise | Invoke `kms:Rotate` on the multi-region CMK; AWS KMS handles cross-region propagation; emit Cat A `kms.cmk_rotated`; no re-encryption of existing data (CMK rotation is transparent — ciphertext under the old version remains decryptable; new encryptions use the new version) |
-| Per-data-class DEK | Quarterly (3-month interval) | New DEK generated; existing ciphertext fields re-encrypted via background job over a 30-day window; emit Cat A `kms.dek_rotation_started` + Cat A `kms.dek_rotation_completed`; the rotation job is interruptible + resumable (per-row idempotency keyed by `(tenant_id, data_class, row_id, dek_version)`) |
+| Per-data-class DEK | Quarterly (3-month interval) | New DEK generated; existing ciphertext fields re-encrypted via background job over a 30-day window; emit Cat A `kms.dek_rotation_started` + Cat A `kms.dek_rotation_completed`; the rotation job is interruptible + resumable; **versioned-read semantics per R1 MED-1 closure (see §6.4 below)** |
 | Per-row envelope | On-demand; replaced at rest only when data-class DEK rotates | Each rotation pass re-encrypts envelope keys under the new DEK; per-row idempotency prevents double-rotation |
 
 ### 6.2 On-demand emergency rotation
@@ -218,19 +272,84 @@ On suspected compromise:
 
 The complete rotation audit chain is reconstructable per tenant + per key from the Cat A events. The audit chain is the canonical compliance evidence for HIPAA + GDPR + country-specific data-protection regulations.
 
+### 6.4 Versioned DEK read semantics + old-DEK retention (R1 MED-1 closure)
+
+To preserve decryptability across the 30-day rotation window + interruptions + DR-failover-during-rotation, the canonical DEK model uses **versioned-read semantics**:
+
+1. **Per-row DEK version column:** every encrypted PHI row has a `dek_version_id` column referencing `ai_kms_dek_keyring` (canonical keyring table per tenant + data class). The version is set at INSERT/UPDATE time to the THEN-CURRENT active DEK; never updated post-row-INSERT (per I-027 append-only on encryption metadata).
+2. **Keyring table** `ai_kms_dek_keyring(tenant_id, data_class, dek_version_id, encrypted_dek_blob, created_at, retired_at)`: append-only; old DEK versions retained with `retired_at` set when rotation completes + verification passes.
+3. **Reader fallback rule:** at decrypt time, the reader looks up `dek_version_id` from the row + fetches the matching DEK from the keyring; readers MUST select the DEK by ciphertext metadata, never assume the current-active DEK. A row encrypted under old DEK remains decryptable until old DEK is retired AND removed from the keyring (a separate, deferred step).
+4. **Old-DEK retention policy:**
+   - During the 30-day rotation window: BOTH old + new DEKs in keyring; new encryptions use new; reads dispatch by row's dek_version_id.
+   - At rotation-complete (all rows re-encrypted): old DEK marked `retired_at` but kept in keyring. The keyring retention period is 90 days post-retired-at (covers backup-replication windows + audit-replay).
+   - At 90 days post-retired-at: old DEK MAY be removed from the keyring + the matching plaintext key purged from in-memory caches.
+5. **DR-failover-during-rotation:** if Cold-DR failover occurs during an active DEK rotation, the rotation is PAUSED at the next checkpoint; both old + new DEKs in keyring are replicated to us-west-2; rotation resumes from checkpoint after us-west-2 is primary. The reader-fallback rule continues to work without modification.
+6. **Premature old-DEK retirement detection:** static-analyzer rule TLC-KMS-004 verifies that no code path retires/purges a DEK from the keyring without verifying ALL rows under that tenant + data_class have `dek_version_id != that_version`. Premature retirement would orphan ciphertext.
+7. **Audit:** every DEK lookup at decrypt time emits Cat C `kms.dek_lookup` (sampled high-volume; partition P1 if patient-bound; P2 keyed by tenant_id otherwise). Cat A `kms.dek_retired` event emitted when a DEK transitions to `retired_at` set; Cat A `kms.dek_purged` event when it is removed from keyring.
+
+**Test KMS.5b (R1 MED-1 closure):** mixed old + new DEK rows during rotation; reads on both succeed via dek_version_id dispatch. Test KMS.5c: rotation interrupted; readers continue using old DEK on un-rotated rows; resumption completes without double-rotation. Test KMS.5d: rotation interrupted by simulated DR failover; rotation pauses; us-west-2 reads continue with mixed DEK state.
+
 ---
 
 ## 7. Break-glass cross-tenant access (I-024 integration)
 
-### 7.1 Break-glass posture
+### 7.1 Break-glass posture (R1 HIGH-1 closure: IAM-enforced dual-control + STS session-tag-bound expiry)
 
-Per I-024, cross-tenant access is permitted only under operator-gated break-glass conditions (e.g., regulatory subpoena, security incident response). The KMS-side of break-glass:
+Per I-024, cross-tenant access is permitted only under operator-gated break-glass conditions. The KMS-side of break-glass MUST be enforced at the IAM/STS/KMS layer (not application/procedural policy alone). Key elements:
 
-1. The `break-glass-operator` IAM role (per §4.1 key policy) is the ONLY identity that can decrypt across tenants.
-2. The role assumption requires MFA + a per-operation `break_glass_authorized` encryption-context flag set explicitly.
-3. The break-glass-authorized flag is set ONLY by the canonical break-glass procedure (Track 5 operator tooling; not application-layer code).
-4. Every break-glass decrypt emits Cat A `kms.break_glass_decrypt` event (P2 keyed by `'platform'`; visible to platform-level compliance audit) + Cat A `kms.break_glass_decrypt_to_tenant_<tenant_id>` event (P1 mirror for the affected tenant's audit trail).
-5. Dual-control: break-glass procedure requires CTO + Compliance Officer + Incident Commander (3 named humans; per Cold-DR Runbook §"Authority + override path" precedent).
+1. **Approval-broker role** (`break-glass-approval-broker`): the only identity that can issue STS session credentials for break-glass operations. This role is assumed by the canonical operator tooling (Track 5 deliverable) ONLY after the canonical 3-person approval workflow completes (CTO + Compliance Officer + Incident Commander each provide cryptographic proof-of-approval).
+
+2. **STS session-tag-bound break-glass session:** the approval broker calls `sts:AssumeRole` on `break-glass-operator` with the following REQUIRED session tags:
+   - `break_glass_approved = true` (single canonical token; absence = denied)
+   - `incident_id = <UUID>` (unique per break-glass operation)
+   - `tenant_id = <UUID>` (the specific tenant being accessed; absent = scope-violation denied)
+   - `affected_data_classes = <comma_separated>` (restricts which data classes can be decrypted)
+   - `expires_at = <RFC3339_timestamp_at_most_4h_from_now>` (hard expiry)
+
+3. **CMK key policy break-glass condition (R1 HIGH-1 closure):**
+
+```json
+{
+  "Sid": "AllowBreakGlassDecryptScopedAndExpiring",
+  "Effect": "Allow",
+  "Principal": { "AWS": "arn:aws:iam::<account>:role/break-glass-operator" },
+  "Action": ["kms:Decrypt"],
+  "Resource": "*",
+  "Condition": {
+    "Bool": { "aws:MultiFactorAuthPresent": "true" },
+    "StringEquals": {
+      "aws:PrincipalTag/break_glass_approved": "true",
+      "aws:PrincipalTag/tenant_id": "${kms:EncryptionContext:tenant_id}"
+    },
+    "DateLessThan": { "aws:CurrentTime": "${aws:PrincipalTag/expires_at}" }
+  }
+}
+```
+
+4. **Explicit Deny for missing or expired tags:**
+
+```json
+{
+  "Sid": "DenyBreakGlassWithoutFullScope",
+  "Effect": "Deny",
+  "Principal": { "AWS": "arn:aws:iam::<account>:role/break-glass-operator" },
+  "Action": "kms:Decrypt",
+  "Resource": "*",
+  "Condition": {
+    "Null": {
+      "aws:PrincipalTag/incident_id": "true"
+    }
+  }
+}
+```
+
+5. **STS max session duration ceiling = 4 hours** (set on the `break-glass-operator` role itself); session-tag `expires_at` may be shorter but never longer. Both checks apply (max-session-duration as floor + expires_at as additional ceiling).
+
+6. **Approval-cryptographic-proof:** the approval-broker validates each approver's signature on the incident-id-bound approval token; signature verification uses approver-specific signing keys (CTO key + CO key + IC key, all HSM-backed). The broker refuses to assume the break-glass role without all 3 valid signatures.
+
+7. **Audit emission:** every break-glass decrypt emits Cat A `kms.break_glass_decrypt` event (P2 keyed by `'platform'`) + Cat A `kms.break_glass_decrypt_to_tenant_<tenant_id>` event (P1 mirror for the affected tenant). Failure to emit (audit-pipeline down) → decrypt rejected per FLOOR-020.
+
+**Test KMS.7b (R1 HIGH-1 closure):** break-glass attempt without complete session tags → IAM Deny + Cat A audit event. Test KMS.7c: break-glass attempt past expires_at → IAM Deny + Cat A audit. Test KMS.7d: approval-broker invocation without 3 valid approver signatures → broker refuses assume-role.
 
 ### 7.2 Break-glass time-bounding
 
@@ -255,12 +374,48 @@ During us-east-1 → us-west-2 failover:
 
 Per-tenant Cat A `kms.dr_decrypt_continuity_verified` event emitted at Cold-DR Step 14 (post-failover verification) confirming the invariant held for each tenant.
 
-### 8.3 Country-specific DR exception (residency_policy=us_only)
+### 8.3 Country-specific DR exception (residency_policy=us_only; R1 MED-2 closure: regulatory consultation as blocking artifact)
 
-For tenants with `kms_residency_policy = us_only`: DR failover from us-east-1 → us-west-2 violates the residency constraint. The Cold-DR Runbook handles this as a Step 8 ratifier-gated decision:
+For tenants with `kms_residency_policy = us_only`: DR failover from us-east-1 → us-west-2 violates the residency constraint. The Cold-DR Runbook handles this as a Step 8 ratifier-gated decision.
 
-1. Default: us_only tenants are EXCLUDED from automatic DR failover. Their tenant-routing remains pinned to us-east-1; if us-east-1 is unrecoverable, the tenant is offline until us-east-1 returns OR ratifier explicitly overrides the residency policy (with country-regulatory consultation).
-2. Operator override path: CTO + Compliance Officer + Incident Commander + Country Regulatory Counsel (4 named humans per the elevated residency-policy override) approve a temporary cross-residency operation via Cat A `kms.residency_policy_dr_override` event.
+**Default:** us_only tenants are EXCLUDED from automatic DR failover. Their tenant-routing remains pinned to us-east-1; if us-east-1 is unrecoverable, the tenant is offline until us-east-1 returns OR a formal regulatory-decision artifact authorizes a temporary cross-residency operation.
+
+**Regulatory-decision artifact contract (R1 MED-2 closure):** the override requires a structured, persisted decision record in `kms_residency_dr_override`:
+
+```sql
+CREATE TABLE kms_residency_dr_override (
+    id UUID PRIMARY KEY,
+    tenant_id tenant_id_t NOT NULL,
+    country_of_care TEXT NOT NULL,
+    incident_id UUID NOT NULL,
+    legal_basis TEXT NOT NULL,                     -- e.g., "Ghana Data Protection Act Section 60 emergency clause"
+    consultation_artifact_id UUID NOT NULL,        -- References country_regulatory_consultation table; legal-opinion document on file
+    consultation_artifact_signed_by TEXT NOT NULL, -- Counsel name + bar membership
+    consultation_artifact_at TIMESTAMPTZ NOT NULL,
+    permitted_data_classes TEXT[] NOT NULL,        -- Restricts which data classes can decrypt outside residency (e.g., {pii_demographic} but NOT pii_sensitive_clinical)
+    decision_outcome TEXT NOT NULL,                -- 'allow' OR 'deny'; if deny, the tenant remains offline
+    expires_at TIMESTAMPTZ NOT NULL,               -- Hard ceiling; no implicit renewal
+    authorized_by_cto UUID NOT NULL,
+    authorized_by_compliance UUID NOT NULL,
+    authorized_by_incident_commander UUID NOT NULL,
+    authorized_by_regulatory_counsel UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+**Decision states:**
+
+- **`allow`:** the override is active; tenant's KMS-decrypt operations succeed against us-west-2 within `permitted_data_classes` until `expires_at`. After expiry: no automatic renewal; tenant returns to us_only posture.
+- **`deny`:** the consultation explicitly denied cross-residency. Tenant REMAINS OFFLINE; no decrypt against us-west-2. Cat A `kms.residency_policy_dr_denied` event emitted.
+- **`absent` (no record):** equivalent to `deny` — tenant remains offline.
+
+**KMS-side enforcement:** the canonical us_only-decrypt SECURITY DEFINER procedure checks the decision record:
+1. SELECT current `kms_residency_dr_override` WHERE `tenant_id = $1 AND now() <= expires_at AND decision_outcome = 'allow'`.
+2. Verify the requested `data_class ∈ permitted_data_classes`.
+3. Verify all 4 named authorizers are present.
+4. If any check fails: decrypt rejected with Cat A audit event.
+
+**Test KMS.10b (R1 MED-2 closure):** override with missing consultation_artifact_id → decrypt rejected. Test KMS.10c: override with `decision_outcome='deny'` → tenant offline; decrypt rejected. Test KMS.10d: override past `expires_at` → decrypt rejected; tenant returns to us_only posture.
 
 ---
 
@@ -295,10 +450,30 @@ For tenants with `kms_residency_policy = us_only`: DR failover from us-east-1 �
 | Test KMS.13 | `tools/static-analyzer/tests/kms-encryption-context.test.ts` | `static-analyzer` | KMS encrypt/decrypt call missing canonical encryption context (tenant_id + data_class) → static-analyzer rule TLC-KMS-001 fails build | §4.2 |
 | Test KMS.14 | `tools/static-analyzer/tests/kms-cmk-arn-binding.test.ts` | `static-analyzer` | Service-role decrypt invocation with hardcoded CMK ARN (instead of `tenant.cmk_arn` lookup) → rule TLC-KMS-002 fails | §2.3 |
 
+**Additional tests added per R1 closures:**
+
+| Test ID | File location | CI job | Verifies | Section |
+|---|---|---|---|---|
+| Test KMS.15 | `apps/api-server/__integration__/kms/sts_session_tag_binding.test.ts` | `integration-kms` | Confused-deputy simulation: app sets `app.tenant_id = tenant_A`, attempts to assume `tenant-<tenant_B>-service` role → STS denies with tenant_id session-tag mismatch (R1 HIGH-3) | §4.3 |
+| Test KMS.16 | `infrastructure/policy-as-code/tests/key_policy_drift.test.ts` | `policy-as-code` | Daily KMS replica-policy drift check: effective key policy on us-west-2 replica matches us-east-1 primary per canonical IaC artifact (R1 HIGH-2) | §3.1 |
+| Test KMS.17 | `apps/api-server/__integration__/kms/pre_failover_canary.test.ts` | `integration-kms` | Pre-failover canary decrypt against us-west-2 succeeds per tenant; failure blocks that tenant from failover (R1 HIGH-2) | §3.1, §8 |
+| Test KMS.7b | `apps/api-server/__integration__/kms/break_glass_missing_tags.test.ts` | `integration-kms` | Break-glass attempt without complete session tags (missing incident_id OR tenant_id OR expires_at) → STS-or-IAM Deny (R1 HIGH-1) | §7.1 |
+| Test KMS.7c | `apps/api-server/__integration__/kms/break_glass_past_expiry.test.ts` | `integration-kms` | Break-glass attempt past expires_at → STS-or-IAM Deny + Cat A audit (R1 HIGH-1) | §7.1 |
+| Test KMS.7d | `apps/api-server/__integration__/kms/break_glass_signature_check.test.ts` | `integration-kms` | Approval-broker invocation without 3 valid approver HSM signatures → broker refuses sts:AssumeRole (R1 HIGH-1) | §7.1 |
+| Test KMS.5b | `apps/api-server/__integration__/kms/dek_versioned_reads.test.ts` | `integration-kms` | Mixed old + new DEK rows; reads on both succeed via dek_version_id dispatch (R1 MED-1) | §6.4 |
+| Test KMS.5c | `apps/api-server/__integration__/kms/dek_rotation_interrupted_reads.test.ts` | `integration-kms` | Rotation interrupted; readers continue using old DEK on un-rotated rows; resumption completes without double-rotation (R1 MED-1) | §6.4 |
+| Test KMS.5d | `apps/api-server/__integration__/kms/dek_rotation_dr_failover.test.ts` | `integration-kms` | Rotation interrupted by DR failover; rotation pauses; us-west-2 reads continue with mixed DEK state (R1 MED-1) | §6.4 |
+| Test KMS.10b | `apps/api-server/__integration__/kms/residency_override_missing_consultation.test.ts` | `integration-kms` | Override with missing consultation_artifact_id → decrypt rejected (R1 MED-2) | §8.3 |
+| Test KMS.10c | `apps/api-server/__integration__/kms/residency_override_denied.test.ts` | `integration-kms` | Override with decision_outcome='deny' → tenant offline; decrypt rejected (R1 MED-2) | §8.3 |
+| Test KMS.10d | `apps/api-server/__integration__/kms/residency_override_expired.test.ts` | `integration-kms` | Override past expires_at → decrypt rejected; tenant returns to us_only posture (R1 MED-2) | §8.3 |
+
 **Static-analyzer rule IDs registered:**
 - `TLC-KMS-001` — KMS encrypt/decrypt call missing canonical encryption context.
 - `TLC-KMS-002` — Service-role decrypt invocation with hardcoded CMK ARN (must use per-tenant CMK ARN lookup).
 - `TLC-KMS-003` — Application code attempting to set `break_glass_authorized` encryption context flag directly (must use canonical break-glass operator tooling).
+- `TLC-KMS-004` — Code path retiring/purging a DEK from the keyring without verifying ALL rows under that tenant + data_class have `dek_version_id != that_version` (R1 MED-1).
+- `TLC-KMS-005` — IaC policy artifact (Terraform/CDK) missing the canonical break-glass Deny block OR the canonical tenant-role STS-tag binding (policy-as-code rule; R1 HIGH-1 + HIGH-3).
+- `TLC-KMS-006` — IaC policy artifact for us-east-1 CMK + us-west-2 CMK replica diverging (drift-blocking pre-merge; R1 HIGH-2).
 
 ---
 
@@ -319,6 +494,22 @@ For tenants with `kms_residency_policy = us_only`: DR failover from us-east-1 �
 ## 12. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
+
+**v0.1 R1 closure 2026-05-19:** 3 HIGH + 3 MED findings closed inline:
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | HIGH-1 break-glass dual-control + 4h limit not IAM-enforced (only procedural); HIGH-2 DR continuity assumed shared policy but operational policy may drift; HIGH-3 tenant role assumption not bound to request tenant via STS session tags; MED-1 DEK rotation lacked versioned-read semantics; MED-2 residency_policy=us_only override not modeled as blocking regulatory artifact; MED-3 tests missed policy-as-code surfaces | All 6 closed inline |
+
+**R1 closure pattern recap:**
+- HIGH-1: §7.1 rewritten with IAM-enforced break-glass: approval-broker role + STS session tags (`break_glass_approved`, `incident_id`, `tenant_id`, `affected_data_classes`, `expires_at`) + CMK key-policy conditions checking tags + Explicit Deny for missing tags + STS max-session-duration 4h + HSM-backed approval-cryptographic-proof for CTO/CO/IC.
+- HIGH-2: §3.1 rewritten distinguishing cryptographic interoperability (multi-region shared key material) from operational accessibility (region-specific key policy); canonical policy-as-code via shared IaC artifact + daily drift detection + pre-failover canary decrypts + Cold-DR Step 7 hard gate.
+- HIGH-3: §4.3 added end-to-end binding chain: middleware-GUC → STS AssumeRole with session-tag tenant_id → CMK key-policy `aws:PrincipalTag/tenant_id = kms:EncryptionContext:tenant_id` equality; confused-deputy denied at STS.
+- MED-1: §6.4 added versioned-read semantics with per-row `dek_version_id` + `ai_kms_dek_keyring` keyring table + 90-day post-retirement retention + reader fallback by ciphertext metadata + DR-failover-during-rotation pause semantics.
+- MED-2: §8.3 added `kms_residency_dr_override` structured decision record with country + legal basis + consultation artifact ID + signed counsel + permitted data classes + decision outcome + expires_at + 4 named authorizers; KMS-side enforcement via SECURITY DEFINER procedure.
+- MED-3: 12 additional tests added (KMS.15, KMS.16, KMS.17, KMS.7b/c/d, KMS.5b/c/d, KMS.10b/c/d) + 3 new static-analyzer rules (TLC-KMS-004/005/006) including policy-as-code IaC drift detection.
+
+No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. 7 known OQs (§9) remain ratifier-targetable.
 
 ---
 
