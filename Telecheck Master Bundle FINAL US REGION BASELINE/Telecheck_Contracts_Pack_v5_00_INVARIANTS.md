@@ -252,20 +252,26 @@ The audit chain MUST be queryable by ethics review boards, regulators, and the r
 
 ### I-032 · Tenant-GUC equality guard on SECURITY DEFINER procedures with actor-tenant parameters
 
-Any `SECURITY DEFINER` procedure that accepts an actor-tenant parameter (`p_tenant_id` or any equivalently-named parameter holding the caller's authenticated tenant identifier) MUST reject the call where `p_tenant_id` IS DISTINCT FROM `current_setting('app.tenant_id', true)` BEFORE performing any data mutation, idempotency lookup, advisory-lock acquisition, or state read.
+Any `SECURITY DEFINER` procedure that accepts an actor-tenant parameter (`p_tenant_id` or any equivalently-named parameter holding the caller's authenticated tenant identifier) MUST reject the call BEFORE performing any data mutation, idempotency lookup, advisory-lock acquisition, or state read.
 
-**Rejection contract.**
+The check has two failure modes; the procedure's response differs per mode:
 
-- The rejection MUST be **step 0** of the procedure's validation sequence (it precedes all other validation steps including the existing auth-FIRST patterns).
-- The rejection MUST use the canonical rejection code `tenant_guc_mismatch`.
-- The procedure MUST return the rejection tuple WITHOUT raising a SQL exception (the application call site needs to receive structured rejection data so it can emit the canonical audit event + P0 alert; raising would abort the application transaction prematurely).
+- **Mode 1 — Missing GUC (RAISE; environmental failure outside structured-rejection scope):** If `current_setting('app.tenant_id', true)` IS NULL (the session-bound GUC was never set; this indicates middleware misconfiguration or an unauthenticated call path that bypassed the canonical SI-017 authContextPlugin contract), the procedure MUST `RAISE EXCEPTION 'I-032: app.tenant_id GUC not set on connection; SI-017 authContextPlugin contract violated'` and abort the application transaction. This mode is treated as an environmental failure at a layer below the procedure's structured-rejection contract — no tenant-scoped audit envelope is constructible without a tenant identifier, and no canonical platform-scope audit-chain partition exists at present (any proposed platform-scope partition tier is an audit-chain primitive extension requiring ratifier-quorum review under a separate SI). Operational response: application middleware catches the SQL exception and routes the failure to the platform error stream + P0 ops alert with sufficient context (procedure name, session_id, account_id, client_ip, user_agent, pg_backend_pid). I-003 audit-completeness is preserved at the error-stream / ops-alert layer; this is the canonical-model's existing fallback path for environmental failures that occur before tenant context can be established.
+- **Mode 2 — Mismatch (the structured-rejection case I-032 is named for):** If the GUC is non-NULL AND `p_tenant_id` IS DISTINCT FROM `current_setting('app.tenant_id', true)`, the procedure MUST reject with the canonical rejection code `tenant_guc_mismatch` (structured rejection tuple; no SQL exception). The application call site receives the rejection tuple and emits the `security.security_definer_tenant_guc_mismatch` Cat B ELEVATED audit event at SI-018 P2 partition keyed on the non-NULL GUC value (as documented below).
 
-**Audit-event emission contract.**
+**Rejection contract (Mode 2 only; Mode 1 raises and is handled by error-stream middleware).**
 
-- The application call site (NOT the procedure) MUST emit a Cat B audit event with `action_id = 'security.security_definer_tenant_guc_mismatch'` immediately after receiving the rejection tuple, BEFORE responding to the upstream request.
-- The audit event envelope MUST use `tenant_id = current_setting('app.tenant_id', true)` (the GUC-side value; NOT the caller-supplied `p_tenant_id`). Placing the audit signal under the session's actually-active tenant rather than the claimed-tenant prevents attacker-controlled partition placement — the legitimate tenant whose session/GUC is in use sees the mismatch in their audit chain; the attacker-claimed tenant does not.
+- The Mode 2 rejection MUST be **step 0** of the procedure's validation sequence (it precedes all other validation steps including the existing auth-FIRST patterns). The Mode 1 RAISE precedes Mode 2 check (NULL check first; if non-NULL, then mismatch check).
+- The Mode 2 rejection MUST use the canonical rejection code `tenant_guc_mismatch`.
+- The Mode 2 procedure MUST return the rejection tuple WITHOUT raising a SQL exception (the application call site needs to receive structured rejection data so it can emit the canonical audit event + P0 alert; raising would abort the application transaction prematurely and prevent structured downstream handling).
+
+**Audit-event emission contract (Mode 2 only).**
+
+- The application call site (NOT the procedure) MUST emit a Cat B audit event with `action_id = 'security.security_definer_tenant_guc_mismatch'` immediately after receiving the Mode 2 rejection tuple, BEFORE responding to the upstream request.
+- The audit event envelope MUST use `tenant_id = current_setting('app.tenant_id', true)` (the GUC-side value, non-NULL in Mode 2 by definition; NOT the caller-supplied `p_tenant_id`). Placing the audit signal under the session's actually-active tenant rather than the claimed-tenant prevents attacker-controlled partition placement — the legitimate tenant whose session/GUC is in use sees the mismatch in their audit chain; the attacker-claimed tenant does not.
 - The audit event MUST be partitioned per **I-027 + the SI-018 canonical AUDIT_EVENTS partition rule** at P2 (tenant-governance): `chain_partition_key = SHA-256("GENESIS:TENANT:<current_setting('app.tenant_id', true)>")`.
 - The audit event severity MUST be ELEVATED (mismatch is an attack-signal-class event, not routine).
+- On Mode 2 rejection, the application MUST raise a P0 ops alert in addition to emitting the audit event.
 
 **Operational contract.**
 
@@ -279,7 +285,22 @@ Any `SECURITY DEFINER` procedure that accepts an actor-tenant parameter (`p_tena
 
 **Why.** SECURITY DEFINER procedures bypass RLS via PostgreSQL `SECURITY DEFINER` privilege. Tenant-isolation enforcement therefore moves from RLS-layer (where the GUC enforces automatically via row-level policies) to procedure-layer (where the procedure must enforce explicitly). The canonical SI-017 authContextPlugin contract treats application middleware as the single trust anchor for both `SET LOCAL app.tenant_id` and procedure actor parameters. I-032 codifies the parallel-trust-path equality as a DB-layer MUST, eliminating the class of "middleware bug or confused-deputy path" failure mode that Codex flagged on PR #17 P-019a R1 (review-mpcmsk90-zopinx) and PR #18 P-021a R3 (review-mpcn6wag-llvapb). Per Decision Memo `Telecheck_v1_10_PRD_Update/Decision-Memo-Cross-PR-OQ3-Trust-Boundary-Equality-Guard-Option-A-Adopted-2026-05-19.md`: clinical-decision-recording + KMS-rotation + AI-workflow-execution + sync-session-escalation surfaces are safety-critical enough to justify the slim defense-in-depth cost.
 
-**Verification.** Each amended SECURITY DEFINER procedure ships with a regression test asserting: (a) matching `p_tenant_id`/GUC call succeeds; (b) mismatching call returns `tenant_guc_mismatch` rejection tuple WITHOUT mutating any row; (c) application call site emits exactly one `security.security_definer_tenant_guc_mismatch` Cat B audit event partitioned per SI-018 P2 keyed on the GUC value (NOT the claim value); (d) P0 ops alert raised exactly once per mismatch.
+**Verification.** Each amended SECURITY DEFINER procedure ships with regression tests asserting both failure modes:
+
+**Mode 2 (mismatch — structured rejection) tests:**
+- (M2.1) Matching `p_tenant_id` = `current_setting('app.tenant_id')` call (both non-NULL, equal) succeeds (proceeds past STEP 0).
+- (M2.2) Mismatching call with both values non-NULL but different returns `tenant_guc_mismatch` rejection tuple WITHOUT mutating any row.
+- (M2.3) Application call site emits exactly one `security.security_definer_tenant_guc_mismatch` Cat B audit event partitioned per SI-018 P2 keyed on the non-NULL GUC value (NOT the claim value).
+- (M2.4) P0 ops alert raised exactly once per Mode 2 rejection.
+
+**Mode 1 (missing GUC — RAISE + error-stream handoff) tests:**
+- (M1.1) Call with `SET LOCAL app.tenant_id` never issued (or explicitly `RESET app.tenant_id` before the call) causes the procedure to RAISE a SQL exception WITHOUT mutating any row.
+- (M1.2) Application middleware catches the SQL exception and routes the failure to the platform error stream + P0 ops alert with sufficient context (procedure_name, session_id, account_id, client_ip, user_agent, pg_backend_pid).
+- (M1.3) NO `security.security_definer_tenant_guc_mismatch` Cat B audit event is emitted on Mode 1 (this is the mutual-exclusion property: Mode 1 and Mode 2 are non-overlapping by the GUC's NULL/non-NULL state).
+- (M1.4) Mode 1 occurrences in production are escalated to ratifier-quorum review for potential SI authoring a canonical platform-scope audit-chain partition tier — current behavior (RAISE + error-stream) is the canonical-model fallback path until/unless such a partition is ratified.
+
+**Mode mutual-exclusion test:**
+- (M.X) Mode 1 and Mode 2 are mutually exclusive by GUC state: NULL GUC → Mode 1; non-NULL GUC with mismatched `p_tenant_id` → Mode 2. A single failed call exercises exactly one mode.
 
 **Related.** I-023 (3-layer tenant-isolation enforcement); SI-017 (authContextPlugin contract — the trust anchor I-032 is defense-in-depth for); SI-018 (audit-chain partition rule — the partition contract I-032's audit event uses); P-018a/P-019a/P-021a (the supersession entries that apply I-032 to each affected procedure).
 

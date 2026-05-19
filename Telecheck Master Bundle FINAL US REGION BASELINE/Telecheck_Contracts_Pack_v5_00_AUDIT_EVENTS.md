@@ -55,10 +55,11 @@ Every audit event contains:
   "country_of_care":   "<ISO 3166-1 alpha-2>",
   "break_glass":       { "session_id": "...", "reason": "...", "authorized_until": "...", "privacy_officer_review_status": "pending | reviewed" } | null,
   "hash_chain": {
-    "partition":       "<partition key = target_patient_id>",
-    "sequence_number": "<monotonically increasing within partition>",
-    "previous_hash":   "<SHA-256 of previous record in this partition>",
-    "record_hash":     "<SHA-256 of this record (all fields except hash_chain)>"
+    "partition_tier":      "<1 (P1 patient-bound) | 2 (P2 tenant-governance)>",
+    "chain_partition_key": "<SHA-256('GENESIS:PATIENT:<target_patient_id>') if partition_tier=1; SHA-256('GENESIS:TENANT:<tenant_id>') if partition_tier=2 — see §Hash chain §Partitioning for the canonical two-tier hybrid SI-018 rule>",
+    "sequence_number":     "<monotonically increasing within partition>",
+    "previous_hash":       "<SHA-256 of previous record in this partition>",
+    "record_hash":         "<SHA-256 of this record (all fields except hash_chain)>"
   }
 }
 ```
@@ -189,7 +190,7 @@ Like all Category A records, rejection events are tenant-scoped per `tenant_id`,
 | `incident_opened` | operator | incident_id, severity, affected_services[], patient_impact_estimate |
 | `incident_resolved` | operator | incident_id, resolution_detail, root_cause, preventive_actions[] |
 | `signal_enforcement_trigger` | system | signal_type, threshold_exceeded, enforcement_action_taken |
-| `security.security_definer_tenant_guc_mismatch` (added v5.5 2026-05-19 per I-032 ratification; Cat B, **ELEVATED severity**) | application call site (NOT the procedure) | procedure_name, **p_tenant_id** (caller-supplied tenant parameter), **app_tenant_id** (`current_setting('app.tenant_id', true)` value), session_id, p_account_id, rejected_at, pg_backend_pid. Envelope `tenant_id` = `current_setting('app.tenant_id', true)` (the GUC-side value, NOT the claim-side `p_tenant_id` — places audit signal under session's actually-active tenant; prevents attacker-controlled partition placement per I-032 §"Audit-event emission contract"). Partition tier **P2** keyed on `SHA-256("GENESIS:TENANT:<current_setting('app.tenant_id', true)>")`. Trigger: a SECURITY DEFINER procedure subject to I-032 (Tenant-GUC equality guard) rejected a call where `p_tenant_id IS DISTINCT FROM current_setting('app.tenant_id', true)` — indicates middleware bug or confused-deputy path; system bug, not user error. P0 ops alert MUST be raised alongside. |
+| `security.security_definer_tenant_guc_mismatch` (added v5.5 2026-05-19 per I-032 Mode 2 ratification; Cat B, **ELEVATED severity**) | application call site (NOT the procedure) | procedure_name, **p_tenant_id** (caller-supplied tenant parameter), **app_tenant_id** (`current_setting('app.tenant_id', true)` value; non-NULL in Mode 2 by definition), session_id, p_account_id, rejected_at, pg_backend_pid. Envelope `tenant_id` = `current_setting('app.tenant_id', true)` (the GUC-side value, NOT the claim-side `p_tenant_id` — places audit signal under session's actually-active tenant; prevents attacker-controlled partition placement per I-032 §"Audit-event emission contract"). Partition tier **P2** keyed on `SHA-256("GENESIS:TENANT:<current_setting('app.tenant_id', true)>")`. Trigger: I-032 Mode 2 — both `p_tenant_id` and the GUC are non-NULL but `p_tenant_id IS DISTINCT FROM current_setting('app.tenant_id', true)` — indicates middleware bug or confused-deputy path; system bug, not user error. P0 ops alert MUST be raised alongside. **Mode 1 (missing GUC) does NOT emit this event** — Mode 1 RAISEs a SQL exception and is handled at the application error-stream layer per I-032 §"Audit-event emission contract" (Mode 1 audit treatment is deferred to a future SI ratifying a canonical platform-scope audit-chain partition tier). |
 | `identity.session_liveness_check_failed` (added v5.5 2026-05-19 per SI-017 ratification Sub-decision 4; Cat B, STANDARD severity) | system (authContextPlugin) | session_id, account_id, tenant_id_claimed, failure_reason (one of: `revoked`, `expired`, `missing`, `account_disabled`), checked_at, pg_backend_pid, client_ip, user_agent. Envelope `tenant_id` = `tenant_id_claimed` from JWT (session row may not exist — `failure_reason = 'missing'` case). Partition tier **P2** keyed on `SHA-256("GENESIS:TENANT:<tenant_id_claimed>")`. **Mismatch path exclusion:** this event is NOT emitted when JWT verifies but `auth.sessions.tenant_id IS DISTINCT FROM tenant_id_claimed` — that scenario emits the Cat A `identity.session_jwt_tenant_id_mismatch` event instead (mutually exclusive per SI-017 Sub-decision 4.5). |
 
 #### Research events (added v5.2 per ADR-028)
@@ -290,6 +291,8 @@ chain_partition_key = SHA-256("GENESIS:TENANT:<tenant_id>")
 ```
 
 Per-event partition tier is enumerated for each action ID in the catalog below. An implementation that emits an audit row in the wrong partition fails the per-event regression test.
+
+**Open question deferred to a separate SI:** I-032 Mode 1 (missing GUC) failure mode RAISES a SQL exception and is handled at the application error-stream layer rather than emitting an audit row, because the canonical SI-018 two-tier hybrid does not extend to platform-scope events. If production Mode 1 frequency justifies a canonical platform-scope audit-chain partition tier, that is a separate audit-chain primitive requiring a new SI + ratifier-quorum review. Until such a partition is ratified, Mode 1 handling stays at the error-stream + P0 ops alert layer per I-032 §"Audit-event emission contract".
 
 **Determinism + I-027 preservation.** The partition is uniquely determined by the event's envelope (no caller choice; no application-state-derived routing). Append-only per I-027 is preserved — the partition rule does not allow rewriting historical partitions. P1 and P2 use independent hash chains; cross-partition linkage is NOT supported at envelope time (no `linked_events[]` field overload; cross-tenant or cross-patient correlation, where needed, is handled at query time).
 
