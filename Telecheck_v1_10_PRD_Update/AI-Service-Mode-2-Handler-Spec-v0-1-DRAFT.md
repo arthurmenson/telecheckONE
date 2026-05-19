@@ -348,15 +348,22 @@ Tokens are tenant-scoped; a token issued under tenant_A cannot resolve under ten
 
 ---
 
-## 8. Latency budget
+## 8. Latency budget (R3 closure: SLO vs lease-ceiling distinction)
 
-| Autonomy Level | p50 | p99 | Hard ceiling |
-|---|---|---|---|
-| L2 (admit → pending_patient_confirm) | 200ms | 1.5s | 5s |
-| L3 (admit → execute → pending_clinician_review) | 500ms | 5s | 30s |
-| L4 (admit → execute → completed) | 800ms | 10s | 60s |
+This section defines **service-level objective (SLO)** budgets — the expected and target latency for active handler execution. SLO ceilings are operational targets: exceeding them triggers SRE alerts (PagerDuty per SIEM §3) and quality-regression investigation. They are **distinct from the §3.2 execution-lease ceiling**, which is the absolute hard timeout (60 minutes) at which the runtime forcibly terminates the invocation.
 
-L4 ceiling is higher to accommodate complex multi-step protocol executions (e.g., GLP-1 titration involves multiple lookups + decision-tree evaluation).
+| Autonomy Level | p50 SLO | p99 SLO | SLO alerting ceiling | Lease-enforced hard timeout |
+|---|---|---|---|---|
+| L2 (admit → pending_patient_confirm) | 200ms | 1.5s | 5s (SLO breach alert) | 60min (lease expiry per §3.2) |
+| L3 (admit → execute → pending_clinician_review) | 500ms | 5s | 30s (SLO breach alert) | 60min (lease expiry per §3.2) |
+| L4 (admit → execute → completed) | 800ms | 10s | 60s (SLO breach alert) | 60min (lease expiry per §3.2) |
+
+**Two-tier semantics:**
+
+- **SLO breach (e.g., L4 active execution exceeding 60s):** the workflow continues running; an SRE alert fires; the SRE on-call investigates whether this is a transient or systemic latency regression. The workflow MAY still complete successfully within the lease ceiling.
+- **Lease-enforced hard timeout (60min):** the runtime forcibly terminates the invocation; Cat A `ai.mode2.invocation_lease_expired` event emitted; invocation transitions to `failed` with `failure_class = 'execution_lease_expired'` per §3.2.
+
+L4 SLO ceiling is higher than L2/L3 to accommodate complex multi-step protocol executions (e.g., GLP-1 titration involves multiple lookups + decision-tree evaluation). The lease ceiling at 60min provides a true backstop against runaway executions while allowing SLO-aware workloads to run long when justified (e.g., a multi-stage GLP-1 titration with external lab-data fetches).
 
 Per-stage breakdown for L4:
 - Handler resolution (registry lookup): 5-20ms.
@@ -480,6 +487,7 @@ No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honor
 | Round | Findings | Status |
 |---|---|---|
 | R2 | HIGH execution-lease vs pending-token-TTL timeout conflict | Closed inline by separating execution lease (handler-runtime; 60min) from pending-token TTL (human-review; 7 days); lease released on transition to pending_* state |
+| R3 | HIGH §3.2 60-min lease ceiling vs §8 30s/60s "hard ceiling" labels created internal contradiction (active execution would time out at §8 ceiling before lease expiry) | Closed inline: §8 ceilings re-labeled as SLO breach alerting thresholds (operational targets; SRE alert fires; workflow may still complete); §3.2 60-min lease is the absolute hard timeout (forcible termination). Two-tier semantics articulated. |
 
 ---
 
