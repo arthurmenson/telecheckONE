@@ -1,7 +1,8 @@
 # Cross-SI Publish-State OQ — Batched Ratifier Proposal
 
 **Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; Sprint 10 of autonomous 24h-loop work plan
+**Status:** RATIFIER-READY-WITH-KNOWN-OQs (post-R2 Codex iterate-to-asymptote close at §10 cadence boundary, 2026-05-19); Sprint 10 of autonomous 24h-loop work plan
+**Codex iteration trajectory:** R1 (2 HIGH + 2 MED) → R2 (1 HIGH + 2 MED). All 7 findings closed inline as in-scope correctness gaps in proposal accuracy / completeness; no architectural-judgment items closed inline (the canonical decision is preserved as the ratifier's authority). §10 cadence boundary applied at R2.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus Track 6 ratification-proposal deliverable)
 **Owner:** Evans (ratifier-quorum lead) + CDM owner (canonical schema authority)
 **Companion documents:** SI-015 MarketingCopy CDM Canonical Schema (Sprint 2); SI-016 AI Workflow Handler Registry (Sprint 3); SI-019 Med-Interaction Slice PRD v2.0 Implementation-Readiness Extension; P-021 SC3 procedure-side amendment (precedent for "transition log" pattern); SI-018 two-tier hybrid audit-chain partition rule (ratified 2026-05-19)
@@ -58,14 +59,23 @@ CREATE TABLE marketing_copy_transition (
     transitioned_by_user_id UUID NOT NULL,
     transition_reason TEXT NOT NULL,
     CONSTRAINT mc_transition_tenant_fk FOREIGN KEY (tenant_id, marketing_copy_id) REFERENCES marketing_copy(tenant_id, id),
-    -- Admissibility: at most one in-progress transition from a given state at a time
-    CONSTRAINT mc_transition_admissibility UNIQUE (tenant_id, marketing_copy_id, from_state, to_state, transition_idempotency_key),
-    -- Application-layer enforced via SECURITY DEFINER procedure:
-    --   At INSERT time, verify the entity's most-recent transition's to_state = NEW.from_state
-    --   (else raise "invalid from_state" error). This is the structural equivalent of Option B's
-    --   constrained UPDATE ROW_COUNT guard.
     CHECK (from_state IS NULL OR from_state != to_state)
 );
+
+-- Separate idempotency UNIQUE: same caller-supplied idempotency_key + same logical transition = single row.
+CREATE UNIQUE INDEX mc_transition_idempotency_uk
+    ON marketing_copy_transition (tenant_id, marketing_copy_id, transition_idempotency_key);
+
+-- Single-winner admissibility per R2 HIGH-1 closure: at most ONE transition from a given (entity, from_state) ever.
+-- Partial UNIQUE index with explicit NULL handling: COALESCE(from_state, '__initial__') makes the
+-- "initial admission" (from_state IS NULL) participate in uniqueness alongside named from_state values.
+CREATE UNIQUE INDEX mc_transition_single_winner_uk
+    ON marketing_copy_transition (tenant_id, marketing_copy_id, COALESCE(from_state, '__initial__'));
+
+-- The SECURITY DEFINER transition procedure additionally takes pg_advisory_xact_lock on
+-- (hash(tenant_id, marketing_copy_id)) to serialize transition attempts at the application boundary.
+-- This prevents two concurrent callers from both checking the most-recent-transition's to_state
+-- and then both INSERTing different new transitions from the same from_state.
 
 -- Current-state view derived at query time
 CREATE VIEW marketing_copy_state AS
@@ -87,7 +97,7 @@ FROM marketing_copy mc;
 - **Procedure-side STEP 0:** standard I-032 tenant-GUC guard; no UPDATE permission required on the procedure's grants.
 - **Storage cost:** transition entity grows linearly with state-change count; one row per transition.
 - **Query complexity:** current-state lookup requires a subquery or view (small overhead).
-- **Race conditions on concurrent transitions:** none structurally — concurrent INSERTs produce two transition rows; the "actual" winner is the one with earlier `transitioned_at`; downstream consumers see both as historical.
+- **Race conditions on concurrent transitions (R2 MED-1 closure):** single-winner enforcement per the partial UNIQUE index `mc_transition_single_winner_uk` on `(tenant_id, marketing_copy_id, COALESCE(from_state, '__initial__'))`. Two concurrent callers attempting the same `(entity, from_state) → *` transition: one INSERT succeeds; the other fails with unique-constraint violation. The SECURITY DEFINER procedure additionally takes `pg_advisory_xact_lock(hash(tenant_id, marketing_copy_id))` to serialize transition attempts at the application boundary, preventing concurrent callers from both observing the same most-recent-transition's to_state and then both attempting INSERT (the lock ensures the second caller observes the first's already-committed row + can resolve the idempotency-or-error decision deterministically). This is the structural equivalent of Option B's row-level locking + ROW_COUNT=0 race-detection.
 
 **Existing precedent in canonical bundle:** Sprint 7 Cold-DR Runbook's three-state per-device obligation model (state-Q, state-P, state-N) follows this pattern. Sprint 9 AI Service Mode 1 handler's split-table immutable lifecycle (admission / detector_result / result) also follows this pattern. Both are R-N-ratifier-ready.
 
@@ -360,15 +370,28 @@ For each SI, after ratifier selects an option, the SI's author drafts the follow
 
 No architectural-judgment items closed inline; the proposal articulates the question + 3 options + working recommendations, and explicitly preserves the ratifier's authority over the canonical decision. CLAUDE.md hard-floor item 6 honored.
 
+**v0.1 R2 closure 2026-05-19:** 1 HIGH + 2 MED findings closed inline (R1 closures left residual gaps in Option A's admissibility constraint, race-safety property statement, and the OQ section / footer that still carried pre-R1 unilateral Option B framing).
+
+| Round | Findings | Status |
+|---|---|---|
+| R2 | HIGH-1 Option A admissibility constraint UNIQUE (tenant_id, marketing_copy_id, from_state, to_state, transition_idempotency_key) did NOT prevent two different transitions from the same from_state with different idempotency_keys; MED-1 Option A properties section still asserted "structural race safety" + timestamp-winner framing contradicting the partial-UNIQUE fix; MED-2 §8 OQs + document footer still carried pre-R1 unilateral Option B framing | All 3 closed inline |
+
+**R2 closure pattern recap:**
+- HIGH-1: split into two UNIQUE indexes — `mc_transition_idempotency_uk` on idempotency key (replay-safety) + `mc_transition_single_winner_uk` partial UNIQUE on `COALESCE(from_state, '__initial__')` (admissibility). Added pg_advisory_xact_lock requirement in the SECURITY DEFINER procedure for app-boundary serialization.
+- MED-1: race-condition property rewritten to single-winner enforcement via partial UNIQUE + advisory lock; structural equivalence to Option B's row-locking articulated; timestamp-winner framing removed.
+- MED-2: §8 meta-OQs + document footer updated to reflect per-SI evaluation + working-domain-analysis recommendations; no longer say "unilateral Option B"; footer marker now reflects RATIFIER-READY-WITH-KNOWN-OQs at R2 §10 cadence boundary.
+
+**Status at R2 close:** RATIFIER-READY-WITH-KNOWN-OQs per the §10 cadence commitment. The proposal is ratifier-targetable; the per-SI working recommendations are non-binding. CLAUDE.md hard-floor item 6 honored: 0 architectural-judgment items closed inline. The 4 meta-OQs (§8) remain ratifier-targetable.
+
 ---
 
 ## 8. Open questions for ratifier (meta-OQs on this proposal itself)
 
-1. **Meta-OQ1 — Is the decision binary, or should ratifier consider a Hybrid approach?** The recommendation here is Option B unilaterally; the ratifier may wish to consider Hybrid as a third option (per §5 voting shape).
-2. **Meta-OQ2 — Should the ratifier decision bind FUTURE SIs as canonical pattern, or only the three pending SIs?** Recommendation: bind future SIs as well to prevent pattern-drift.
-3. **Meta-OQ3 — Should the ratifier formally re-evaluate Sprint 7 + Sprint 9 specs that adopted Option A, for consistency with the canonical-pattern decision?** Recommendation: NO — the Sprint 7 + Sprint 9 specs are on different domains (event-flow rather than status-bearing); they remain on Option A.
-4. **Meta-OQ4 — Codex pre-ratification round target for this proposal.** Recommendation: 2-3 rounds (proposal review; verifies the option comparison is balanced + the recommendation is defensible).
+1. **Meta-OQ1 — Per-SI decision vs binary corpus-wide rule.** Per the R1+R2 revisions, this proposal NO LONGER recommends a unilateral Option B; instead it recommends per-SI evaluation with working domain-analysis recommendations (SI-015 Option B; SI-016 Option C; SI-019 Option B). The ratifier may choose any A/B/C per SI OR override the working recommendation. The Hybrid (per-SI) outcome is the primary recommended ratifier action.
+2. **Meta-OQ2 — Should the ratifier decision bind FUTURE SIs as canonical pattern, or only the three pending SIs?** Working recommendation: per-SI evaluation continues for future SIs; this ceremony's decisions set precedent but not corpus-wide binding rule. The ratifier may override and bind future SIs if desired.
+3. **Meta-OQ3 — Should the ratifier formally re-evaluate Sprint 7 + Sprint 9 specs that adopted Option A, for consistency with the canonical-pattern decision?** Working recommendation: NO — the Sprint 7 (Cold-DR three-state per-device obligation model) + Sprint 9 (AI Service Mode 1 split-table lifecycle) specs are on event-flow domains, not status-bearing entity domains; the pattern-domain alignment differs. The ratifier may override.
+4. **Meta-OQ4 — Codex pre-ratification round target for this proposal.** Working recommendation: 2-3 rounds (proposal review). At R2 §10 cadence boundary marker, this proposal will be marked RATIFIER-READY-WITH-KNOWN-OQs.
 
 ---
 
-— Claude (Opus 4.7, 1M context), Cross-SI Publish-State OQ Batched Ratifier Proposal v0.1 DRAFT authored 2026-05-19 under "continue for 24 hrs" autonomous-work authorization. Sprint 10 of the 24h-loop work plan. Track 6 spec-corpus ratification-proposal deliverable. Resolves SI-015 OQ4 + SI-016 OQ1 + SI-019 OQ7 with a single ratifier decision. Recommendation: Option B (constrained UPDATE + transition log, per P-021 SC3 precedent). Ratifier-targetable independent of Sprint 11+ work.
+— Claude (Opus 4.7, 1M context), Cross-SI Publish-State OQ Batched Ratifier Proposal v0.1 RATIFIER-READY-WITH-KNOWN-OQs at R2 §10 cadence boundary 2026-05-19 under "continue for 24 hrs" autonomous-work authorization. Sprint 10 of the 24h-loop work plan. Track 6 spec-corpus ratification-proposal deliverable. Surfaces 3 options (A/B/C) per SI; recommends per-SI evaluation with working domain-analysis recommendations (SI-015 Option B; SI-016 Option C; SI-019 Option B); explicitly preserves ratifier authority over canonical decisions. Ratifier-targetable independent of Sprint 11+ work.
