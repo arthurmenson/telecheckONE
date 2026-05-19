@@ -212,7 +212,13 @@ Drill failures trigger P0 incident review + remediation tracking. The gating eff
   - DR-failover replay: in-flight tenant-A data does not appear in tenant-B post-cutover.
   - Analytics/reporting: tenant-A analytics query cannot access tenant-B data even under aggregation paths.
   Test artifact: `cross-tenant-negative-test-suite-tenant-<id>.report.md` filed.
-- [ ] **Cross-tenant data-mixing canary.** A continuous canary process inserts test markers into tenant-A's data + queries tenant-B periodically (and vice versa); markers MUST NOT appear in opposing tenant's results. Canary runs at 5-min cadence post-launch; alert fires if ANY marker appears cross-tenant.
+- [ ] **Cross-tenant data-mixing canary (R2 MED-1 closure: containment + TTL):** a continuous canary process inserts test markers into a dedicated `synthetic_canary` table per tenant + queries the opposing tenant periodically (and vice versa); markers MUST NOT appear in opposing tenant's results. **Containment guarantees:**
+  - **Synthetic-only:** the canary writes ONLY to `synthetic_canary` table, NEVER to any PHI table (patient / consult / medication_request / etc).
+  - **Exclusion-by-table:** the `synthetic_canary` table is explicitly excluded from clinical UIs, analytics queries, portability exports, retention sweeps, billing aggregation, audit-retention archival. The exclusion is enforced via dedicated boolean column `is_canary = true` on every row + a static-analyzer rule `TLC-OPS-001` that fails any code path reading from `synthetic_canary` outside the canary-monitor service.
+  - **TTL:** each canary marker row has `expires_at = now() + 30 min`; the canary cleanup worker deletes expired rows every 5 minutes (idempotent; safe under DR partition).
+  - **Synthetic-subject tagging:** every canary row carries `synthetic_subject_id` (NOT `patient_id`); the synthetic subjects are a separate ID space (`SYNTH-` UUID prefix) that does NOT collide with real patient_ids.
+  - **Audit:** canary writes emit Cat C `ops.canary_marker_inserted` (P2 keyed by tenant_id; sampled at 1%); canary cross-tenant detection of contamination emits Cat A `ops.tenant_isolation_violation_detected` (P2 keyed by 'platform'; immediate P0 alert).
+  - **Cadence:** 5-minute insert + cross-tenant query cadence post-launch; pause-on-deploy carve-out (canary pauses for the 15-min window around a deploy to avoid false positives from transient routing).
 
 **Per-tenant launch gate:** every per-tenant sub-checklist item MUST be green; any red item blocks tenant go-live; Compliance Officer + SRE Lead + Country Lead joint sign-off required per tenant launch ceremony.
 
@@ -302,6 +308,16 @@ Drill failures trigger P0 incident review + remediation tracking. The gating eff
 - MED-2: chaos-drill bounded-blast-radius controls: synthetic-patient isolation + production-notification suppression + cost budget ($5/drill) + dedicated chaos_drill rate-limit bucket + business-hours-only + dedicated `chaos_drill_alerts` PagerDuty rotation (not live on-call) + 15-min wall-clock auto-abort.
 
 No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. 6 known OQs remain ratifier-targetable.
+
+**v0.1 R2 closure 2026-05-19:** 1 HIGH + 1 MED closed inline:
+
+| Round | Findings | Status |
+|---|---|---|
+| R2 | HIGH-1 evidence-rubric catalog referenced but not in branch diff (R1 MED-1 closure incomplete); MED-1 cross-tenant canary lacks containment (could pollute live tenant data) | Both closed inline |
+
+**R2 closure pattern recap:**
+- HIGH-1: Created `Telecheck_v1_10_PRD_Update/v1-6-evidence-rubric-catalog.md` v0.1 DRAFT as a companion artifact in this branch; catalog includes full rubric for all 22 items (14 infrastructure + 6 security + 12 per-tenant). Referenced from amendment §3 + §4 + §7.
+- MED-1: Canary containment articulated — dedicated `synthetic_canary` table (NOT PHI tables); `is_canary=true` flag; static-analyzer rule TLC-OPS-001 forbids reads outside canary-monitor service; 30-min TTL with idempotent cleanup; synthetic-subject IDs in separate `SYNTH-` UUID space; exclusion from clinical UIs / analytics / exports / retention / billing / audit-archival; 1% sampled audit + immediate P0 on contamination detection.
 
 ---
 
