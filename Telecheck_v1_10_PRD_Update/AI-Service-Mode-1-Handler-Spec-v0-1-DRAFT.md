@@ -144,11 +144,26 @@ Per Contracts Pack v5.2 AUDIT_EVENTS + ADR-029 WORKLOAD_TAXONOMY, every Mode 1 t
 Per Contracts Pack v5.2 AUDIT_EVENTS "Audit-emission failure handling":
 
 - **Cat A events** (crisis_signal_emitted, security-critical): if audit emission fails, the Mode 1 turn MUST fail with 503 `mode1.internal_error`; the response is NOT emitted. The crisis-detection-always-on floor requires the audit trail to be durable; bare suppression is forbidden per I-027.
-- **Cat C events** (sampled high-volume): if audit emission fails, the event is dropped (sampled high-volume contract permits this); but the turn proceeds. The drop is itself counted in a Cat B `audit.cat_c_drop_observed` event aggregated per minute per tenant.
+- **Cat C events** (sampled high-volume): if audit emission fails, the event is dropped (sampled high-volume contract permits this); but the turn proceeds. The drop is itself counted in `audit.cat_c_drop_observed` events aggregated per tenant per minute (classification per §3.3 below; R1 HIGH-2 closure clarifies the partition routing).
 
-### 3.3 Audit partition key routing per SI-018
+### 3.3 Audit partition key routing per SI-018 (R1 HIGH-2 closure: explicit per-event classification)
 
-All Mode 1 audit events route to P1 (patient-bound partition) keyed by patient_id (= user_id), per SI-018 ratified partition rule. There are no Mode 1 audit events that route to P2 — Mode 1 is patient-conversation; no platform-governance events are emitted from the Mode 1 handler. (Operator + admin AI tooling, if added later, would route to P2 separately.)
+| Event | Cat | Partition | Key |
+|---|---|---|---|
+| `ai.mode1.turn_admitted` | C | P1 | patient_id |
+| `ai.mode1.crisis_detector_invoked` | C | P1 | patient_id |
+| `ai.mode1.crisis_signal_emitted` | A | P1 | patient_id |
+| `ai.mode1.llm_invoked` | C | P1 | patient_id |
+| `ai.mode1.turn_completed` | C | P1 | patient_id |
+| `ai.mode1.turn_failed` | C | P1 | patient_id |
+| `ai.mode1.invariant_violation_detector_ordering` | A | P1 | patient_id |
+| `ai.mode1.crisis_detector_failed` | A | P1 | patient_id |
+| `ai.mode1.mode2_handoff_proposed` | B | P2 | tenant_id |
+| **`audit.cat_c_drop_observed`** | B | P2 | tenant_id (aggregated per minute) |
+
+**Note on the "all Mode 1 events route to P1" prior claim (now corrected):** the prior draft said all Mode 1 events route to P1; this was incorrect for the two Cat B events (`mode2_handoff_proposed` and the `cat_c_drop_observed` aggregate). Per SI-018 ratified partition rule, non-patient-bound governance + observability events route to P2 keyed by tenant_id. The Mode 1 handler emits **both** P1 patient-bound events AND P2 governance/observability events — this is consistent with SI-018 (Mode 1's "handler" classification has both per-turn patient activity AND per-tenant aggregates).
+
+**Emitter for `audit.cat_c_drop_observed`:** the drop is observed by the audit-pipeline subsystem (NOT the Mode 1 handler directly). The audit pipeline aggregates drops per (tenant_id, minute_bucket) and emits one Cat B P2 event per (tenant_id, minute_bucket) at minute-rollover. Sampling: not sampled (every drop event is recorded as a per-minute aggregate; if no drops occurred in a minute, no event is emitted).
 
 ---
 
@@ -166,9 +181,21 @@ Per I-019 platform-floor invariant (preserved at v1.0), every Mode 1 turn MUST i
    b. Set `crisis_signal` in the response with the appropriate `next_action`.
    c. The LLM call STILL happens (the assistant_message MAY still be returned), but it is post-detector and the response prioritizes crisis-resource directives.
 
-### 4.2 Detector-LLM ordering invariant (canonical no-bypass)
+### 4.2 Detector-LLM ordering invariant (canonical no-bypass; runtime + static enforcement per R1 HIGH-1 closure)
 
-The detector runs BEFORE the LLM call. The handler MUST NOT short-circuit the detector to "save latency" — the always-on floor takes precedence over latency budgets. Codex / static-analyzer rule `TLC-AI-001` enforces detector-before-LLM ordering at PR open (merge-blocking).
+The detector runs BEFORE the LLM call. Enforcement is at **two layers**:
+
+1. **Runtime state-machine precondition (primary enforcement):** the Mode 1 handler maintains a per-turn in-memory `turn_state` machine with strict ordering:
+   - `admitted` → `detector_completed` → `llm_invoked` → `completed` | `failed`.
+   - The `llm.invoke()` call site verifies `turn_state == detector_completed` BEFORE invoking; an attempt to call LLM in any other state raises a runtime invariant violation that fails the turn with 500 `mode1.internal_error` + emits Cat A `ai.mode1.invariant_violation_detector_ordering` event.
+   - The state machine is enforced at the `llm.invoke()` adapter layer — every adapter (Anthropic, Azure-OpenAI, OpenAI) verifies the state before issuing the HTTP request to the provider.
+   - The per-turn `detector_result` (severity + detector_completed_at) is persisted to the `ai_mode1_conversation_turn` row at the `detector_completed` transition via INSERT-only semantics; the LLM call reads from that row to bind the LLM context to the detector result.
+
+2. **Static-analyzer rule `TLC-AI-001` (secondary guard):** verifies at PR open that no code path can call `llm.invoke()` outside the Mode 1 handler's canonical state-machine wrapper. Merge-blocking at CI.
+
+**Why two layers:** Codex R1 HIGH-1 closure rationale — static-analyzer alone cannot constrain runtime paths introduced by provider abstraction, retries, feature flags, or future refactors. The runtime state-machine precondition is the canonical enforcement; the static analyzer is defense-in-depth.
+
+**Test M1.8 + M1.11 verify both layers** (per §11 below).
 
 ### 4.3 Detector-failure handling
 
@@ -180,19 +207,35 @@ If the detector is unavailable (timeout, 5xx, network failure):
 
 This is the canonical implementation of "I-019 crisis-detection-always-on platform floor" for Mode 1.
 
-### 4.4 Multi-region ACK channel integration
+### 4.4 Multi-region ACK channel integration (R1 HIGH-3 closure: ACK-vs-audit-durability semantics articulated)
 
 Per Sprint 7 Cold-DR Runbook §"DR-survivable multi-region ACK channel topology" + partition-aware quorum semantics (R5 closure):
 
-- `ai.mode1.crisis_signal_emitted` writes are durable per the channel's normal-operation 2-of-2 quorum (both regions accept).
-- During a declared regional outage, writes degrade to single-region W=1 with `partition_degraded=true` flag.
-- The Mode 1 handler does NOT block waiting for quorum confirmation before returning the response; the response includes the `server_signal_id` immediately after the local enqueue, and the platform's reconciliation flow guarantees eventual durability + Step 14.5 inventory completeness (per Cold-DR Runbook §"Three-state per-device obligation model").
+**Two distinct durability concepts (clarified per R1 HIGH-3 closure):**
+
+1. **Audit-event durability** (the Cat A `ai.mode1.crisis_signal_emitted` AUDIT row): this is durable in the canonical audit-chain (P1 partition). The Mode 1 handler MUST wait for the audit INSERT to COMMIT before continuing the turn (per §3.2 Cat A failure handling: if audit emission fails, the turn fails with 503). This is the **gating durability** — without it, the turn does NOT succeed.
+
+2. **ACK-channel signal-record durability** (the `i019_enqueue_ack_log` row in the multi-region ACK channel): the canonical signal record for downstream reconciliation. Per Cold-DR Runbook partition-aware semantics:
+   - **Normal operation:** W=2-of-2 quorum across both regions; the local Mode 1 handler region writes to the channel + the channel auto-replicates to the second region; quorum confirmation is async (the handler does NOT block waiting for it).
+   - **Partition operation:** W=1 with `partition_degraded=true` flag; same async semantics; the signal record is durable in the surviving region; quorum promotion happens on regional recovery.
+   - The Mode 1 handler waits for the **single-region local enqueue ACK** (the W=1 confirmation from the local region) before continuing — this is what makes `server_signal_id` durable enough to return to the client. The 2-of-2 quorum promotion is reconciled async.
+
+**Why two distinct concepts:**
+- The Cat A audit row is the **forensic record of "Mode 1 turn detected a crisis"** — this MUST be durable BEFORE the turn returns, because losing this record would break the platform's commitment to the patient that "if the AI assistant detects a crisis, the system always knows about it."
+- The ACK channel signal record is the **downstream operational record** for crisis-response workflows (clinician alerting, escalation queues) — this is gated by the single-region local enqueue ACK at turn-completion, with quorum promotion async per Cold-DR's three-state per-device obligation model.
+
+**Failure-mode semantics:**
+- If the Cat A audit emission fails → turn fails with 503 (per §3.2).
+- If the local single-region ACK-channel enqueue fails → turn fails with 503 `mode1.internal_error` + Cat A `ai.mode1.crisis_signal_enqueue_failed` event (added per R1 HIGH-3 closure).
+- If the local enqueue succeeds but cross-region replication for quorum promotion fails → turn STILL succeeds (the local enqueue ACK is what's gating); the `partition_degraded=true` row is reconciled per Cold-DR's three-state model.
+
+**Codex R1 HIGH-3 closure rationale:** the original §4.4 wording said "the Mode 1 handler does NOT block waiting for quorum confirmation before returning the response" without distinguishing audit-row durability (which MUST block) vs ACK-channel-quorum-promotion (which is async). The clarification preserves the canonical Sprint 7 partition-aware model while making Cat A audit-row durability explicit. This is consistent with: Cold-DR's three-state model treats partition_degraded entries as first-class pending obligations; the Mode 1 audit row + the W=1 local enqueue together are sufficient to record the crisis signal durably for downstream workflows; the W=2 quorum promotion is the reconciliation layer.
 
 ---
 
 ## 5. Mode-1-Mode-2 boundary enforcement
 
-### 5.1 The canonical no-Mode-2-side-effects predicate
+### 5.1 The canonical no-Mode-2-side-effects predicate (R1 MED-1 closure: extended beyond DB writes)
 
 Mode 1 is the **conversational-assistant** workload class per ADR-029. Mode 1 handlers MUST NOT:
 
@@ -200,14 +243,30 @@ Mode 1 is the **conversational-assistant** workload class per ADR-029. Mode 1 ha
 2. Mutate clinical state (no INSERTs on `medication_request`, `consult`, `prescription`, `lab_order`, etc.).
 3. Schedule clinical actions (no background-worker enqueues for protocol execution).
 4. Modify medication records, dosage, or anything in the clinical workflow surface.
+5. **Issue HTTP calls to Mode 2 endpoints** (`POST /ai/mode-2/*` or any other Mode 2 surface). No internal-call escape hatch — Mode 1 NEVER initiates Mode 2 execution; only the client can navigate to Mode 2 surfaces after seeing a Cat B `mode2_handoff_proposed` event.
+6. **Enqueue jobs to Mode 2 worker queues** (Mode 2 protocol-execution queues are off-limits from Mode 1; the queue names + ACL are enumerated in the canonical allow-list per below).
+7. **Execute LLM-generated tool calls** that resolve to Mode 2 surfaces. If the LLM provider returns a tool-use block proposing a Mode 2 invocation, the Mode 1 handler MUST refuse to execute it; instead, the handler emits the `mode2_handoff_proposed` event and renders a tool-call-rejection in the assistant_message ("I noticed your request is about [protocol]; please tap here to start that workflow").
 
-The canonical predicate: a Mode 1 turn's database-side effect is LIMITED to:
-- `ai_mode1_conversation_turn` INSERT (recording the turn).
-- `ai_mode1_conversation_state` UPDATE (advancing the conversation state machine; idempotent on turn_id).
-- `i019_enqueue_ack_log` INSERT (crisis-signal emission, when applicable).
-- Audit events per §3.
+**Three-layer enforcement (per the SI-017 5-layer model precedent):**
 
-Any INSERT/UPDATE/DELETE outside this enumerated set is a CI-blocking violation (static analyzer rule `TLC-AI-002`).
+1. **DB write enforcement (Layer 2 RLS + Layer 3 SECURITY DEFINER STEP 0):** clinical-state tables have RLS policies that reject writes from the Mode 1 service-role identity (the Mode 1 service runs under a dedicated DB role with INSERT/UPDATE/DELETE permissions ONLY on the enumerated `ai_mode1_*` tables + `i019_enqueue_ack_log` + audit tables). The SECURITY DEFINER procedures for clinical workflows verify caller-role membership at STEP 0a (in addition to I-032's tenant-GUC check at STEP 0b).
+
+2. **Outbound HTTP allow-list (canonical service-mesh policy):** the Mode 1 service's egress policy enumerates allowed outbound destinations:
+   - LLM provider endpoints (per CCR-driven configuration).
+   - The crisis-detector service.
+   - The multi-region ACK channel write endpoints.
+   - The audit pipeline ingestion endpoint.
+   Calls to any other internal service (Mode 2 endpoints, clinical-workflow services, protocol-engine APIs) are blocked at the service-mesh layer (Istio / similar policy) — the Mode 1 service literally cannot reach them at network level. This is the canonical infra enforcement; Track 5 Infra deliverable.
+
+3. **Static analyzer rule `TLC-AI-002` (expanded scope):** verifies at PR open that:
+   - No INSERT/UPDATE/DELETE on clinical tables (DB layer).
+   - No `http.post('/ai/mode-2/*')` or equivalent client calls (code layer).
+   - No `queue.enqueue('mode2-*')` or equivalent worker-queue enqueues (code layer).
+   - No LLM tool-call dispatcher that resolves Mode 2 surfaces (the canonical tool-use dispatcher MUST have an allow-list; rule `TLC-AI-002` verifies the allow-list excludes Mode 2 patterns).
+
+**The enforceable predicate is a UNION of all 3 layers.** Tests M1.7 + M1.12 + M1.13 (per §11) verify all 3 layers.
+
+**LLM tool-use specific contract:** Mode 1's LLM tool-use is limited to **read-only / informational tools** (e.g., "look up patient's medication list to remind them"); no write-tools, no protocol-tools. The canonical tool-allow-list is configured per provider per CCR and audited as part of every turn (the tool-use catalog is included in `ai.mode1.llm_invoked` event payload).
 
 ### 5.2 Cross-mode escalation: Mode 1 → Mode 2
 
@@ -273,12 +332,21 @@ Both tables enforce RLS per ADR-023 Model A + I-023 tenant isolation. Per-tenant
 - DELETE forbidden except for tenant-retention-policy hard-deletes (covered by separate retention spec; not Mode 1's surface).
 - The `assistant_message` and `turn_status` are written at turn-completion in the SAME transaction as the INSERT (not a subsequent UPDATE) — the canonical pattern is: build the row in-memory, INSERT once at turn-completion.
 
-### 6.3 Conversation-history-window contract
+### 6.3 Conversation-history-window contract (R1 MED-2 closure: replay-safe under concurrent retries)
 
 When the request specifies `conversation_history_window: N`, the handler:
-1. SELECTs the last N turns of `ai_mode1_conversation_turn` for the conversation_id (ORDER BY created_at DESC LIMIT N).
-2. Constructs the LLM prompt with those N prior turns + the current `user_message`.
-3. The default N=20 is the canonical balance between context-quality + LLM-cost; the max N=50 caps per-turn cost.
+
+1. **At turn-admission (atomic per-turn admission record):**
+   - INSERTs a row into `ai_mode1_conversation_turn` with `turn_status = 'admitted'`, taking an advisory lock on `(tenant_id, conversation_id, turn_id)` via `pg_try_advisory_xact_lock` to prevent concurrent same-turn retries.
+   - If the lock is already held (concurrent retry): the second attempt SELECTs the in-flight turn row, waits up to 30s for completion (poll every 1s), then returns the cached response if the in-flight turn completed; or returns 409 `mode1.turn_id_conflict` if the in-flight turn's request body differs.
+   - Captures a `history_high_water_mark` = `MAX(created_at)` from `ai_mode1_conversation_turn` where `conversation_id = $1 AND created_at < now()` AT admission time, and persists it into the turn row's `history_snapshot_high_water_mark` column.
+2. **SELECTs the last N turns** of `ai_mode1_conversation_turn` for the conversation_id WHERE `created_at <= history_snapshot_high_water_mark` (ORDER BY created_at DESC LIMIT N). **The high-water-mark snapshot ensures the same N turns are used on every retry**, even if intervening turns have committed between admission and retry.
+3. Constructs the LLM prompt with those N prior turns + the current `user_message`.
+4. The default N=20 is the canonical balance between context-quality + LLM-cost; the max N=50 caps per-turn cost.
+
+**Replay-safety invariant:** for a given `(tenant_id, conversation_id, turn_id)`, the LLM prompt is deterministically reconstructable from `history_snapshot_high_water_mark` + the in-place `user_message` field. Subsequent retries see the same prompt and (if the LLM is deterministic-mode + token-stream is cached) the same `assistant_message`. The canonical idempotency-cache (per §2.5) stores the final response keyed by `(tenant_id, conversation_id, turn_id)`; once cached, retries return the cached response without re-invoking the LLM.
+
+**Test M1.5 + M1.14 (per §11) verify replay-safety under concurrent retries.**
 
 ---
 
@@ -362,11 +430,20 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 | Test M1.8 | `tools/static-analyzer/tests/ai-mode-1-detector-ordering.test.ts` | `static-analyzer` | Mode 1 handler calling LLM before detector fails rule `TLC-AI-001` | §4.2 |
 | Test M1.9 | `apps/api-server/__integration__/ai/mode1_mode2_handoff.test.ts` | `integration-ai-mode1` | Mode 1 turn proposing Mode 2 → Cat B `mode2_handoff_proposed`; NO direct invocation of Mode 2 handler | §5.2 |
 | Test M1.10 | `apps/api-server/__integration__/ai/mode1_rate_limit.test.ts` | `integration-ai-mode1` | Per-session 1-turn-per-3s → 429; Per-tenant daily quota exceeded → 429 | §8 |
+| Test M1.11 | `apps/api-server/__integration__/ai/mode1_runtime_state_machine.test.ts` | `integration-ai-mode1` | Runtime state-machine: any attempt to call `llm.invoke()` outside the `detector_completed` state fails the turn with 500 + Cat A `invariant_violation_detector_ordering` event (per R1 HIGH-1 runtime-enforcement) | §4.2 |
+| Test M1.12 | `apps/api-server/__integration__/ai/mode1_cat_a_audit_failure.test.ts` | `integration-ai-mode1` | Cat A `crisis_signal_emitted` audit INSERT fails → turn fails with 503; response NOT emitted | §3.2 |
+| Test M1.13 | `apps/api-server/__integration__/ai/mode1_cat_c_drop_partitioning.test.ts` | `integration-ai-mode1` | Cat C drop aggregator emits `audit.cat_c_drop_observed` Cat B P2 event keyed by tenant_id per minute bucket; verifies SI-018 routing | §3.2, §3.3 |
+| Test M1.14 | `apps/api-server/__integration__/ai/mode1_concurrent_retry.test.ts` | `integration-ai-mode1` | Two concurrent requests with same turn_id: advisory lock holds; second waits up to 30s; both return same response (or 409 if bodies differ) | §6.3 R1 MED-2 |
+| Test M1.15 | `apps/api-server/__integration__/ai/mode1_ack_quorum_partition.test.ts` | `integration-ai-mode1` | Crisis signal under normal operation → 2-of-2 quorum eventually achieved (async); under simulated regional outage → W=1 + `partition_degraded=true` row; turn STILL succeeds in both modes; verifies R1 HIGH-3 dual-durability semantics | §4.4 |
+| Test M1.16 | `apps/api-server/__integration__/ai/mode1_tool_use_mode2_denial.test.ts` | `integration-ai-mode1` | LLM tool-use proposing a Mode 2 invocation → handler refuses to execute + emits Cat B `mode2_handoff_proposed` + renders rejection in assistant_message | §5.1 R1 MED-1 |
+| Test M1.17 | `apps/api-server/__integration__/ai/mode1_phi_provider_enforcement.test.ts` | `integration-ai-mode1` | Tenant with PHI flag + `ai_provider = 'openai'` (non-HIPAA) → static-analyzer rule TLC-AI-003 fails at PR open; runtime: such a configuration is rejected at tenant-config admission with Cat A `tenant_config.phi_provider_violation` | §7.1, TLC-AI-003 |
+| Test M1.18 | `apps/api-server/__integration__/ai/mode1_history_snapshot_replay.test.ts` | `integration-ai-mode1` | Turn admitted at T0 captures history_snapshot_high_water_mark; intervening turn commits at T1; retry of T0's turn at T2 uses same snapshot, returns same prompt + same cached response | §6.3 R1 MED-2 |
+| Test M1.19 | `apps/api-server/__integration__/ai/mode1_egress_allow_list.test.ts` | `integration-ai-mode1` | Mode 1 service attempting to HTTP-call `POST /ai/mode-2/*` → blocked at service-mesh layer; integration test verifies the policy is enforced (test runs against the canonical service-mesh fixture) | §5.1 Layer 2 |
 
 **Static-analyzer rule IDs registered at this amendment:**
-- `TLC-AI-001` — Mode 1 handler calling LLM before crisis detector (detector-before-LLM ordering invariant).
-- `TLC-AI-002` — Mode 1 handler INSERTing/UPDATEing/DELETing on clinical tables outside the enumerated `ai_mode1_*` set (no-Mode-2-side-effects predicate).
-- `TLC-AI-003` — Mode 1 handler routing PHI conversation to a non-HIPAA-covered LLM provider (BAA chain enforcement).
+- `TLC-AI-001` — Mode 1 handler calling LLM before crisis detector (detector-before-LLM ordering invariant; verifies runtime state-machine guard exists per R1 HIGH-1 closure).
+- `TLC-AI-002` — Mode 1 handler INSERTing/UPDATEing/DELETing on clinical tables outside the enumerated `ai_mode1_*` set OR issuing HTTP calls / queue enqueues / LLM tool-calls that resolve Mode 2 surfaces (extended scope per R1 MED-1 closure).
+- `TLC-AI-003` — Mode 1 handler routing PHI conversation to a non-HIPAA-covered LLM provider (BAA chain enforcement; test M1.17 verifies).
 
 ---
 
@@ -387,6 +464,22 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 ## 13. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
+
+**v0.1 R1 closure 2026-05-19:** 3 HIGH + 3 MED findings closed inline (all in-scope correctness gaps; no architectural-judgment items requiring ratifier escalation):
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | HIGH-1 detector-before-LLM enforced only via static-analyzer (no runtime guard); HIGH-2 Cat C drop event Cat B P2 classification contradicted "all Mode 1 events route to P1" claim; HIGH-3 ACK durability semantics conflated audit-row durability (blocks) with quorum-promotion durability (async); MED-1 no-Mode-2-side-effects predicate didn't cover HTTP / queue / tool-use paths; MED-2 history-window not replay-safe under concurrent retries; MED-3 missing tests for Cat A audit failure / Cat C drop partitioning / ACK quorum / concurrent retries / history snapshot / Mode 2 tool denial / PHI provider enforcement | All 6 closed inline |
+
+**R1 closure pattern recap:**
+- HIGH-1: added runtime per-turn state machine (`admitted → detector_completed → llm_invoked → completed`); `llm.invoke()` adapter verifies state before issuing HTTP request; defense-in-depth via static analyzer remains.
+- HIGH-2: explicit per-event partition table added (§3.3) with both P1 patient-bound + P2 governance/observability events; the "all Mode 1 events route to P1" claim retracted; `audit.cat_c_drop_observed` classified as Cat B P2 keyed by tenant_id per-minute aggregate, emitted by audit pipeline (not Mode 1 handler directly).
+- HIGH-3: §4.4 distinguishes (a) Cat A audit-row durability (gating; turn fails on failure) from (b) ACK channel signal-record durability (W=1 local enqueue gates turn; W=2 quorum promotion is async per Cold-DR Sprint 7 three-state model). Added Cat A `ai.mode1.crisis_signal_enqueue_failed` event for the local-enqueue-failure path.
+- MED-1: predicate extended to 3-layer enforcement (DB write enforcement + outbound HTTP allow-list at service mesh + static-analyzer expanded scope). LLM tool-use specifically limited to read-only/informational tools; write-tools forbidden.
+- MED-2: history-window snapshot via `history_snapshot_high_water_mark` column on turn row + advisory lock on `(tenant_id, conversation_id, turn_id)` for concurrent-retry safety.
+- MED-3: 9 additional merge-blocking tests added (M1.11-M1.19): runtime state machine, Cat A audit failure, Cat C drop partitioning, concurrent retry, ACK quorum/partition, Mode 2 tool denial, PHI provider enforcement, history snapshot replay, egress allow-list.
+
+No architectural-judgment items introduced inline; CLAUDE.md hard-floor item 6 honored. Codex flagged HIGH-2 + HIGH-3 as "architectural contract decisions" but on review both fall within existing canonical surfaces (SI-018 has both P1 and P2 categories; Sprint 7 Cold-DR Runbook three-state model articulates ACK-quorum semantics); the closures are in-scope clarifications. The 6 known OQs (§10) remain ratifier-targetable.
 
 ---
 
