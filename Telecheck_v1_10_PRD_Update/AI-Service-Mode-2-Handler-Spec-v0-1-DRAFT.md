@@ -108,15 +108,30 @@ type Mode2WorkflowResponse = {
 | 503 | `mode2.audit_unavailable` | Audit chain unavailable; invocation rejected (per FLOOR-020 audit-emission-failure-handling Cat A rule) |
 | 500 | `mode2.internal_error` | Unexpected server-side failure (tenant-blind details) |
 
-### 2.5 Idempotency semantics
+### 2.5 Idempotency semantics + invocation state machine (R1 HIGH-2 closure)
 
-Per Contracts Pack v5.1 IDEMPOTENCY: the `invocation_id` is the idempotency key per invocation. The idempotency cache key is `(tenant_id, workflow_id, invocation_id)`.
+Per Contracts Pack v5.1 IDEMPOTENCY: the `invocation_id` is the idempotency key per invocation. The idempotency cache key is `(tenant_id, workflow_id, invocation_id)`. The invocation has a durable state machine persisted in `ai_mode2_invocation_state`:
 
-- Same `invocation_id` + same request body: return cached response (200 or the cached pending-state).
+```
+admitted → pre_state_guard_passed → governance_admitted →
+  { L4 path: executed → completed | failed }
+  { L3 path: executed → pending_clinician_review →
+      { resolved_approved → completed | resolved_rejected → reverted | abandoned_expired } }
+  { L2 path: proposed → pending_patient_confirm →
+      { confirmed → executed → completed | declined → cancelled | abandoned_expired } }
+```
+
+**Replay semantics by terminal state:**
+
+- Same `invocation_id` + same request body + state ∈ `{admitted, pre_state_guard_passed, governance_admitted, proposed, executed, pending_*}`: return cached current state (the in-flight response).
+- Same `invocation_id` + same request body + state ∈ `{completed, failed, reverted, cancelled}`: return cached terminal response.
+- Same `invocation_id` + same request body + state = `abandoned_expired` (token-expiry path per §7.2): return terminal response `{status: 'failed', failure_class: 'workflow_abandoned_expired'}` — DO NOT return the stale expired token to the client. A new `invocation_id` is required to retry.
 - Same `invocation_id` + different request body: return 409 `mode2.invocation_id_conflict`.
-- New `invocation_id`: process normally.
+- New `invocation_id` after a previous invocation_id reached `abandoned_expired` for the same workflow + same patient: processed normally as a fresh invocation. The audit chain records the previous invocation_id's terminal state for traceability.
 
-**Important:** for pending-review workflows, the invocation_id remains stable through clinician resolution; the resolution endpoint references the same invocation_id. The Cat A audit chain for an invocation is fully reconstructable from `invocation_id`.
+**Important:** the resolution endpoints (`POST /ai/mode-2/workflow/<workflow_id>/review` and `.../confirm`) reference the original `invocation_id` + the issued `pending_*_token`. Tokens are tenant-scoped, single-use (R1 MED-2 closure), and validity-bound; failed token resolution emits Cat A `ai.mode2.token_resolution_failed` events (P1 keyed by patient_id) per the token security contract in §7.
+
+**State machine transitions ARE the canonical audit anchors:** each transition emits exactly one Cat A audit event per §4.5; the audit chain is fully reconstructable from `invocation_id` by replaying transition events in `transitioned_at` order.
 
 ---
 
@@ -131,9 +146,26 @@ For each request, the Mode 2 handler envelope:
 3. Loads the handler's input schema + validates `workflow_input` against it (400 on validation failure).
 4. Records the resolution decision in the Cat A audit chain (`ai.mode2.handler_resolved` event with full resolution path).
 
-### 3.2 Registry race-handling
+### 3.2 Registry race-handling (R1 HIGH-3 closure: execution lease + fencing token + safety-retraction policy)
 
-The handler registry's state transitions follow the Sprint 10 batched-ratifier proposal recommendation (Option C for SI-016 per the per-SI domain analysis: event-sourced authoritative source + materialized current-state projection). The Mode 2 envelope reads from the materialized projection at resolution time; for an in-flight invocation, the resolution is locked to the resolved version even if the registry transitions mid-invocation (i.e., handler retraction does not abort in-flight invocations; abortion is a separate operator-gated escalation path).
+The handler registry's state transitions follow the Sprint 10 batched-ratifier proposal recommendation (Option C for SI-016: event-sourced authoritative source + materialized current-state projection). To prevent the race where a handler is retracted mid-invocation, the canonical Mode 2 admission flow:
+
+1. **Reads the materialized projection** to determine the currently-published handler for `(tenant_id, workflow_id)`. The result includes the handler's `registry_revision` (monotonic per-handler version counter, separate from semver) — this is the **fencing token**.
+
+2. **Acquires an execution lease** by INSERTing into `ai_mode2_invocation_state` at admission with `(invocation_id, handler_id, registry_revision, admitted_at, lease_expires_at)`. The lease pins the invocation to a specific handler revision.
+
+3. **Before any side-effect-producing step** (especially before the irreversible-effect dispatch per §5.2), the workflow MUST verify the fencing token has not been revoked:
+   - Read current `ai_workflow_handler_registry.<handler_id>.revoked_revisions` set.
+   - If the invocation's pinned `registry_revision` ∈ revoked_revisions: ABORT the in-flight invocation with 503 `mode2.handler_retracted_mid_execution`. Emit Cat A `ai.mode2.invocation_aborted_safety_retraction` (P1 keyed by patient_id).
+   - This re-check happens at every state-machine transition boundary, NOT just at admission.
+
+4. **Two retraction classes (operator-declared at the registry level):**
+   - **Normal disablement** (`retraction_class = 'normal'`): admitted invocations drain to completion; no fence check required mid-execution. Used for scheduled-deprecation of a handler version.
+   - **Safety retraction** (`retraction_class = 'safety'`): admitted invocations MUST be fenced at the next state-machine transition boundary; no further side effects. Used when a handler version is discovered to be unsafe (e.g., clinical-protocol bug). The retraction adds the revision to `revoked_revisions` immediately.
+
+5. **The execution lease has a 24-hour expiry**; invocations that haven't reached a terminal state in that window are terminated (Cat A `ai.mode2.invocation_lease_expired` event). This prevents zombie pending-state invocations.
+
+**Test M2.22 (R1 HIGH-3 closure verification):** simulates safety-retraction during a long-running L3 invocation; asserts the invocation aborts at the next state-machine boundary with the correct Cat A audit event.
 
 ### 3.3 Unregistered workflow → 404
 
@@ -169,7 +201,28 @@ Per ADR-029 + Contracts Pack v5.2 AUTONOMY_LEVELS, every Mode 2 invocation passe
 - **Restricted workflows:** only workflows tagged `autonomy_max_level = 'L4'` in the handler registry accept L4 invocations. Workflows tagged L2 or L3 reject L4 attempts with 422 `mode2.governance_gate_rejected`.
 - **Audit events:** `ai.mode2.l4_executed` Cat A.
 
-### 4.4 Governance-gate decision audit
+### 4.4 Pre-state guard contract (R1 HIGH-1 closure: required for ALL autonomy levels, especially L4)
+
+In addition to the autonomy-level gate (above), every Mode 2 invocation passes through a **workflow-specific pre-state guard** BEFORE governance admission can succeed. The pre-state guard:
+
+1. Is declared by each registered handler in `ai_workflow_handler_registry.pre_state_guard_procedure_name` (canonical SECURITY DEFINER procedure name).
+2. Receives `(tenant_id, patient_id, workflow_input)` + access to the canonical PHI tables via I-032 STEP 0 + RLS.
+3. Verifies workflow-specific pre-state invariants:
+   - **For refill workflows:** prescription not already-fulfilled / not-on-hold / patient is active.
+   - **For GLP-1 titration:** lab data within freshness window / no contraindicated state / patient consent active.
+   - **For lab order workflows:** no duplicate active order for the same panel / patient demographics complete.
+   - **For all workflows:** patient is not in a globally-restrictive state (e.g., patient disabled, tenant disabled, account under investigation).
+4. Returns `(admit: boolean, reason: text)`. If admit=false, the invocation is rejected with 409 `mode2.workflow_state_conflict` + the reason recorded in the gate decision audit row.
+5. **L4 invocations have a STRICTER pre-state guard:** the registered L4 pre-state guard procedure MUST verify all of the above PLUS:
+   - **Patient state drift check:** the patient state hasn't materially changed since the L4 schedule was set (e.g., for a scheduled refill, the prescription hasn't been retracted in the interim).
+   - **Duplicate-invocation check:** no concurrent OR recently-completed identical invocation exists (deduplication beyond invocation_id idempotency).
+   - **Tenant-level kill-switch check:** the tenant has not engaged the L4-pause kill-switch (per Forms Engine SI-011 kill-switch precedent).
+
+**Static analyzer rule `TLC-AI-008`:** every workflow registered with `autonomy_max_level >= 'L4'` MUST declare a `pre_state_guard_procedure_name` in the registry. Workflows missing the L4 pre-state guard fail CI at PR open.
+
+**Test coverage:** tests M2.18-M2.21 (added per R1 HIGH-1 closure) verify pre-state guard rejection for stale labs, duplicate orders, contraindicated states, and patient-state drift.
+
+### 4.5 Governance-gate decision audit
 
 Every gate decision (admit OR reject) emits a Cat A `ai.mode2.governance_gate_decision` event (P1 keyed by patient_id) recording:
 - Requested autonomy level
@@ -197,14 +250,19 @@ Mode 2 workflows produce side effects of three classes:
 
 Each registered handler declares its side-effect class in the registry; the response's `reversibility` field reflects this.
 
-### 5.2 Irreversible side-effect gate
+### 5.2 Irreversible side-effect gate (R1 CRITICAL closure: durable pre-commit audit via separate-transaction commit)
 
 Workflows producing irreversible side effects MUST:
 
 1. Be tagged `irreversible = true` in the handler registry.
-2. Run through L2 OR L3 gating (NEVER L4 unless explicitly authorized at the tenant + workflow + role level).
-3. Emit Cat A `ai.mode2.irreversible_effect_committed` BEFORE the irreversible action.
-4. The pre-commit audit row is the durability barrier — if the audit emission fails, the irreversible action MUST NOT execute (per FLOOR-020 Cat A handling).
+2. Run through L2 OR L3 gating (NEVER L4 unless explicitly authorized at the tenant + workflow + role level per OQ3).
+3. Emit Cat A `ai.mode2.irreversible_effect_committed` BEFORE the irreversible action via a **canonical durable-audit pattern**:
+   - **The Cat A audit INSERT runs in a separate, independently-committed transaction** (NOT the workflow's execution transaction). The audit transaction COMMITs to disk before the workflow proceeds to dispatch the irreversible action.
+   - **Canonical implementation:** the application opens a fresh DB transaction, INSERTs the Cat A audit row, COMMITs, then opens the workflow's execution transaction for the irreversible dispatch. If the audit COMMIT fails: the workflow MUST NOT proceed (turn fails 503 `mode2.audit_unavailable`).
+   - **If the workflow's execution transaction later rolls back AFTER the irreversible external action has already happened** (e.g., pharmacy dispatch acknowledged then DB rollback): the durable pre-commit audit row REMAINS DURABLE (it was in a separately-committed transaction). The forensic barrier is preserved.
+   - **Equivalent pattern (durable transactional outbox):** alternatively, the audit row can be written to a durable outbox (separate WAL-backed store) with acknowledged flush before the irreversible dispatch; the outbox-flush ACK is the durability barrier. Either pattern is acceptable; the canonical handler chooses one + declares it in the registry.
+   - **Why same-transaction emission is forbidden:** if the audit INSERT and the irreversible dispatch share a transaction, a later rollback removes the audit row while the external irreversible action has already happened. This is the exact failure mode the gate is meant to prevent. (Closes R1 CRITICAL: same-transaction rollback would erase the forensic barrier.)
+4. **Test M2.10b (R1 CRITICAL closure verification):** the canonical test forces a rollback of the workflow's execution transaction AFTER the irreversible-action dispatch point and asserts the Cat A pre-commit audit row REMAINS durable in the audit chain.
 
 ### 5.3 Reversible side-effect undo
 
@@ -221,15 +279,31 @@ Workflows that cannot be undone in their current state (e.g., a prescription tha
 
 ## 6. Cross-mode boundary enforcement
 
-### 6.1 Mode 2 → Mode 1 boundary
+### 6.1 Mode 2 → Mode 1 boundary (R1 MED-1 closure: 3-layer enforcement mirroring Sprint 9 §5.1)
 
 Mode 2 MUST NOT:
 1. Initiate a new Mode 1 conversation.
-2. Mutate Mode 1's conversation state (`ai_mode1_conversation_*` tables).
-3. Invoke Mode 1 handlers directly.
+2. Mutate Mode 1's conversation state (`ai_mode1_conversation*` + `ai_mode1_conversation_archival_event`).
+3. Invoke Mode 1 handlers directly via internal HTTP.
+4. Enqueue jobs to Mode 1 worker queues.
+5. Execute LLM tool-calls that resolve to Mode 1 surfaces (Mode 2 may invoke LLMs as part of protocol execution; tool-use allow-lists exclude Mode 1 patterns).
+6. Call SECURITY DEFINER procedures that mutate Mode 1 state (the Mode 2 service-role's procedure-grants explicitly exclude any Mode 1 mutation procedure).
 
 Mode 2 MAY:
 1. Emit a Cat B `ai.mode2.mode1_advisory_hint` event (P2 keyed by tenant_id) suggesting Mode 1 follow-up. The client routes the user back to Mode 1 if appropriate; Mode 2 does not initiate the handoff itself.
+
+**Three-layer enforcement (mirrors Sprint 9 §5.1):**
+
+1. **DB write enforcement (Layer 2 RLS + Layer 3 SECURITY DEFINER STEP 0a):** clinical-state tables grant the Mode 2 service-role write permissions ONLY on `ai_mode2_*` tables + invoked workflow's domain tables; Mode 1 tables explicitly denied to the Mode 2 role. The SECURITY DEFINER procedures for Mode 1 mutations verify caller-role at STEP 0a (in addition to I-032 tenant-GUC at STEP 0b).
+2. **Outbound HTTP allow-list (service-mesh policy):** the Mode 2 service's egress policy enumerates allowed outbound destinations (LLM providers, audit pipeline, multi-region ACK channel, downstream domain services). Mode 1 endpoints are explicitly blocked at the service-mesh layer.
+3. **Static analyzer rule `TLC-AI-005` (expanded scope per R1 MED-1):** verifies at PR open that:
+   - No INSERT/UPDATE/DELETE on `ai_mode1_*` tables.
+   - No `http.post('/ai/mode-1/*')` or equivalent.
+   - No `queue.enqueue('mode1-*')` or equivalent.
+   - No LLM tool-call dispatcher that resolves Mode 1 surfaces.
+   - No SECURITY DEFINER procedure call that mutates Mode 1 state.
+
+Tests M2.13a-M2.13e verify each enforcement layer (per §11 below).
 
 ### 6.2 Mode 1 → Mode 2 handoff (recap)
 
@@ -243,13 +317,28 @@ Per Sprint 9 §5.2: Mode 1 emits `ai.mode1.mode2_handoff_proposed` Cat B; client
 
 Workflows that produce L2 (pending_patient_confirm) OR L3 (pending_clinician_review) responses enqueue review tasks into the canonical clinician review queue. The clinician's review-queue UI is downstream of this spec; Mode 2's responsibility ends at enqueueing the review task with `pending_review_token` / `pending_confirm_token`.
 
-### 7.2 Review-token validity
+### 7.2 Review-token validity + canonical security contract (R1 MED-2 closure: high-entropy + single-use + actor-bound + hashed at rest)
 
-Tokens are valid for 7 days; expired tokens reject resolution with 410 `mode2.review_token_expired`. The workflow's state at expiry is "abandoned" (Cat B `ai.mode2.workflow_abandoned` event).
+Tokens are canonical bearer tokens with the following MUST-level security properties:
+
+1. **High entropy:** 256 bits of cryptographic randomness from `crypto.randomBytes(32)` (or platform equivalent); base64url-encoded for transport.
+2. **Server-side hashed storage:** the token's SHA-256 hash is persisted in `ai_mode2_pending_token`; the raw token is NEVER stored at rest. Token resolution computes SHA-256 of the presented token + compares to stored hash + verifies it has not been used.
+3. **Single-use:** at successful resolution, the token's `used_at` is set; subsequent presentation of the same token rejects with 410 `mode2.review_token_already_used` + Cat A `ai.mode2.token_replay_attempt` event (P1 keyed by patient_id).
+4. **Multi-binding (purpose + actor + invocation):** the token is bound to a tuple `(tenant_id, patient_id, workflow_id, invocation_id, purpose, expected_actor_role)`:
+   - **purpose** is one of `{l2_patient_confirm, l3_clinician_review}`; presenting an L2 token to the L3 review endpoint rejects with 422 `mode2.token_purpose_mismatch`.
+   - **expected_actor_role** binds the token to the role permitted to resolve it: L2 tokens require the resolver to be the same patient (or their authorized delegate); L3 tokens require the resolver to be a clinician with the appropriate scope. Resolver role is verified at resolution time via the session's RBAC scope (per SI-017 §3).
+5. **Validity:** 7 days from issuance; expired tokens reject with 410 `mode2.review_token_expired` + Cat B `ai.mode2.workflow_abandoned` (P2 keyed by tenant_id; aggregated; expired tokens are bulk events).
+6. **Failed-resolution audit:** all token-resolution failures (expired, used, purpose-mismatch, actor-mismatch, tenant-mismatch, hash-mismatch) emit Cat A `ai.mode2.token_resolution_failed` (P1 keyed by patient_id) with `failure_reason` set. These events are forensic anchors for security analysis (e.g., detect repeated hash-mismatch attempts = token-guessing).
+7. **Tenant binding** (preserved per v0.1 design): tokens are tenant-scoped; cross-tenant resolution rejects with 404 tenant-blind per I-025 + Cat A `ai.mode2.token_resolution_failed` event with `failure_reason = 'tenant_mismatch'`.
+8. **Token rotation on abandonment:** if a workflow is in `pending_*` state for >24 hours without resolution, the system MAY issue a single courtesy reminder (Cat B `ai.mode2.pending_reminder_sent` event); after 7-day expiry, no rotation — the invocation transitions to `abandoned_expired` and a new `invocation_id` is required to retry.
+
+**HMAC is NOT required given the DB-authoritative + hashed + single-use + multi-binding controls above** (R1 MED-2 closure: the v0.1 OQ4 conclusion that "HMAC adds no security" is now defensible because the compensating controls are explicit). OQ4 remains open for ratifier confirmation but is no longer blocking.
+
+**Tests M2.14a-M2.14e (per §11 below) verify each token security property:** hash-only storage, single-use enforcement, purpose binding, actor binding, expired/abandoned semantics.
 
 ### 7.3 Review-token tenant-binding
 
-Tokens are tenant-scoped; a token issued under tenant_A cannot resolve under tenant_B (RLS enforced at the resolution endpoint; cross-tenant resolution attempts fail with 404 per I-025).
+Tokens are tenant-scoped; a token issued under tenant_A cannot resolve under tenant_B (RLS enforced at the resolution endpoint; cross-tenant resolution attempts fail with 404 per I-025 + Cat A `token_resolution_failed` with `tenant_mismatch`).
 
 ---
 
@@ -319,11 +408,27 @@ Rate-limit state is held per-region; cross-region sync via the multi-region ACK 
 | Test M2.15 | `apps/api-server/__integration__/ai/mode2_review_token_expiry.test.ts` | `integration-ai-mode2` | Expired token → 410 `review_token_expired` + Cat B `workflow_abandoned` event | §7.2 |
 | Test M2.16 | `apps/api-server/__integration__/ai/mode2_rate_limit.test.ts` | `integration-ai-mode2` | Per-patient 20/hr → 429; per-tenant daily quota → 429 | §9 |
 | Test M2.17 | `apps/api-server/__integration__/ai/mode2_concurrent_invocations.test.ts` | `integration-ai-mode2` | 4th concurrent invocation per patient → queued; 11th → 429 | §9 |
+| Test M2.18 | `apps/api-server/__integration__/ai/mode2_pre_state_guard_stale_lab.test.ts` | `integration-ai-mode2` | L4 GLP-1 titration with stale lab data → pre-state guard rejects → 409 `workflow_state_conflict` + Cat A gate-decision rejection (R1 HIGH-1) | §4.4 |
+| Test M2.19 | `apps/api-server/__integration__/ai/mode2_pre_state_guard_duplicate_order.test.ts` | `integration-ai-mode2` | L4 duplicate active order → pre-state guard dedup rejects (R1 HIGH-1) | §4.4 |
+| Test M2.20 | `apps/api-server/__integration__/ai/mode2_pre_state_guard_kill_switch.test.ts` | `integration-ai-mode2` | Tenant L4-pause kill-switch engaged → all L4 invocations rejected; L2/L3 unaffected (R1 HIGH-1) | §4.4 |
+| Test M2.21 | `tools/static-analyzer/tests/ai-mode-2-l4-pre-state-guard.test.ts` | `static-analyzer` | Handler registered with autonomy_max_level=L4 + missing pre_state_guard_procedure_name → rule TLC-AI-008 fails build (R1 HIGH-1) | §4.4 |
+| Test M2.22 | `apps/api-server/__integration__/ai/mode2_handler_retraction_fencing.test.ts` | `integration-ai-mode2` | L3 invocation in pending_review state when handler safety-retracted → next transition aborts with 503 + Cat A `invocation_aborted_safety_retraction` (R1 HIGH-3) | §3.2 |
+| Test M2.23 | `apps/api-server/__integration__/ai/mode2_idempotency_replay_after_expiry.test.ts` | `integration-ai-mode2` | Replay same invocation_id after abandoned_expired terminal state → terminal response returned; stale token NOT re-issued (R1 HIGH-2) | §2.5 |
+| Test M2.24 | `apps/api-server/__integration__/ai/mode2_new_invocation_after_abandoned.test.ts` | `integration-ai-mode2` | New invocation_id after previous abandoned_expired for same patient + workflow → fresh invocation processes normally; audit chain links the new + abandoned via referenced_previous_invocation_id (R1 HIGH-2) | §2.5 |
+| Test M2.25 | `apps/api-server/__integration__/ai/mode2_durable_audit_under_rollback.test.ts` | `integration-ai-mode2` | Irreversible workflow: Cat A pre-commit audit COMMITs in separate transaction → irreversible dispatch occurs → workflow execution transaction is forced to rollback → audit row REMAINS durable in audit chain (R1 CRITICAL) | §5.2 |
+| Test M2.26 | `apps/api-server/__integration__/ai/mode2_token_replay_attempt.test.ts` | `integration-ai-mode2` | Successfully-resolved token presented again → 410 `review_token_already_used` + Cat A `token_replay_attempt` (R1 MED-2) | §7.2 |
+| Test M2.27 | `apps/api-server/__integration__/ai/mode2_token_purpose_mismatch.test.ts` | `integration-ai-mode2` | L2 confirm token presented to L3 review endpoint → 422 `token_purpose_mismatch` + Cat A token_resolution_failed (R1 MED-2) | §7.2 |
+| Test M2.28 | `apps/api-server/__integration__/ai/mode2_token_actor_mismatch.test.ts` | `integration-ai-mode2` | L3 review token presented by non-clinician role → 403 + Cat A token_resolution_failed with `actor_mismatch` (R1 MED-2) | §7.2 |
+| Test M2.29 | `apps/api-server/__integration__/ai/mode2_token_hash_storage.test.ts` | `integration-ai-mode2` | Inspect ai_mode2_pending_token table: raw token NEVER stored; only SHA-256 hash + binding metadata (R1 MED-2) | §7.2 |
+| Test M2.30 | `apps/api-server/__integration__/ai/mode2_egress_allow_list.test.ts` | `integration-ai-mode2` | Mode 2 service attempting HTTP-call to `POST /ai/mode-1/*` → blocked at service-mesh layer (R1 MED-1) | §6.1 |
+| Test M2.31 | `apps/api-server/__integration__/ai/mode2_queue_denial.test.ts` | `integration-ai-mode2` | Mode 2 attempting to enqueue to `mode1-*` worker queue → static-analyzer rule TLC-AI-005 fails + runtime queue-ACL rejection (R1 MED-1) | §6.1 |
+| Test M2.32 | `apps/api-server/__integration__/ai/mode2_invocation_lease_expiry.test.ts` | `integration-ai-mode2` | Invocation in pending_* state >24h without resolution → lease expires → terminal state transition + Cat A `invocation_lease_expired` (R1 HIGH-3) | §3.2 |
 
 **Static-analyzer rule IDs registered:**
-- `TLC-AI-005` — Mode 2 handler INSERTing/UPDATEing on `ai_mode1_*` tables (Mode 2 → Mode 1 boundary).
+- `TLC-AI-005` — Mode 2 handler mutating Mode 1 surfaces via DB INSERT/UPDATE/DELETE OR HTTP OR queue OR LLM tool-call OR SECURITY DEFINER procedure (Mode 2 → Mode 1 boundary; expanded per R1 MED-1).
 - `TLC-AI-006` — Workflow tagged irreversible MUST go through L2 or L3 gate (handler-registry declaration consistency).
 - `TLC-AI-007` — Mode 2 handler executing irreversible action without preceding `irreversible_effect_committed` Cat A audit row (verified at handler-implementation site).
+- `TLC-AI-008` — Workflow registered with autonomy_max_level=L4 + missing pre_state_guard_procedure_name (R1 HIGH-1).
 
 ---
 
@@ -345,6 +450,23 @@ Rate-limit state is held per-region; cross-region sync via the multi-region ACK 
 ## 13. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
+
+**v0.1 R1 closure 2026-05-19:** 1 CRITICAL + 3 HIGH + 3 MED findings closed inline (all in-scope correctness gaps in own draft; no architectural-judgment items closed inline):
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | CRITICAL irreversible pre-commit audit same-transaction rollback contradiction; HIGH-1 autonomy gating lacked workflow-specific pre-state guards; HIGH-2 idempotency state machine + token-expiry replay semantics undefined; HIGH-3 handler-registry retraction race lacking execution-lease + fencing-token + safety-retraction policy; MED-1 cross-mode boundary only blocked DB-table mutation (HTTP/queue/tool-use/procedure paths uncovered); MED-2 review-token security recommendation opaque-without-compensating-controls; MED-3 test coverage gaps (critical expiry, L4 pre-state, durability under rollback, retraction fencing) | All 7 closed inline |
+
+**R1 closure pattern recap:**
+- CRITICAL: §5.2 rewritten: Cat A pre-commit audit MUST run in separate independently-committed transaction (or durable transactional outbox with acknowledged flush) before irreversible dispatch. Test M2.25 verifies durability under rollback.
+- HIGH-1: §4.4 added: required workflow-specific pre_state_guard_procedure_name in handler registry + canonical pre-state checks (stale labs / contraindications / duplicate orders / patient state drift / tenant kill-switch). Static rule TLC-AI-008 enforces L4 declaration. Tests M2.18-M2.21.
+- HIGH-2: §2.5 rewritten: durable invocation state machine (admitted → pre_state_guard_passed → governance_admitted → executed → completed | failed | abandoned_expired); replay-after-expiry returns terminal abandoned_expired (never re-issues stale token); new invocation_id required for retry. Tests M2.23-M2.24.
+- HIGH-3: §3.2 rewritten: execution lease + monotonic registry_revision as fencing token + safety-retraction policy distinct from normal-disablement; mid-execution fence check at every state-machine boundary; 24h lease expiry. Tests M2.22, M2.32.
+- MED-1: §6.1 expanded to 3-layer enforcement (DB grants + service-mesh allow-list + static analyzer); TLC-AI-005 scope expanded. Tests M2.30, M2.31.
+- MED-2: §7.2 rewritten with full token security contract: 256-bit entropy + SHA-256 hashed at rest + single-use + multi-binding (tenant + patient + workflow + invocation + purpose + actor_role) + 7-day validity + failed-resolution Cat A audit + tenant binding. Tests M2.26-M2.29.
+- MED-3: 15 additional tests added (M2.18-M2.32) covering all R1-closure verification paths.
+
+No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. The 7 known OQs (§10) remain ratifier-targetable.
 
 ---
 
