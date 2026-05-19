@@ -49,7 +49,12 @@ One row per immutable version of a registered handler. Columns:
 - `id` ULID primary key
 - `tenant_id` Telecheck-{country} — OR `'platform'` sentinel for platform-wide handlers (see OQ2 below)
 - `handler_name` VARCHAR(80) NOT NULL — canonical handler identifier (e.g., `glp1_protocol_eval`, `forms_intake_eligibility_scorer`)
-- `handler_version` VARCHAR(40) NOT NULL — semver (e.g., `1.0.0`)
+- `handler_version` VARCHAR(40) NOT NULL — strict semver `MAJOR.MINOR.PATCH` (no pre-release / no build metadata at v1.0; reserved for future SI). CHECK constraint enforces the grammar `^\d+\.\d+\.\d+$`.
+- `handler_version_major` INT NOT NULL GENERATED ALWAYS AS (split_part(handler_version, '.', 1)::int) STORED
+- `handler_version_minor` INT NOT NULL GENERATED ALWAYS AS (split_part(handler_version, '.', 2)::int) STORED
+- `handler_version_patch` INT NOT NULL GENERATED ALWAYS AS (split_part(handler_version, '.', 3)::int) STORED
+
+The generated columns make per-(tenant_id, handler_name) max-version comparison a simple `ORDER BY major DESC, minor DESC, patch DESC LIMIT 1` query — enforceable by INSERT trigger (see Sub-decision 1.5 below).
 - `ai_workload_type` VARCHAR(40) NOT NULL — per ADR-029 enum (`conversational_assistant | protocol_execution | autonomous_agent | multi_agent_supervisor | tool_using_agent`); reserved values rejected per WORKLOAD_TAXONOMY contract
 - `autonomy_level` VARCHAR(40) NOT NULL — per AUTONOMY_LEVELS contract (`advisory | suggestion | action_with_confirm | action_with_audit_only | fully_autonomous`); reserved values rejected
 - `implementation_reference` JSONB NOT NULL — opaque reference to the handler implementation (e.g., `{"repo": "arthurmenson/telecheck-app", "module": "ai-service/handlers/glp1_protocol_eval", "commit_sha": "abc123...", "build_artifact_id": "..."}`)
@@ -64,7 +69,16 @@ One row per immutable version of a registered handler. Columns:
 
 **Triple-composite UNIQUE** `(tenant_id, handler_name, handler_version)` — within a tenant scope, a handler-name + version uniquely identifies a registry row.
 
-**Versioning rule (I-013 published-content-immutable):** handler_version semver is monotonically increasing per (tenant_id, handler_name); a new registration with the same handler_name MUST increment the version. Same-name+version registrations REJECTED.
+**Versioning rule (I-013 published-content-immutable; closes Codex R1 HIGH-2 monotone-semver enforceability):** handler_version semver is monotonically increasing per (tenant_id, handler_name); a new registration with the same handler_name MUST be strictly greater than the current maximum version. Same-name+version registrations REJECTED. Lower-version registrations REJECTED. Enforcement: see Sub-decision 1.5 INSERT trigger below.
+
+### Sub-decision 1.5: BEFORE INSERT trigger `ai_workflow_handler_registry_semver_monotone` (closes Codex R1 HIGH-2)
+
+Trigger fires BEFORE INSERT on `ai_workflow_handler_registry` and validates that `NEW.(handler_version_major, handler_version_minor, handler_version_patch)` is strictly greater (lexicographic comparison on the 3 generated columns) than `MAX((handler_version_major, handler_version_minor, handler_version_patch))` for the same `(NEW.tenant_id, NEW.handler_name)` stream. SELECT-FOR-UPDATE-locks the existing-max row to prevent concurrent inserts racing.
+
+Rejection codes:
+- `semver_grammar_violation` — handler_version doesn't match `^\d+\.\d+\.\d+$`
+- `semver_not_monotone_increasing` — proposed version not strictly greater than current max
+- `concurrent_registration_race` — SELECT-FOR-UPDATE lock contention (caller retries with idempotency)
 
 **Persistence model per OQ4 (cross-SI ratifier decision):**
 - Option A (immutable + transition entity): registry row never updates; state changes via `ai_workflow_handler_registry_transition` entity (separate). The `state` column above becomes a derived view.
@@ -89,20 +103,91 @@ Subscribers:
 - SI-008 `record_workflow_pointer_swap` SECURITY DEFINER procedure — validates that the FK target handler is in `published` state at execution time
 - Admin Backend — operator dashboard of registered handlers + their states
 
-### Sub-decision 4: RBAC — 1 new role definition
+### Sub-decision 4: RBAC — 2 new role definitions + canonical dual-control matrix (closes Codex R1 MED-1)
 
-- `ai_workflow_handler.registrar` — write role for INSERT into `ai_workflow_handler_registry`; granted to a small named set of AI Service operators + Compliance Officer (dual-control per I-015 for protocol-execution handlers; single-control acceptable for conversational_assistant handlers per OQ3 below)
+- `ai_workflow_handler.proposer` — INSERT role; allowed to create rows in `registered` state. Does NOT have authority to transition `registered → published`.
+- `ai_workflow_handler.approver` — state-transition role for `registered → published`. Dual-control enforced: caller MUST hold `ai_workflow_handler.approver` AND be different from `created_by_account_id`.
 
-State-change permissions inherit from the registrar role; explicit RBAC entries:
-- `ai_workflow_handler.registrar` — INSERT + state transitions `registered → published` (requires dual-control for protocol_execution + autonomous types per OQ3)
-- `ai_workflow_handler.registrar` — state transitions `published → deprecated → retired` (single-control; deprecation is monotone reductive)
+**New required columns on `ai_workflow_handler_registry` to enforce the matrix (closes Codex R1 MED-1):**
+
+- `proposed_by_account_id` ULID FK to accounts (renamed from `created_by_account_id` for clarity; the proposer)
+- `approved_by_account_id` ULID FK to accounts NULL — populated only on the `registered → published` transition; NULL while state = `registered`; NOT NULL when state ∈ `{published, deprecated, retired}`
+- `approved_at` TIMESTAMPTZ NULL — populated alongside `approved_by_account_id`
+- `approval_artifact_id` ULID FK to governance review artifact NOT NULL when state ∈ `{published, deprecated, retired}`
+
+**CHECK constraints (table-level):**
+- `(state = 'registered' AND approved_by_account_id IS NULL AND approved_at IS NULL) OR (state IN ('published', 'deprecated', 'retired') AND approved_by_account_id IS NOT NULL AND approved_at IS NOT NULL)`
+- `approved_by_account_id <> proposed_by_account_id` when state ∈ `{published, deprecated, retired}` — enforces no-self-approval per I-015
+
+**Workload-type-driven dual-control matrix (closes Codex R1 MED-1 OQ3 promotion to normative):**
+
+| `ai_workload_type` | Dual-control required for `registered → published`? |
+|---|---|
+| `conversational_assistant` (Mode 1; no clinical decisions per ADR-002 + I-002) | NO (single-control acceptable; `approved_by_account_id` may equal `proposed_by_account_id` per a CHECK-constraint carve-out for this workload type) |
+| `protocol_execution` (Mode 2; patient-impacting) | **YES** (dual-control required per I-015) |
+| `autonomous_agent` (reserved; ADR-030+) | **YES** (dual-control required) |
+| `multi_agent_supervisor` (reserved; ADR-031+) | **YES** (dual-control required) |
+| `tool_using_agent` (reserved; ADR-032+) | **YES** (dual-control required) |
+
+**CHECK constraint** (table-level, dual-control matrix enforcement):
+```sql
+CHECK (
+  -- conversational_assistant carve-out: dual-control NOT required
+  (ai_workload_type = 'conversational_assistant' AND state IN ('registered','published','deprecated','retired'))
+  OR
+  -- All other ai_workload_types: dual-control REQUIRED (approved_by != proposed_by)
+  (ai_workload_type <> 'conversational_assistant' AND
+    ((state = 'registered') OR
+     (state IN ('published','deprecated','retired') AND approved_by_account_id <> proposed_by_account_id))
+  )
+)
+```
+
+**Procedure-level enforcement:** any `registered → published` state transition that goes through a SECURITY DEFINER procedure (per OQ4 persistence-model decision) inherits the same matrix as STEP 2.5 of its validation chain.
 
 ### Sub-decision 5: Tenant-threading per ADR-023 + I-023 + I-032
 
 - `ai_workflow_handler_registry.tenant_id` enforced via RLS for tenant-scoped handlers
 - `tenant_id = 'platform'` sentinel — platform-wide handlers visible to all tenants (per OQ2 below); RLS bypass for SELECT only; INSERT to `'platform'` rows requires platform_admin role per I-015
 - Any handler-registration SECURITY DEFINER procedure (if registration goes through a procedure rather than direct INSERT) inherits I-032 STEP 0 Mode 1/Mode 2 (per the just-ratified canonical I-032 in INVARIANTS v5.3)
-- Cross-tenant handler-lookup at execution time: SI-008's `ai_workflow_executions.ai_workflow_handler_id` FK resolves to either the tenant's own registered handler OR a `'platform'`-tenant handler; canonical resolution order = tenant-specific first, then platform-fallback
+- Cross-tenant handler-lookup at execution time: SI-008's `ai_workflow_executions.ai_workflow_handler_id` FK resolves to either the tenant's own registered handler OR a `'platform'`-tenant handler; canonical resolution order = tenant-specific first, then platform-fallback. **The FK alone is INSUFFICIENT for tenant-isolation** — closes Codex R1 HIGH-1.
+
+**Sub-decision 5.5: Execution-time tenant-eligibility CHECK constraint on `ai_workflow_executions` (closes Codex R1 HIGH-1; cross-SI amendment to SI-008's already-ratified `ai_workflow_executions` entity).**
+
+A bare FK from `ai_workflow_executions.ai_workflow_handler_id` to `ai_workflow_handler_registry.id` proves the handler row exists but NOT that it is usable by the execution's tenant. To prevent silent cross-tenant binding, an execution-time CHECK is required:
+
+```sql
+-- BEFORE INSERT trigger ai_workflow_executions_handler_tenant_eligibility
+-- Closes SI-016 R1 HIGH-1 — prevents silent cross-tenant handler binding
+CREATE OR REPLACE FUNCTION ai_workflow_executions_handler_tenant_eligibility_fn()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_handler_tenant_id TEXT;
+BEGIN
+  SELECT tenant_id INTO v_handler_tenant_id
+  FROM ai_workflow_handler_registry
+  WHERE id = NEW.ai_workflow_handler_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ai_workflow_executions: handler_id % does not exist in registry', NEW.ai_workflow_handler_id;
+  END IF;
+
+  IF v_handler_tenant_id <> NEW.tenant_id AND v_handler_tenant_id <> 'platform' THEN
+    RAISE EXCEPTION 'ai_workflow_executions: handler_id % belongs to tenant %, not execution tenant % (and not platform-sentinel); cross-tenant handler binding rejected',
+      NEW.ai_workflow_handler_id, v_handler_tenant_id, NEW.tenant_id;
+  END IF;
+
+  -- Record which resolution path (tenant-specific or platform-fallback) was used
+  NEW.handler_resolution_path = CASE WHEN v_handler_tenant_id = NEW.tenant_id THEN 'tenant_specific' ELSE 'platform_fallback' END;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Cross-SI consequence:** SI-008 `ai_workflow_executions` entity gains a new column `handler_resolution_path` VARCHAR(40) NOT NULL with enum `('tenant_specific' | 'platform_fallback')` — populated by the trigger above. This is a CDM amendment to an already-ratified entity (P-018 SI-008); it requires a parallel supersession entry (P-018b) OR a single combined ratification.
+
+**Caveat for ratifier:** this Sub-decision 5.5 amends a ratified entity. Per CLAUDE.md hard-floor item 6, amendments to canonical contract surfaces beyond the SI's scoped sub-decisions ARE architectural-judgment. SI-016 scopes the new `ai_workflow_handler_registry` entity, not amendments to `ai_workflow_executions`. **This may need ratifier escalation to either: (a) ratify SI-016 + the parallel P-018b supersession together; or (b) defer the execution-time tenant-eligibility CHECK to SI-008's own future amendment SI.** Recommendation: (a) — they're tightly coupled (FK target's eligibility rule must be authored alongside the FK origin's enforcement). Surfaces as OQ6 below.
 
 ---
 
@@ -132,6 +217,23 @@ If all 5 sub-decisions ratify, the lockstep PR-A2-class commit lands:
 4. **OQ4 — Codex pre-ratification target:** 3 rounds + 1 verification = 4 total. STOP-and-escalate per discipline floor on architectural-judgment.
 
 5. **OQ5 — `implementation_reference` JSONB schema enforcement?** Recommendation: define a JSON Schema validator for the `implementation_reference` field; reject INSERT on schema violation. Specific schema: `{"repo": "<github-org/repo>", "module": "<dotted-path>", "commit_sha": "<40-char-hex>", "build_artifact_id": "<optional-ULID>"}`. Future fields additive.
+
+### Open Question 6 (SI-016-OQ-EXECUTION-CHECK-AMENDMENT) — **STOP-CONDITION; HARD-FLOOR ITEM 6 ESCALATION; AWAITING EVANS'S RATIFIER DECISION**
+
+**Trigger:** Codex R1 HIGH-1 closure required `ai_workflow_executions` to gain a BEFORE INSERT trigger validating handler-tenant-eligibility + a new `handler_resolution_path` column. This is an amendment to the **already-ratified P-018 SI-008 `ai_workflow_executions` entity** — beyond the scope SI-016 itself declared. Per CLAUDE.md hard-floor item 6: amendments to canonical contract surfaces beyond the SI's scoped sub-decisions are architectural-judgment.
+
+**Two paths Evans must choose:**
+
+- **Option A — Combined ratification (recommended):** ratify SI-016 + the parallel P-018b supersession entry together in the same ratifier ceremony. P-018b amends P-018's CDM §4.23 `ai_workflow_executions` with: new column `handler_resolution_path` + new BEFORE INSERT trigger. Both ratify in the same lockstep canonical content port. Tightly-coupled FK + enforcement.
+
+- **Option B — Defer execution-time CHECK to a separate SI:** ratify SI-016 alone without the execution-time CHECK; file a separate future SI (call it SI-008.1 or P-018b standalone) for the `ai_workflow_executions` amendment. Implementation can begin on SI-016 + use application-layer pre-INSERT validation as an interim measure; the canonical CHECK constraint lands later.
+
+**Claude's advisory recommendation:** Option A. Reasoning:
+- The FK origin's enforcement and the FK target's eligibility rule MUST be authored together for correctness; splitting creates a window where SI-016 is ratified but execution-time enforcement is missing.
+- P-018 SI-008 just had a supersession (P-018a) for actor-identity-source; the supersession pattern is well-established. P-018b can follow exactly the same shape (reconciliation entry; no Registry bump from the supersession itself; consolidated lockstep).
+- Cycle precedent: cross-SI ratifications (P-026 SI-018 + P-027 SI-017 + P-018a/P-019a/P-021a in one ceremony) are working well.
+
+**If Evans selects Option B:** SI-016 can ratify standalone without the Sub-decision 5.5 amendment; the execution-time CHECK becomes a follow-up.
 
 ---
 
