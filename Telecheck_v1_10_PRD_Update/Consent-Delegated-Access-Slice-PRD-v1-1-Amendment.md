@@ -1,7 +1,8 @@
 # Consent & Delegated Access Slice PRD v1.0 → v1.1 Amendment
 
 **Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; Sprint 14 of autonomous 24h-loop work plan
+**Status:** RATIFIER-READY-WITH-KNOWN-OQs (R2 Codex APPROVE 2026-05-19); Sprint 14 of autonomous 24h-loop work plan
+**Codex iteration trajectory:** R1 (3 HIGH + 1 MED) → R2 APPROVE (with prose-consistency cleanup of stale references in §1/§3.SD2/§3.SD4 dispatcher prose/§5 test table). All 4 findings closed inline; 0 architectural-judgment items closed inline; 7 known OQs (§6) remain ratifier-targetable.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus Track 3 deliverable)
 **Owner:** Evans (per progress.json area=slice-consent owner) + Compliance Officer (consent governance)
 **Companion documents:** `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Consent_Delegated_Access_Slice_PRD_v1_0.md` (target canonical surface); SI-017 Identity Spec v1.1 (Sprint 8; canonical middleware-GUC + I-032 STEP 0); Sprint 13 KMS Architecture Spec (per-tenant key access for consent data); Contracts Pack v5.2 DOMAIN_EVENTS + AUDIT_EVENTS + INVARIANTS v5.3; ADR-028 Research Data Partnership Posture A.
@@ -15,7 +16,7 @@ This amendment integrates **three architectural shifts** into the canonical Cons
 
 1. **Domain-event emission via same-transaction outbox pattern** — every consent transition (grant / revoke / scope-change / delegation-grant / delegation-revoke) emits BOTH a Cat A audit event AND a domain event within the same transaction, persisted to a canonical outbox table for downstream subscribers (e.g., AI Service for consent-revocation propagation; Forms Engine for consent-aware form gating; Research Data Pipeline per ADR-028).
 2. **SI-017 canonical-middleware-GUC integration** — every consent procedure is SECURITY DEFINER with I-032 STEP 0 tenant-GUC equality guard per Sprint 8 contract.
-3. **Consent-revocation-bound KMS access pattern** — revocation of `pii_research_consented` data class triggers Cat A `kms.consent_revocation_research_data_lock` event; downstream KMS decrypt operations on that tenant's research-consented data fail per the consent_revocation_locks table check.
+3. **Consent-revocation-bound KMS access pattern** — revocation of `pii_research_consented` data class triggers Cat A `kms.consent_revocation_research_data_lock` event; downstream KMS decrypt operations on that tenant's research-consented data fail per the canonical STEP 0.5 check against `consent_research_active` view (R1 HIGH-1 closure: epoch-versioned via append-only `consent_revocation_event` table; permanent-lock approach retracted).
 
 **Out of scope (deferred):**
 - Patient-facing consent UI design (downstream of UI Design Implementation Contract v1.1; covered by separate UX deliverable).
@@ -126,7 +127,7 @@ CREATE INDEX consent_domain_event_delivery_pending_idx
 
 ### Sub-decision 2 — Consent-revocation-bound KMS access lock (research-data-class)
 
-**Decision shape:** revocation of a research-consent triggers a Cat A `kms.consent_revocation_research_data_lock` event + INSERT into `consent_revocation_locks`. Downstream KMS decrypt operations on that tenant's `pii_research_consented` data class verify the lock is not present BEFORE proceeding.
+**Decision shape (R1 HIGH-1 closure: epoch-versioned via append-only event table):** revocation of a research-consent triggers a Cat A `kms.consent_revocation_research_data_lock` event + INSERT into `consent_revocation_event` (append-only). Downstream KMS decrypt operations on that tenant's `pii_research_consented` data class verify there is an ACTIVE consent (via the `consent_research_active` view) BEFORE proceeding — handling re-grant cycles correctly.
 
 **Schema (R1 HIGH-1 closure: epoch-versioned lock model preserves re-grant decryptability):**
 
@@ -225,7 +226,7 @@ The `consent_revocation_locks` table from the v0.1 draft is replaced by the `con
 1. Polls outbox table every 1s; processes up to 100 pending events per cycle (batched).
 2. For each pending event: invokes subscriber webhooks for the event_type. Subscriber list is registered in `consent_domain_event_subscriber` table per tenant + event_type.
 3. Delivery is at-least-once; subscribers handle idempotency via the event_id key.
-4. On success: sets `consumed_at`. On failure: increments `delivery_attempts`; retries with exponential backoff up to 5 attempts; after 5: emits Cat A `consent.outbox_drain_failed` event + adds to dead-letter queue for operator triage.
+4. **Per-subscriber delivery (R1 HIGH-2 closure):** for each pending row in `consent_domain_event_delivery`, dispatcher invokes the subscriber's webhook. On success: sets `delivered_at` + `delivery_status='delivered'`. On failure: increments `delivery_attempts` + sets `next_attempt_at` per exponential backoff (1m, 5m, 15m, 1h, 6h); after 5 failed attempts: status → `dead_lettered`; Cat A `consent.outbox_drain_failed` event emitted (P2 keyed by tenant_id + subscriber_id). The event is fully terminal only when ALL per-subscriber rows are in {delivered, dead_lettered, skipped}.
 5. Dispatcher publishes its own health metric `consent_outbox_pending_count` + `consent_outbox_lag_seconds`; SRE alerts on >5 minutes lag.
 
 ### Sub-decision 5 — SI-017 I-032 STEP 0 integration for all consent procedures
@@ -337,8 +338,8 @@ Each procedure amended per Sub-decision 5 with I-032 STEP 0 + outbox emission st
 | Test ID | File location | CI job | Verifies | Section |
 |---|---|---|---|---|
 | Test C.1 | `apps/api-server/__integration__/consent/grant_outbox_atomic.test.ts` | `integration-consent` | grant_consent rolls back → outbox row also absent (same-tx atomicity) | §3 SD1 |
-| Test C.2 | `apps/api-server/__integration__/consent/revoke_outbox_propagation.test.ts` | `integration-consent` | revoke_consent emits both Cat A audit + outbox row in same tx; dispatcher delivers to subscribers; consumed_at set | §3 SD1, SD4 |
-| Test C.3 | `apps/api-server/__integration__/consent/revoke_research_kms_lock.test.ts` | `integration-consent` | revoke tier-6 consent → consent_revocation_locks INSERT + Cat A `kms.consent_revocation_research_data_lock` event | §3 SD2 |
+| Test C.2 | `apps/api-server/__integration__/consent/revoke_outbox_propagation.test.ts` | `integration-consent` | revoke_consent emits both Cat A audit + outbox row in same tx; dispatcher delivers to each registered subscriber; per-subscriber `delivery_status='delivered'` + `delivered_at` set | §3 SD1, SD4 |
+| Test C.3 | `apps/api-server/__integration__/consent/revoke_research_event.test.ts` | `integration-consent` | revoke tier-6 consent → `consent_revocation_event` INSERT (append-only) + Cat A `kms.consent_revocation_research_data_lock` event; `consent_research_active` view no longer shows this consent | §3 SD2 |
 | Test C.4 | `apps/api-server/__integration__/consent/kms_decrypt_after_revoke.test.ts` | `integration-consent` | Decrypt of `pii_research_consented` after revocation → STEP 0.5 fails with ERRCODE TLC51 | §3 SD2 |
 | Test C.5 | `apps/api-server/__integration__/consent/i032_step0_tenant_mismatch.test.ts` | `integration-consent` | Call grant_consent with mismatched `app.tenant_id` GUC → ERRCODE TLC32 + Cat A audit | §3 SD5 |
 | Test C.6 | `apps/api-server/__integration__/consent/tier6_default_opt_in.test.ts` | `integration-consent` | New patient registration: tier 6 default state = none (opt-in required) | §3 SD3 |
