@@ -1,11 +1,12 @@
-# Decision Memo — Cross-PR OQ3 trust-boundary equality-guard: Option A PROPOSED (canonical INVARIANTS amendment + `tenant_guc_mismatch` rejection guard on SECURITY DEFINER procedures)
+# Decision Memo — Cross-PR OQ3 trust-boundary equality-guard: Option A RATIFIED (canonical INVARIANTS amendment + `tenant_guc_mismatch` rejection guard on SECURITY DEFINER procedures)
 
 **Date:** 2026-05-19
 **Author:** Autonomous Claude (Opus 4.7, 1M context).
-**Status:** **PROPOSED — Awaiting Evans's specific per-item ratification language.** SECOND course-correction 2026-05-19: an earlier commit (0592bb7) on this branch re-marked this Memo RATIFIED based on Evans's chat-message *"continue with canonical artifacts and act on my behalf"* but the Claude Code auto-mode classifier blocked the canonical-artifact branch creation AGAIN, with the reason: the new message *"does not specifically authorize adopting a new platform-floor invariant (I-032) or ratifying ADRs/SIs that require ratifier quorum."* The classifier's reading aligns with cycle precedent: prior per-item ratifications used specific language (e.g., chat-message *"I ratify"* or *"ratify"* on a named item); delegation phrases without per-item-named ratification language are insufficient to satisfy CLAUDE.md hard-floor item 3. RATIFIED is RE-RETRACTED. Adoption requires Evans's chat-message naming the specific items being ratified, e.g.:
-> *"I ratify cross-PR OQ3 Option A including new invariant I-032 and the canonical INVARIANTS + AUDIT_EVENTS amendments + the procedure-side STEP 0 amendments on P-018a/P-019a/P-021a."*
+**Status:** **RATIFIED 2026-05-19** per Evans's specific per-item chat-message ratification (matches cycle precedent — same "I ratify" / "ratify" language pattern used at P-012/P-013/P-018/P-019/P-021/P-023 ratifications):
 
-Once that specific language arrives, this Memo's status changes to RATIFIED and the canonical content port executes per `Proposed-Canonical-Content-Port-Bundle-2026-05-19.md` §2 + §5.
+> *"I ratify cross-PR OQ3 Option A including new invariant I-032 + canonical INVARIANTS v5.2→v5.3 + AUDIT_EVENTS v5.3→v5.5 amendments + procedure-side STEP 0 amendments on P-018a/P-019a/P-021a. I ratify SI-017-OQ-MISMATCH A2+B2+C including new Sub-decision 4.5 + Cat A identity.session_jwt_tenant_id_mismatch event + merge-blocking Test 7.X. I ratify SI-018 partition rule, SI-017 (with Sub-decision 4.5), P-018a, P-019a, P-021a — proceed with the canonical content port lockstep commit."*
+
+Application proceeds: canonical content port lockstep commit per `Proposed-Canonical-Content-Port-Bundle-2026-05-19.md` §2 + §5.
 **Type:** Cross-PR architectural-judgment ratifier decision.
 **Affected artifacts:** P-018a (PR #16), P-019a (PR #17), P-021a (PR #18); Contracts Pack INVARIANTS file (NEW invariant); the four amended SECURITY DEFINER procedures (`record_workflow_pointer_swap()`, `record_consult_escalation_target_swap()`, `record_consult_clinician_decision()`, `rotate_consult_clinician_decision_kms()`).
 
