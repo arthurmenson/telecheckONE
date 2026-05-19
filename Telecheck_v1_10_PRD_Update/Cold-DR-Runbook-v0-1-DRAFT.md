@@ -393,7 +393,7 @@ Per I-019 + I-017 platform floor, every device's local-fallback queue's enqueue 
 **ACK channel canonical topology:**
 
 - **Multi-region writeable endpoint:** the ACK channel accepts writes at BOTH us-east-1 and us-west-2 endpoints concurrently (CRDT-style append-only store; AWS DynamoDB Global Tables OR equivalent multi-region database; not the primary RDS that is failed-over). Devices send ACKs to the geographically nearest reachable endpoint via DNS round-robin or active-active load balancing.
-- **Durability:** each ACK write is durable with quorum across both regions; an ACK is acknowledged to the device only when at least 1 region has accepted it.
+- **Durability (R4 HIGH-1 closure; quorum-correct):** each ACK write is durable with QUORUM across both regions = **the device's "ACK received" signal fires only after BOTH regions (or W=2-of-2 strong consistency for the 2-region topology) have accepted the write**. Single-region ACKs are PROVISIONAL — they DO NOT cause the device to mark a signal as platform-acknowledged. If only one region acknowledged, the device treats the emission as still-locally-pending until either (a) the second region acknowledges via replication backfill, OR (b) the device reconciles on reconnect treating the locally-ACK'd-but-server-record-missing emissions as pending obligations.
 - **Retry semantics on the device:** if the ACK channel is unreachable from a device, the device retries with exponential backoff; the device's local queue does NOT mark a signal as ACK'd until the platform-side acknowledgment is received. Unacknowledged local emissions remain in the device queue as pending.
 - **Two-source authoritative inventory:** the platform-side authoritative inventory is the union of:
   - (a) `i019_enqueue_ack_log` entries received via the multi-region ACK channel (the authoritative-server-side record of acknowledged-by-platform emissions)
@@ -407,7 +407,10 @@ Per I-019 + I-017 platform floor, every device's local-fallback queue's enqueue 
 
 ```bash
 $ dr-tool verify-i019-fallback-replay --target us-west-2 --window T+0 to T+failover_complete
-# (a) Server-side inventory: query i019_enqueue_ack_log for every (device_id, local_signal_id) pair acknowledged during the read-only window. This is the authoritative "expected" inventory — NOT device-reported.
+# (a) Server-side inventory (TWO-SOURCE per R4 HIGH-2 closure):
+#     (a.i) i019_enqueue_ack_log entries acknowledged with QUORUM during the read-only window — authoritative for emissions the platform durably recorded.
+#     (a.ii) For each reachable device, on first successful write after cutover, the device uploads its local queue's pending-obligation list — emissions that were locally-emitted but not platform-ACK'd (or only single-region ACK'd, treated as locally-pending). This upload is REQUIRED for the device to advance past first-reconnect; failure of this upload BLOCKS the device's subsequent writes per the canonical I-019 reconciliation contract.
+#     The expected gating inventory = UNION of (a.i) + (a.ii). Step 14.5 drain/order/dedup/isolation checks apply to the union, not just (a.i).
 # (b) Reachable-device cohort definition: a device is "reachable" if it has issued at least 1 successful write to the platform within 4h of cutover; this defines the cohort whose replay is GATING for failover completion.
 # (c) Bounded drain SLA: for the reachable-device cohort, every expected (device_id, local_signal_id) per (a) MUST have a corresponding processed audit row within 60 min of cutover (4h escalation deadline).
 # (d) Verify ordering: replayed signals processed in original emit-timestamp order per tenant + per patient.
@@ -446,7 +449,8 @@ E) Tenant-level Cat B `audit_retention.i019_offline_cohort_warning` emitted for 
 **Step 14.5 result interpretation (refined per R2 MED-1):**
 - **All reachable devices drained + ordered + deduped + isolated within 60 min + offline cohort below threshold**: failover proceeds to Step 16 mark-complete.
 - **Reachable-cohort queues not drained within 60 min**: extend deadline to 4h; if still not drained, escalate to IC + Privacy Officer + Compliance Officer review; Step 16 BLOCKED until reachable-cohort drained.
-- **Offline cohort exceeds tenant-risk threshold**: Privacy Officer + Compliance Officer + Incident Commander must review per-tenant impact + sign off on whether failover-completion may proceed despite the offline cohort. The `i019_pending_replay` reconciliation continues regardless.
+- **Offline cohort >5% but ≤20% on any tenant** (warning threshold tripped but block threshold not crossed): per the hard-gate rule above (clauses D + E), Privacy Officer + Compliance Officer review acknowledgment REQUIRED + tenant-level Cat B `audit_retention.i019_offline_cohort_warning` MUST be emitted per affected tenant; once both are recorded, failover proceeds to Step 16 mark-complete. The `i019_pending_replay` reconciliation continues regardless.
+- **Offline cohort >20% on any tenant** (block threshold crossed): Step 16 mark-complete is BLOCKED. Override requires the canonical override authority defined above: explicit chat-message ratification from CTO + Compliance Officer + Incident Commander (3 named humans) + a written per-tenant residual-risk acceptance attached to the deploy ticket for every tenant exceeding 20%. Privacy Officer review is advisory and informs (does not gate) the CTO/CO/IC decision. The `i019_pending_replay` reconciliation continues regardless. (R4 MED-1 closure: this bullet's authority model is normalized to match the §"Authority + override path" hard-gate definition above — no Privacy-Officer-as-gate, no missing CTO, no missing residual-risk artifact.)
 - **Any ordering / dedup / isolation violation**: P0 alert; quarantine the affected tenant cohort; the failover is not marked complete; named manual review of every affected signal per crisis-response runbook.
 
 This rewrite ensures the I-019 replay gate is provable under realistic offline-device conditions — using server-side acknowledgment evidence as the authoritative record, not device-side self-reporting that may never reconnect.
