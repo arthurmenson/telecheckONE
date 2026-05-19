@@ -329,23 +329,62 @@ Per I-024, cross-tenant access is permitted only under operator-gated break-glas
 
 The `affected_data_class` ↔ `data_class` equality check ensures a session approved for `pii_demographic` CANNOT decrypt `pii_sensitive_clinical` ciphertext for the same tenant — the encryption-context's `data_class` MUST match the session-pinned `affected_data_class`.
 
-4. **Explicit Deny for missing OR mismatched scope (R2 HIGH closure: comprehensive coverage):**
+4. **Explicit Deny for missing OR mismatched scope (R3 HIGH closure: per-tag Deny since IAM evaluates multiple condition keys as AND, not OR):**
+
+Each required tag gets its OWN Explicit Deny statement. Omission of ANY single required tag triggers Deny; this is the canonical IAM pattern for "missing tag → deny" because multiple keys in a single `Null` block are evaluated as AND (all-must-be-null to trigger Deny — exactly the wrong direction for our requirement).
 
 ```json
 {
-  "Sid": "DenyBreakGlassWithoutFullScope",
+  "Sid": "DenyBreakGlassMissingIncidentId",
   "Effect": "Deny",
   "Principal": { "AWS": "arn:aws:iam::<account>:role/break-glass-operator" },
   "Action": "kms:Decrypt",
   "Resource": "*",
-  "Condition": {
-    "Null": {
-      "aws:PrincipalTag/incident_id": "true",
-      "aws:PrincipalTag/tenant_id": "true",
-      "aws:PrincipalTag/affected_data_class": "true",
-      "aws:PrincipalTag/expires_at": "true"
-    }
-  }
+  "Condition": { "Null": { "aws:PrincipalTag/incident_id": "true" } }
+}
+```
+
+```json
+{
+  "Sid": "DenyBreakGlassMissingTenantId",
+  "Effect": "Deny",
+  "Principal": { "AWS": "arn:aws:iam::<account>:role/break-glass-operator" },
+  "Action": "kms:Decrypt",
+  "Resource": "*",
+  "Condition": { "Null": { "aws:PrincipalTag/tenant_id": "true" } }
+}
+```
+
+```json
+{
+  "Sid": "DenyBreakGlassMissingAffectedDataClass",
+  "Effect": "Deny",
+  "Principal": { "AWS": "arn:aws:iam::<account>:role/break-glass-operator" },
+  "Action": "kms:Decrypt",
+  "Resource": "*",
+  "Condition": { "Null": { "aws:PrincipalTag/affected_data_class": "true" } }
+}
+```
+
+```json
+{
+  "Sid": "DenyBreakGlassMissingExpiresAt",
+  "Effect": "Deny",
+  "Principal": { "AWS": "arn:aws:iam::<account>:role/break-glass-operator" },
+  "Action": "kms:Decrypt",
+  "Resource": "*",
+  "Condition": { "Null": { "aws:PrincipalTag/expires_at": "true" } }
+}
+```
+
+```json
+{
+  "Sid": "DenyBreakGlassMissingBreakGlassApproved",
+  "Effect": "Deny",
+  "Principal": { "AWS": "arn:aws:iam::<account>:role/break-glass-operator" },
+  "Action": "kms:Decrypt",
+  "Resource": "*",
+  "Condition": { "Null": { "aws:PrincipalTag/break_glass_approved": "true" } }
 }
 ```
 
@@ -478,7 +517,7 @@ CREATE TABLE kms_residency_dr_override (
 | Test KMS.15 | `apps/api-server/__integration__/kms/sts_session_tag_binding.test.ts` | `integration-kms` | Confused-deputy simulation: app sets `app.tenant_id = tenant_A`, attempts to assume `tenant-<tenant_B>-service` role → STS denies with tenant_id session-tag mismatch (R1 HIGH-3) | §4.3 |
 | Test KMS.16 | `infrastructure/policy-as-code/tests/key_policy_drift.test.ts` | `policy-as-code` | Daily KMS replica-policy drift check: effective key policy on us-west-2 replica matches us-east-1 primary per canonical IaC artifact (R1 HIGH-2) | §3.1 |
 | Test KMS.17 | `apps/api-server/__integration__/kms/pre_failover_canary.test.ts` | `integration-kms` | Pre-failover canary decrypt against us-west-2 succeeds per tenant; failure blocks that tenant from failover (R1 HIGH-2) | §3.1, §8 |
-| Test KMS.7b | `apps/api-server/__integration__/kms/break_glass_missing_tags.test.ts` | `integration-kms` | Break-glass attempt without complete session tags (missing incident_id OR tenant_id OR expires_at) → STS-or-IAM Deny (R1 HIGH-1) | §7.1 |
+| Test KMS.7b | `apps/api-server/__integration__/kms/break_glass_missing_tags.test.ts` | `integration-kms` | Break-glass attempt with ANY SINGLE missing session tag from {incident_id, tenant_id, affected_data_class, expires_at, break_glass_approved} → IAM Deny + Cat A audit. Each test case omits one tag at a time and asserts Deny per the 5 per-tag Explicit Deny statements (R1 HIGH-1 + R3 HIGH closure) | §7.1 |
 | Test KMS.7c | `apps/api-server/__integration__/kms/break_glass_past_expiry.test.ts` | `integration-kms` | Break-glass attempt past expires_at → STS-or-IAM Deny + Cat A audit (R1 HIGH-1) | §7.1 |
 | Test KMS.7d | `apps/api-server/__integration__/kms/break_glass_signature_check.test.ts` | `integration-kms` | Approval-broker invocation without 3 valid approver HSM signatures → broker refuses sts:AssumeRole (R1 HIGH-1) | §7.1 |
 | Test KMS.5b | `apps/api-server/__integration__/kms/dek_versioned_reads.test.ts` | `integration-kms` | Mixed old + new DEK rows; reads on both succeed via dek_version_id dispatch (R1 MED-1) | §6.4 |
@@ -537,6 +576,7 @@ No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honor
 | Round | Findings | Status |
 |---|---|---|
 | R2 | HIGH break-glass data-class scope declared but not IAM-enforced | Closed inline by pinning session to single data class + adding key-policy equality check + Explicit Deny for mismatch |
+| R3 | HIGH `DenyBreakGlassWithoutFullScope` single-statement covered only all-tags-missing (IAM evaluates multiple condition keys as AND, not OR); omission of ANY SINGLE required tag wasn't denied | Closed inline by splitting into 5 per-tag Explicit Deny statements (`DenyBreakGlassMissing*`), each independently triggered by omission of its target tag |
 
 **Workstream-discipline note for R2:** Codex flagged R2 finding as architectural-judgment + STOP-and-escalate. On review per CLAUDE.md hard-floor item 6 discriminator: the `affected_data_classes` session-tag scope was ALREADY declared in §7.1 item 2 at R1 closure; the R2 fix makes the existing scope IAM-enforceable rather than only-procedural. This is the same pattern as Sprint 8 R1 HIGH-3 (5-layer enforcement made existing scope enforceable) and Sprint 9 R1 HIGH-3 (3-layer enforcement). Per the established precedent across Sprints 8-12, IAM/policy-enforcement closures of already-declared scope are in-scope correctness; only NET-NEW architecture/schema/invariant proposals trigger hard-floor item 6 escalation. Closed inline.
 
