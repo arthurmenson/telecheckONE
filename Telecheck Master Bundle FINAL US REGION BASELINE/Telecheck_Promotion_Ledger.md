@@ -90,7 +90,7 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 1. **P-019 Sub-decision 3 (procedure design) AMENDED:** caller-supplied JWT-verified actor parameters per SI-017.
 2. **P-019 Sub-decision 4 (Server-trusted actor identity via SET LOCAL-bound `_session_actor_context`) SUPERSEDED ENTIRELY:** SI-010 primitives gone; replaced with canonical SI-017 authContextPlugin + pgbouncer transaction-mode + SET LOCAL discipline per System Architecture v1.2 §5.
 3. **P-019 three-tier audit-durability sub-decision AMENDED:** audit-emission LOCATION moves to application-layer; D1/D2/D3 relabel; this procedure's audit event lives in **P2 (tenant-governance)** because `target_patient_id IS NULL` (event is not patient-bound) per SI-018.
-4. **NEW STEP 0 — I-032 Tenant-GUC equality guard** added to `record_consult_consult_escalation_target_swap()`.
+4. **NEW STEP 0 — I-032 Tenant-GUC equality guard** added to `record_consult_escalation_target_swap()`.
 
 **Rejection code set update:** add `tenant_guc_mismatch` to P-019's existing set.
 
