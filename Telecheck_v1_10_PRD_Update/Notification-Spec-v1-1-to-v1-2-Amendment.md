@@ -58,18 +58,60 @@ This amendment integrates **five architectural shifts** into the canonical Notif
 4. **Severity-tiered routing:**
    - `imminent_harm` / `self_harm`: ALL channels dispatched in parallel (do not wait for ACK); per-tenant operator notification triggered (Cat A `notification.crisis_operator_alert`).
    - `medical_emergency`: ALL channels dispatched in parallel; emergency-services-redirect resource content included.
-5. **Idempotency:** the crisis-notification subsystem dedupes on `(tenant_id, patient_id, server_signal_id)`. The same crisis signal does not trigger duplicate notification dispatches even if the event is re-delivered (e.g., due to multi-region ACK channel replay).
+5. **Idempotency + canonical dispatch ledger (R1 HIGH-1 closure):** the crisis-notification subsystem dedupes via a canonical dispatch ledger keyed at the (tenant + patient + signal + channel) granularity:
+
+```sql
+CREATE TABLE notification_crisis_dispatch_ledger (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),                  -- = notification_id; encryption-context binding key
+    tenant_id tenant_id_t NOT NULL,
+    patient_id UUID NOT NULL,
+    server_signal_id UUID NOT NULL,                                 -- From Mode 1 ai.mode1.crisis_signal_emitted
+    channel TEXT NOT NULL,                                          -- 'push' | 'sms' | 'email' | 'in_app'
+    severity TEXT NOT NULL,
+    dispatch_obligation_state TEXT NOT NULL,                        -- See R1 HIGH-2 closure state machine §3 SD2
+    -- Append-only; state transitions recorded in notification_crisis_dispatch_event
+    CONSTRAINT notification_crisis_dispatch_ledger_unique
+        UNIQUE (tenant_id, patient_id, server_signal_id, channel)
+);
+```
+
+The UNIQUE constraint on `(tenant_id, patient_id, server_signal_id, channel)` is the canonical dedup. Re-delivery of the same signal_id from multi-region ACK channel replay attempts to INSERT a row with the same key + fails with conflict → the second attempt looks up the existing `notification_id` + treats the operation as a no-op.
+
+**Encryption-context binding (cross-references §3 SD5):** the notification's `payload_body` encryption-context includes `notification_id` from this ledger row, NOT the server_signal_id directly. This means encryption-context binding is per-channel (one notification_id per channel per signal), which prevents channel-payload cross-contamination from ledger-key collisions.
+
+**24h re-dispatch window (OQ1 deferred):** the canonical dedup is permanent at the channel granularity; OQ1's 24h window only governs whether a NEW notification_id can be issued for the same signal_id + channel after the initial dispatch terminates in a failure state. Recommendation: re-dispatch on terminal failure (delivery_failed) is allowed via a NEW notification_id within 24h; subsequent re-dispatch beyond 24h requires a new server_signal_id (which means a re-detection by Mode 1).
 
 ### Sub-decision 2 — DR-survivable notification delivery via multi-region ACK channel
 
 **Decision shape:** crisis-notification dispatch records ARE bound to the same DR-survivable multi-region ACK channel topology as Mode 1 crisis signals (per Sprint 7 Cold-DR Runbook).
 
-**Two-state notification-delivery model (parallels Sprint 7's three-state per-device obligation model):**
+**Full notification-delivery state machine (R1 HIGH-2 closure: faithful to Sprint 7 obligation model):**
 
-| State | Meaning | Reconciliation |
+The `dispatch_obligation_state` field on `notification_crisis_dispatch_ledger` transitions through:
+
+| State | Meaning | Next states |
 |---|---|---|
-| `dispatched` (quorum) | Both regions accepted the dispatch record; downstream provider invoked; awaiting delivery ACK | Standard delivery confirmation path |
-| `dispatched_partition_degraded` | Only one region accepted dispatch record (partition operation); downstream provider invoked from surviving region; partition_degraded=true | Promoted to quorum on regional recovery + replication backfill; recorded as pending obligation in dispatch ledger |
+| `accepted` | Ledger row INSERTed (canonical key acquired); not yet enqueued to provider | `accepted_partition_degraded` (under partition) OR `provider_invocation_pending` |
+| `accepted_partition_degraded` | Ledger row accepted in W=1 partition mode (only one region); awaiting cross-region replication backfill | `accepted` (post-replication promotion) OR `provider_invocation_pending` (surviving region continues without waiting) |
+| `provider_invocation_pending` | Dispatch enqueued to provider abstraction (Twilio/Vonage/FCM/APNS); awaiting provider invocation completion | `provider_invoked` OR `provider_invocation_failed` |
+| `provider_invoked` | Provider HTTP request succeeded (provider accepted dispatch); awaiting delivery confirmation webhook | `delivery_confirmed` OR `terminal_failed` (provider rejected) |
+| `delivery_confirmed` | Provider webhook confirmed delivery to device/recipient | TERMINAL (delivered) |
+| `provider_invocation_failed` | Provider HTTP request failed; eligible for fallback channel (per §3 SD1 step 2) | `accepted` (re-dispatch via fallback channel; NEW ledger row per channel) |
+| `terminal_failed` | All channels exhausted; non-deliverable | TERMINAL (failed) → triggers 5-min escalation per §3 SD6 |
+| `reconciled` | Post-DR-failover reconciliation matched a partition-degraded row to its provider-webhook outcome | TERMINAL (matched to delivery_confirmed/terminal_failed via reconciliation) |
+
+**Idempotency across regions:**
+- `accepted` + `accepted_partition_degraded` are idempotent (UNIQUE constraint per §3 SD1 step 5 dedups).
+- `provider_invocation_pending` → `provider_invoked` transition records the canonical provider request-id; webhook reconciliation matches on request-id, NOT on ledger key.
+- Duplicate webhook arrivals (e.g., provider retries OR DR reconciliation) match the same request-id + are no-ops past `delivery_confirmed`.
+
+**Cross-region reconciliation pass (post-failover; matches Sprint 7 §"Three-state reconciliation"):**
+1. Surviving region's reconciliation worker reads ledger rows in `accepted_partition_degraded` state.
+2. For each: queries the provider's API for the dispatch-request-id outcome (if provider supports query) OR awaits provider's webhook (some providers always webhook regardless of region).
+3. Updates the ledger row to `reconciled` referencing the matched delivery outcome.
+4. Cat A `notification.crisis_dispatch_reconciled` event emitted with reconciliation provenance.
+
+**Audit:** state transitions emit Cat A `notification.crisis_state_transition` per transition (P1 keyed by patient_id; per state-machine boundary).
 
 **Per-notification audit:**
 - `notification.crisis_dispatched` (Cat A; P1 keyed by patient_id) — emitted on each dispatch attempt; includes channel + partition_degraded flag.
@@ -89,7 +131,23 @@ This amendment integrates **five architectural shifts** into the canonical Notif
 
 **Provider abstraction:** the notification handler invokes `sms.send(tenant_id, phone, message)`; the abstraction layer routes via CCR + handles provider-specific authentication + BAA-chain handling + per-tenant cost attribution. Provider failure triggers fallback per Sub-decision 1 step 2.
 
-**Per-provider rate limiting:** each provider has its own per-tenant rate limit (Twilio = 100/sec/account; Africa's Talking = 30/sec/account); the notification subsystem implements token-bucket per provider per tenant. Crisis notifications get reserved bucket capacity (10% reserved for crisis).
+**Per-provider rate limiting + dual-bucket reservation (R1 MED-1 closure: starvation-proof):**
+
+Each provider has its own per-tenant rate limit (Twilio = 100/sec/account; Africa's Talking = 30/sec/account). The notification subsystem maintains TWO independent token buckets per (tenant, provider, region):
+
+| Bucket | Capacity | Consumed by | Borrowable? |
+|---|---|---|---|
+| Routine bucket | 90% of provider rate limit | Routine notifications (appointment reminders, refill reminders, medication reminders, clinician messages) | NEVER consumed by crisis (crisis has its own bucket); routine cannot consume crisis bucket either |
+| Crisis bucket | 10% of provider rate limit (reserved) | Crisis notifications ONLY | Crisis MAY ALSO consume from routine bucket if crisis bucket exhausted (crisis can borrow routine; routine cannot borrow crisis) |
+
+**Starvation prevention guarantees:**
+- A burst of routine traffic that saturates the routine bucket CANNOT drain the crisis bucket; the crisis bucket has dedicated 10% capacity reserved exclusively for crisis notifications.
+- If the crisis bucket is also saturated (unusual; would require massive crisis volume): crisis MAY borrow from the routine bucket. Routine traffic temporarily blocks (429 → retry-with-backoff at the routine notification layer).
+- The dual-bucket model applies per (tenant, provider, region); fallback-provider routing (Twilio → Vonage failure cascade) reserves the same 10% crisis capacity on Vonage.
+
+**Implementation note:** the canonical token-bucket implementation uses Redis (per-region) with cross-region sync via the multi-region ACK channel for per-tenant cumulative bucket state. The 30-second polling cadence of the bucket-sync worker is the canonical lag tolerance; under DR partition, bucket state is region-local until reconciliation.
+
+**Audit:** every crisis notification's bucket consumption emits Cat C `notification.crisis_bucket_consumed` event with `bucket_used = {'crisis_reserved' | 'borrowed_routine'}`. SRE alerts on sustained `borrowed_routine` consumption (indicates crisis-volume regression beyond reserved capacity).
 
 ### Sub-decision 4 — I-017 emergency override of quiet-hours + opt-out
 
@@ -103,7 +161,23 @@ This amendment integrates **five architectural shifts** into the canonical Notif
 | Transactional opt-out | Routine clinical reminders (appointment reminders, refill reminders) | OVERRIDDEN by crisis (I-017) |
 | Quiet-hours | Time-based delivery suppression (e.g., no notifications 10pm-7am) | OVERRIDDEN by crisis (I-017) |
 | Channel-specific opt-out (e.g., "no SMS, only push") | Per-channel preference | Crisis dispatches ALL channels regardless |
-| Account suspension | Patient account in non-active state | OVERRIDDEN by crisis (only crisis-class notifications dispatched; routine remain suspended) |
+| Account suspension (per R1 MED-2 closure: enumerated reasons) | Patient account in non-active state | OVERRIDE varies by suspension reason — see below |
+
+**Account suspension override scope (R1 MED-2 closure):** the term "account suspension" covers heterogeneous reason classes; crisis-notification override applies ONLY to specific reason classes:
+
+| Suspension reason | Crisis-notification override |
+|---|---|
+| `payment_overdue` | OVERRIDDEN (clinical safety > commercial collection) |
+| `inactivity_period` | OVERRIDDEN (auto-suspension on long inactivity; crisis re-engages) |
+| `voluntary_pause` | OVERRIDDEN (patient self-paused; crisis safety floor remains) |
+| `clinician_holding_for_review` | OVERRIDDEN (clinical-side hold; crisis safety floor remains) |
+| `abuse_or_fraud` | NOT OVERRIDDEN (account flagged for abuse; no automated outreach including crisis; operator-initiated welfare check only) |
+| `legal_hold_or_subpoena` | NOT OVERRIDDEN (regulatory/legal block on automated communications; operator-initiated welfare check only per legal directive) |
+| `identity_compromise_investigation` | NOT OVERRIDDEN (account potentially compromised; automated outreach to a compromised contact path is unsafe; operator-initiated direct contact via verified channel) |
+| `deceased_patient` | NOT OVERRIDDEN (no automated outreach; case routed to estate-handling procedure) |
+| `tenant_offboarding` | NOT OVERRIDDEN (tenant-level state; patient is no longer under tenant's active care; operator-handled transition) |
+
+**Audit:** every crisis-notification dispatch decision affected by suspension status emits Cat A `notification.suspension_crisis_decision` event recording the suspension_reason + the decision outcome. Operator-initiated alternative welfare-check paths emit their own Cat A audit per the operator procedure.
 
 **Audit:** every crisis-notification override of a patient preference emits Cat A `notification.opt_out_override_for_emergency` event (P1 keyed by patient_id) recording which preference was overridden + the crisis-signal trigger.
 
@@ -128,13 +202,41 @@ This amendment integrates **five architectural shifts** into the canonical Notif
 
 ### Sub-decision 6 — Crisis-notification undeliverable escalation
 
-**Decision shape:** if all channels (push + SMS + email) fail to deliver a crisis notification within a 5-minute window, the failure triggers operator escalation:
+**Decision shape (R1 HIGH-3 closure: persisted deadline + surviving-region ownership + idempotent escalation):**
 
-1. Cat A `notification.crisis_undeliverable_5min` event emitted (P1 keyed by patient_id + P2 mirror keyed by 'platform' for SRE visibility).
-2. The patient's tenant operator receives a P0 PagerDuty alert (per SIEM Spec §3 alerting taxonomy).
-3. The operator's response procedure (out-of-band; phone outreach + caregiver contact + dispatch local welfare check if appropriate) is triggered.
+If all channels (push + SMS + email) fail to deliver a crisis notification within a 5-minute window, the failure triggers operator escalation. The escalation mechanism uses a **persisted deadline + idempotent escalation key** to survive DR partition + region failover:
 
-**The 5-minute window is NOT extended under partition-degraded operation.** Partition operation still respects the 5-minute SLA; if surviving-region channels fail to deliver, operator escalation fires regardless of DR state.
+```sql
+-- One row per (tenant + patient + server_signal_id); created at the FIRST crisis dispatch
+CREATE TABLE notification_crisis_escalation_obligation (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id tenant_id_t NOT NULL,
+    patient_id UUID NOT NULL,
+    server_signal_id UUID NOT NULL,
+    first_dispatched_at TIMESTAMPTZ NOT NULL,
+    undeliverable_deadline_at TIMESTAMPTZ NOT NULL,                 -- = first_dispatched_at + 5min
+    escalation_state TEXT NOT NULL,                                 -- 'pending' | 'escalated' | 'pre_empted_by_delivery'
+    escalated_at TIMESTAMPTZ,
+    escalation_key UUID NOT NULL DEFAULT gen_random_uuid(),         -- Idempotency key for PagerDuty webhook
+    CONSTRAINT notification_crisis_escalation_unique UNIQUE (tenant_id, patient_id, server_signal_id)
+);
+```
+
+**Deadline ownership + monotonicity:**
+- The `undeliverable_deadline_at` is set ONCE at the first dispatch (per signal_id) and NEVER extended. The 5-minute window is canonical regardless of DR state.
+- The deadline is evaluated by a polling worker that runs in the canonical PRIMARY region (us-east-1 under normal operation; us-west-2 under active DR). Polling cadence: every 30 seconds.
+- Under partition-degraded operation, the polling worker in the surviving region takes over deadline evaluation; the `escalation_key` is the canonical idempotency key — even if both regions briefly poll simultaneously during failover, PagerDuty webhook dedup on `escalation_key` ensures exactly-once escalation.
+
+**Escalation decision logic (polling worker):**
+1. SELECT rows WHERE `escalation_state = 'pending' AND undeliverable_deadline_at <= now()`.
+2. For each: check `notification_crisis_dispatch_ledger` for any `delivery_confirmed` state per channel for the same signal_id.
+3. If ANY channel confirmed delivery: transition to `pre_empted_by_delivery`; no escalation.
+4. If NO channel confirmed: invoke PagerDuty webhook with the `escalation_key` as the canonical dedup key; transition to `escalated` on webhook 2xx response; Cat A `notification.crisis_undeliverable_5min` emitted (P1 keyed by patient_id + P2 mirror keyed by 'platform').
+5. On webhook failure: retry with exponential backoff up to 10 attempts; after 10: emit Cat A `notification.crisis_escalation_failed` (P2 keyed by 'platform') + add to dead-letter queue for SRE triage.
+
+**Webhook-loss behavior (R1 HIGH-3 closure):** if the provider's delivery-confirmation webhook is lost (e.g., webhook endpoint outage), the affected ledger rows remain in `provider_invoked` past the 5-minute deadline. The escalation polling worker treats `provider_invoked` (no `delivery_confirmed`) as "not delivered" → escalation fires. This is the canonical fail-safe: webhook loss → operator escalation (not silent skip).
+
+**The 5-minute window is NOT extended under partition-degraded operation.** Partition operation still respects the 5-minute SLA; if surviving-region channels fail to deliver OR if provider webhooks are unreachable, operator escalation fires regardless of DR state. The persisted `undeliverable_deadline_at` survives the failover; the surviving region's polling worker takes ownership seamlessly.
 
 ---
 
@@ -254,6 +356,21 @@ New events per Sub-decisions 1-6:
 ## 8. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
+
+**v0.1 R1 closure 2026-05-19:** 3 HIGH + 2 MED closed inline:
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | HIGH-1 idempotency key not bound to notification row (encryption-context collision risk); HIGH-2 two-state DR model missing intermediate reconciliation states (Sprint 7 three-state parallel incomplete); HIGH-3 5-min undeliverable SLA lacked persisted deadline + surviving-region ownership + idempotent escalation key; MED-1 reserved-bucket vague (starvation risk); MED-2 account suspension blanket override overreach | All 5 closed inline |
+
+**R1 closure pattern recap:**
+- HIGH-1: canonical `notification_crisis_dispatch_ledger` table with UNIQUE on `(tenant_id, patient_id, server_signal_id, channel)` → notification_id; encryption-context binds to notification_id (per-channel), preventing cross-channel payload contamination.
+- HIGH-2: 8-state machine (accepted / accepted_partition_degraded / provider_invocation_pending / provider_invoked / delivery_confirmed / provider_invocation_failed / terminal_failed / reconciled) parallels Sprint 7's full obligation model; cross-region reconciliation pass for partition-degraded rows; webhook-loss = failure-to-confirm (canonical fail-safe).
+- HIGH-3: `notification_crisis_escalation_obligation` table with persisted `undeliverable_deadline_at` + `escalation_key` UUID for idempotency; surviving-region polling worker takes ownership seamlessly under DR; webhook loss → escalation fires (fail-safe).
+- MED-1: dual-bucket per (tenant, provider, region) with 10% reserved crisis bucket; routine CANNOT consume crisis; crisis CAN borrow routine; fallback-provider preserves 10% reservation.
+- MED-2: 9 enumerated suspension reasons with per-reason override decision (`payment_overdue` / `inactivity` / `voluntary_pause` / `clinician_hold` overridden; `abuse_or_fraud` / `legal_hold` / `identity_compromise` / `deceased` / `tenant_offboarding` NOT overridden — operator-initiated alternative paths instead).
+
+No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. 7 known OQs remain ratifier-targetable.
 
 ---
 
