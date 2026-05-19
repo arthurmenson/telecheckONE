@@ -1,7 +1,8 @@
 # AI Service Mode 1 Handler Specification
 
 **Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; Sprint 9 of autonomous 24h-loop work plan
+**Status:** RATIFIER-READY-WITH-KNOWN-OQs (post-R4 Codex iterate-to-asymptote close at §10 cadence boundary, 2026-05-19); Sprint 9 of autonomous 24h-loop work plan
+**Codex iteration trajectory:** R1 (3 HIGH + 3 MED) → R2 (2 HIGH + 2 MED) → R3 (1 HIGH) → R4 (1 HIGH + 1 MED). Asymptote pattern consistent with v1.10.1 hygiene cycle precedent. All 13 findings closed inline as in-scope correctness gaps; no architectural-judgment escalations. §10 cadence boundary applied at R4 → ratifier-ready.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus Track 2 deliverable)
 **Owner:** AI Service Lead + Clinical Lead (co-owners; Mode 1 spans Track 2 AI service boundary + clinical safety floor)
 **Companion documents:** AI_Service_Rollout_24h_Status_2026-05-14.md, ADR-002 (two-mode AI architecture), Contracts Pack v5.2 AI_LAYERING + AUDIT_EVENTS v5.5 + WORKLOAD_TAXONOMY, ADR-029 (AI workload taxonomy), I-019 crisis-detection-always-on platform floor, SI-017 Identity Spec v1.1 amendment (Sprint 8; canonical-middleware-GUC model), SI-016 ai_workflow_handler_registry (Sprint 3; Mode 2 sister spec), Cold-DR Runbook (Sprint 7; partition-aware ACK semantics for crisis-signal emission).
@@ -292,25 +293,27 @@ CREATE TABLE ai_mode1_conversation (
     tenant_id tenant_id_t NOT NULL,
     patient_id UUID NOT NULL REFERENCES patient(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- Append-only: INSERT once at conversation creation; no UPDATE permitted post-commit.
-    -- Derived facts (last_turn_at, archived state) are computed via SELECT or sourced from
-    -- separate append-only event tables (see ai_mode1_conversation_archival_event below).
-    CONSTRAINT ai_mode1_conversation_tenant_check CHECK (tenant_id IS NOT NULL)
+    CONSTRAINT ai_mode1_conversation_tenant_check CHECK (tenant_id IS NOT NULL),
+    -- Composite UNIQUE per R4 MED-1 closure: enables composite FK from archival_event + turn tables
+    CONSTRAINT ai_mode1_conversation_tenant_id_unique UNIQUE (tenant_id, id)
 );
 
 -- Conversation archival event (append-only; one row per archival event)
 CREATE TABLE ai_mode1_conversation_archival_event (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id tenant_id_t NOT NULL,
-    conversation_id UUID NOT NULL REFERENCES ai_mode1_conversation(id),
+    conversation_id UUID NOT NULL,
     archived_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     archived_by_user_id UUID NOT NULL,                        -- Operator who triggered archival
     archival_reason TEXT NOT NULL,                            -- One of {patient_retention_policy, patient_request, tenant_disable}
-    -- Append-only; INSERT-only. The existence of a row for a conversation_id IS the "archived" state.
-    CONSTRAINT ai_mode1_conversation_archival_unique UNIQUE (conversation_id)
+    CONSTRAINT ai_mode1_conversation_archival_unique UNIQUE (conversation_id),
+    -- Composite FK per R4 MED-1 closure: enforces tenant_id matches conversation's tenant_id
+    CONSTRAINT ai_mode1_conversation_archival_tenant_fk
+        FOREIGN KEY (tenant_id, conversation_id)
+        REFERENCES ai_mode1_conversation(tenant_id, id)
 );
 
--- Derived view: last_turn_at + archived state computed at query time
+-- Derived view: last_turn_at + archived state computed at query time (tenant-bound subqueries per R4 MED-1)
 CREATE VIEW ai_mode1_conversation_state AS
 SELECT
     c.id AS conversation_id,
@@ -320,10 +323,43 @@ SELECT
     (SELECT MAX(r.completed_at) FROM ai_mode1_conversation_turn_result r
      WHERE r.conversation_id = c.id AND r.tenant_id = c.tenant_id) AS last_turn_at,
     EXISTS (SELECT 1 FROM ai_mode1_conversation_archival_event a
-            WHERE a.conversation_id = c.id) AS is_archived,
+            WHERE a.conversation_id = c.id AND a.tenant_id = c.tenant_id) AS is_archived,
     (SELECT a.archived_at FROM ai_mode1_conversation_archival_event a
-     WHERE a.conversation_id = c.id) AS archived_at
+     WHERE a.conversation_id = c.id AND a.tenant_id = c.tenant_id) AS archived_at
 FROM ai_mode1_conversation c;
+
+-- Canonical I-027 append-only enforcement trigger function (R4 HIGH-1 closure)
+CREATE OR REPLACE FUNCTION enforce_append_only() RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' OR TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'I-027 append-only violation: % operation rejected on table %',
+            TG_OP, TG_TABLE_NAME
+            USING ERRCODE = 'TLC27';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Bind the trigger to all 5 append-only tables (R4 HIGH-1 closure)
+CREATE TRIGGER ai_mode1_conversation_append_only
+    BEFORE UPDATE OR DELETE ON ai_mode1_conversation
+    FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
+
+CREATE TRIGGER ai_mode1_conversation_archival_event_append_only
+    BEFORE UPDATE OR DELETE ON ai_mode1_conversation_archival_event
+    FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
+
+CREATE TRIGGER ai_mode1_conversation_turn_admission_append_only
+    BEFORE UPDATE OR DELETE ON ai_mode1_conversation_turn_admission
+    FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
+
+CREATE TRIGGER ai_mode1_conversation_turn_detector_result_append_only
+    BEFORE UPDATE OR DELETE ON ai_mode1_conversation_turn_detector_result
+    FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
+
+CREATE TRIGGER ai_mode1_conversation_turn_result_append_only
+    BEFORE UPDATE OR DELETE ON ai_mode1_conversation_turn_result
+    FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
 
 -- Immutable admission record (1 row per turn at admission; INSERT-only)
 CREATE TABLE ai_mode1_conversation_turn_admission (
@@ -523,6 +559,8 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 | Test M1.18 | `apps/api-server/__integration__/ai/mode1_history_snapshot_replay.test.ts` | `integration-ai-mode1` | Turn admitted at T0 captures history_snapshot_high_water_mark; intervening turn commits at T1; retry of T0's turn at T2 uses same snapshot, returns same prompt + same cached response | §6.3 R1 MED-2 |
 | Test M1.19 | `apps/api-server/__integration__/ai/mode1_egress_allow_list.test.ts` | `integration-ai-mode1` | Mode 1 service attempting to HTTP-call `POST /ai/mode-2/*` → blocked at service-mesh layer; integration test verifies the policy is enforced (test runs against the canonical service-mesh fixture) | §5.1 Layer 2 |
 | Test M1.20 | `apps/api-server/__integration__/ai/mode1_queue_denial.test.ts` | `integration-ai-mode1` | Mode 1 attempting to enqueue to a `mode2-*` worker queue → blocked by (a) static-analyzer rule TLC-AI-002 at PR open AND (b) runtime queue-ACL rejection (the BullMQ wrapper enforces an allow-list per service-role); verifies both layers (R2 MED-2 closure) | §5.1 Layer 3 + TLC-AI-002 |
+| Test M1.21 | `apps/api-server/__integration__/ai/mode1_append_only_enforcement.test.ts` | `integration-ai-mode1` | Attempting UPDATE or DELETE on any of the 5 append-only tables → fails with ERRCODE TLC27 `I-027 append-only violation`; verifies the `enforce_append_only()` trigger is bound to all 5 tables (R4 HIGH-1 closure) | §6.2 |
+| Test M1.22 | `apps/api-server/__integration__/ai/mode1_archival_tenant_integrity.test.ts` | `integration-ai-mode1` | Attempting to INSERT `ai_mode1_conversation_archival_event` with `tenant_id` mismatching the conversation's `tenant_id` → fails with FK violation (composite FK on `(tenant_id, conversation_id)` per R4 MED-1) | §6.1 |
 
 **Static-analyzer rule IDs registered at this amendment:**
 - `TLC-AI-001` — Mode 1 handler calling LLM before crisis detector (detector-before-LLM ordering invariant; verifies runtime state-machine guard exists per R1 HIGH-1 closure).
@@ -553,7 +591,11 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 
 **v0.1 R2 closure 2026-05-19:** 2 HIGH + 2 MED findings closed inline (R1 closures landed correctly in the body sections but: (a) the §12 cross-SI alignment summary still carried the pre-R1 "all events to P1" claim; (b) the multi-state lifecycle in §4.2 + §6.3 conflicted with §6.2's append-only INSERT-at-completion constraint; (c) `history_snapshot_high_water_mark` was referenced but not in the schema; (d) Mode 2 worker-queue denial test was missing). All 4 closed inline via split-table model + canonical cross-references.
 
-**v0.1 R3 closure 2026-05-19:** 1 HIGH closed inline — the R2 split-table model still had a mutable `last_turn_at` field on `ai_mode1_conversation` (via INSERT trigger pattern) which violated the claimed "all 4 tables INSERT-only" across all entities. R3 closure: removed the mutable field entirely; added `ai_mode1_conversation_archival_event` append-only event table for archival; added `ai_mode1_conversation_state` derived view that computes `last_turn_at` + `is_archived` + `archived_at` at query time from the append-only base tables. All 5 tables (4 lifecycle + 1 archival event) are now truly INSERT-only across all entities; I-027 append-only invariant honored without exception.
+**v0.1 R3 closure 2026-05-19:** 1 HIGH closed inline — the R2 split-table model still had a mutable `last_turn_at` field on `ai_mode1_conversation` (via INSERT trigger pattern) which violated the claimed "all 4 tables INSERT-only" across all entities. R3 closure: removed the mutable field entirely; added `ai_mode1_conversation_archival_event` append-only event table for archival; added `ai_mode1_conversation_state` derived view. All 5 tables truly INSERT-only.
+
+**v0.1 R4 closure 2026-05-19:** 1 HIGH + 1 MED closed inline. R4 HIGH: I-027 append-only enforcement was asserted in prose but missing concrete DDL — added canonical `enforce_append_only()` PL/pgSQL trigger function (ERRCODE `TLC27`) + 5 explicit `CREATE TRIGGER` bindings (one per append-only table). R4 MED: archival event tenant integrity was FK-bound to conversation_id only, not the composite (tenant_id, conversation_id); added composite UNIQUE on conversation + composite FK on archival_event + tenant-bound subqueries in the `ai_mode1_conversation_state` view. Tests M1.21 + M1.22 added to verify both closures.
+
+**Status at R4 close (per §10 cadence boundary):** RATIFIER-READY-WITH-KNOWN-OQs. The asymptote pattern (R1 6 findings → R2 4 findings → R3 1 finding → R4 2 findings) is consistent with the v1.10.1 hygiene cycle; each round closed in-scope correctness gaps with no architectural-judgment escalations. Sprint 9 closes at R4 with ratifier-ready status; the 6 known OQs (§10) remain ratifier-targetable. Workstream proceeds to Sprint 10.
 
 **Full Codex trajectory:**
 
@@ -562,6 +604,7 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 | R1 | HIGH-1 detector-before-LLM enforced only via static-analyzer (no runtime guard); HIGH-2 Cat C drop event Cat B P2 classification contradicted "all Mode 1 events route to P1" claim; HIGH-3 ACK durability semantics conflated audit-row durability (blocks) with quorum-promotion durability (async); MED-1 no-Mode-2-side-effects predicate didn't cover HTTP / queue / tool-use paths; MED-2 history-window not replay-safe under concurrent retries; MED-3 missing tests for Cat A audit failure / Cat C drop partitioning / ACK quorum / concurrent retries / history snapshot / Mode 2 tool denial / PHI provider enforcement | All 6 closed inline |
 | R2 | HIGH-1 §12 cross-SI summary still carried pre-R1 "all events to P1" claim (contradicting §3.3 amended table); HIGH-2 multi-state lifecycle vs append-only INSERT-at-completion contradiction + missing `history_snapshot_high_water_mark` schema column; MED-1 detector_completed state not durable in schema; MED-2 missing Mode 2 worker-queue denial test | All 4 closed inline via split-table model |
 | R3 | HIGH `ai_mode1_conversation.last_turn_at` remained mutable via INSERT trigger; violated R2's claimed "all 4 tables INSERT-only" across all entities | Closed inline by removing the mutable field; archival modeled as append-only event table; derived facts via view |
+| R4 | HIGH I-027 append-only enforcement asserted in prose but missing CREATE TRIGGER bindings + trigger function definition; MED archival event tenant integrity FK only on conversation_id (not composite tenant_id + conversation_id) | Closed inline: added canonical `enforce_append_only()` function + 5 trigger bindings (ERRCODE TLC27); added composite UNIQUE + composite FK + tenant-bound view subqueries; added M1.21 + M1.22 |
 
 **R1 closure pattern recap:**
 - HIGH-1: added runtime per-turn state machine (`admitted → detector_completed → llm_invoked → completed`); `llm.invoke()` adapter verifies state before issuing HTTP request; defense-in-depth via static analyzer remains.
