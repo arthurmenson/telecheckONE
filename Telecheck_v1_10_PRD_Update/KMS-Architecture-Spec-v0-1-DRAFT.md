@@ -1,7 +1,8 @@
 # KMS Architecture Specification
 
 **Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; Sprint 13 of autonomous 24h-loop work plan
+**Status:** RATIFIER-READY-WITH-KNOWN-OQs (R4 Codex APPROVE 2026-05-19); Sprint 13 of autonomous 24h-loop work plan
+**Codex iteration trajectory:** R1 (3 HIGH + 3 MED) → R2 (1 HIGH break-glass data-class scope) → R3 (1 HIGH per-tag Deny split) → R4 APPROVE. All 8 findings closed inline; 0 architectural-judgment items closed inline; 7 known OQs (§9) remain ratifier-targetable.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus Track 5 Infra/Ops deliverable)
 **Owner:** SRE Lead + Compliance Officer + Security Engineering Lead (tri-owner per KMS posture's intersection of operations + regulatory + cryptographic governance)
 **Companion documents:** Cold-DR Runbook v0.1 (Sprint 7; resolves Cold-DR OQ2 multi-region key policy details); ADR-026 single-region+cold-DR architecture; I-026 per-tenant KMS encryption invariant; Contracts Pack v5.2 INVARIANTS + AUDIT_EVENTS + CCR_RUNTIME; SI-018 audit-chain partition rule; Ghana Launch Playbook v1.2 (country-specific KMS posture).
@@ -424,7 +425,7 @@ A break-glass session is limited to 4 hours; the IAM role assumption expires aut
 During us-east-1 → us-west-2 failover:
 
 1. Cold-DR Step 7 (KMS verification): the us-west-2 replica of every active tenant's multi-region CMK is verified accessible.
-2. Cold-DR Step 9 (KMS-policy verification): the IAM policies for us-west-2 service roles are verified equivalent to us-east-1 (the multi-region key shares policy automatically; this is a sanity check).
+2. Cold-DR Step 9 (KMS-policy verification): the IAM policies for us-west-2 service roles + the us-west-2 CMK replica policies are verified equivalent to us-east-1 per the canonical IaC artifact (per §3.1 R1 HIGH-2 closure — replica policies are region-specific and provisioned via the same Terraform/CDK module; the verification is a HARD GATE, not a sanity check; drift triggers Cat A `kms.replica_policy_drift_detected` + per-tenant exclusion from failover until drift resolved).
 3. Application servers in us-west-2 assume the same `tenant-<tenant_id>-service` roles (cross-region role assumption is canonical via IAM; the role ARN is region-independent).
 4. Decrypt operations resume against us-west-2 CMK replicas with no application-code changes; the encryption-context binding remains the same.
 
@@ -577,6 +578,9 @@ No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honor
 |---|---|---|
 | R2 | HIGH break-glass data-class scope declared but not IAM-enforced | Closed inline by pinning session to single data class + adding key-policy equality check + Explicit Deny for mismatch |
 | R3 | HIGH `DenyBreakGlassWithoutFullScope` single-statement covered only all-tags-missing (IAM evaluates multiple condition keys as AND, not OR); omission of ANY SINGLE required tag wasn't denied | Closed inline by splitting into 5 per-tag Explicit Deny statements (`DenyBreakGlassMissing*`), each independently triggered by omission of its target tag |
+| R4 | APPROVE — material correctness clean; one residual prose nit in §8.1 Step 2 said multi-region policy "shares automatically" contradicting §3.1's corrected region-specific model. Cleaned up to reference §3.1 HARD GATE verification. | RATIFIER-READY |
+
+**Status at R4 close:** RATIFIER-READY-WITH-KNOWN-OQs. Sprint 13 closes at R4 APPROVE; workstream proceeds to Sprint 14.
 
 **Workstream-discipline note for R2:** Codex flagged R2 finding as architectural-judgment + STOP-and-escalate. On review per CLAUDE.md hard-floor item 6 discriminator: the `affected_data_classes` session-tag scope was ALREADY declared in §7.1 item 2 at R1 closure; the R2 fix makes the existing scope IAM-enforceable rather than only-procedural. This is the same pattern as Sprint 8 R1 HIGH-3 (5-layer enforcement made existing scope enforceable) and Sprint 9 R1 HIGH-3 (3-layer enforcement). Per the established precedent across Sprints 8-12, IAM/policy-enforcement closures of already-declared scope are in-scope correctness; only NET-NEW architecture/schema/invariant proposals trigger hard-floor item 6 escalation. Closed inline.
 
