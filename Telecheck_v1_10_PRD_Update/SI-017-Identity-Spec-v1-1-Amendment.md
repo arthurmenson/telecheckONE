@@ -390,25 +390,57 @@ The following deltas apply against the existing v1.0 body. The amendments are wr
 
 > ### 11. I-032 STEP 0 contract for SECURITY DEFINER call sites
 >
-> Per I-032 (INVARIANTS v5.3, ratified 2026-05-19), every SECURITY DEFINER procedure that touches PHI MUST verify tenant-GUC equality as STEP 0 of its body. The canonical STEP 0 block is:
+> Per I-032 (INVARIANTS v5.3, ratified 2026-05-19), every SECURITY DEFINER procedure that touches PHI MUST verify tenant-GUC equality as STEP 0 of its body. The canonical STEP 0 block uses a **named `p_tenant_id` parameter** (positional `$1` is forbidden per Sub-decision 5 of this amendment):
 >
 > ```sql
-> IF NULLIF(current_setting('app.tenant_id', true), '') IS DISTINCT FROM $1 THEN
->     RAISE EXCEPTION 'I-032 tenant-GUC equality violation: app.tenant_id=% does not match procedure tenant_id=%',
->         NULLIF(current_setting('app.tenant_id', true), ''), $1
+> IF NULLIF(current_setting('app.tenant_id', true), '') IS DISTINCT FROM p_tenant_id THEN
+>     RAISE EXCEPTION 'I-032 tenant-GUC equality violation: app.tenant_id=% does not match procedure p_tenant_id=%',
+>         NULLIF(current_setting('app.tenant_id', true), ''), p_tenant_id
 >         USING ERRCODE = 'TLC32';
 > END IF;
 > ```
 >
-> NULLIF normalization is required because PostgreSQL custom GUCs return empty string when RESET/blank, not NULL.
+> **Named-parameter convention** (mandatory): every PHI-touching SECURITY DEFINER procedure MUST declare an explicitly named `p_tenant_id` parameter of type `tenant_id_t` (CDM-canonical tenant identifier type). Positional `$1` references are forbidden because procedures whose first argument is not tenant_id would silently compare against the wrong value, overloaded procedures would have inconsistent guard behavior, and wrappers calling subprocedures need named-parameter pass-through (`CALL inner_proc(p_tenant_id => v_tenant_id)`). The static analyzer rule `TLC-SCOPE-003` enforces this at CI.
 >
-> Mode 2 procedures (identity-platform-floor) MUST additionally emit Cat A `identity.security_definer_tenant_guc_mismatch` BEFORE raising. If the audit emission itself fails, the procedure still raises I-032 but logs the audit-emission-failure to error-stream fallback per AUDIT_EVENTS v5.5 §"Audit-emission failure handling".
+> **NULLIF normalization** is required because PostgreSQL custom GUCs return empty string when RESET/blank, not NULL.
+>
+> **Mode 2 audit-durability contract (application-layer catch-and-emit, NOT in-procedure emission)**: identity-platform-floor SECURITY DEFINER procedures raise TLC32 (Mode 1); the canonical middleware error-handler catches TLC32, opens a **fresh, separate transaction**, INSERTs the Cat A `identity.security_definer_tenant_guc_mismatch` audit row, COMMITs that transaction, then propagates the tenant-blind error to the caller. The audit row is durable because it lives in a fresh transaction that succeeds; the original aborted procedure transaction is unrelated. **The procedure itself MUST NOT emit the Cat A audit row** — coupling audit emission to the procedure transaction would cause the audit to roll back with the violation. This pattern is consistent with the PR #11 engineering-review-grounded answer (Engineering-Review-Request-I-003-Atomic-Audit-Inside-vs-Application-Layer-Audit-2026-05-19, unanimous NO answer: application-layer audit emission satisfies I-003 + I-013 + HIPAA technical-safeguards because transaction atomicity is governed by the application's BEGIN/COMMIT boundary, not the procedure's invocation boundary).
+>
+> **Canonical application-layer error-handler contract**:
+>
+> ```pseudocode
+> try {
+>   call_security_definer_procedure(p_tenant_id => current_tenant, ...)
+> } catch (PostgresError e) {
+>   if (e.errcode === 'TLC32') {
+>     # Open fresh transaction, emit Cat A audit, COMMIT
+>     db.transaction(() => {
+>       audit.emit_cat_a('identity.security_definer_tenant_guc_mismatch', {
+>         procedure_name: e.procedure_name,
+>         expected_tenant_id: e.expected_tenant_id_from_message,
+>         observed_tenant_id_or_null: e.observed_tenant_id_from_message,
+>         caller_session_id: current_session_id,
+>       })
+>     })
+>   }
+>   throw new TenantBlindError(401)  # per I-025
+> }
+> ```
+>
+> The application middleware error-handler is the canonical home for TLC32 catch-and-emit; per-handler catch-and-emit is forbidden.
+>
+> **Nested procedure call contract** (per Sub-decision 5):
+> - SECURITY DEFINER procedure invoking another SECURITY DEFINER subprocedure MUST pass `p_tenant_id => <value>` by name; subprocedure's STEP 0 re-verifies independently.
+> - SECURITY DEFINER invoking SECURITY INVOKER subprocedure does NOT require subprocedure STEP 0 (RLS policy at table boundary covers).
+> - SAVEPOINT + ROLLBACK TO SAVEPOINT does NOT reset `app.tenant_id` (the GUC was set by SET LOCAL at outer transaction start); STEP 0 remains valid.
+> - Canonical exception-handler pattern: `EXCEPTION WHEN SQLSTATE 'TLC32' THEN RAISE; WHEN OTHERS THEN ...` — the TLC32-specific re-raise is mandatory and enforced by static analyzer `TLC-SCOPE-004`.
+> - Overloaded procedures: static analyzer verifies consistent `p_tenant_id` placement across overloads.
 >
 > Reference procedures (already amended via P-018a/P-019a/P-021a 2026-05-19):
-> - `record_workflow_pointer_swap()` (P-018a / SI-008)
-> - `record_consult_escalation_target_swap()` (P-019a / SI-009)
-> - `record_consult_clinician_decision()` (P-021a / SI-005)
-> - `rotate_consult_clinician_decision_kms()` (P-021a / SI-005)
+> - `record_workflow_pointer_swap(p_tenant_id, ...)` (P-018a / SI-008)
+> - `record_consult_escalation_target_swap(p_tenant_id, ...)` (P-019a / SI-009)
+> - `record_consult_clinician_decision(p_tenant_id, ...)` (P-021a / SI-005)
+> - `rotate_consult_clinician_decision_kms(p_tenant_id, ...)` (P-021a / SI-005)
 
 ### Delta 8 — §12 (NEW) Open questions for ratifier
 
@@ -476,11 +508,16 @@ Each rule's existence + merge-blocking status is canonical at this amendment. Ru
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
 
-**v0.1 R1 closure 2026-05-19:** 3 HIGH + 3 MED findings closed inline (no architectural-judgment items; all in-scope correctness gaps in own draft):
+**v0.1 R1 closure 2026-05-19:** 3 HIGH + 3 MED findings closed inline (no architectural-judgment items; all in-scope correctness gaps in own draft).
+
+**v0.1 R2 closure 2026-05-19:** 1 HIGH finding closed inline — R1 narrative closures landed in Sub-decision text correctly, but the canonical §11 Delta 7 patch text (intended for promotion into bundle file body) still carried the pre-R1 `$1` + in-procedure audit emission language. Delta 7 patch text rewritten to match Sub-decision 5 + Mode 2 application-layer catch-and-emit pattern exactly. (The lesson: amendments to sub-decisions MUST be propagated to corresponding Delta patch-text blocks, since Delta blocks are the ratifier-promotion surface.)
+
+**Full Codex trajectory:**
 
 | Round | Findings | Status |
 |---|---|---|
 | R1 | HIGH-1 Mode 2 audit durability (procedure raise aborts the audit emission's transaction); HIGH-2 single-shot session-liveness check + in-flight revocation race; HIGH-3 entry-point enforcement across HTTP/gRPC/worker/admin/migration bypass paths; MED-1 STEP 0 `$1` brittleness for non-tenant-first-arg + overloaded + nested-call procedures; MED-2 Cat A/P1 classification overreach for non-patient-bound revocation cascades; MED-3 merge-blocking tests not actually merge-blocking-able without canonical CI gate definitions | All 6 closed inline |
+| R2 | HIGH Delta 7 patch text still carried pre-R1 `$1` positional comparison + in-procedure Mode 2 audit emission (R1 narrative closures landed in Sub-decision text but not in the corresponding Delta patch-text block that is the ratifier-promotion surface) | Closed inline |
 
 **R1 closure pattern recap:**
 - HIGH-1: Mode 2 moved from in-procedure audit emission to application-layer catch-and-emit in a fresh transaction (consistent with PR #11 engineering-review-grounded answer that application-layer audit emission satisfies I-003 + HIPAA technical-safeguards).
