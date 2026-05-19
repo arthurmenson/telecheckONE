@@ -175,28 +175,52 @@ Verification suite MUST pass before the deploy is marked CANONICAL. Failed verif
 
 ---
 
-## 4. Canary gates (deep-dive on §3.3)
+## 4. Canary gates (deep-dive on §3.3; closes Codex R3 HIGH-1 by aligning with §3.3 per-probe SLA semantics)
 
-Each canary gate is checked at the end of every 1-minute window during the stage's soak period:
+**Section 3.3's per-probe SLA table is the BINDING source of canary-gate semantics.** This §4 deep-dive describes the algorithmic mechanics that implement those semantics; any apparent conflict is resolved by §3.3's table.
+
+**Short-SLA probe gate (checked every 1-minute window during the stage's soak period):**
 
 ```
-gate_pass = (
+short_sla_gate_pass(window) = (
   error_rate_1min < stage.error_rate_threshold
   AND latency_p99_1min < stage.latency_p99_threshold * baseline.latency_p99
-  AND no_i019_signals_dropped
-  AND audit_chain_hash_check_passed
-  AND no_cross_tenant_data_leak_signals
+  AND no_i019_signals_dropped_in_last_60s
+  AND no_cross_tenant_isolation_probe_failures_in_last_60s
+  AND no_cross_tenant_cache_state_leakage_in_last_60s
+  AND service_health_check_responses_received_in_last_30s
   AND no_p0_alerts
 )
 ```
 
-**Stage promotion criterion:** all 1-min windows in the soak period pass.
+Note: `audit_chain_hash_check_passed` is NOT in the short-SLA gate. I-027 audit-chain integrity is a separate longer-cadence probe (see I-027 promotion-checkpoint gate below).
 
-**Stage demotion criterion (auto-rollback):** ≥2 consecutive 1-min windows fail.
+**I-027 audit-chain integrity probe (separate 5-min cadence; checked at every stage-promotion checkpoint + every 5 min during soak):**
 
-**Stage stretch criterion:** soak period extended +5 min if any 1-min window fails but the next succeeds (allows transient blips without triggering rollback).
+```
+i027_gate_pass(checkpoint_time) = (
+  most_recent_audit_chain_verification_result IS NOT NULL
+  AND most_recent_audit_chain_verification_result.completed_at >= checkpoint_time - 10 minutes  -- 2x SLA staleness limit
+  AND most_recent_audit_chain_verification_result.outcome == 'pass'
+)
+```
+
+I-027 staleness alone within the 10-min window does NOT trigger demotion; only an explicit `outcome == 'fail'` (broken chain detected) does.
+
+**Stage-promotion criterion (refined per R3 HIGH-1):**
+- ALL 1-min windows in the soak period: `short_sla_gate_pass(window) = true`
+- AND at the promotion-checkpoint moment: `i027_gate_pass(promotion_time) = true`
+- AND no probe missing-telemetry per the per-probe SLA table in §3.3
+
+**Stage-demotion criterion (auto-rollback; refined per R3 HIGH-1):**
+- ≥2 consecutive 1-min windows where `short_sla_gate_pass = false` (short-SLA probe failures), **OR**
+- Any explicit I-027 chain-failure report (`outcome == 'fail'`) at any cadence point (NOT staleness alone within the 10-min window — staleness blocks promotion but doesn't auto-rollback)
+
+**Stage stretch criterion (refined):** soak period extended +5 min if any short-SLA 1-min window fails but the next succeeds (transient blip tolerance). Does NOT apply to I-027 chain-failure reports (those are immediate auto-rollback).
 
 **Stage abort criterion:** approver manually decides to abort the stage (e.g., a non-quantitative signal — a Slack escalation from a clinician noticing an issue).
+
+**§3.3 vs §4 reconciliation rule:** §3.3's per-probe SLA table is canonical. §4's pseudocode is the algorithmic representation. If a future amendment introduces inconsistency, §3.3 binds.
 
 ---
 
