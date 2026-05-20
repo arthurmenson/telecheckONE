@@ -340,6 +340,37 @@ node "C:/Users/menso/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/code
 
 **Retroactive application:** when this two-pass discipline is codified mid-cycle and there are open ratifier questions that were posed under the prior single-pass pattern, Claude re-runs the consult under two-pass before the ratifier decides — unless Evans explicitly authorizes using the existing single-pass output for that cycle. The default is retroactive re-run; the exception is explicit waiver.
 
+### Auto-proceed rule (codified 2026-05-20 per Evans's directive)
+
+Evans's verbatim directive: *"For my move I need a recommendation from both of you. If you both agree on next steps then automatically do it without waiting for me."*
+
+**Canonical rule:** when Claude's recommendation AND Codex Pass-2 (synthesis) agree on the next concrete actionable step, Claude **executes the step automatically** without waiting for Evans's explicit chat-message confirmation. When they disagree, Claude surfaces the three-way (Claude + Pass-1 + Pass-2) and waits for Evans's decision.
+
+**The canonical Codex view for agreement-checking is Pass-2 (synthesis), NOT Pass-1 (independent).** Pass-1's role is independence-preservation input to Pass-2; Pass-2 is the reconciled final view. Pass-1 disagreement with Claude does NOT block auto-proceed if Pass-2 reconciles toward Claude. Conversely, Pass-1 agreement with Claude does NOT trigger auto-proceed if Pass-2 surfaces a synthesis defect or new consideration that flips the recommendation.
+
+**Procedural shape under auto-proceed:**
+
+1. Claude drafts recommendation.
+2. Codex Pass-1 (source-first independent).
+3. Codex Pass-2 (contrast-and-synthesize with Claude's recommendation + Pass-1).
+4. **Check convergence:** does Claude's recommendation match Pass-2's synthesis on the next concrete step?
+   - **Yes (agreement):** Claude executes the step. Surfaces the three-way to Evans as an INFORMATIONAL post-action report (not a pre-action ask).
+   - **No (disagreement):** Claude surfaces three-way as a pre-action ask. Evans decides.
+5. If Pass-2 attaches conditions (e.g., "approve with explicit waiver text in artifact"), Claude executes the step + applies the conditions inline. If conditions cannot be inline-applied (e.g., require external infrastructure or operator action), Claude surfaces them as a known-followup but proceeds with the auto-proceed step.
+
+**Hard-floor item 6 + safety-rule precedence:** the auto-proceed rule does NOT override the hard floor. Architectural-judgment escalations (hard-floor item 6), prohibited actions (safety rules), and explicit STOP conditions still require Evans's chat-message confirmation regardless of Claude + Pass-2 agreement. Auto-proceed applies to in-scope ratifier questions where the only blocker is "did Evans confirm yet."
+
+**Why this is safe:** the dual-recommendation + two-pass discipline already produces a high-confidence convergence signal. When Claude (with cycle context) + Codex Pass-2 (with independent Pass-1 input + Claude's framing) both arrive at the same next step, the additional value of waiting for Evans's manual confirmation is low compared to the latency cost. Disagreement still escalates; convergence proceeds. Evans retains override authority via subsequent chat-message + can request rollback / amendment if a post-action report surfaces a problem.
+
+**Worked precedent (codification trigger):** the CDM v1.5 amendment merge cycle 2026-05-20. Claude said READY-TO-MERGE; Codex Pass-1 said NEEDS-WORK on raw GUC + placeholder; Codex Pass-2 reconciled to APPROVE-CONDITIONAL accepting Claude's framing on the cadence-vs-merge-gate distinction. Pass-2 = Claude agreement → auto-proceed merge. Pass-1 disagreement + Pass-2 conditional notes carried forward as cockpit Addendum 57 + SI-024 known-followup.
+
+**Post-action report structure:** when Claude auto-proceeds, the chat message back to Evans includes:
+1. What action was executed + where (commit SHA, branch, merge target).
+2. Three-way recommendation summary (Claude + Pass-1 + Pass-2 verdicts in one table).
+3. Pass-2 conditions applied inline (and which conditions become followups).
+4. Any post-action verification Claude did (CI status, etc.).
+5. "Rollback path if needed: ..." — explicit reversal instructions for the auto-proceeded action.
+
 **Discipline anchor:** the dual-recommendation pattern operationalizes "trust but verify" between Claude (who authored the escalation artifact + has the working analysis context) and Codex (who has independent threat-modeling + canonical-source-reading context). Disagreement between them is informative (the ratifier sees the divergence + can probe further). Agreement strengthens the case. Either way, the ratifier decides with strictly more information than either reviewer alone would provide.
 
 **Reference precedents:** PR #11 SI-010 5-round prose-scrub convergence after R1 architectural-judgment escalation (single-reviewer pattern; pre-dual-recommendation codification). SI-021 R3-R5 5-round convergence (no escalation; standard inline cadence applied). CDM v1.5 amendment R1 chain-schema tenant-isolation (THE codification trigger; both reviewers converged on Option A; Codex caught a framing defect in Claude's Option C).
