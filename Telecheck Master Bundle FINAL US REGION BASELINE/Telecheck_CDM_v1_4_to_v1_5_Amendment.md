@@ -1,7 +1,7 @@
 # CDM v1.4 → v1.5 Amendment (SI-021 follow-on)
 
-**Version:** 0.2 DRAFT
-**Status:** R1 ALL FINDINGS CLOSED (3 inline closures + 1 CRITICAL ratified via ERR mini-review per dual-recommendation process). Option A implemented in §4.NEW1-4 (tenant_id + RLS + P1 trigger + P2 CHECK consistency). R2 verification PENDING.
+**Version:** 0.3 DRAFT
+**Status:** R2 ALL FINDINGS CLOSED (3 HIGH; HIGH-1 partial close inline + hardened-helper sub-recommendation deferred to OQ6 cross-CDM scope; HIGH-2 + HIGH-3 closed inline). R3 verification PENDING.
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-028 (SI-021 v1.0 RATIFIED) OQ4 canonical decision — file SI-021's 4 new audit-chain-archival entities as a CDM v1.4 → v1.5 amendment cycle co-bumped with AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4.
 **Owner:** SRE Lead + Security Engineering Lead + Compliance Officer (same as SI-021 owner triad).
@@ -63,13 +63,18 @@ CREATE TABLE audit_event_hash_chain (
     CONSTRAINT audit_event_hash_chain_audit_event_fk FOREIGN KEY (audit_event_id) REFERENCES audit_events(id)
 );
 
--- Three-layer RLS enforcement
+-- Three-layer RLS enforcement (R2 HIGH-1 closure: FORCE + WITH CHECK + fail-closed GUC)
 ALTER TABLE audit_event_hash_chain ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_event_hash_chain FORCE ROW LEVEL SECURITY;   -- prevent table-owner RLS bypass
 CREATE POLICY audit_event_hash_chain_tenant_isolation ON audit_event_hash_chain
     USING (
-        tenant_id = current_setting('app.tenant_id')::tenant_id_t
+        tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
         OR (current_setting('app.platform_operator_break_glass', true) = 'true'
             AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    )
+    WITH CHECK (
+        -- INSERT/UPDATE must also satisfy the tenant predicate (break-glass cannot write under platform-operator clause)
+        tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
     );
 
 -- Append-only enforcement
@@ -83,7 +88,7 @@ CREATE FUNCTION audit_event_hash_chain_p1_tenant_match() RETURNS TRIGGER AS $$
 DECLARE parent_tenant_id tenant_id_t;
 BEGIN
     IF NEW.partition = 'P1' THEN
-        SELECT tenant_id INTO parent_tenant_id FROM audit_events WHERE id = NEW.audit_event_id;
+        SELECT tenant_id INTO parent_tenant_id FROM public.audit_events WHERE id = NEW.audit_event_id;  -- R2 HIGH-2 closure: schema-qualified
         IF parent_tenant_id IS NULL OR parent_tenant_id <> NEW.tenant_id THEN
             RAISE EXCEPTION 'audit_event_hash_chain P1 row tenant_id (%) must match audit_events.tenant_id (%) for audit_event_id (%)',
                 NEW.tenant_id, parent_tenant_id, NEW.audit_event_id
@@ -92,7 +97,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;   -- R2 HIGH-2 closure: search_path-hardened to defeat SECURITY DEFINER + caller-controlled-search_path object-redirection attack
 
 CREATE TRIGGER audit_event_hash_chain_p1_tenant_match_trg
     BEFORE INSERT ON audit_event_hash_chain
@@ -184,13 +189,17 @@ CREATE TABLE audit_event_hash_chain_anchor_intent (
     )
 );
 
--- Three-layer RLS enforcement
+-- Three-layer RLS enforcement (R2 HIGH-1 closure: FORCE + WITH CHECK + fail-closed GUC)
 ALTER TABLE audit_event_hash_chain_anchor_intent ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_event_hash_chain_anchor_intent FORCE ROW LEVEL SECURITY;
 CREATE POLICY audit_event_hash_chain_anchor_intent_tenant_isolation ON audit_event_hash_chain_anchor_intent
     USING (
-        tenant_id = current_setting('app.tenant_id')::tenant_id_t
+        tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
         OR (current_setting('app.platform_operator_break_glass', true) = 'true'
             AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    )
+    WITH CHECK (
+        tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
     );
 
 -- P1 tenant-id-match enforced via the §4.NEW1 chain's tenant_id (anchor_intent's partition_key for P1 references the chain via FK below)
@@ -200,7 +209,7 @@ DECLARE chain_tenant_id tenant_id_t;
 BEGIN
     IF NEW.partition = 'P1' THEN
         SELECT tenant_id INTO chain_tenant_id
-            FROM audit_event_hash_chain
+            FROM public.audit_event_hash_chain   -- R2 HIGH-2 closure: schema-qualified
             WHERE partition = NEW.partition AND partition_key = NEW.partition_key AND sequence_no = NEW.sequence_no_head;
         IF chain_tenant_id IS NULL OR chain_tenant_id <> NEW.tenant_id THEN
             RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent P1 row tenant_id (%) must match audit_event_hash_chain.tenant_id (%) at (partition=%, partition_key=%, sequence_no=%)',
@@ -210,7 +219,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;   -- R2 HIGH-2 closure: search_path-hardened to defeat SECURITY DEFINER + caller-controlled-search_path object-redirection attack
 
 CREATE TRIGGER audit_event_hash_chain_anchor_intent_p1_tenant_match_trg
     BEFORE INSERT ON audit_event_hash_chain_anchor_intent
@@ -273,14 +282,23 @@ CREATE TABLE audit_event_hash_chain_anchor (
 );
 -- FK to corruption-evidence table established AFTER §4.NEW4 below via forward-reference ALTER TABLE.
 
--- Three-layer RLS enforcement
+-- Three-layer RLS enforcement (R2 HIGH-1 closure: FORCE + WITH CHECK + fail-closed GUC)
 ALTER TABLE audit_event_hash_chain_anchor ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_event_hash_chain_anchor FORCE ROW LEVEL SECURITY;
 CREATE POLICY audit_event_hash_chain_anchor_tenant_isolation ON audit_event_hash_chain_anchor
     USING (
-        tenant_id = current_setting('app.tenant_id')::tenant_id_t
+        tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
         OR (current_setting('app.platform_operator_break_glass', true) = 'true'
             AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    )
+    WITH CHECK (
+        tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
     );
+
+-- Append-only enforcement (R2 HIGH-3 closure: was missing in v0.2; restored to match §4.NEW1 pattern)
+CREATE TRIGGER audit_event_hash_chain_anchor_append_only
+    BEFORE UPDATE OR DELETE ON audit_event_hash_chain_anchor
+    FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
 
 -- P1 tenant-id-match trigger: anchor's tenant_id MUST match corresponding chain row's tenant_id (Option A consistency constraint #1).
 CREATE FUNCTION audit_event_hash_chain_anchor_p1_tenant_match() RETURNS TRIGGER AS $$
@@ -288,7 +306,7 @@ DECLARE chain_tenant_id tenant_id_t;
 BEGIN
     IF NEW.partition = 'P1' THEN
         SELECT tenant_id INTO chain_tenant_id
-            FROM audit_event_hash_chain
+            FROM public.audit_event_hash_chain   -- R2 HIGH-2 closure: schema-qualified
             WHERE partition = NEW.partition AND partition_key = NEW.partition_key AND sequence_no = NEW.sequence_no_head;
         IF chain_tenant_id IS NULL OR chain_tenant_id <> NEW.tenant_id THEN
             RAISE EXCEPTION 'audit_event_hash_chain_anchor P1 row tenant_id mismatch at (partition=%, partition_key=%, sequence_no=%)',
@@ -298,7 +316,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;   -- R2 HIGH-2 closure: search_path-hardened to defeat SECURITY DEFINER + caller-controlled-search_path object-redirection attack
 
 CREATE TRIGGER audit_event_hash_chain_anchor_p1_tenant_match_trg
     BEFORE INSERT ON audit_event_hash_chain_anchor
@@ -346,14 +364,23 @@ CREATE TABLE audit_event_hash_chain_anchor_corruption_evidence (
     )
 );
 
--- Three-layer RLS enforcement
+-- Three-layer RLS enforcement (R2 HIGH-1 closure: FORCE + WITH CHECK + fail-closed GUC)
 ALTER TABLE audit_event_hash_chain_anchor_corruption_evidence ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_event_hash_chain_anchor_corruption_evidence FORCE ROW LEVEL SECURITY;
 CREATE POLICY audit_event_hash_chain_anchor_corruption_evidence_tenant_isolation ON audit_event_hash_chain_anchor_corruption_evidence
     USING (
-        tenant_id = current_setting('app.tenant_id')::tenant_id_t
+        tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
         OR (current_setting('app.platform_operator_break_glass', true) = 'true'
             AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    )
+    WITH CHECK (
+        tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
     );
+
+-- Append-only enforcement (R2 HIGH-3 closure)
+CREATE TRIGGER audit_event_hash_chain_anchor_corruption_evidence_append_only
+    BEFORE UPDATE OR DELETE ON audit_event_hash_chain_anchor_corruption_evidence
+    FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
 
 -- P1 tenant-id-match trigger: corruption-evidence's tenant_id MUST match the corrupted chain row's tenant_id (Option A consistency constraint #1).
 CREATE FUNCTION audit_event_hash_chain_anchor_corruption_evidence_p1_tenant_match() RETURNS TRIGGER AS $$
@@ -361,7 +388,7 @@ DECLARE chain_tenant_id tenant_id_t;
 BEGIN
     IF NEW.corrupted_partition = 'P1' THEN
         SELECT tenant_id INTO chain_tenant_id
-            FROM audit_event_hash_chain
+            FROM public.audit_event_hash_chain   -- R2 HIGH-2 closure: schema-qualified
             WHERE partition = NEW.corrupted_partition AND partition_key = NEW.corrupted_partition_key AND sequence_no = NEW.corrupted_sequence_no;
         IF chain_tenant_id IS NULL OR chain_tenant_id <> NEW.tenant_id THEN
             RAISE EXCEPTION 'audit_event_hash_chain_anchor_corruption_evidence P1 row tenant_id mismatch at corrupted (partition=%, partition_key=%, sequence_no=%)',
@@ -371,7 +398,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;   -- R2 HIGH-2 closure: search_path-hardened to defeat SECURITY DEFINER + caller-controlled-search_path object-redirection attack
 
 CREATE TRIGGER audit_event_hash_chain_anchor_corruption_evidence_p1_tenant_match_trg
     BEFORE INSERT ON audit_event_hash_chain_anchor_corruption_evidence
@@ -480,6 +507,7 @@ ALTER TABLE audit_events
 3. **OQ3 — Cat A retention for hash-chain anchor table.** Recommendation: 7 years (HIPAA Cat A standard) for `audit_event_hash_chain_anchor` + `audit_event_hash_chain_anchor_corruption_evidence`; 7 years for `audit_event_hash_chain_anchor_intent` (intent table preserves crash-recovery audit-trail); 7 years for `audit_event_hash_chain` (chain projection).
 4. **OQ4 — Whether INVARIANTS v5.4 needs I-036 for audit-chain anchor-supersession.** Recommendation: NO new invariant — supersession is constrained at schema-level (single-supersession UNIQUE + paired-NULL CHECK + dual-control authorization) without needing platform-floor invariant elevation. The existing I-035 append-only invariant covers the underlying invariant.
 5. **OQ5 — Codex pre-ratification target.** Recommendation: 2-3 rounds (mechanical amendment cycle; lower complexity than SI-021 v1.0 itself).
+6. **OQ6 — Hardened tenant/platform helper function for RLS predicates** (R2 HIGH-1 sub-recommendation deferred 2026-05-20). Codex R2 HIGH-1 recommended replacing raw `current_setting('app.tenant_id')` RLS predicates with a canonical hardened tenant helper function (analogous to SI-010-style trust-anchor pattern that was rejected at P-023a; the right scope is a successor cross-CDM hardening SI rather than this amendment cycle). The current amendment closes the in-scope sub-recommendations of HIGH-1 (FORCE ROW LEVEL SECURITY + WITH CHECK predicates + fail-closed `current_setting(..., false)` flag) but defers the hardened-helper question. **Recommendation:** file a separate cross-CDM hardening SI in a future cycle (provisionally SI-024 "Canonical Hardened Tenant/Platform RLS Helper Pattern") that proposes a `current_tenant_id_strict()` SQL function + migration plan for all v1.10-era PHI-bearing entities. SI-021's chain tables benefit from the helper alongside every other PHI table; resolving in isolation is wrong scope. Until SI-024 lands, the chain tables use the same `current_setting()` pattern as every other v1.10 entity (consistent canonical floor).
 
 ---
 
@@ -535,7 +563,21 @@ All 4 chain tables (§4.NEW1 audit_event_hash_chain + §4.NEW2 audit_event_hash_
 
 **0 hard-floor item 6 violations** on this R1 cycle. PR #11 STOP-and-escalate discipline applied + codified as canonical process for future cycles.
 
-**R2 verification pending.** Codex re-invocation queued in standard adversarial-review framing to verify the Option A implementation against (a) SI-021 v1.0 + ERR Option A ratification + Codex's missed-considerations consistency rules; (b) the convergent canonical v1.10 pattern across other CDM entities; (c) any residual defects in the new RLS policies + CHECK constraints + trigger functions.
+**v0.3 R2 closure 2026-05-20:** 3 HIGH closed (1 partial + 2 inline).
+
+| Round | Findings | Status |
+|---|---|---|
+| R2 | **HIGH-1** RLS trusts caller-settable GUCs for tenant and break-glass decisions (canonical fix per Codex would be a hardened `current_tenant_id()` helper); **HIGH-2** SECURITY DEFINER triggers not search_path-hardened (object-redirection attack vector); **HIGH-3** committed-anchor + corruption-evidence tables missing `enforce_append_only()` triggers (DDL gap — relies on grants which can drift) | HIGH-1 partial close inline + hardened-helper sub-rec deferred to OQ6; HIGH-2 + HIGH-3 closed inline |
+
+**R2 closure pattern recap:**
+
+- **HIGH-1 (partial close inline + defer):** in-scope hardening applied to all 4 RLS policies: (a) `FORCE ROW LEVEL SECURITY` added to prevent table-owner RLS bypass; (b) `WITH CHECK` predicate added enforcing tenant-write-binding (break-glass clause is read-only, cannot write under PLATFORM_TENANT_ID); (c) `current_setting('app.tenant_id', false)` fail-closed flag — RLS predicate now raises an error if the GUC is unset, eliminating the silent-empty-string trust-boundary bug. **Deferred:** the hardened-helper sub-recommendation (replace raw `current_setting()` with a canonical `current_tenant_id_strict()` SQL function) is out-of-scope for this amendment cycle — it affects ALL v1.10-era PHI-bearing entities, not just SI-021's chain tables. Filed as §6 OQ6 for resolution at a separate cross-CDM hardening SI (provisionally SI-024). Until SI-024 lands, SI-021 chain tables match the convergent canonical floor (raw GUC + FORCE RLS + WITH CHECK + fail-closed flag).
+- **HIGH-2 (closed inline):** all 4 SECURITY DEFINER trigger functions hardened with `SET search_path = pg_catalog, public` declaration. All unqualified `audit_events` + `audit_event_hash_chain` references schema-qualified as `public.audit_events` + `public.audit_event_hash_chain`. Defeats the SECURITY DEFINER + caller-controlled-search_path object-redirection attack vector.
+- **HIGH-3 (closed inline):** `enforce_append_only()` triggers added to `audit_event_hash_chain_anchor` (§4.NEW3) and `audit_event_hash_chain_anchor_corruption_evidence` (§4.NEW4). Now all 4 chain tables have executable DDL-level append-only enforcement, not just grant-based controls. Matches the §4.NEW1 pattern.
+
+**0 hard-floor item 6 violations on R2.** The hardened-helper question was correctly recognized as architectural-judgment (net-new platform-floor primitive affecting cross-CDM scope) and deferred via OQ6 rather than escalated via ERR (deferral is the right discipline for cross-corpus-scope questions; ERR is for SI-internal architectural-judgment that the current cycle must resolve). The HIGH-1 partial-close + defer pattern is now a documented closure shape alongside full-inline-close and ERR-escalation.
+
+**R3 verification pending.** Codex re-invocation queued in standard adversarial-review framing to verify (a) the R2 closures landed cleanly; (b) the deferred OQ6 framing is acceptable as a partial close vs full escalation; (c) any residual defects introduced by the v0.3 changes (FORCE RLS interaction with grant patterns; WITH CHECK semantics; SET search_path syntax in DDL).
 
 Authored on `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` branch off main at `8d44bde` (post-P-028 ratification). Merged main `f3a6469` (CLAUDE.md dual-recommendation codification) into branch 2026-05-20.
 
