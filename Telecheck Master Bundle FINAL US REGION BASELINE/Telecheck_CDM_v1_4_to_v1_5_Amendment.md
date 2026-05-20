@@ -1,7 +1,7 @@
 # CDM v1.4 → v1.5 Amendment (SI-021 follow-on)
 
-**Version:** 0.3 DRAFT
-**Status:** R2 ALL FINDINGS CLOSED (3 HIGH; HIGH-1 partial close inline + hardened-helper sub-recommendation deferred to OQ6 cross-CDM scope; HIGH-2 + HIGH-3 closed inline). R3 verification PENDING.
+**Version:** 0.4 DRAFT
+**Status:** R3 ALL FINDINGS CLOSED INLINE (2 HIGH — phase-1 tenant_id grant restoration + monotonic-transition trigger with per-phase immutability). R4 verification PENDING.
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-028 (SI-021 v1.0 RATIFIED) OQ4 canonical decision — file SI-021's 4 new audit-chain-archival entities as a CDM v1.4 → v1.5 amendment cycle co-bumped with AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4.
 **Owner:** SRE Lead + Security Engineering Lead + Compliance Officer (same as SI-021 owner triad).
@@ -112,7 +112,7 @@ Crash-safe intent-state table for the 5-phase commit state machine per SI-021 §
 
 | Phase | Role authorized | Action |
 |---|---|---|
-| Phase 1 (intent_reserved) | `audit-chain-writer` | INSERT row with intent_state='intent_reserved'; sets partition + partition_key + sequence_no_head + row_hash_head + anchor_idempotency_key + intent_reserved_at |
+| Phase 1 (intent_reserved) | `audit-chain-writer` | INSERT row with intent_state='intent_reserved'; sets **tenant_id (must match session `app.tenant_id` GUC; RLS WITH CHECK enforces equality)** + partition + partition_key + sequence_no_head + row_hash_head + anchor_idempotency_key + intent_reserved_at + signer_principal_arn (planned signer ARN, verified at phase 2). **Caller MUST `SET app.tenant_id = '<row_tenant_id>'` BEFORE the INSERT** so the RLS WITH CHECK predicate satisfies (R3 HIGH-1 closure 2026-05-20: tenant_id is NOT NULL + WITH CHECK requires equality with the session GUC; phase-1 column grant + RLS interaction must allow audit-chain-writer to supply tenant_id) |
 | Phase 2 (signature_computed) | `audit-chain-archive-signer` | UPDATE: sets signature + signed_at_intent + signature_computed_at + intent_state='signature_computed'; cannot modify any other column |
 | Phase 3 (s3_write_committed) | `audit-chain-s3-writer` | UPDATE: sets s3_us_east_1_etag + s3_us_west_2_etag + s3_object_key + s3_object_sha256 + s3_write_committed_at + intent_state='s3_write_committed'; cannot modify signature OR transparency-log fields |
 | Phase 4 (transparency_log_appended) | `audit-transparency-log-append-witness` | UPDATE: sets transparency_log_id + transparency_log_entry_index + transparency_log_sth_at_append + transparency_log_sth_signature + transparency_log_inclusion_proof + transparency_log_appended_at + intent_state='transparency_log_appended'; cannot modify S3 OR signature fields |
@@ -226,15 +226,99 @@ CREATE TRIGGER audit_event_hash_chain_anchor_intent_p1_tenant_match_trg
     FOR EACH ROW EXECUTE FUNCTION audit_event_hash_chain_anchor_intent_p1_tenant_match();
 
 -- Column-level GRANT enforces per-phase role authority (illustrative; actual GRANT DDL deferred to Phase D infrastructure IaC):
--- GRANT INSERT (partition, partition_key, sequence_no_head, row_hash_head, anchor_idempotency_key, intent_state, intent_reserved_at, signer_principal_arn) ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_writer;
+-- GRANT INSERT (tenant_id, partition, partition_key, sequence_no_head, row_hash_head, anchor_idempotency_key, intent_state, intent_reserved_at, signer_principal_arn) ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_writer;   -- R3 HIGH-1 closure: tenant_id included so RLS WITH CHECK predicate satisfies + NOT NULL constraint can be honored
 -- GRANT UPDATE (signature, signed_at_intent, signature_computed_at, intent_state) ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_archive_signer;
 -- GRANT UPDATE (s3_object_key, s3_us_east_1_etag, s3_us_west_2_etag, s3_object_sha256, s3_write_committed_at, intent_state) ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_s3_writer;
 -- GRANT UPDATE (transparency_log_id, transparency_log_entry_index, transparency_log_sth_at_append, transparency_log_sth_signature, transparency_log_inclusion_proof, transparency_log_appended_at, intent_state) ON TABLE audit_event_hash_chain_anchor_intent TO audit_transparency_log_append_witness;
 -- GRANT UPDATE (committed_at, intent_state) ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_archive_signer, audit_chain_verifier;
 -- GRANT SELECT ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_verifier;
+
+-- R3 HIGH-2 closure: BEFORE UPDATE trigger enforcing monotonic intent_state transitions + per-phase field immutability after that phase has been completed.
+-- The intent table is mutable-by-design (NOT covered by enforce_append_only()) because phases 2-5 mutate per-phase columns + intent_state.
+-- But: backward transitions + rewriting already-persisted phase evidence MUST be prevented. The trigger enforces:
+--   (a) Allowed forward transitions only: intent_reserved → signature_computed → s3_write_committed → transparency_log_appended → COMMITTED.
+--   (b) Per-phase persisted fields IMMUTABLE once the row has advanced beyond that phase (e.g., signature column cannot change once intent_state >= 's3_write_committed').
+CREATE FUNCTION audit_event_hash_chain_anchor_intent_monotonic_transition() RETURNS TRIGGER AS $$
+DECLARE
+    allowed_next_state TEXT;
+BEGIN
+    -- (a) Monotonic state-transition rule
+    allowed_next_state := CASE OLD.intent_state
+        WHEN 'intent_reserved' THEN 'signature_computed'
+        WHEN 'signature_computed' THEN 's3_write_committed'
+        WHEN 's3_write_committed' THEN 'transparency_log_appended'
+        WHEN 'transparency_log_appended' THEN 'COMMITTED'
+        WHEN 'COMMITTED' THEN NULL    -- terminal state; no further transitions
+        ELSE NULL
+    END;
+    IF NEW.intent_state <> OLD.intent_state THEN
+        IF allowed_next_state IS NULL OR NEW.intent_state <> allowed_next_state THEN
+            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent state transition (% -> %) not allowed; only forward monotonic transitions intent_reserved -> signature_computed -> s3_write_committed -> transparency_log_appended -> COMMITTED are permitted',
+                OLD.intent_state, NEW.intent_state
+                USING ERRCODE = 'invalid_transaction_state';
+        END IF;
+    END IF;
+
+    -- (b) Per-phase persisted-field immutability rules
+    -- Phase 2 fields (signature, signed_at_intent, signature_computed_at) IMMUTABLE once intent_state >= 's3_write_committed'
+    IF OLD.intent_state IN ('s3_write_committed', 'transparency_log_appended', 'COMMITTED') THEN
+        IF NEW.signature IS DISTINCT FROM OLD.signature
+            OR NEW.signed_at_intent IS DISTINCT FROM OLD.signed_at_intent
+            OR NEW.signature_computed_at IS DISTINCT FROM OLD.signature_computed_at THEN
+            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent phase-2 fields (signature, signed_at_intent, signature_computed_at) are immutable once intent_state >= s3_write_committed'
+                USING ERRCODE = 'invalid_column_reference';
+        END IF;
+    END IF;
+    -- Phase 3 fields IMMUTABLE once intent_state >= 'transparency_log_appended'
+    IF OLD.intent_state IN ('transparency_log_appended', 'COMMITTED') THEN
+        IF NEW.s3_object_key IS DISTINCT FROM OLD.s3_object_key
+            OR NEW.s3_us_east_1_etag IS DISTINCT FROM OLD.s3_us_east_1_etag
+            OR NEW.s3_us_west_2_etag IS DISTINCT FROM OLD.s3_us_west_2_etag
+            OR NEW.s3_object_sha256 IS DISTINCT FROM OLD.s3_object_sha256
+            OR NEW.s3_write_committed_at IS DISTINCT FROM OLD.s3_write_committed_at THEN
+            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent phase-3 fields (s3_object_key, s3_*_etag, s3_object_sha256, s3_write_committed_at) are immutable once intent_state >= transparency_log_appended'
+                USING ERRCODE = 'invalid_column_reference';
+        END IF;
+    END IF;
+    -- Phase 4 fields IMMUTABLE once intent_state = 'COMMITTED'
+    IF OLD.intent_state = 'COMMITTED' THEN
+        IF NEW.transparency_log_id IS DISTINCT FROM OLD.transparency_log_id
+            OR NEW.transparency_log_entry_index IS DISTINCT FROM OLD.transparency_log_entry_index
+            OR NEW.transparency_log_sth_at_append IS DISTINCT FROM OLD.transparency_log_sth_at_append
+            OR NEW.transparency_log_sth_signature IS DISTINCT FROM OLD.transparency_log_sth_signature
+            OR NEW.transparency_log_inclusion_proof IS DISTINCT FROM OLD.transparency_log_inclusion_proof
+            OR NEW.transparency_log_appended_at IS DISTINCT FROM OLD.transparency_log_appended_at
+            OR NEW.committed_at IS DISTINCT FROM OLD.committed_at THEN
+            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent phase-4 + phase-5 fields are immutable once intent_state = COMMITTED'
+                USING ERRCODE = 'invalid_column_reference';
+        END IF;
+    END IF;
+    -- Identity fields (id, tenant_id, partition, partition_key, sequence_no_head, row_hash_head, anchor_idempotency_key, intent_reserved_at, signer_principal_arn) ALWAYS immutable post-INSERT
+    IF NEW.id IS DISTINCT FROM OLD.id
+        OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+        OR NEW.partition IS DISTINCT FROM OLD.partition
+        OR NEW.partition_key IS DISTINCT FROM OLD.partition_key
+        OR NEW.sequence_no_head IS DISTINCT FROM OLD.sequence_no_head
+        OR NEW.row_hash_head IS DISTINCT FROM OLD.row_hash_head
+        OR NEW.anchor_idempotency_key IS DISTINCT FROM OLD.anchor_idempotency_key
+        OR NEW.intent_reserved_at IS DISTINCT FROM OLD.intent_reserved_at
+        OR NEW.signer_principal_arn IS DISTINCT FROM OLD.signer_principal_arn THEN
+        RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent identity fields (id, tenant_id, partition, partition_key, sequence_no_head, row_hash_head, anchor_idempotency_key, intent_reserved_at, signer_principal_arn) are immutable post-INSERT'
+            USING ERRCODE = 'invalid_column_reference';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;   -- R3 HIGH-2 closure + R2 HIGH-2 search_path-hardened
+
+CREATE TRIGGER audit_event_hash_chain_anchor_intent_monotonic_transition_trg
+    BEFORE UPDATE ON audit_event_hash_chain_anchor_intent
+    FOR EACH ROW EXECUTE FUNCTION audit_event_hash_chain_anchor_intent_monotonic_transition();
 ```
 
-**Cross-references:** SI-021 §2 Sub-decision 5a (5-role separation IAM/DB/KMS/S3 permission matrix); SI-021 §2 Sub-decision 6 (5-phase commit state machine + crash recovery rules); SI-021 §2 Sub-decision 7 (cryptographic-disagreement HALT-AND-REPAIR).
+**§4.NEW2 mutable-by-design clarification (R3 HIGH-2 closure 2026-05-20):** unlike the other 3 chain tables (§4.NEW1 + §4.NEW3 + §4.NEW4) which are append-only and carry `enforce_append_only()` BEFORE UPDATE OR DELETE triggers, **§4.NEW2 `audit_event_hash_chain_anchor_intent` is mutable-by-design** because the 5-phase commit state machine requires phase-by-phase UPDATEs to mutate the row from intent_reserved → COMMITTED. The R2 HIGH-3 closure correctly added enforce_append_only() to §4.NEW1 + §4.NEW3 + §4.NEW4 only. For §4.NEW2, append-only is REPLACED by the more nuanced monotonic-transition + per-phase-immutability trigger above. The cross-SI alignment note in §5 below is updated to reflect this distinction.
+
+**Cross-references:** SI-021 §2 Sub-decision 5a (5-role separation IAM/DB/KMS/S3 permission matrix); SI-021 §2 Sub-decision 6 (5-phase commit state machine + crash recovery rules); SI-021 §2 Sub-decision 7 (cryptographic-disagreement HALT-AND-REPAIR); INVARIANTS v5.4 §I-035 (append-only invariant for ratification + audit-bound state machines — applies to §4.NEW1/3/4; §4.NEW2 satisfies the spirit via monotonic-transition + per-phase-immutability discipline instead of strict append-only).
 
 ### §4.NEW3 — `audit_event_hash_chain_anchor` (CDM v1.5 new)
 
@@ -491,7 +575,8 @@ ALTER TABLE audit_events
 | Cross-SI surface | This amendment's surface | Relationship |
 |---|---|---|
 | SI-021 v1.0 RATIFIED §2 Sub-decisions 1-7 | §4.NEW1-4 + §3 + §4 | This amendment IS the CDM/contracts consolidation of SI-021 v1.0 |
-| INVARIANTS v5.4 §I-027 (append-only) | All 4 new entities | Append-only enforced via trigger + role-based IAM |
+| INVARIANTS v5.4 §I-027 (append-only) | §4.NEW1 + §4.NEW3 + §4.NEW4 | `enforce_append_only()` BEFORE UPDATE OR DELETE triggers + role-based IAM |
+| INVARIANTS v5.4 §I-027 + §I-035 (append-only spirit; mutable-by-design exception) | §4.NEW2 only | Phase-1 INSERT immutable post-row-creation; phases 2-5 enforce monotonic forward transitions + per-phase field immutability post-transition (cannot regress; cannot rewrite already-committed phase evidence). Documented via R3 HIGH-2 closure trigger `audit_event_hash_chain_anchor_intent_monotonic_transition` |
 | INVARIANTS v5.4 §I-035 (append-only for ratification + audit-bound state machines) | §4.NEW1-4 | Convergent canonical pattern |
 | Sprint 13 KMS Architecture §HSM-signer-role | §4.NEW2-3 signer_principal_arn | HSM-backed signing per Sprint 13 |
 | Sprint 18 RBAC v1.2 §3 Group C dual-control | §4.NEW4 dual-control CHECK constraint | Convergent pattern |
@@ -578,6 +663,23 @@ All 4 chain tables (§4.NEW1 audit_event_hash_chain + §4.NEW2 audit_event_hash_
 **0 hard-floor item 6 violations on R2.** The hardened-helper question was correctly recognized as architectural-judgment (net-new platform-floor primitive affecting cross-CDM scope) and deferred via OQ6 rather than escalated via ERR (deferral is the right discipline for cross-corpus-scope questions; ERR is for SI-internal architectural-judgment that the current cycle must resolve). The HIGH-1 partial-close + defer pattern is now a documented closure shape alongside full-inline-close and ERR-escalation.
 
 **R3 verification pending.** Codex re-invocation queued in standard adversarial-review framing to verify (a) the R2 closures landed cleanly; (b) the deferred OQ6 framing is acceptable as a partial close vs full escalation; (c) any residual defects introduced by the v0.3 changes (FORCE RLS interaction with grant patterns; WITH CHECK semantics; SET search_path syntax in DDL).
+
+**v0.4 R3 closure 2026-05-20:** 2 HIGH closed inline + OQ6 deferral approved by Codex.
+
+| Round | Findings | Status |
+|---|---|---|
+| R3 | **HIGH-1** Phase-1 intent INSERT cannot set required tenant_id under documented column grants (tenant_id is NOT NULL + RLS WITH CHECK; phase-1 grant list omitted tenant_id → audit-chain-writer cannot create anchor_intent rows → 5-phase state machine breaks at phase 1); **HIGH-2** intent-phase updates not monotonic + can rewrite durable recovery evidence (column-level UPDATE grants + CHECK constraints didn't prevent backward transitions or rewriting already-persisted phase evidence; cross-SI alignment claimed append-only for all 4 entities while R2 explicitly left §4.NEW2 mutable). Codex also explicitly APPROVED the OQ6 cross-CDM deferral of the hardened-helper question: "OQ6 is a defensible cross-CDM deferral." | Both HIGH closed inline + OQ6 deferral confirmed |
+
+**R3 closure pattern recap:**
+
+- **HIGH-1 (closed inline):** Phase-1 action description updated: "INSERT row with intent_state='intent_reserved'; sets **tenant_id (must match session `app.tenant_id` GUC; RLS WITH CHECK enforces equality)** + partition + ... ; **Caller MUST `SET app.tenant_id = '<row_tenant_id>'` BEFORE the INSERT**." Phase-1 column grant updated: `GRANT INSERT (tenant_id, partition, partition_key, sequence_no_head, row_hash_head, anchor_idempotency_key, intent_state, intent_reserved_at, signer_principal_arn) ... TO audit_chain_writer;`. The audit-chain-writer role can now supply tenant_id at phase-1 INSERT + the RLS WITH CHECK predicate satisfies because the GUC was pre-set.
+- **HIGH-2 (closed inline):** NEW BEFORE UPDATE trigger `audit_event_hash_chain_anchor_intent_monotonic_transition` enforces: (a) **monotonic forward state transitions only** (intent_reserved → signature_computed → s3_write_committed → transparency_log_appended → COMMITTED; no backward transitions; COMMITTED is terminal); (b) **per-phase persisted-field immutability after that phase has been completed** (phase-2 signature fields immutable once intent_state ≥ s3_write_committed; phase-3 S3 fields immutable once intent_state ≥ transparency_log_appended; phase-4 transparency-log + phase-5 committed_at fields immutable once intent_state = COMMITTED); (c) **identity fields immutable post-INSERT** (id + tenant_id + partition + partition_key + sequence_no_head + row_hash_head + anchor_idempotency_key + intent_reserved_at + signer_principal_arn). Trigger is `SECURITY DEFINER SET search_path = pg_catalog, public` per R2 HIGH-2 pattern. Cross-SI alignment table updated to distinguish §4.NEW1+3+4 (enforce_append_only-covered) from §4.NEW2 (mutable-by-design; satisfies I-027 spirit via monotonic-transition + per-phase-immutability discipline).
+
+**OQ6 deferral confirmed:** Codex explicitly approved the cross-CDM deferral pattern ("OQ6 is a defensible cross-CDM deferral"). The hardened-helper question remains queued for future SI-024 cross-CDM hardening cycle. The partial-close + defer closure shape is now Codex-validated alongside full-inline-close + ERR-escalation.
+
+**0 hard-floor item 6 violations on R3.** Both findings were in-scope correctness defects from prior closures, not architectural-judgment.
+
+**R4 verification queued.** Per OQ5 working recommendation of 2-3 rounds for mechanical amendment cycles, the cycle has now extended to R4 — comparable to SI-021's own R5-cadence-boundary precedent. Standard cadence allows up to R5 boundary if needed; convergence to APPROVE expected at R4 since R3 closures were in-scope corrections to R2-introduced surface area only.
 
 Authored on `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` branch off main at `8d44bde` (post-P-028 ratification). Merged main `f3a6469` (CLAUDE.md dual-recommendation codification) into branch 2026-05-20.
 
