@@ -266,16 +266,28 @@ node "C:/Users/menso/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/code
 
 **When the dual-recommendation process applies:**
 
-- **Always** when hard-floor item 6 fires (Codex finding proposes net-new schema/invariant/platform-floor primitive beyond ratified scope).
-- **Always** when the escalation artifact presents ≥ 2 options that the ratifier must choose between (single-option escalations don't need a Codex consult since there's nothing to weigh).
-- **Optionally** when Claude is uncertain about a non-hard-floor decision and a Codex second opinion is valuable; in that case Claude flags the uncertainty to the ratifier and asks whether to invoke the consult.
+- **Always when Claude asks the ratifier (Evans) any question that requires a decision** (codified 2026-05-20 per Evans's directive *"always add both of your recommendations when you ask a question"*). The rule is unconditional: any chat question Claude poses to Evans that has a "choose A vs B" or "approve / reject / modify" shape requires a Codex consult invoked first + both recommendations surfaced side-by-side in the chat question. This includes — but is broader than — hard-floor item 6 escalations.
+- **Always** when hard-floor item 6 fires (Codex finding proposes net-new schema/invariant/platform-floor primitive beyond ratified scope) — even if Claude isn't explicitly asking Evans a question, the ERR's option choice IS a question and follows the dual-recommendation rule.
+- **Always** when the escalation artifact presents ≥ 2 options that the ratifier must choose between.
 
 **When it does NOT apply:**
 
-- Routine Codex closures within a single SI's Codex convergence cycle (HIGH / MEDIUM / LOW within-scope findings) — Claude closes inline per the standard cadence.
+- Routine Codex closures within a single SI's Codex convergence cycle (HIGH / MEDIUM / LOW within-scope findings) — Claude closes inline per the standard cadence; no question posed to Evans → no consult needed.
 - Prose-consistency findings — closeable inline within 2 rounds.
 - SUPERSEDED-annotation discipline closures — closeable inline.
-- Ratifier ceremonies driven by Evans's standing chat-message authority (e.g., a clean P-N ratification of a ratifier-ready SI at working recommendations) — no architectural-judgment open; no Codex consult needed.
+- Ratifier ceremonies driven by Evans's standing chat-message authority (e.g., a clean P-N ratification of a ratifier-ready SI at working recommendations where the working recommendations are already documented in the SI under review) — Evans's ratification is the decision; no further question being posed.
+- Status-update / progress-report messages where Claude is informing Evans, not asking — no decision required → no consult.
+- Single-option-only escalations (where there's genuinely only one path) — there's nothing to weigh; Claude can proceed.
+
+**Operational shape for "always when asking a question":**
+
+When Claude is about to post a question to Evans that requires a decision, Claude:
+1. Drafts the question + Claude's own recommendation + rationale.
+2. **Invokes Codex via consult-framing BEFORE sending the question to Evans.** The Codex invocation reads the same source material Claude consulted + returns its independent recommendation.
+3. Surfaces both recommendations side-by-side in the chat question to Evans, with explicit labels ("Claude's recommendation: X" / "Codex's recommendation: Y") + any convergence/divergence narrative + framing-defect catches.
+4. Evans decides with both recommendations visible.
+
+**Latency note:** Codex consults typically take 1-3 minutes. For time-sensitive questions where waiting for Codex would block Evans materially, Claude can post the question with Claude's recommendation first + a note that "Codex consult in flight, will surface when complete" + then post Codex's recommendation as a follow-up. This is the exception path, not the default. The default is: wait for Codex, surface both together.
 
 **Discipline anchor:** the dual-recommendation pattern operationalizes "trust but verify" between Claude (who authored the escalation artifact + has the working analysis context) and Codex (who has independent threat-modeling + canonical-source-reading context). Disagreement between them is informative (the ratifier sees the divergence + can probe further). Agreement strengthens the case. Either way, the ratifier decides with strictly more information than either reviewer alone would provide.
 
