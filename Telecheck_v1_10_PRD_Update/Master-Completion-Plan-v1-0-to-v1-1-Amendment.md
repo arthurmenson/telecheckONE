@@ -70,7 +70,25 @@ This amendment updates the canonical Master Completion Plan v1.0 with **18 sprin
 | Sprint 17 synthetic_canary + kms_residency_dr_override + chaos-drill tables | DRAFTED; pending CDM v1.3 promotion | Sprint 17 |
 | Sprint 18 iam_principal_human_binding + operator_active_mode_lease + hsm_signer_binding | DRAFTED; pending CDM v1.3 promotion | Sprint 18 |
 
-**Phase B exit gate:** all draft schemas reviewed + ratifier-approved as a single CDM v1.3 batched promotion (sister-SI batched approach per Addendum 51 + 53 recommendation).
+**Phase B exit gate (R1 HIGH-2 closure: explicit alternatives + ratifier decision gate):**
+
+The amendment does NOT pre-commit to batched vs incremental promotion; the choice is OQ2 (§7) — ratifier-resolved. Phase B exit criteria differ per chosen path:
+
+**Path B1 — Batched promotion (recommended; per Addendum 51 + 53):**
+- ALL draft schemas reviewed + ratifier-approved as a single CDM v1.3 batched promotion.
+- Single Promotion Ledger entry records the v1.3 promotion.
+- Compatibility/rollback: backward-compat verified across all draft schemas before promotion; ROLLBACK = revert v1.3 to v1.2 in one operation.
+- Risk: large promotion blast radius; any one schema failure blocks all.
+- Benefit: single ratifier ceremony; consistent v1.3 across all dependent specs.
+
+**Path B2 — Incremental per-SI promotion:**
+- Each draft schema independently ratifier-approved + promoted in sequence (CDM v1.2 → v1.2.1 → v1.2.2 → ... → v1.3 over multiple ratifier cycles).
+- Multiple Promotion Ledger entries, one per increment.
+- Compatibility/rollback: backward-compat verified per increment; each promotion has its own rollback path.
+- Risk: partial-state windows where some dependent specs reference v1.2.N while others reference v1.2.(N+1); cross-spec consistency burden on each subsequent ratifier cycle.
+- Benefit: smaller blast radius per ratifier cycle; faster initial promotion of the highest-priority schemas.
+
+**Phase B exit gate is satisfied IFF either Path B1 OR Path B2 has completed for all listed draft schemas.** OQ2 is the ratifier-blocking decision — until resolved, Phase B is blocked-by-OQ2.
 
 ### Phase C — Procedure-Side Implementation (Track 1+2+5; PENDING)
 
@@ -89,7 +107,13 @@ Track 1 procedures pending Phase B CDM v1.3:
 | KMS multi-region keys + IAM policies-as-code (Sprint 13) | RATIFIER-READY; provision after Phase A |
 | SIEM event-streaming pipeline + hash-chain archival (Sprint 6; §4.5.HC potential SI-021 split) | RATIFIER-READY; provision after Phase A |
 | F-4 deploy pipeline (Sprint 5) | RATIFIER-READY; provision after Phase A |
-| Notification SMS providers + dispatch infrastructure (Sprint 16) | PROVISIONED; per-tenant CCR keys per Sprint 17 P-5 |
+| Notification SMS providers (Twilio + Vonage + Africa's Talking accounts) | PROVISIONED at infrastructure level |
+| Per-tenant CCR keys (`sms_provider_primary`, `sms_provider_fallback`) | PROVISIONED per Sprint 17 P-5 |
+| Notification ACK channel primitive selection | **BLOCKED ON OQ-D (Cold-DR OQ7)** — multi-region ACK primitive selection is shared between Cold-DR + Notification crisis-signal delivery |
+| Notification ACK channel implementation | BLOCKED ON OQ-D resolution |
+| Notification DR-survivable delivery verification (P-15 Sprint 17 §7) | BLOCKED until ACK channel implementation complete + Sprint 17 §6 chaos drill verified |
+
+**Phase D notification dispatch readiness (R1 MED-1 closure):** the overall notification dispatch gate is BLOCKED until OQ-D is ratifier-resolved + the chosen ACK channel primitive is implemented + DR-survivable delivery is chaos-drill-verified per Sprint 17 §6 SD3 cadence. SMS-provider-only readiness is NOT sufficient for tenant-launch gating — Sprint 17 P-15 (crisis-notification cross-channel dispatch test) MUST PASS at Phase E entry.
 | Chaos-drill infrastructure (Sprint 17 §6 + RBAC R-11) | PROVISIONED per Phase D |
 
 ### Phase E — Internal Alpha + Per-Tenant Readiness Verification (PENDING)
@@ -202,9 +226,29 @@ Per Addendum 53 §"Recommended ratifier sequence":
 7. SIEM §4.5.HC SI-021 split confirmation.
 8. Sprint 6-18 deliverables canonical promotion (in batched waves).
 
-### Delta 9 — §11 (NEW) Architectural-judgment OQ-group catalog
+### Delta 9 — §11 (NEW) Architectural-judgment OQ-group catalog (R1 HIGH-1 closure: full inventory)
 
-Per Addendum 53, ~12 OQ-groups across 13 enumerated items. Each item retains its source Sprint reference + working recommendation. The catalog is the canonical inventory; ratifier ceremony agenda is built from this catalog.
+The canonical inventory of architectural-judgment OQ-groups queued for ratifier ceremony. Each row identifies the source Sprint, impacted phase/track, ratifier priority bucket (per §10 sequence), blocking relationship, and recommended ceremony placement.
+
+| OQ-group ID | Source Sprint | Description | Impacted Phase/Track | Priority bucket (§10 step) | Blocks |
+|---|---|---|---|---|---|
+| OQ-A | Sprint 10 + Sprint 2 + Sprint 3 + Sprint 19 | Cross-SI publish-state (SI-015 OQ4 = SI-016 OQ1 = SI-019 OQ7); 3 options A/B/C per-SI working recommendations | Phase A + Phase B | Step 1 (highest leverage) | SI-015 / SI-016 / SI-019 finalization; CDM v1.3 promotion |
+| OQ-B | Sprint 3 | SI-016 OQ6 (P-018b cross-SI scope; ai_workflow_executions BEFORE INSERT trigger crosses P-018) | Phase A | Step 1 (sister to OQ-A) | SI-016 finalization |
+| OQ-C | Sprint 6 | SIEM Spec §4.5.HC SI-021 split candidate (hash-chain archival mechanics warrant separate SI) | Phase A + Phase D | Step 7 | SIEM Spec canonical promotion + S3 Object Lock infrastructure |
+| OQ-D | Sprint 7 | Cold-DR OQ7 multi-region ACK primitive selection (DynamoDB Global Tables OR Aurora Global OR CRDT-over-S3 OR custom) | Phase D | Step 3 | Multi-region ACK channel provisioning; Notification v1.2 DR delivery |
+| OQ-E | Sprint 7 | Cold-DR OQ8 cross-region replication-backfill SLA for state-P → state-Q promotion | Phase D | Step 3 (sister to OQ-D) | Cold-DR three-state model finalization |
+| OQ-F | Sprint 8 | SI-017 OQ1 (CDM session_state entity placement; SI-022 candidate) | Phase B | Step 2 | CDM v1.3 promotion |
+| OQ-G | Sprint 9 | Sprint 9 OQ1 (CDM ai_mode1_conversation entities; SI-023 candidate) | Phase B | Step 2 | CDM v1.3 promotion |
+| OQ-H | Sprint 12 | Sprint 12 OQs: L4 autonomous workflow allow-list; review-token transit security; Mode 1 advisory-hint rate-limiting; per-workflow undo procedure | Phase A + Phase C | Step 4 | Mode 2 Handler implementation |
+| OQ-I | Sprint 13 | Sprint 13 OQs: HSM-backed CMK scope; per-row envelope-key format; DEK rotation interruptibility under DR; quantum-resistance roadmap; break-glass time-bound extension | Phase A + Phase D | Step 3 (sister to OQ-D + OQ-E) | KMS Architecture canonical promotion + infrastructure provisioning |
+| OQ-J | Sprint 14 | Sprint 14 OQs: outbox dispatcher service architecture; subscriber registration; DLQ retention; propagation SLA target | Phase A + Phase C | Step 4 (sister to OQ-H) | Consent v1.1 outbox dispatcher implementation |
+| OQ-K | Sprint 16 | Sprint 16 OQs: crisis-notification 24h dedup window confirmation; operator escalation SLA tolerance; marketing-opt-out content-policy verification; SMS provider DR continuity | Phase A + Phase D | Step 5 | Notification v1.2 canonical promotion + dispatch infrastructure |
+| OQ-L | Sprint 17 | Sprint 17 OQs: DR drill cadence + chaos cadence intervals; drill execution sequencing; drill-failure remediation SLA | Phase A + Phase E | Step 6 | Operational Readiness v1.6 canonical promotion |
+| OQ-M | Sprint 18 | Sprint 18 OQs (RBAC): L4 scope vs separate role; country regulatory counsel roster; chaos drill operator grant freshness; SoD violation severity tier | Phase A + Phase C | Step 5 (sister to OQ-K) | RBAC v1.2 canonical promotion + procedure-side STEP 0a implementation |
+
+**Total: 13 enumerated OQ-groups across ~12 distinct decision areas (OQ-A is multi-SI but single decision per Sprint 10 framing).**
+
+**Ratifier-agenda construction:** the ratifier ceremony walks this catalog in §10-step order; each OQ-group's working recommendation is the starting position; ratifier may override per ceremony deliberation. Ceremony output: a Promotion Ledger entry per OQ-group with the canonical decision recorded.
 
 ### Delta 10 — §12 (NEW) Cross-track dependency graph
 
@@ -229,6 +273,19 @@ Per §5 above.
 ## 8. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
+
+**v0.1 R1 closure 2026-05-19:** 2 HIGH + 1 MED closed inline:
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | HIGH-1 §11 OQ-group catalog claimed but missing; HIGH-2 Phase B exit gate mandated batched promotion while OQ2 still open; MED-1 Phase D notification SMS marked PROVISIONED while ACK primitive is OQ-D blocked | All 3 closed inline |
+
+**R1 closure pattern recap:**
+- HIGH-1: §11 actually populated with 13-row OQ-group catalog (OQ-A to OQ-M) covering source Sprint + impacted phase/track + priority bucket + blocking relationship + ceremony placement. Cross-references §7 OQs as plan-level meta-OQs (distinct from architectural-judgment OQs).
+- HIGH-2: Phase B exit gate split into Path B1 (batched) vs Path B2 (incremental); both paths' criteria + risks + benefits + rollback profile articulated; OQ2 remains the ratifier-blocking decision; Phase B is `blocked-by-OQ2` until resolved.
+- MED-1: Phase D notification readiness decomposed — SMS providers PROVISIONED + per-tenant CCR keys PROVISIONED but ACK channel primitive BLOCKED ON OQ-D + ACK implementation + DR-survivable delivery verification ALL BLOCKED until OQ-D resolves; Phase E entry requires Sprint 17 P-15 PASS.
+
+No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. 5 known plan-level OQs (§7) + 13 architectural-judgment OQs catalogued in §11 — distinct surfaces.
 
 ---
 
