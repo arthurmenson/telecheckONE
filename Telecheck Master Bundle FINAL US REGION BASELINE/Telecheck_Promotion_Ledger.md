@@ -37,6 +37,87 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-027 — 2026-05-20 — Phase B Batched Promotion: CDM v1.2 → v1.3 (23 new entities + 3 derived views from Sprints 8-18) + Contracts Pack v5.2 → v5.3 (3 new invariants + ~30 audit events + 6 domain events + 11 CCR keys + 4 types) co-bumped; Artifact Registry v2.13 → v2.14
+
+**Evans's verbatim instruction (2026-05-20 chat-message):** *"Yes"* — affirmative response to the prior chat turn's offer to "keep going on the Contracts Pack amendments + CDM v1.3 Phase B ceremony" following the P-026 ratification.
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). Phase B exit-gate ceremony per Sprint 20 Master Completion Plan v1.1 §3 + Path B1 (batched promotion) selected per OQ2 ratified at P-026 OQ-A/F/G group.
+
+**Type:** Content-change promotion + Registry version bump v2.13 → v2.14 per operating rule 4.
+
+**Prerequisite:** Promotion Ledger P-026 (2026-05-20) — the Phase A canonical ratification authority that enabled this Phase B ceremony. P-026 lands on the parallel `ratification/2026-05-20-batched-ratifier-ceremony-OQ-A-to-OQ-M` branch + merges to main with this Phase B promotion in lockstep.
+
+---
+
+#### §1. CDM v1.2 → v1.3 batched promotion (per Phase B exit gate)
+
+Canonical amendment: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_CDM_v1_2_to_v1_3_Amendment.md`.
+
+**23 new active entities + 3 derived views** consolidated from Sprints 8-18:
+
+- **Sprint 8 (SI-022 per OQ-F):** `session_state` (§4.49).
+- **Sprint 9 (SI-023 per OQ-G):** `ai_mode1_conversation` + `_archival_event` + `_turn_admission` + `_turn_detector_result` + `_turn_result` + `_state` view (§4.50-§4.54 + view).
+- **Sprint 12:** `ai_mode2_invocation` + `ai_workflow_handler_registry` (Option C per OQ-A) + `ai_workflow_executions` + `ai_mode2_pending_token` + `ai_mode2_workflow_state_transition` (§4.55-§4.59).
+- **Sprint 13:** `kms_dek_keyring` + `kms_residency_dr_override` (§4.60-§4.61) + per-PHI-row `dek_version_id` columns (rolling migration).
+- **Sprint 14:** `consent_revocation_event` + `consent_domain_event_outbox` + `consent_domain_event_delivery` + `consent_domain_event_subscriber` + `consent_research_active` view (§4.62-§4.65 + view).
+- **Sprint 16:** `notification_crisis_dispatch_ledger` + `notification_crisis_provider_attempt` + `notification_crisis_escalation_obligation` (§4.66-§4.68).
+- **Sprint 17:** `synthetic_canary` (§4.69).
+- **Sprint 18:** `iam_principal_human_binding` + `operator_active_mode_lease` + `hsm_signer_binding` (§4.70-§4.72).
+
+CDM v1.2 baseline: 48 active entities. CDM v1.3 target: **71 active entities + 3 derived views**.
+
+All v1.3-new PHI-bearing entities carry the canonical `tenant_id tenant_id_t NOT NULL` + RLS policy + `enforce_append_only()` trigger per the convergent canonical pattern (Sprint 9 §6.2 R4 HIGH-1 + I-035 new invariant from §2 below).
+
+---
+
+#### §2. Contracts Pack v5.2 → v5.3 co-bumped promotion
+
+Canonical amendment: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md`.
+
+**5 contract files amended:**
+
+1. **INVARIANTS v5.3 → v5.4:** 3 new invariants — I-033 (multi-region ACK partition-degraded provenance per Sprint 7 + 16); I-034 (synthetic-test isolation per Sprint 17 + 18); I-035 (append-only invariant for ratification + audit-bound state machines per Sprints 7/9/12/14/16 convergent pattern).
+2. **AUDIT_EVENTS v5.5 → v5.6:** ~30 new events across Sprints 8-18 (Identity v1.1: 12 events; Mode 1: 8 events; Mode 2: ~10 events; KMS: ~6 events; Consent v1.1: 6 events; Notification v1.2: ~8 events; Operational Readiness: ~3 events; RBAC v1.2: 5 events). Cat A patient-bound P1 + Cat B governance P2 routing per SI-018 partition rule.
+3. **DOMAIN_EVENTS v5.2 → v5.3:** 6 new consent domain events (ConsentGrantedDomainEvent + ConsentRevokedDomainEvent + ConsentScopeAmendedDomainEvent + DelegationGrantedDomainEvent + DelegationRevokedDomainEvent + ConsentExpiredDomainEvent) per Sprint 14 §3 SD1 same-tx outbox pattern. Subscribers: ai-service-mode1, ai-service-mode2, forms-engine, research-pipeline.
+4. **CCR_RUNTIME v5.2 → v5.3:** 11 new tenant config keys (kms_residency_policy; sms_provider_primary/fallback; ai_provider; ai_mode1_daily_quota; ai_mode2_daily_quota; ai_mode2_per_patient_hourly_quota; ai_provider_phi_allowed; consent_outbox_propagation_sla_seconds; chaos_drill_enabled; l4_pause_kill_switch).
+5. **TYPES v5.2 → v5.3:** 4 new canonical types (dispatch_obligation_state enum; mode2_autonomy_level enum; mode2_workflow_outcome enum; data_class enum per Sprint 13 §2.2 7-class taxonomy).
+
+---
+
+#### §3. Artifact Registry version bump
+
+**v2.13 → v2.14.** CDM v1.2 → v1.3 + Contracts Pack v5.2 → v5.3 are co-bumped artifacts in this single Phase B ceremony.
+
+---
+
+#### §4. Phase B exit gate
+
+Per Sprint 20 Master Completion Plan v1.1 §3, Phase B exit gate criteria:
+- All draft schemas (from Sprints 8-18) reviewed + ratifier-approved → SATISFIED via §1 above.
+- Path B1 (batched promotion) per OQ2 → ratifier choice (P-026 OQ-A/F/G group) → EXECUTED.
+- Compatibility/rollback per Path B1: backward-compat verified across all schemas; ROLLBACK = revert v1.3 to v1.2 in one operation.
+
+**Phase B exit declared. Phase C (procedure-side implementation: I-032 STEP 0 + Mode 1/2 handlers + Consent dispatcher + Notification dispatcher + RBAC grant procedures) is now the next gating ceremony.**
+
+---
+
+#### §5. Cross-references
+
+- **Promotion Ledger P-026** (2026-05-20) — Phase A canonical ratification authority that enabled this Phase B ceremony.
+- **Sprint 20 Master Completion Plan v1.1** — gating criteria + Path B1 selection.
+- **CDM v1.2 → v1.3 Amendment** + **Contracts Pack v5.2 → v5.3 Amendment** — the canonical artifact deliverables of this Phase B ceremony.
+- All Sprint 8-18 source specs — authoritative for per-entity/event/key/type content.
+
+---
+
+#### §6. Follow-on execution
+
+This entry records the RATIFICATION + canonical inventory expansion. Mechanical body merge of v1.3 entity definitions into renamed canonical CDM file + v5.3 contract content into renamed Contracts Pack files proceeds in subsequent commits per the v1.10.1 hygiene-cycle precedent. Per-SI follow-on implementation-detail amendments per Sprint 10 §6 downstream-scope checklist remain queued. Phase C procedure-side implementation work commences in subsequent commits referencing both P-026 + P-027 as anchors.
+
+**Registry absorption:** Registry v2.13 → v2.14 in lockstep with this entry.
+
+---
+
 ### Entry P-023a — 2026-05-19 — REJECTION of SI-010 trust-anchor layer (sub-ceremony 6 / P-023 reversal): unratified net-new platform-floor architecture authored in violation of Boot Sequence §9 + CLAUDE.md hard rules; security-posture regression on partially-compromised-application threat model
 
 **Type:** Reconciliation entry (NO Registry version bump in this commit per operating rule 4; this entry records a status change to a prior ratification-intent entry, not the promotion of new canonical content). The Registry remains at **v2.12** (the version landed by SC7 P-024 PR-A2/A3 2026-05-18); the v2.12 → v2.13 bump that PR #10 attempted is hereby abandoned and that PR's branch / commits are preserved as audit trail only.
