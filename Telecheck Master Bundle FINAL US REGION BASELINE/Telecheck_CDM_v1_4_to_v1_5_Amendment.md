@@ -1,7 +1,7 @@
 # CDM v1.4 → v1.5 Amendment (SI-021 follow-on)
 
 **Version:** 0.1 DRAFT
-**Status:** RATIFIER-READY-PENDING-CODEX-CONVERGENCE (pre-Codex; targets ~2-3 rounds)
+**Status:** R1 CLOSED INLINE FOR HIGH-1 + HIGH-2 + MED; 1 CRITICAL ESCALATED via Engineering Review Request (CLAUDE.md hard-floor item 6 STOP-and-escalate); RATIFIER-MINI-REVIEW-OPEN on chain-schema tenant-isolation question. R2 BLOCKED until CRITICAL resolved.
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-028 (SI-021 v1.0 RATIFIED) OQ4 canonical decision — file SI-021's 4 new audit-chain-archival entities as a CDM v1.4 → v1.5 amendment cycle co-bumped with AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4.
 **Owner:** SRE Lead + Security Engineering Lead + Compliance Officer (same as SI-021 owner triad).
@@ -61,7 +61,19 @@ CREATE TABLE audit_event_hash_chain (
 
 ### §4.NEW2 — `audit_event_hash_chain_anchor_intent` (CDM v1.5 new)
 
-Crash-safe intent-state table for the 5-phase commit state machine per SI-021 Sub-decision 6. INSERT by `audit-chain-archive-signer` role at phase 1; UPDATE-of-state-only by the same role through deterministic state transitions; INSERT/UPDATE by no other role. Read-only by `audit-chain-verifier`.
+Crash-safe intent-state table for the 5-phase commit state machine per SI-021 §2 Sub-decision 6. **Per-phase role-INSERT/UPDATE authority distribution matches SI-021 §2 Sub-decision 5a 5-role separation (R1 HIGH-1 closure 2026-05-20):**
+
+| Phase | Role authorized | Action |
+|---|---|---|
+| Phase 1 (intent_reserved) | `audit-chain-writer` | INSERT row with intent_state='intent_reserved'; sets partition + partition_key + sequence_no_head + row_hash_head + anchor_idempotency_key + intent_reserved_at |
+| Phase 2 (signature_computed) | `audit-chain-archive-signer` | UPDATE: sets signature + signed_at_intent + signature_computed_at + intent_state='signature_computed'; cannot modify any other column |
+| Phase 3 (s3_write_committed) | `audit-chain-s3-writer` | UPDATE: sets s3_us_east_1_etag + s3_us_west_2_etag + s3_object_key + s3_object_sha256 + s3_write_committed_at + intent_state='s3_write_committed'; cannot modify signature OR transparency-log fields |
+| Phase 4 (transparency_log_appended) | `audit-transparency-log-append-witness` | UPDATE: sets transparency_log_id + transparency_log_entry_index + transparency_log_sth_at_append + transparency_log_sth_signature + transparency_log_inclusion_proof + transparency_log_appended_at + intent_state='transparency_log_appended'; cannot modify S3 OR signature fields |
+| Phase 5 (COMMITTED) | `audit-chain-archive-signer` OR `audit-chain-verifier` | UPDATE: sets committed_at + intent_state='COMMITTED' after verifying prior phases via row-level CHECK constraints |
+
+Role-based RLS + column-level GRANTs enforce per-phase authority. Read-only by `audit-chain-verifier` at all phases.
+
+**Intent-table persistence fields per phase (R1 HIGH-2 closure 2026-05-20):** the intent row carries all material needed to resume from durable state without re-signing or losing proofs. Phase 2 persists the signature + signed_at_intent so phase-3/4/5 crash recovery does not require re-signing. Phase 3 persists S3 dual-region provenance so phase-4 crash recovery does not require re-probing both regions. Phase 4 persists transparency-log inclusion proof + STH material so phase-5 crash recovery does not require re-fetching from the transparency log. At phase 5 the intent row's persisted material is copied into the canonical `audit_event_hash_chain_anchor` row (§4.NEW3) and the intent row may be retained for forensic audit-trail OR archived per retention policy.
 
 ```sql
 CREATE TABLE audit_event_hash_chain_anchor_intent (
@@ -73,15 +85,45 @@ CREATE TABLE audit_event_hash_chain_anchor_intent (
     anchor_idempotency_key BYTEA NOT NULL,         -- Deterministic per (partition, partition_key, sequence_no_head)
     intent_state TEXT NOT NULL,                    -- 'intent_reserved' | 'signature_computed' | 's3_write_committed' | 'transparency_log_appended' | 'COMMITTED'
     intent_reserved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    signature_computed_at TIMESTAMPTZ,
-    s3_write_committed_at TIMESTAMPTZ,
-    transparency_log_appended_at TIMESTAMPTZ,
-    committed_at TIMESTAMPTZ,
-    signer_principal_arn TEXT NOT NULL,
+    -- Phase 2 persistence (set by audit-chain-archive-signer; required at intent_state >= 'signature_computed')
+    signature BYTEA,                               -- RSA-PSS-SHA256 over canonical signed payload
+    signed_at_intent TIMESTAMPTZ,                  -- Signer's authoritative signing timestamp (canonical signed_at at phase 5 may differ; carries chronological accuracy)
+    signature_computed_at TIMESTAMPTZ,             -- Audit timestamp for phase 2 transition
+    signer_principal_arn TEXT NOT NULL,            -- Pre-populated at phase 1 from the planned signer principal; verified at phase 2
+    -- Phase 3 persistence (set by audit-chain-s3-writer; required at intent_state >= 's3_write_committed')
+    s3_object_key TEXT,                            -- Deterministic S3 locator for the immutable archive object
+    s3_us_east_1_etag TEXT,
+    s3_us_west_2_etag TEXT,
+    s3_object_sha256 BYTEA,                        -- Canonical content hash (re-verified at recovery per Sub-decision 7)
+    s3_write_committed_at TIMESTAMPTZ,             -- Audit timestamp for phase 3 transition
+    -- Phase 4 persistence (set by audit-transparency-log-append-witness; required at intent_state >= 'transparency_log_appended')
+    transparency_log_id TEXT,
+    transparency_log_entry_index BIGINT,
+    transparency_log_sth_at_append BYTEA,
+    transparency_log_sth_signature BYTEA,
+    transparency_log_inclusion_proof JSONB,
+    transparency_log_appended_at TIMESTAMPTZ,      -- Audit timestamp for phase 4 transition
+    -- Phase 5 persistence (set by audit-chain-archive-signer OR audit-chain-verifier; required at intent_state = 'COMMITTED')
+    committed_at TIMESTAMPTZ,                      -- Audit timestamp for phase 5 transition
     CONSTRAINT audit_event_hash_chain_anchor_intent_unique UNIQUE (partition, partition_key, sequence_no_head),
     CONSTRAINT audit_event_hash_chain_anchor_intent_idempotency_unique UNIQUE (anchor_idempotency_key),
     CONSTRAINT audit_event_hash_chain_anchor_intent_state_check
         CHECK (intent_state IN ('intent_reserved', 'signature_computed', 's3_write_committed', 'transparency_log_appended', 'COMMITTED')),
+    -- State-specific NOT-NULL CHECK: required persistence fields per phase
+    CONSTRAINT audit_event_hash_chain_anchor_intent_phase_2_complete
+        CHECK (intent_state = 'intent_reserved'
+            OR (signature IS NOT NULL AND signed_at_intent IS NOT NULL AND signature_computed_at IS NOT NULL)),
+    CONSTRAINT audit_event_hash_chain_anchor_intent_phase_3_complete
+        CHECK (intent_state IN ('intent_reserved', 'signature_computed')
+            OR (s3_object_key IS NOT NULL AND s3_us_east_1_etag IS NOT NULL AND s3_us_west_2_etag IS NOT NULL
+                AND s3_object_sha256 IS NOT NULL AND s3_write_committed_at IS NOT NULL)),
+    CONSTRAINT audit_event_hash_chain_anchor_intent_phase_4_complete
+        CHECK (intent_state IN ('intent_reserved', 'signature_computed', 's3_write_committed')
+            OR (transparency_log_id IS NOT NULL AND transparency_log_entry_index IS NOT NULL
+                AND transparency_log_sth_at_append IS NOT NULL AND transparency_log_sth_signature IS NOT NULL
+                AND transparency_log_inclusion_proof IS NOT NULL AND transparency_log_appended_at IS NOT NULL)),
+    CONSTRAINT audit_event_hash_chain_anchor_intent_phase_5_complete
+        CHECK (intent_state <> 'COMMITTED' OR committed_at IS NOT NULL),
     CONSTRAINT audit_event_hash_chain_anchor_intent_phase_timestamps_monotonic
         CHECK (
             (signature_computed_at IS NULL OR signature_computed_at >= intent_reserved_at)
@@ -90,9 +132,17 @@ CREATE TABLE audit_event_hash_chain_anchor_intent (
             AND (committed_at IS NULL OR committed_at >= COALESCE(transparency_log_appended_at, s3_write_committed_at, signature_computed_at, intent_reserved_at))
         )
 );
+
+-- Column-level GRANT enforces per-phase role authority (illustrative; actual GRANT DDL deferred to Phase D infrastructure IaC):
+-- GRANT INSERT (partition, partition_key, sequence_no_head, row_hash_head, anchor_idempotency_key, intent_state, intent_reserved_at, signer_principal_arn) ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_writer;
+-- GRANT UPDATE (signature, signed_at_intent, signature_computed_at, intent_state) ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_archive_signer;
+-- GRANT UPDATE (s3_object_key, s3_us_east_1_etag, s3_us_west_2_etag, s3_object_sha256, s3_write_committed_at, intent_state) ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_s3_writer;
+-- GRANT UPDATE (transparency_log_id, transparency_log_entry_index, transparency_log_sth_at_append, transparency_log_sth_signature, transparency_log_inclusion_proof, transparency_log_appended_at, intent_state) ON TABLE audit_event_hash_chain_anchor_intent TO audit_transparency_log_append_witness;
+-- GRANT UPDATE (committed_at, intent_state) ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_archive_signer, audit_chain_verifier;
+-- GRANT SELECT ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_verifier;
 ```
 
-**Cross-references:** SI-021 §2 Sub-decision 6 (5-phase commit state machine + crash recovery rules); SI-021 §2 Sub-decision 7 (cryptographic-disagreement HALT-AND-REPAIR).
+**Cross-references:** SI-021 §2 Sub-decision 5a (5-role separation IAM/DB/KMS/S3 permission matrix); SI-021 §2 Sub-decision 6 (5-phase commit state machine + crash recovery rules); SI-021 §2 Sub-decision 7 (cryptographic-disagreement HALT-AND-REPAIR).
 
 ### §4.NEW3 — `audit_event_hash_chain_anchor` (CDM v1.5 new)
 
@@ -114,6 +164,7 @@ CREATE TABLE audit_event_hash_chain_anchor (
     transparency_log_sth_at_append BYTEA NOT NULL,
     transparency_log_sth_signature BYTEA NOT NULL,
     transparency_log_inclusion_proof JSONB NOT NULL,
+    s3_object_key TEXT NOT NULL,                   -- Deterministic S3 locator for the immutable archive object (R1 MED closure 2026-05-20: restored from SI-021 v1.0 §2 Sub-decision 3 schema; carried in canonical signed payload so HSM signature covers it)
     s3_us_east_1_etag TEXT NOT NULL,
     s3_us_west_2_etag TEXT NOT NULL,
     s3_object_sha256 BYTEA NOT NULL,
@@ -271,7 +322,31 @@ ALTER TABLE audit_events
 
 ## 7. Codex pre-ratification status
 
-**v0.1 DRAFT 2026-05-20:** pre-Codex-review; awaiting R1.
+**v0.1 DRAFT 2026-05-20:** pre-Codex-review.
+
+**v0.1 R1 closure 2026-05-20:** 1 CRITICAL (ESCALATED) + 2 HIGH + 1 MED.
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | **CRITICAL** patient-bound chain metadata has no enforceable tenant boundary (audit_event_hash_chain + intent + anchor + corruption-evidence tables lack tenant_id; rely on parent audit_events RLS join which is insufficient for direct row-level enforcement during DR reconstruction OR direct queries against the chain tables); **HIGH-1** intent-table authority collapses SI-021 §2 Sub-decision 5a 5-role separation (amendment had single-role audit-chain-archive-signer handling all phase transitions; should be writer→signer→s3-writer→witness→signer/verifier per phase); **HIGH-2** intent schema missing crash-recovery persistence fields (signature + signed_at_intent + S3 provenance + transparency-log inclusion-proof material per phase); **MED** committed anchor missing s3_object_key (SI-021 §2 Sub-decision 3 schema field for deterministic immutable-object locator) | HIGH-1 + HIGH-2 + MED closed inline; **CRITICAL ESCALATED per CLAUDE.md hard-floor item 6** |
+
+**R1 closure pattern recap:**
+
+- **HIGH-1 (closed inline):** §4.NEW2 rewritten with per-phase role-authority table mapping each phase to its canonical 5-role-separation role (writer→signer→s3-writer→witness→signer/verifier). Column-level GRANT discipline articulated as illustrative SQL comments (actual GRANT DDL deferred to Phase D infrastructure IaC). The amendment's prior single-role collapse is fully reversed.
+- **HIGH-2 (closed inline):** §4.NEW2 schema extended with per-phase persistence fields:
+  - Phase 2: `signature BYTEA` + `signed_at_intent TIMESTAMPTZ` + `signature_computed_at TIMESTAMPTZ`
+  - Phase 3: `s3_object_key TEXT` + `s3_us_east_1_etag TEXT` + `s3_us_west_2_etag TEXT` + `s3_object_sha256 BYTEA` + `s3_write_committed_at TIMESTAMPTZ`
+  - Phase 4: `transparency_log_id TEXT` + `transparency_log_entry_index BIGINT` + `transparency_log_sth_at_append BYTEA` + `transparency_log_sth_signature BYTEA` + `transparency_log_inclusion_proof JSONB` + `transparency_log_appended_at TIMESTAMPTZ`
+  - State-specific NOT-NULL CHECK constraints per phase (intent_state ∈ {…} OR field IS NOT NULL pattern) enforce that the row carries the required persistence material before transitioning to subsequent phases. Crash recovery can now resume from durable state at any phase boundary without re-signing or re-fetching external proofs.
+- **MED (closed inline):** §4.NEW3 schema extended with `s3_object_key TEXT NOT NULL` per SI-021 §2 Sub-decision 3 deterministic-locator pattern. s3_object_key is carried in the canonical signed payload so HSM signature covers it; verifier reading the committed anchor row alone can locate the exact Object Lock artifact without reconstructing external naming conventions.
+
+**R1 CRITICAL escalation status (CLAUDE.md hard-floor item 6 STOP-and-escalate):**
+
+The R1 CRITICAL finding proposes **net-new canonical schema fields** (tenant_id column + RLS policy on `audit_event_hash_chain` + `audit_event_hash_chain_anchor_intent` + `audit_event_hash_chain_anchor` + `audit_event_hash_chain_anchor_corruption_evidence` tables) that **SI-021 v1.0 RATIFIED §2 Sub-decision 1's schema did NOT include**. Per CLAUDE.md hard-floor item 6 discriminator (a) "net-new canonical schema fields" beyond the ratified sub-decision scope of the SI under review is a hard STOP requiring ratifier escalation. Closing this finding inline by amending the schema within this amendment cycle would violate the discipline.
+
+**Escalation artifact:** `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-SI-021-Chain-Schema-Tenant-Isolation-2026-05-20.md` authored on this branch alongside the R1 closure. The ERR documents the tenant-isolation gap, presents three options (A: add tenant_id+RLS to all 4 chain tables; B: ratify SI-021's tenant-id-less chain schema as canonical with audit_events FK as the sole tenant-binding; C: hybrid — tenant_id on P1 patient-bound chains only, platform-scoped P2 chains use partition_key='platform' literal), assesses each option's I-023/I-024/I-025 platform-floor compatibility, and routes to Evans + Engineering Lead + CDM owner for ratifier mini-review.
+
+**Verdict at R1 close:** RATIFIER-READY-WITH-OPEN-ESCALATION. 3 inline closures (HIGH-1 + HIGH-2 + MED) are clean; 1 CRITICAL is awaiting Evans's ratifier mini-review per the ERR. R2 should NOT run until the CRITICAL is resolved — running R2 against an unresolved CRITICAL would risk Codex closing the open question inline by proposing schema amendments that violate hard-floor item 6.
 
 Authored on `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` branch off main at `8d44bde` (post-P-028 ratification).
 
