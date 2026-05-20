@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.12 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + Pass-2 strategic-synthesis B+ closures applied + cycle-6 cleanup
-**Status:** Cycle-6 final cleanup: 1 HIGH + 1 MED inline (stale break_glass_approval_lookup_owner policy removed — sec_break_glass_lookup role no longer referenced; P-030 stale v0.7/canonical-floor language replaced with v0.11 TRANSITIONAL language). Pre-merge cycle-7 final two-pass verification queued before auto-proceed merge.
+**Version:** 1.0 v0.13 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + Pass-2 B+ + cycle-6 + cycle-7 closures applied
+**Status:** Cycle-7 HIGH closure: Phase 2 RLS DDL pattern revised to add companion PERMISSIVE break-glass admission policy (POLICY 2) alongside the existing permissive raw-GUC policy (POLICY 1) and the new RESTRICTIVE hardened-helper intersection policy (POLICY 3). PostgreSQL RLS composition semantics now correct: ALL restrictive policies pass AND at least one permissive passes; legitimate cross-tenant break-glass admitted; spoofing denied + telemetry; tenant reads work normally. Integration test specified.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -201,8 +201,31 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 1. **Phase 1 (foundation):** create the canonical hardened helper functions (Sub-decision 1) + provision the trust-anchor (Sub-decision 2) + grant `EXECUTE` to all roles that currently can use raw `current_setting('app.tenant_id')` in RLS. No RLS policy changes yet; helpers coexist with raw GUC.
 2. **Phase 2 (RESTRICTIVE parallel policy):** for each PHI-bearing entity, ADD a parallel RLS policy using the hardened helper **with `AS RESTRICTIVE`** so the new policy intersects (AND-combines) with the existing permissive raw-GUC policy. **R1 HIGH-1 closure 2026-05-20:** prior wording said "must satisfy BOTH" implying intersection; but PostgreSQL permissive RLS policies OR-combine by default. Using `AS RESTRICTIVE` explicitly produces the intersection (a row satisfies the table policy iff ALL permissive policies' USING/WITH CHECK is true AND ALL restrictive policies' USING/WITH CHECK is true).
 
-   Canonical Phase 2 DDL pattern (pre-merge HIGH-2 closure 2026-05-20: target-tenant break-glass branch added so legitimate DR/compliance access survives the coexistence window):
+   Canonical Phase 2 DDL pattern (pre-merge HIGH-2 closure 2026-05-20: target-tenant break-glass branch added so legitimate DR/compliance access survives the coexistence window; **cycle-7 HIGH closure 2026-05-20: companion PERMISSIVE break-glass admission policy added to satisfy PostgreSQL RLS composition rules — RESTRICTIVE alone cannot grant access that the existing permissive raw-GUC policy denies**):
+
    ```sql
+   -- POLICY 1 (EXISTING; preserved): Permissive raw-GUC tenant-isolation policy already in place from pre-SI-024 baseline.
+   -- (Not authored by SI-024; preserved during Phase 2 coexistence; DROPPED at Phase 4 cutover.)
+
+   -- POLICY 2 (NEW at Phase 2; permissive): Break-glass admission policy.
+   -- Required because PostgreSQL admits a row IFF (all RESTRICTIVE policies pass) AND (at least one PERMISSIVE passes).
+   -- The existing raw-GUC permissive policy (POLICY 1) only passes for tenant_id = current_setting('app.tenant_id'),
+   -- so it FAILS for legitimate cross-tenant break-glass reads. POLICY 2 provides the permissive admission path
+   -- for those break-glass reads; POLICY 3 (restrictive) then enforces the hardened helper verification.
+   CREATE POLICY <table>_break_glass_permissive_admission
+       ON <table>
+       AS PERMISSIVE
+       USING (
+           is_target_tenant_break_glass_active(tenant_id)
+           OR (is_platform_operator_break_glass_active()
+               AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+       )
+       WITH CHECK (
+           is_target_tenant_break_glass_active(tenant_id)
+       );
+
+   -- POLICY 3 (NEW at Phase 2; restrictive): Hardened-helper intersection policy.
+   -- ALL restrictive policies must pass; this enforces the hardened helper verification on every admitted row.
    CREATE POLICY <table>_tenant_isolation_hardened_intersection
        ON <table>
        AS RESTRICTIVE
@@ -217,7 +240,19 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
            OR is_target_tenant_break_glass_active(tenant_id)
        );
    ```
-   This ensures: (a) a row admitted under raw-GUC but rejected by the hardened helper is REJECTED during Phase 2 (catches spoofing attempts in telemetry); (b) a row admitted by both is allowed (no false negatives for legitimate traffic); (c) **legitimate target-tenant break-glass reads survive the coexistence window** (closed pre-merge HIGH-2; DR/compliance investigation paths are not denied during the migration meant to harden them); (d) platform-sentinel break-glass reads also survive. The Phase 2 RESTRICTIVE policy MIRRORS the final canonical policy from Sub-decision 5a §3.
+
+   **Composition semantics under Phase 2 (cycle-7 HIGH closure):**
+   - **Normal tenant read:** POLICY 1 permissive passes (raw GUC matches) → POLICY 3 restrictive passes (hardened helper matches because `current_tenant_id_strict()` returns same tenant). ADMITTED.
+   - **Spoofing attempt (compromised non-middleware role sets raw GUC):** POLICY 1 permissive passes → POLICY 3 restrictive FAILS (hardened helper returns NULL for non-middleware role; NULL = anything → UNKNOWN → FALSE). DENIED + telemetry.
+   - **Legitimate target-tenant break-glass read:** POLICY 1 permissive FAILS (raw GUC ≠ target tenant) → POLICY 2 permissive PASSES (`is_target_tenant_break_glass_active` returns TRUE) → POLICY 3 restrictive PASSES (same break-glass branch). ADMITTED.
+   - **Platform-sentinel break-glass read:** POLICY 1 permissive likely FAILS (raw GUC ≠ PLATFORM_SENTINEL unless middleware specifically set it) → POLICY 2 permissive PASSES (sentinel branch) → POLICY 3 restrictive PASSES. ADMITTED.
+
+   **Integration test required for SI-024 v1.0 Phase 2 implementation (cycle-7 HIGH closure):** under Phase 2 dual-policy state, an active break-glass approval for a target tenant MUST permit cross-tenant PHI read by the approved operator. Test:
+   1. Set up: operator role with platform_operator_break_glass membership; valid `break_glass_approval` row for target_tenant_X; `app.actor_human_id` GUC set to operator's human-id.
+   2. Operator session DOES NOT set `app.tenant_id` to target_tenant_X (would be tenant-spoofing).
+   3. Operator SELECT from a PHI table WHERE tenant_id = target_tenant_X.
+   4. Expected: row admitted (POLICY 2 permissive + POLICY 3 restrictive both pass).
+   5. Test variant: revoke approval (set revoked_at); same SELECT now denied (POLICY 2 + 3 both fail).
 
 3. **Phase 3 (telemetry):** run the dual-policy state for a tenant-launch-readiness window (suggested 30 days per Sprint 17 cadence) collecting telemetry on hardened-helper invocations + any spoofing-attempt audit events. **Required test before Phase 4:** integration test demonstrating that a row admitted under the raw-GUC permissive policy + rejected by the hardened-helper restrictive policy is actually denied during Phase 2 (validates the RESTRICTIVE intersection semantics in production).
 4. **Phase 4 (cutover):** for each entity, DROP the raw-GUC permissive RLS policy; the hardened-helper RESTRICTIVE policy + any other permissive policies become the canonical enforcement. (Note: at cutover, the hardened-helper policy may be DROPPED and re-CREATED as permissive instead of restrictive, since it's the sole tenant-isolation policy — restrictive is only needed during the dual-coexistence window.)
