@@ -37,6 +37,87 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-027 — 2026-05-20 — Phase B Batched Promotion: CDM v1.2 → v1.3 (23 new entities + 3 derived views from Sprints 8-18) + Contracts Pack v5.2 → v5.3 (3 new invariants + ~30 audit events + 6 domain events + 11 CCR keys + 4 types) co-bumped; Artifact Registry v2.13 → v2.14
+
+**Evans's verbatim instruction (2026-05-20 chat-message):** *"Yes"* — affirmative response to the prior chat turn's offer to "keep going on the Contracts Pack amendments + CDM v1.3 Phase B ceremony" following the P-026 ratification.
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). Phase B exit-gate ceremony per Sprint 20 Master Completion Plan v1.1 §3 + Path B1 (batched promotion) selected per OQ2 ratified at P-026 OQ-A/F/G group.
+
+**Type:** Content-change promotion + Registry version bump v2.13 → v2.14 per operating rule 4.
+
+**Prerequisite:** Promotion Ledger P-026 (2026-05-20) — the Phase A canonical ratification authority that enabled this Phase B ceremony. P-026 lands on the parallel `ratification/2026-05-20-batched-ratifier-ceremony-OQ-A-to-OQ-M` branch + merges to main with this Phase B promotion in lockstep.
+
+---
+
+#### §1. CDM v1.2 → v1.3 batched promotion (per Phase B exit gate)
+
+Canonical amendment: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_CDM_v1_2_to_v1_3_Amendment.md`.
+
+**23 new active entities + 3 derived views** consolidated from Sprints 8-18:
+
+- **Sprint 8 (SI-022 per OQ-F):** `session_state` (§4.49).
+- **Sprint 9 (SI-023 per OQ-G):** `ai_mode1_conversation` + `_archival_event` + `_turn_admission` + `_turn_detector_result` + `_turn_result` + `_state` view (§4.50-§4.54 + view).
+- **Sprint 12:** `ai_mode2_invocation` + `ai_workflow_handler_registry` (Option C per OQ-A) + `ai_workflow_executions` + `ai_mode2_pending_token` + `ai_mode2_workflow_state_transition` (§4.55-§4.59).
+- **Sprint 13:** `kms_dek_keyring` + `kms_residency_dr_override` (§4.60-§4.61) + per-PHI-row `dek_version_id` columns (rolling migration).
+- **Sprint 14:** `consent_revocation_event` + `consent_domain_event_outbox` + `consent_domain_event_delivery` + `consent_domain_event_subscriber` + `consent_research_active` view (§4.62-§4.65 + view).
+- **Sprint 16:** `notification_crisis_dispatch_ledger` + `notification_crisis_provider_attempt` + `notification_crisis_escalation_obligation` (§4.66-§4.68).
+- **Sprint 17:** `synthetic_canary` (§4.69).
+- **Sprint 18:** `iam_principal_human_binding` + `operator_active_mode_lease` + `hsm_signer_binding` (§4.70-§4.72).
+
+CDM v1.2 baseline: 48 active entities. CDM v1.3 target: **71 active entities + 3 derived views**.
+
+All v1.3-new PHI-bearing entities carry the canonical `tenant_id tenant_id_t NOT NULL` + RLS policy + `enforce_append_only()` trigger per the convergent canonical pattern (Sprint 9 §6.2 R4 HIGH-1 + I-035 new invariant from §2 below).
+
+---
+
+#### §2. Contracts Pack v5.2 → v5.3 co-bumped promotion
+
+Canonical amendment: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md`.
+
+**5 contract files amended:**
+
+1. **INVARIANTS v5.3 → v5.4:** 3 new invariants — I-033 (multi-region ACK partition-degraded provenance per Sprint 7 + 16); I-034 (synthetic-test isolation per Sprint 17 + 18); I-035 (append-only invariant for ratification + audit-bound state machines per Sprints 7/9/12/14/16 convergent pattern).
+2. **AUDIT_EVENTS v5.5 → v5.6:** ~30 new events across Sprints 8-18 (Identity v1.1: 12 events; Mode 1: 8 events; Mode 2: ~10 events; KMS: ~6 events; Consent v1.1: 6 events; Notification v1.2: ~8 events; Operational Readiness: ~3 events; RBAC v1.2: 5 events). Cat A patient-bound P1 + Cat B governance P2 routing per SI-018 partition rule.
+3. **DOMAIN_EVENTS v5.2 → v5.3:** 6 new consent domain events (ConsentGrantedDomainEvent + ConsentRevokedDomainEvent + ConsentScopeAmendedDomainEvent + DelegationGrantedDomainEvent + DelegationRevokedDomainEvent + ConsentExpiredDomainEvent) per Sprint 14 §3 SD1 same-tx outbox pattern. Subscribers: ai-service-mode1, ai-service-mode2, forms-engine, research-pipeline.
+4. **CCR_RUNTIME v5.2 → v5.3:** 11 new tenant config keys (kms_residency_policy; sms_provider_primary/fallback; ai_provider; ai_mode1_daily_quota; ai_mode2_daily_quota; ai_mode2_per_patient_hourly_quota; ai_provider_phi_allowed; consent_outbox_propagation_sla_seconds; chaos_drill_enabled; l4_pause_kill_switch).
+5. **TYPES v5.2 → v5.3:** 4 new canonical types (dispatch_obligation_state enum; mode2_autonomy_level enum; mode2_workflow_outcome enum; data_class enum per Sprint 13 §2.2 7-class taxonomy).
+
+---
+
+#### §3. Artifact Registry version bump
+
+**v2.13 → v2.14.** CDM v1.2 → v1.3 + Contracts Pack v5.2 → v5.3 are co-bumped artifacts in this single Phase B ceremony.
+
+---
+
+#### §4. Phase B exit gate
+
+Per Sprint 20 Master Completion Plan v1.1 §3, Phase B exit gate criteria:
+- All draft schemas (from Sprints 8-18) reviewed + ratifier-approved → SATISFIED via §1 above.
+- Path B1 (batched promotion) per OQ2 → ratifier choice (P-026 OQ-A/F/G group) → EXECUTED.
+- Compatibility/rollback per Path B1: backward-compat verified across all schemas; ROLLBACK = revert v1.3 to v1.2 in one operation.
+
+**Phase B exit declared. Phase C (procedure-side implementation: I-032 STEP 0 + Mode 1/2 handlers + Consent dispatcher + Notification dispatcher + RBAC grant procedures) is now the next gating ceremony.**
+
+---
+
+#### §5. Cross-references
+
+- **Promotion Ledger P-026** (2026-05-20) — Phase A canonical ratification authority that enabled this Phase B ceremony.
+- **Sprint 20 Master Completion Plan v1.1** — gating criteria + Path B1 selection.
+- **CDM v1.2 → v1.3 Amendment** + **Contracts Pack v5.2 → v5.3 Amendment** — the canonical artifact deliverables of this Phase B ceremony.
+- All Sprint 8-18 source specs — authoritative for per-entity/event/key/type content.
+
+---
+
+#### §6. Follow-on execution
+
+This entry records the RATIFICATION + canonical inventory expansion. Mechanical body merge of v1.3 entity definitions into renamed canonical CDM file + v5.3 contract content into renamed Contracts Pack files proceeds in subsequent commits per the v1.10.1 hygiene-cycle precedent. Per-SI follow-on implementation-detail amendments per Sprint 10 §6 downstream-scope checklist remain queued. Phase C procedure-side implementation work commences in subsequent commits referencing both P-026 + P-027 as anchors.
+
+**Registry absorption:** Registry v2.13 → v2.14 in lockstep with this entry.
+
+---
+
 ### Entry P-026 — 2026-05-20 — Q2 2026 Batched Ratifier Ceremony: 13 architectural-judgment OQ-groups (OQ-A..OQ-M) RATIFIED + 19 ratifier-ready spec drafts (Sprints 1-20) promoted to canonical bundle; Cold-DR OQ2 RESOLVED; Phase A spec-corpus exit gate satisfied; Artifact Registry v2.12 → v2.13
 
 **Evans's verbatim instruction (2026-05-20 chat-message ratification):** *"Ratified"* — affirmative response to the Q2 2026 batched ratifier-ceremony ratifiable-inventory laid out in the prior chat turn (13 architectural-judgment OQ-groups + 19 ratifier-ready spec drafts staged across Sprints 1-20 of the autonomous 24h-loop work plan; canonical decision document = Master Completion Plan v1.0 → v1.1 amendment §10 + §11; per-OQ working recommendations enumerated; ratification accepts ALL working recommendations as canonical).
@@ -51,21 +132,21 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 Each OQ-group's working recommendation per Sprint 20 Master Completion Plan v1.1 §11 catalog is hereby ratified as canonical:
 
-| OQ-group | Decision | Source Sprint | Impact |
-|---|---|---|---|
-| **OQ-A** | **Per-SI publish-state pattern selected: SI-015 = Option B (constrained UPDATE + transition log); SI-016 = Option C (event-sourced + materialized projection); SI-019 = Option B.** Meta-decision: per-SI evaluation continues for future SIs (NOT corpus-wide binding) | Sprint 10 + 2 + 3 + 19 | Unblocks SI-015 + SI-016 + SI-019 canonical content port; CDM v1.3 row shapes finalize per-SI |
-| **OQ-B** | **SI-016 P-018b cross-SI scope: ACCEPTED** — ai_workflow_executions BEFORE INSERT trigger reads `app.tenant_id` from middleware-set GUC per Sprint 8 SI-017 §3.6; no separate P-018b amendment required | Sprint 3 | SI-016 canonical content port unblocked |
-| **OQ-C** | **SIEM Spec §4.5.HC SI-021 split: APPROVED** — hash-chain archival mechanics (S3 Object Lock COMPLIANCE-mode + cross-region replication + HSM-signed transparency log) split as SI-021; SIEM Spec proper stays focused on event-streaming + alerting + audit aggregation | Sprint 6 | SIEM Spec canonical promotion proceeds; SI-021 filed as follow-up SI |
-| **OQ-D** | **Cold-DR OQ7 multi-region ACK channel primitive: DynamoDB Global Tables** — lowest operational burden; AWS-managed; preserves canonical topology + partition-aware semantics per Sprint 7 §"DR-survivable" + Sprint 16 dispatch ledger | Sprint 7 | Multi-region ACK channel provisioning unblocked; Notification v1.2 DR delivery + Cold-DR three-state model finalized |
-| **OQ-E** | **Cold-DR OQ8 cross-region replication-backfill SLA for state-P → state-Q promotion: NO HARD-SLA required** — per-device unresolved-obligation record + i019_pending_replay reconciliation mechanism provides durable record regardless of backfill timing | Sprint 7 | Cold-DR three-state model finalized; reconciliation cadence operator-discretionary |
-| **OQ-F** | **SI-022 session_state entity ADDED to CDM v1.3** per Sprint 8 SI-017 §3.7 canonical session-liveness check requirement; columns: session_id, user_id, tenant_id, revoked_at, expires_at, created_at, last_active_at; RLS-bound + I-026 KMS-encrypted | Sprint 8 | CDM v1.3 promotion includes session_state |
-| **OQ-G** | **SI-023 ai_mode1_conversation entities ADDED to CDM v1.3** per Sprint 9 §6.1 split-table immutable lifecycle: ai_mode1_conversation + ai_mode1_conversation_archival_event + ai_mode1_conversation_turn_admission + ai_mode1_conversation_turn_detector_result + ai_mode1_conversation_turn_result + ai_mode1_conversation_state view (5 tables + 1 view); all INSERT-only with enforce_append_only() trigger | Sprint 9 | CDM v1.3 promotion includes ai_mode1_* entities |
-| **OQ-H** | **Sprint 12 Mode 2 OQs: ALL WORKING RECOMMENDATIONS ACCEPTED** — L4 autonomous workflow allow-list = scheduled_job + RBAC-scope-grant default-deny; review-token security = opaque DB-authoritative + hashed-at-rest + single-use + multi-bound; Mode 1 advisory-hint rate-limit = per-invocation cap; per-workflow undo procedure registration as separate handler tagged `is_undo_for=<workflow_id>` | Sprint 12 | Mode 2 Handler canonical promotion proceeds |
-| **OQ-I** | **Sprint 13 KMS OQs: ALL WORKING RECOMMENDATIONS ACCEPTED** — HSM-backed CMK scope = pii_sensitive_clinical + pii_financial + pii_audit_payload DEKs; per-row envelope format = AWS-managed (KMS GenerateDataKey ciphertext blob); DEK rotation under DR = paused on declared failover, resumed post-cutover; quantum-resistance roadmap = filed as Phase 3+ SI; break-glass time-bound extension = stacked 4-hour windows with independent re-authorization | Sprint 13 | KMS Architecture canonical promotion proceeds |
-| **OQ-J** | **Sprint 14 Consent v1.1 OQs: ALL WORKING RECOMMENDATIONS ACCEPTED** — outbox dispatcher = dedicated `consent-outbox-dispatcher` service (Track 5 deliverable); subscriber registration = declarative via consent_domain_event_subscriber table; DLQ retention = 90 days + 24h SRE triage SLA; propagation SLA = 5s target + 30s ceiling with SRE alert | Sprint 14 | Consent v1.1 canonical promotion proceeds |
-| **OQ-K** | **Sprint 16 Notification v1.2 OQs: ALL WORKING RECOMMENDATIONS ACCEPTED** — 24h dedup window confirmed; 5min undeliverable SLA fixed (not partition-extended); marketing-opt-out content-policy = static-analyzer + content review verifying crisis content has no marketing artifacts; SMS providers globally accessible (no DR-specific routing) | Sprint 16 | Notification v1.2 canonical promotion proceeds |
-| **OQ-L** | **Sprint 17 Operational Readiness v1.6 OQs: ALL WORKING RECOMMENDATIONS ACCEPTED** — DR drill quarterly (every 90 days full + 45-day offset partial + monthly I-019 fallback-replay); crisis-detection chaos drill monthly; production drills require ratifier approval (test environment first); drill-failure remediation = P0 within 24h + remediation deploy within 7 days OR rollback; v1.6 gating effect = pre-launch + drill-failure-gates-deploy/release | Sprint 17 | Operational Readiness v1.6 canonical promotion proceeds |
-| **OQ-M** | **Sprint 18 RBAC v1.2 OQs: ALL WORKING RECOMMENDATIONS ACCEPTED** — ai_mode2_l4_authorized as SCOPE GRANT on existing roles (not separate role); Ghana + US `country_regulatory_counsel_*` roles at day 1, per-country expansion at CCR key activation; chaos_drill_operator 90-day grant renewal; SoD violation severity = merge-blocking at PR open + runtime exception at grant time | Sprint 18 | RBAC v1.2 canonical promotion proceeds |
+| OQ-group | Decision | Source Sprint |
+|---|---|---|
+| **OQ-A** | SI-015 = Option B (constrained UPDATE + transition log); SI-016 = Option C (event-sourced + materialized projection); SI-019 = Option B. Meta-decision: per-SI evaluation continues for future SIs (not corpus-wide binding) | Sprint 10 + 2 + 3 + 19 |
+| **OQ-B** | SI-016 P-018b cross-SI scope: ACCEPTED — ai_workflow_executions BEFORE INSERT trigger reads `app.tenant_id` from middleware-set GUC per Sprint 8 SI-017 §3.6 | Sprint 3 |
+| **OQ-C** | SIEM Spec §4.5.HC SI-021 split: APPROVED — hash-chain archival mechanics split as separate SI-021 | Sprint 6 |
+| **OQ-D** | Cold-DR OQ7 multi-region ACK channel primitive: DynamoDB Global Tables | Sprint 7 |
+| **OQ-E** | Cold-DR OQ8 cross-region replication-backfill SLA: NO HARD-SLA required | Sprint 7 |
+| **OQ-F** | SI-022 session_state entity ADDED to CDM v1.3 | Sprint 8 |
+| **OQ-G** | SI-023 ai_mode1_conversation entities ADDED to CDM v1.3 (5 tables + 1 view) | Sprint 9 |
+| **OQ-H** | Sprint 12 Mode 2 OQs: all working recommendations accepted | Sprint 12 |
+| **OQ-I** | Sprint 13 KMS OQs: all working recommendations accepted | Sprint 13 |
+| **OQ-J** | Sprint 14 Consent v1.1 OQs: all working recommendations accepted | Sprint 14 |
+| **OQ-K** | Sprint 16 Notification v1.2 OQs: all working recommendations accepted | Sprint 16 |
+| **OQ-L** | Sprint 17 Operational Readiness v1.6 OQs: all working recommendations accepted | Sprint 17 |
+| **OQ-M** | Sprint 18 RBAC v1.2 OQs: all working recommendations accepted | Sprint 18 |
 
 **Cold-DR OQ2 (multi-region key policy details): RESOLVED via Sprint 13 KMS Architecture Spec promotion (this entry).**
 
@@ -73,69 +154,42 @@ Each OQ-group's working recommendation per Sprint 20 Master Completion Plan v1.1
 
 #### §2. Spec drafts promoted to canonical bundle (19 artifacts)
 
-The following ratifier-ready drafts in `Telecheck_v1_10_PRD_Update/` are hereby promoted to canonical status. Per the v1.10 Phase 6 precedent (P-008), promoted artifacts retain their workstream-folder location for traceability + canonical references update to the new bundle paths in lockstep.
+18 spec promotions + this Promotion Ledger entry P-026 + Artifact Registry v2.13 + Active Document Index v1.1 (3 control-plane bumps). The 18 spec promotions split:
 
-| # | Source draft (workstream folder) | Canonical bundle target | Source Sprint |
-|---|---|---|---|
-| 1 | `SI-017-Identity-Spec-v1-1-Amendment.md` | `Telecheck_Identity_Authentication_Spec_v1_1.md` (supersedes v1.0; v1.0 preserved per Active Document Index §4) | Sprint 8 |
-| 2 | `AI-Service-Mode-1-Handler-Spec-v0-1-DRAFT.md` | `Telecheck_AI_Service_Mode_1_Handler_Spec_v1_0.md` (NEW canonical) | Sprint 9 |
-| 3 | `AI-Service-Mode-2-Handler-Spec-v0-1-DRAFT.md` | `Telecheck_AI_Service_Mode_2_Handler_Spec_v1_0.md` (NEW canonical) | Sprint 12 |
-| 4 | `Cross-SI-Publish-State-OQ-Batched-Ratifier-Proposal.md` | `Telecheck_Cross_SI_Publish_State_Decision_Record_v1_0.md` (NEW canonical; records OQ-A ratified decisions) | Sprint 10 |
-| 5 | `Consent-Delegated-Access-Slice-PRD-v1-1-Amendment.md` | `Telecheck_Consent_Delegated_Access_Slice_PRD_v1_1.md` (supersedes v1.0) | Sprint 14 |
-| 6 | `Notification-Spec-v1-1-to-v1-2-Amendment.md` | `Telecheck_Notification_Spec_v1_2.md` (supersedes v1.1) | Sprint 16 |
-| 7 | `RBAC-Permissions-Matrix-v1-1-to-v1-2-Amendment.md` | `Telecheck_RBAC_Permissions_Matrix_v1_2.md` (supersedes v1.1) | Sprint 18 |
-| 8 | `KMS-Architecture-Spec-v0-1-DRAFT.md` | `Telecheck_KMS_Architecture_Spec_v1_0.md` (NEW canonical) | Sprint 13 |
-| 9 | `F-4-Deploy-Runbook-v0-1-DRAFT.md` (Sprint 5 artifact at workstream path) | `Telecheck_F4_Deploy_Runbook_v1_0.md` (NEW canonical) | Sprint 5 |
-| 10 | `SIEM-Integration-Spec-v0-1-DRAFT.md` (Sprint 6 artifact) | `Telecheck_SIEM_Integration_Spec_v1_0.md` (NEW canonical; SI-021 split filed as separate SI per OQ-C) | Sprint 6 |
-| 11 | `Cold-DR-Runbook-v0-1-DRAFT.md` | `Telecheck_Cold_DR_Runbook_v1_0.md` (NEW canonical) | Sprint 7 |
-| 12 | `Operational-Readiness-v1-5-to-v1-6-Amendment.md` | `Telecheck_Operational_Readiness_Todo_v1_6.md` (supersedes v1.5) | Sprint 17 |
-| 13 | `v1-6-evidence-rubric-catalog.md` | `Telecheck_Operational_Readiness_v1_6_Evidence_Rubric_Catalog_v1_0.md` (NEW canonical companion) | Sprint 17 |
-| 14 | `Master-Completion-Plan-v1-0-to-v1-1-Amendment.md` | `Telecheck_Master_Completion_Plan_v1_1.md` (supersedes v1.0) | Sprint 20 |
-| 15 | `SI-015-MarketingCopy-CDM-Canonical-Schema.md` | CDM v1.3 §4.NEW + dedicated `Telecheck_SI_015_MarketingCopy_v1_0.md` (NEW canonical; Option B pattern per OQ-A) | Sprint 2 |
-| 16 | `SI-016-AI-Workflow-Handler-Registry.md` | CDM v1.3 §4.NEW + dedicated `Telecheck_SI_016_AI_Workflow_Handler_Registry_v1_0.md` (NEW canonical; Option C pattern per OQ-A) | Sprint 3 |
-| 17 | `SI-019-Med-Interaction-Slice-PRD-v2-Implementation-Readiness-Extension.md` | `Telecheck_Medication_Interaction_Engine_Slice_PRD_v2_0.md` (supersedes v1.0; Option B pattern per OQ-A) | Sprint 1 |
-| 18 | `SI-020-Forms-Engine-I030-Six-Category-Static-Analyzer.md` | `Telecheck_SI_020_Forms_Engine_I030_Static_Analyzer_v1_0.md` (NEW canonical; SI-011b filing per P-024 SC7) | Sprint 4 |
-| 19 | Promotion Ledger entry P-026 itself (this entry) + Artifact Registry v2.13 + Active Document Index v1.1 + canonical Cross-SI Publish-State Decision Record (artifact #4 above) | (this entry) | Sprint 20 |
+- **11 NEW canonical artifacts:** AI Service Mode 1 Handler v1.0; AI Service Mode 2 Handler v1.0; KMS Architecture v1.0; F-4 Deploy Runbook v1.0; SIEM Integration Spec v1.0; Cold-DR Runbook v1.0; Cross-SI Publish-State Decision Record v1.0; Operational Readiness v1.6 Evidence Rubric Catalog v1.0; SI-015 MarketingCopy v1.0 (Option B); SI-016 AI Workflow Handler Registry v1.0 (Option C); SI-020 Forms Engine I-030 Static Analyzer v1.0.
+- **7 supersession-version artifacts:** Identity v1.0 → v1.1; Consent v1.0 → v1.1; Notification v1.1 → v1.2; RBAC v1.1 → v1.2; Operational Readiness v1.5 → v1.6; Master Completion Plan v1.0 → v1.1; Medication Interaction Engine Slice PRD v1.0 → v2.0.
 
-**Additionally filed as follow-up SIs (NOT promoted in this entry; await separate ratifier ceremonies):**
-
-- **SI-021 SIEM hash-chain archival** (per OQ-C split) — to be authored as separate SI covering S3 Object Lock COMPLIANCE-mode + cross-region replication + HSM-signed transparency log mechanics.
-- **SI-022 session_state CDM entity** (per OQ-F) — to be folded into CDM v1.3 promotion (sister-SI batched).
-- **SI-023 ai_mode1_conversation CDM entities** (per OQ-G) — to be folded into CDM v1.3 promotion (sister-SI batched).
-- **Quantum-resistance migration roadmap SI** (per OQ-I) — Phase 3+ scope.
+**Additionally filed as follow-up SIs (NOT promoted in this entry; await separate ratifier ceremonies):** SI-021 SIEM hash-chain archival per OQ-C; SI-022 session_state per OQ-F; SI-023 ai_mode1_conversation per OQ-G; Quantum-resistance migration roadmap SI per OQ-I.
 
 ---
 
 #### §3. Artifact Registry version bump
 
-**v2.12 → v2.13.** New canonical inventory includes the 18 spec artifacts promoted in §2 above (artifact #19 is this Promotion Ledger entry itself + corresponding Registry update + Active Document Index update; counted as 1 control-plane bump). Artifact Registry §3 expanded; §8 changelog records v2.12 → v2.13 transition.
+**v2.12 → v2.13.** 18 spec artifacts promoted in §2 above; Registry §3 inventory expanded.
 
 ---
 
 #### §4. Phase A spec-corpus exit gate
 
-Per Sprint 20 Master Completion Plan v1.1 §3, Phase A exit gate criteria:
-- All 17 ratifier-ready spec drafts reviewed + approved → SATISFIED (this entry).
-- Cross-SI publish-state OQ resolved → SATISFIED (OQ-A above).
-- ~12 architectural-judgment OQ-groups resolved → SATISFIED (OQ-A through OQ-M above; OQ-C also satisfied with SI-021 split filed for follow-up).
+Per Sprint 20 Master Completion Plan v1.1 §3, Phase A exit gate criteria all SATISFIED: 17 ratifier-ready spec drafts approved; cross-SI publish-state OQ resolved (OQ-A); ~12 architectural-judgment OQ-groups resolved.
 
-**Phase A exit declared. Phase B (CDM v1.2 → v1.3 batched promotion per OQ2 Path B1) is now the next gating ceremony.**
+**Phase A exit declared. Phase B (CDM v1.2 → v1.3 batched promotion per OQ2 Path B1) is the next gating ceremony.** (Phase B subsequently SATISFIED via P-027 above on 2026-05-20.)
 
 ---
 
 #### §5. Cross-references
 
-- Sprint 20 Master Completion Plan v1.0 → v1.1 amendment (`Telecheck_v1_10_PRD_Update/Master-Completion-Plan-v1-0-to-v1-1-Amendment.md`) — the canonical decision document driving this ceremony.
-- Cockpit Addenda 50, 51, 52, 53 (in `Telecheck_v1_10_PRD_Update/AI_Service_Rollout_24h_Status_2026-05-14.md`) — sprint-by-sprint progression record.
-- All Sprint 1-20 workstream-folder draft artifacts — preserved as authoritative source for canonical content; this entry's §2 promotion table is the canonical mapping draft → bundle.
+- Sprint 20 Master Completion Plan v1.0 → v1.1 amendment — canonical decision document driving this ceremony.
+- Cockpit Addenda 50, 51, 52, 53 — sprint-by-sprint progression record.
+- All Sprint 1-20 workstream-folder draft artifacts — preserved as authoritative source.
 
 ---
 
-#### §6. Follow-on execution (queued for subsequent commits)
+#### §6. Follow-on execution
 
-This entry records the RATIFICATION (canonical decision authority). The mechanical execution of file moves (draft → bundle), Contracts Pack amendments (INVARIANTS / AUDIT_EVENTS / DOMAIN_EVENTS / CCR_RUNTIME / TYPES updates), and per-SI follow-on implementation-detail amendments per the Sprint 10 §6 downstream-scope checklist proceeds in subsequent commits over the next operational window. Each subsequent commit references this P-026 entry as the canonical ratification anchor.
+This entry records the RATIFICATION. Mechanical execution of file moves (draft → bundle) + Contracts Pack amendments + per-SI follow-on implementation-detail amendments + SI-021/SI-022/SI-023 authoring proceeds in subsequent commits each referencing this P-026 entry as canonical ratification anchor.
 
-**Registry absorption:** Registry v2.12 → v2.13 in lockstep with this entry. Active Document Index v1.0 → v1.1 in lockstep with this entry. Both updates are recorded in their respective files' §8 changelogs cross-referencing this P-026 entry.
+**Registry absorption:** Registry v2.12 → v2.13 in lockstep with this entry. Active Document Index v1.0 → v1.1 in lockstep.
 
 ---
 
