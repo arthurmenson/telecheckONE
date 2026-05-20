@@ -60,7 +60,7 @@ Canonical amendment: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck
 3. **`audit_event_hash_chain_anchor`** (§4.NEW3) — canonical committed-anchor table with transparency-log STH + inclusion proof + supersession-linkage to corruption-evidence via composite FK.
 4. **`audit_event_hash_chain_anchor_corruption_evidence`** (§4.NEW4) — corruption-evidence table for pre-phase-4 corruption detection. Dual-control authorization (Compliance Officer + CTO; CHECK constraint enforces distinct human_id).
 
-All 4 entities carry `enforce_append_only()` triggers (anchor + intent excluded for monotonic-transition; clarified in §4.NEW2). All 4 have FORCE ROW LEVEL SECURITY + WITH CHECK + fail-closed GUC RLS predicates. All 4 P1-coordinate triggers do tenant-scoped lookups.
+**Append-only enforcement (corrected per Codex cycle-4 MED 2026-05-20):** §4.NEW1 + §4.NEW3 + §4.NEW4 carry `enforce_append_only()` BEFORE UPDATE OR DELETE triggers; **§4.NEW2 (intent table) is MUTABLE-BY-DESIGN** because the 5-phase commit state machine requires phase-by-phase UPDATEs to mutate the row from `intent_reserved` → `COMMITTED`. §4.NEW2 satisfies the I-027 append-only spirit via the `audit_event_hash_chain_anchor_intent_monotonic_transition` trigger which enforces monotonic-forward state transitions + per-phase-completed-field immutability + identity-field immutability post-INSERT. All 4 entities have FORCE ROW LEVEL SECURITY + WITH CHECK + fail-closed GUC RLS predicates. All 4 P1-coordinate triggers do tenant-scoped lookups (matching v0.7 + v0.8 identity-key hardening).
 
 ---
 
