@@ -1,7 +1,8 @@
 # Master Completion Plan v1.0 → v1.1 Amendment
 
 **Version:** 0.1 DRAFT
-**Status:** Pre-Codex-pre-ratification; Sprint 20 of autonomous 24h-loop work plan
+**Status:** RATIFIER-READY-WITH-KNOWN-OQs (R2 structural cleanup 2026-05-19); Sprint 20 of autonomous 24h-loop work plan
+**Codex iteration trajectory:** R1 (2 HIGH + 1 MED) → R2 (1 MED §10/§11/§12 promoted to top-level). All 4 findings closed inline; 0 architectural-judgment items closed inline. 5 plan-level OQs (§7) + 13 architectural-judgment OQs (§11) catalogued.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus Track 6 deliverable)
 **Owner:** Evans (workstream lead) + Engineering Lead + SRE Lead + Compliance Officer
 **Companion documents:** `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Master_Completion_Plan_v1_0.md` (target canonical surface); all Sprints 1-19 deliverables in `Telecheck_v1_10_PRD_Update/` workstream folder; cockpit Addenda 50, 51, 52, 53.
@@ -213,22 +214,15 @@ Added F-4 Deploy Runbook + SIEM Integration Spec + Cold-DR Runbook + KMS Archite
 
 Added Cross-SI Publish-State Batched-Ratifier Proposal + this v1.1 amendment (Sprint 20).
 
-### Delta 8 — §10 (NEW) Ratifier ceremony recommended sequence
+### Delta 8 — §10 (NEW; promoted to top-level section below) Ratifier ceremony recommended sequence
 
-Per Addendum 53 §"Recommended ratifier sequence":
+See §10 below.
 
-1. Cross-SI publish-state batched-ratifier ceremony (Sprint 10) — highest leverage; resolves 3 SIs simultaneously.
-2. CDM v1.2 → v1.3 amendment ceremony — sister SIs batched (SI-022 + SI-023 + all Sprint 12-18 schema additions).
-3. Cold-DR OQ7/OQ8 + KMS OQs — infrastructure-related OQs grouped.
-4. Sprint 12 (Mode 2) + Sprint 14 (Consent v1.1) OQs.
-5. Sprint 16 (Notification v1.2) + Sprint 18 (RBAC v1.2) OQs.
-6. Sprint 17 (Operational Readiness v1.6) OQs.
-7. SIEM §4.5.HC SI-021 split confirmation.
-8. Sprint 6-18 deliverables canonical promotion (in batched waves).
+### Delta 9 — §11 (NEW; promoted to top-level section below) Architectural-judgment OQ-group catalog
 
-### Delta 9 — §11 (NEW) Architectural-judgment OQ-group catalog (R1 HIGH-1 closure: full inventory)
+See §11 below. (R1 HIGH-1 closure: full inventory)
 
-The canonical inventory of architectural-judgment OQ-groups queued for ratifier ceremony. Each row identifies the source Sprint, impacted phase/track, ratifier priority bucket (per §10 sequence), blocking relationship, and recommended ceremony placement.
+**(canonical content moved to §11 below)** The canonical inventory of architectural-judgment OQ-groups queued for ratifier ceremony. Each row identifies the source Sprint, impacted phase/track, ratifier priority bucket (per §10 sequence), blocking relationship, and recommended ceremony placement.
 
 | OQ-group ID | Source Sprint | Description | Impacted Phase/Track | Priority bucket (§10 step) | Blocks |
 |---|---|---|---|---|---|
@@ -270,6 +264,53 @@ Per §5 above.
 
 ---
 
+## 10. Ratifier ceremony recommended sequence (R2 closure: promoted to top-level)
+
+Per Addendum 53 §"Recommended ratifier sequence":
+
+1. **Cross-SI publish-state batched-ratifier ceremony (Sprint 10)** — highest leverage; resolves 3 SIs simultaneously (OQ-A + OQ-B).
+2. **CDM v1.2 → v1.3 amendment ceremony** — sister SIs batched (OQ-F + OQ-G + all Sprint 12-18 schema additions).
+3. **Cold-DR OQ7/OQ8 + KMS OQs** — infrastructure-related OQs grouped (OQ-D + OQ-E + OQ-I).
+4. **Sprint 12 (Mode 2) + Sprint 14 (Consent v1.1) OQs** — handler + outbox semantics (OQ-H + OQ-J).
+5. **Sprint 16 (Notification v1.2) + Sprint 18 (RBAC v1.2) OQs** — delivery + identity governance (OQ-K + OQ-M).
+6. **Sprint 17 (Operational Readiness v1.6) OQs** — drill cadence + remediation SLAs (OQ-L).
+7. **SIEM §4.5.HC SI-021 split confirmation** (OQ-C).
+8. **Sprint 6-18 deliverables canonical promotion** — in batched waves per ratifier decisions above.
+
+---
+
+## 11. Architectural-judgment OQ-group catalog (R2 closure: promoted to top-level)
+
+The canonical inventory of architectural-judgment OQ-groups queued for ratifier ceremony. Each row identifies source Sprint, impacted phase/track, priority bucket (per §10 sequence), and blocking relationship.
+
+| OQ-group ID | Source Sprint | Description | Impacted Phase/Track | Priority bucket (§10 step) | Blocks |
+|---|---|---|---|---|---|
+| OQ-A | Sprint 10 + Sprint 2 + Sprint 3 + Sprint 19 | Cross-SI publish-state (SI-015 OQ4 = SI-016 OQ1 = SI-019 OQ7); 3 options A/B/C per-SI working recommendations | Phase A + Phase B | Step 1 | SI-015 / SI-016 / SI-019 finalization; CDM v1.3 promotion |
+| OQ-B | Sprint 3 | SI-016 OQ6 (P-018b cross-SI scope; ai_workflow_executions BEFORE INSERT trigger crosses P-018) | Phase A | Step 1 (sister to OQ-A) | SI-016 finalization |
+| OQ-C | Sprint 6 | SIEM Spec §4.5.HC SI-021 split candidate (hash-chain archival mechanics warrant separate SI) | Phase A + Phase D | Step 7 | SIEM Spec canonical promotion + S3 Object Lock infrastructure |
+| OQ-D | Sprint 7 | Cold-DR OQ7 multi-region ACK primitive selection (DynamoDB Global Tables OR Aurora Global OR CRDT-over-S3 OR custom) | Phase D | Step 3 | Multi-region ACK channel provisioning; Notification v1.2 DR delivery |
+| OQ-E | Sprint 7 | Cold-DR OQ8 cross-region replication-backfill SLA for state-P → state-Q promotion | Phase D | Step 3 (sister to OQ-D) | Cold-DR three-state model finalization |
+| OQ-F | Sprint 8 | SI-017 OQ1 (CDM session_state entity placement; SI-022 candidate) | Phase B | Step 2 | CDM v1.3 promotion |
+| OQ-G | Sprint 9 | Sprint 9 OQ1 (CDM ai_mode1_conversation entities; SI-023 candidate) | Phase B | Step 2 | CDM v1.3 promotion |
+| OQ-H | Sprint 12 | Sprint 12 OQs: L4 autonomous workflow allow-list; review-token transit security; Mode 1 advisory-hint rate-limiting; per-workflow undo procedure | Phase A + Phase C | Step 4 | Mode 2 Handler implementation |
+| OQ-I | Sprint 13 | Sprint 13 OQs: HSM-backed CMK scope; per-row envelope-key format; DEK rotation interruptibility under DR; quantum-resistance roadmap; break-glass time-bound extension | Phase A + Phase D | Step 3 (sister to OQ-D + OQ-E) | KMS Architecture canonical promotion + infrastructure provisioning |
+| OQ-J | Sprint 14 | Sprint 14 OQs: outbox dispatcher service architecture; subscriber registration; DLQ retention; propagation SLA target | Phase A + Phase C | Step 4 (sister to OQ-H) | Consent v1.1 outbox dispatcher implementation |
+| OQ-K | Sprint 16 | Sprint 16 OQs: crisis-notification 24h dedup window confirmation; operator escalation SLA tolerance; marketing-opt-out content-policy verification; SMS provider DR continuity | Phase A + Phase D | Step 5 | Notification v1.2 canonical promotion + dispatch infrastructure |
+| OQ-L | Sprint 17 | Sprint 17 OQs: DR drill cadence + chaos cadence intervals; drill execution sequencing; drill-failure remediation SLA | Phase A + Phase E | Step 6 | Operational Readiness v1.6 canonical promotion |
+| OQ-M | Sprint 18 | Sprint 18 OQs (RBAC): L4 scope vs separate role; country regulatory counsel roster; chaos drill operator grant freshness; SoD violation severity tier | Phase A + Phase C | Step 5 (sister to OQ-K) | RBAC v1.2 canonical promotion + procedure-side STEP 0a implementation |
+
+**Total: 13 enumerated OQ-groups across ~12 distinct decision areas (OQ-A is multi-SI but single decision per Sprint 10 framing).**
+
+**Ratifier-agenda construction:** the ratifier ceremony walks this catalog in §10-step order; each OQ-group's working recommendation is the starting position; ratifier may override per ceremony deliberation. Ceremony output: a Promotion Ledger entry per OQ-group with the canonical decision recorded.
+
+---
+
+## 12. Cross-track dependency graph (R2 closure: promoted to top-level)
+
+See §5 above — cross-track unblock/block relationships canonicalized.
+
+---
+
 ## 8. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
@@ -279,6 +320,9 @@ Per §5 above.
 | Round | Findings | Status |
 |---|---|---|
 | R1 | HIGH-1 §11 OQ-group catalog claimed but missing; HIGH-2 Phase B exit gate mandated batched promotion while OQ2 still open; MED-1 Phase D notification SMS marked PROVISIONED while ACK primitive is OQ-D blocked | All 3 closed inline |
+| R2 | MED structural: §10/§11/§12 referenced as top-level sections but only existed as Delta subsections under §6 — ratifier/promotion-ledger references to `§10` / `§11` / `§12` couldn't target stable canonical sections | Closed inline: §10 ratifier-ceremony-sequence + §11 OQ-group-catalog + §12 cross-track-dependency-graph promoted to actual top-level sections; Delta 8/9/10 simplified to "see §10/§11/§12 below" |
+
+**Status at R2 close:** RATIFIER-READY-WITH-KNOWN-OQs. Sprint 20 closes at R2 with structural cleanup.
 
 **R1 closure pattern recap:**
 - HIGH-1: §11 actually populated with 13-row OQ-group catalog (OQ-A to OQ-M) covering source Sprint + impacted phase/track + priority bucket + blocking relationship + ceremony placement. Cross-references §7 OQs as plan-level meta-OQs (distinct from architectural-judgment OQs).
