@@ -1,6 +1,13 @@
 # 00 · Platform Invariants
 
-**Status:** canonical · **Version:** 5.2 · **Owner:** engineering lead + clinical safety officer · **Consumers:** everyone
+**Status:** canonical · **Version:** 5.3 · **Owner:** engineering lead + clinical safety officer · **Consumers:** everyone
+
+**v5.3 hygiene cycle 2026-05-20 (P-027 Phase B):** 3 new invariants added (definitions in `Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md`):
+- **I-033 — Multi-region ACK channel partition-degraded provenance** (Sprint 7 R5 + Sprint 16 R1 HIGH-2): under W=1 partition fallback, writes tagged `partition_degraded=true` are first-class pending obligations until quorum promotion.
+- **I-034 — Synthetic-test isolation from production PHI workflows** (Sprint 17 §6 SD3 + Sprint 18 RBAC v1.2 Inv-8): chaos drills + synthetic canary records cannot mutate production clinical tables, route to provider sandboxes, excluded from analytics/exports/retention/billing/audit-archival.
+- **I-035 — Append-only invariant for ratification + audit-bound state machines** (Sprints 7/9/12/14/16 convergent pattern): state-machine lifecycle expressed as existence of progressively more rows in append-only tables, NOT mutation on single row; `enforce_append_only()` trigger is the canonical implementation.
+
+**Naming reconciliation:** the amendment artifact filename labels "v5.3 → v5.4" reflecting a Sprint 20 baseline miscount; actual canonical transition is **v5.2 → v5.3** (amendment artifact CONTENT correct; version label off-by-one). v1.10.1 hygiene-cycle pattern: file retains `_v5_00_` filename; header declares v5.3 canonical.
 
 Platform invariants are non-negotiable structural guarantees. They are not configurable, not market-specific, and not overridable by any feature, admin surface, protocol activation, or operator action. They are the floor beneath the floor.
 

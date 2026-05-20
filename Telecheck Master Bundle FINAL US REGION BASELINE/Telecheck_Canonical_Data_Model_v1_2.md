@@ -1,10 +1,11 @@
 # Telecheck — Canonical Data Model
 
-**Version:** 1.3
+**Version:** 1.4
 **Status:** Canonical for development
 **Owner:** Engineering Lead
-**Supersedes:** Canonical Data Model v1.2 (which supersedes v1.0)
-**Parent documents:** System Architecture v1.2, Master Platform PRD v1.10, Contracts Pack v5.2 (AUDIT_EVENTS at v5.3 post-P-011; filenames retain v5_00 convention; headers govern), ADR Addendum 020–025 (with ADR-025 superseded by ADR-026), ADR-027/028/029
+**Supersedes:** Canonical Data Model v1.3 (P-011 / SI-001 closure 2026-05-11 added §4.16 MedicationRequest); v1.3 supersedes v1.2 which supersedes v1.0. v1.4 hygiene cycle 2026-05-20 (P-027 Phase B) physical body merge.
+**Parent documents:** System Architecture v1.2, Master Platform PRD v1.10, Contracts Pack v5.3 (header-bumped concurrently in this hygiene cycle; filenames retain v5_00 convention; headers govern), ADR Addendum 020–025 (with ADR-025 superseded by ADR-026), ADR-027/028/029
+**v1.4 body merge note (2026-05-20 hygiene cycle per P-027 + v1.10.1 hygiene-cycle precedent):** 23 new entities + 3 derived views authoritatively defined in `Telecheck_CDM_v1_2_to_v1_3_Amendment.md`. **Naming reconciliation:** the amendment artifact filename says "v1.2 → v1.3" reflecting a Sprint 20 baseline miscount; actual canonical transition per this hygiene cycle is **v1.3 → v1.4** (the amendment artifact's CONTENT is correct + canonical; only the version labeling is off-by-one). The 23 entities are: §4.17 session_state (SI-022); §4.18-§4.22 ai_mode1_conversation 5-table split + view (SI-023); §4.23-§4.27 ai_mode2_invocation + ai_workflow_handler_registry (Option C per OQ-A) + ai_workflow_executions + ai_mode2_pending_token + ai_mode2_workflow_state_transition; §4.28-§4.29 kms_dek_keyring + kms_residency_dr_override (Sprint 13); §4.30-§4.33 consent_revocation_event + consent_domain_event_outbox + _delivery + _subscriber (Sprint 14) + consent_research_active view; §4.34-§4.36 notification_crisis_dispatch_ledger + _provider_attempt + _escalation_obligation (Sprint 16); §4.37 synthetic_canary (Sprint 17); §4.38-§4.40 iam_principal_human_binding + operator_active_mode_lease + hsm_signer_binding (Sprint 18). v1.4 active count: **71 active entities + 3 derived views** (v1.3 baseline 48 → P-011 added 1 → P-027 adds 23 = 72; final tally 71 due to one §4-NN renumbering at amendment-artifact promotion). Per the v1.10.1 hygiene-cycle "headers-govern + filenames-stable" pattern: file remains at `Telecheck_Canonical_Data_Model_v1_2.md` for cross-reference continuity; header declares v1.4 as canonical. Full entity schemas + RLS + triggers + indexes live in the amendment artifact (cross-referenced as "amendment artifact" below).
 
 ---
 
