@@ -37,6 +37,74 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-030 — 2026-05-20 — SI-024 v1.0 Canonical Hardened Tenant/Platform RLS Helper Pattern (role-constrained-GUC hardening — direct-DB-role spoofing closure only; cryptographic JWT-binding deferred to SI-024.1); 1 new entity (`break_glass_approval`) + 7 new Cat A audit events + 2 new helper functions; Artifact Registry v2.16 → v2.17
+
+**Evans's verbatim instruction (2026-05-20 chat-message, applied via auto-proceed rule at CLAUDE.md commit `f483535`):** *"For my move I need a recommendation from both of you. If you both agree on next steps then automatically do it without waiting for me."* — standing-authorization directive. For this cycle: Claude said READY-TO-MERGE on v0.7 cycle-3 state (after Pass-1 cycle-3 closures applied); Codex Pass-1 cycle-3 said NEEDS-WORK on lockstep + stale-test (both addressed inline in this same commit + the P-030/Registry-v2.17 commit); Codex Pass-2 reconciliation pending. Auto-proceed merge IF Pass-2 converges with Claude on the post-closure state.
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). SI-024 v1.0 promotion to canonical per OQ6 cross-CDM deferral from P-029 + auto-proceed delegation. **CONDITIONAL on SI-024.1 ratifier date/owner commitment per OQ-NEW1.**
+
+**Type:** Content-change promotion + Registry v2.16 → v2.17 per operating rule 4.
+
+**Prerequisite:** P-029 (CDM v1.5 SI-021 follow-on; OQ6 hardened-helper deferral). P-030 closes the OQ6 deferred work.
+
+---
+
+#### §1. SI-024 v1.0 canonical content
+
+Canonical artifact: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_SI_024_Canonical_Hardened_Tenant_Platform_RLS_Helper_v1_0.md` v0.7 RATIFIER-READY-AT-§10-CADENCE-BOUNDARY (post-R4 + 3 pre-merge consult cycles).
+
+**Canonical content (15 sub-decisions across 9 sub-decision blocks):**
+
+1. **Hardened helper function shape** — `current_tenant_id_strict()` (NULL-return on non-membership; raise on unset GUC for members) + `is_platform_operator_break_glass_active()` + `is_target_tenant_break_glass_active(target_tenant_id)`. All SECURITY INVOKER + EXECUTE TO PUBLIC + inline `pg_has_role` membership check + `SET search_path = pg_catalog, public`.
+2. **Trust-anchor (Option B-1 ratified):** role-constrained middleware-GUC pattern. Defense-in-depth: 3 layers (pg_has_role role-check + FORCE RLS on `break_glass_approval` + `operator_user_id` predicate binding).
+3. **Migration scope + 5-phase sequencing:** Phase 1 foundation + Phase 2 RESTRICTIVE coexistence + Phase 3 telemetry + Phase 4 cutover + Phase 5 deprecation.
+4. **Backward-compatibility:** raw `current_setting()` coexists during Phases 1-3 via AS RESTRICTIVE intersection.
+5. **Break-glass posture:** role-based detection via `is_platform_operator_break_glass_active()`.
+5a. **Target-tenant break-glass binding:** `break_glass_approval` table + dual-control authorization (Compliance Officer + CTO) + 4-hour time-bound + revocation. WORM with single sanctioned mutation path. 3 RLS policies + 2 append-only/transition triggers.
+6. **Performance + caching:** STABLE helpers; <100ns per-query overhead expected.
+7. **Test coverage:** 5+ negative-path tests (R3 closure SET-ROLE coverage + cycle-3 MED closure NULL-return correction).
+8. **Audit event taxonomy:** 6 new Cat A events under `tenant_context.*` namespace. Per-invocation audit deferred to SI-024.1 per STABLE-function constraint.
+9. **INVARIANTS amendment:** I-036 platform-floor invariant DEFERRED to first Phase 4 entity cutover (NOT lockstep with this P-030 merge).
+
+---
+
+#### §2. New CDM entity (1)
+
+**`break_glass_approval`** — full schema in SI-024 §Sub-decision 5a. PHI-bearing (carries target_tenant_id + operator_user_id). WORM table with dual-control authorization + 4-hour time-bound + revocation. To be added to CDM as §4.NEW1 at the next CDM amendment cycle (NOT in P-030 scope; the entity definition lives in SI-024 itself per the v1.10.1 hygiene-cycle "spec-first, CDM amendment follows" pattern).
+
+---
+
+#### §3. New AUDIT_EVENTS (7 Cat A)
+
+To be added to AUDIT_EVENTS at SI-024 Phase 1 (foundation) implementation. NOT in this P-030 merge ceremony — the AUDIT_EVENTS amendment is a separate co-bump when Phase 1 begins (mirrors v1.10.1 hygiene-cycle "spec-first, AUDIT_EVENTS bump on implementation" pattern).
+
+Events: `tenant_context.hardened_helper_role_check_rejected` + `tenant_context.platform_operator_break_glass_invoked` + `tenant_context.guc_set_without_role_authority_attempt` + `tenant_context.cross_tenant_read_blocked_by_hardened_helper` + `tenant_context.break_glass_approval_created` + `tenant_context.break_glass_approval_revoked` + (deferred to SI-024.1) `tenant_context.target_tenant_break_glass_invoked`.
+
+---
+
+#### §4. Artifact Registry version bump
+
+**v2.16 → v2.17.** P-030 lands SI-024 v1.0 as canonical; CDM/AUDIT_EVENTS/INVARIANTS co-bumps are deferred to their respective implementation phases (Phase 1 foundation + Phase 4 cutover) per the post-P-029 SI-spec-first promotion pattern.
+
+---
+
+#### §5. Cycle convergence metrics
+
+- **4 adversarial-review rounds (R1-R4)** + **3 merge-readiness consult cycles** = 7 total Codex closure cycles.
+- **R1 used two-pass discipline (Pass-1 + Pass-2 + framing-defect catch); R2-R4 single-invocation; merge-readiness cycles all used two-pass.**
+- **17 findings closed** (2 CRITICAL + 12 HIGH + 3 MED) across 7 cycles.
+- **0 hard-floor item 6 violations.**
+- **0 ERR escalations** (Pass-2 framing-defect catch at R1 saved one; cycle-1+cycle-2+cycle-3 each surfaced new findings closed inline).
+- **8 acknowledged v1.0 simplifications** all carried forward to SI-024.1 cycle.
+
+---
+
+#### §6. Phase 1 implementation gate
+
+P-030 ratifies SI-024 v1.0 as the canonical floor specification. **Phase 1 implementation (helper functions + `break_glass_approval` table + RLS policies; no entity migrations) is UNBLOCKED post-P-030 merge.** Phase 2/3/4 cutovers gated on subsequent ratifier review per Sub-decision 3 sequencing + OQ-NEW2 (Phase 4 cutover gating on SI-024.1 readiness).
+
+---
+
 ### Entry P-029 — 2026-05-20 — CDM v1.4 → v1.5 + AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4 (SI-021 follow-on amendment cycle) co-bumped: 4 new audit-chain-archival entities (with Option A tenant_id-in-identity + 5-role separation + monotonic-transition triggers + composite-FK supersession-binding) + 15 new Cat A audit events + 1 new CCR key; Artifact Registry v2.15 → v2.16
 
 **Evans's verbatim instruction (2026-05-20 chat-message, applied via auto-proceed rule codified at CLAUDE.md commit `f483535`):** *"For my move I need a recommendation from both of you. If you both agree on next steps then automatically do it without waiting for me."* — standing-authorization directive that delegates merge execution to Claude when Claude's recommendation AND Codex Pass-2 (synthesis) converge on the same next step. For this cycle, Claude said READY-TO-MERGE; Codex Pass-1 said NEEDS-WORK on raw GUC + placeholder; Codex Pass-2 reconciled to APPROVE-CONDITIONAL. Pass-2 + Claude agreement triggered auto-proceed merge. **Merge commit:** `e9cf962` on main (2026-05-20). Conditions applied inline at merge: (1) P-029 verbatim filled with the standing-authorization directive above; (2) OQ6 hardened-helper carried forward to future SI-024 cross-CDM hardening cycle; (3) explicit non-endorsement of raw caller-settable GUC RLS as intrinsically safe — Pass-2 approval is for THIS isolated amendment merge gate only, not a corpus-wide ratification of the GUC pattern.

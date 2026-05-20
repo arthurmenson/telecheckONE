@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.7 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycles 1+2 corrections applied
-**Status:** Pre-merge cycle-2: 2 HIGH + 1 MED closed inline (Sub-decision 5a consolidated to single canonical design — stale R3+R4 narratives removed; per-invocation audit emission deferred to SI-024.1 per STABLE-function constraint; Next gates aligned with OQ5 INVARIANTS deferral). Pre-merge re-verification queued.
+**Version:** 1.0 v0.8 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycles 1+2+3 corrections applied + lockstep promotion artifacts pre-authored
+**Status:** Pre-merge cycle-3: 1 HIGH + 1 MED closed inline (P-030 + Registry v2.16 → v2.17 pre-authored as lockstep; Sub-decision 7 Test 2 corrected from RAISE-expectation to NULL-return-expectation per v0.6 design). Pre-merge cycle-4 re-verification queued under two-pass.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -446,7 +446,8 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 **Decision shape:** negative-path test suite required for SI-024 promotion:
 
 - Test 1: `app_middleware_writer` role can set GUC + helper returns the bound value.
-- Test 2: Role NOT in the allowlist cannot pass the helper's role-check (raises `insufficient_privilege`).
+- Test 2 (corrected at pre-merge cycle-3 MED closure 2026-05-20): Role NOT in the middleware-writer membership returns **NULL** from `current_tenant_id_strict()` (NOT a `RAISE insufficient_privilege` — that was the pre-R2-HIGH-2 design; v0.6+ returns NULL so RLS OR-branches can evaluate). Verify RLS predicate using this helper correctly fails closed (treats NULL = anything as UNKNOWN → FALSE for policy admission).
+- Test 2a (added at pre-merge cycle-3 MED closure 2026-05-20): Role IN middleware-writer membership but `app.tenant_id` GUC unset → `current_tenant_id_strict()` raises (fails loudly because this represents a legitimate middleware bug, not unauthorized access).
 - Test 3: Setting GUC `app.platform_operator_break_glass = 'true'` from a non-`platform_operator_*` role does NOT trigger break-glass clause.
 - Test 4: Cross-tenant read attempt by a compromised `app_middleware_writer` setting GUC to victim tenant_id — RLS still enforces the helper's verified context (if Option B-2 with cryptographic binding) OR demonstrates the residual risk (if Option B-1).
 - Test 5: SECURITY DEFINER + `search_path` discipline — helper invocation under attacker-controlled `search_path` does not redirect to attacker-controlled tables.
