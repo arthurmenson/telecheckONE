@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.14 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + Pass-2 B+ + cycles 6-7-8 closures applied
-**Status:** Cycle-8 HIGH closure: Phase 2 RLS write-admission tightened — POLICY 2 scoped to FOR SELECT (no WITH CHECK clause; reads only); POLICY 3 WITH CHECK constrained to tenant_id = current_tenant_id_strict() (break-glass branches REMOVED from WRITE-side; cross-tenant writes blocked at canonical layer until SI-024.1). Cycle-8 MED: P-030 metadata refreshed to v0.14 + final cycle state.
+**Version:** 1.0 v0.15 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + cycles 6-7-8-9 closures applied
+**Status:** Cycle-9 stale-snippet sweep: HIGH closure removed break-glass branches from Sub-decision 5a §3 canonical RLS policy WITH CHECK (aligned with cycle-8 Phase 2 write-block); MED closure updated Sub-decision 2 Option B-1 sample to match Sub-decision 1's canonical helper (SECURITY INVOKER + pg_has_role + NULL return).
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -147,16 +147,27 @@ CREATE POLICY <table>_tenant_isolation ON <table>
 
 The application middleware sets `app.tenant_id` GUC per request after JWT verification. The helper trusts the GUC **only when the current_user role is in an allowlisted set** of middleware-context-writer roles.
 
+**Option B-1 canonical implementation (cycle-9 MED closure 2026-05-20: sample updated to match Sub-decision 1's canonical helper exactly — SECURITY INVOKER + pg_has_role membership + NULL return for non-members + fail-loud only for legitimate-middleware-with-unset-GUC):**
+
 ```sql
+-- Canonical Option B-1 implementation. See Sub-decision 1 above for full rationale + companion
+-- is_platform_operator_break_glass_active() + is_target_tenant_break_glass_active() helpers.
 CREATE FUNCTION current_tenant_id_strict() RETURNS tenant_id_t AS $$
+DECLARE
+    resolved_tenant_id tenant_id_t;
 BEGIN
-    IF current_user NOT IN ('app_middleware_writer', 'app_middleware_reader_via_writer_proxy') THEN
-        RAISE EXCEPTION 'tenant context not bound (current_user=% lacks tenant-context-write authority)', current_user
-            USING ERRCODE = 'insufficient_privilege';
+    -- Role-membership check via pg_has_role (handles inherited memberships + connection-pool role-switching).
+    IF NOT pg_has_role(current_user, 'app_middleware_writer', 'USAGE')
+        AND NOT pg_has_role(current_user, 'app_middleware_reader_via_writer_proxy', 'USAGE') THEN
+        -- Non-middleware caller: return NULL so RLS OR-branches can still evaluate. NULL = anything in RLS
+        -- is UNKNOWN → FALSE for policy admission, so tenant-equality predicate fails closed.
+        RETURN NULL;
     END IF;
-    RETURN current_setting('app.tenant_id', false)::tenant_id_t;
+    -- Middleware caller: fail-loud on unset GUC (legitimate middleware bug).
+    resolved_tenant_id := current_setting('app.tenant_id', false)::tenant_id_t;
+    RETURN resolved_tenant_id;
 END;
-$$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
+$$ LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = pg_catalog, public;
 ```
 
 **Pros:** consistent with the canonical floor (middleware-GUC) that survived P-023a; backwards-compatible with existing RLS predicates; no new infrastructure required; deployable in a single migration.
@@ -553,18 +564,19 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 
    **Mutability summary (R3 HIGH-2 closure):** the ONLY column mutable post-INSERT on `break_glass_approval` is `revoked_at`, and only via the NULL → current-timestamp transition (single-shot). All other columns are append-only via the BEFORE UPDATE trigger. DELETE is forbidden for all roles. This makes the table effectively WORM (write-once read-many) with a single sanctioned mutation path (revocation).
 
-3. **Canonical RLS policy under SI-024 v1.0 (revised for target-tenant break-glass):**
+3. **Canonical RLS policy under SI-024 v1.0 (revised for target-tenant break-glass; cycle-9 HIGH closure 2026-05-20: WRITE-side break-glass branches REMOVED to align with cycle-8 Phase 2 write-block — cross-tenant writes blocked at canonical layer until SI-024.1 defines audited write authorization):**
    ```sql
    CREATE POLICY <table>_tenant_isolation ON <table>
        USING (
+           -- READ-side: break-glass branches admitted (cross-tenant reads permitted for approved operators)
            tenant_id = current_tenant_id_strict()
            OR is_target_tenant_break_glass_active(tenant_id)
            OR (is_platform_operator_break_glass_active()
                AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
        )
        WITH CHECK (
+           -- WRITE-side: NO break-glass branches; cross-tenant writes blocked until SI-024.1.
            tenant_id = current_tenant_id_strict()
-           OR is_target_tenant_break_glass_active(tenant_id)
        );
    ```
 
