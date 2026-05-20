@@ -1,6 +1,14 @@
 # 00 · Country Configuration Registry (CCR) Runtime
 
-**Status:** canonical · **Version:** 5.2 · **Owner:** engineering lead · **Consumers:** all country-specific behavior, all services
+**Status:** canonical · **Version:** 5.3 · **Owner:** engineering lead · **Consumers:** all country-specific behavior, all services
+
+**v5.3 hygiene cycle 2026-05-20 (P-027 Phase B):** 11 new tenant config keys added (full key catalog with types + defaults + scope in `Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md` §5):
+- **Sprint 13 KMS:** `tenant.kms_residency_policy` (`us_only` | `us_with_dr_fallback` | `multi_region_active_active`).
+- **Sprint 16 Notification:** `tenant.sms_provider_primary` + `tenant.sms_provider_fallback` (provider IDs: `twilio` | `vonage` | `africas_talking`).
+- **Sprint 9 + 12 AI quotas:** `tenant.ai_provider` (`anthropic` | `azure-openai` | `openai`); `tenant.ai_mode1_daily_quota`; `tenant.ai_mode2_daily_quota`; `tenant.ai_mode2_per_patient_hourly_quota`; `tenant.ai_provider_phi_allowed` (gates non-HIPAA providers per Sprint 9 §7.1 TLC-AI-003).
+- **Sprint 14 + 17 ops:** `tenant.consent_outbox_propagation_sla_seconds`; `tenant.chaos_drill_enabled`; `tenant.l4_pause_kill_switch` (Sprint 12 §4.4 L4 pre-state guard kill switch).
+
+v1.10.1 hygiene-cycle pattern preserved.
 
 This document defines the Country Configuration Registry — the single authority for country-specific runtime behavior in Telecheck. Per I-009, no service hardcodes country assumptions. All country-specific behavior is resolved through the CCR at runtime.
 

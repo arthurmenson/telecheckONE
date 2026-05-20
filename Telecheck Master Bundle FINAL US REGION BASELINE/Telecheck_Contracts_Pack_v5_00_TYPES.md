@@ -1,6 +1,14 @@
 # 00 · Type Definitions
 
-**Status:** canonical · **Version:** 5.2 · **Owner:** engineering lead · **Consumers:** all services consuming CCR, Forms Engine, Market Launch; all schema authors
+**Status:** canonical · **Version:** 5.3 · **Owner:** engineering lead · **Consumers:** all services consuming CCR, Forms Engine, Market Launch; all schema authors
+
+**v5.3 hygiene cycle 2026-05-20 (P-027 Phase B):** 4 new canonical types added (full type-spec in `Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md` §6):
+- **`dispatch_obligation_state`** enum (per Sprint 16 §3 SD2 8-state machine: `accepted | accepted_partition_degraded | provider_invocation_pending | provider_invoked | delivery_confirmed | provider_invocation_failed | terminal_failed | reconciled`).
+- **`mode2_autonomy_level`** enum (`L2 | L3 | L4` per ADR-029 + Sprint 12 §4).
+- **`mode2_workflow_outcome`** enum (`completed | failed | reverted | cancelled | abandoned_expired`).
+- **`data_class`** enum (7 classes per Sprint 13 §2.2: `pii_demographic | pii_clinical | pii_sensitive_clinical | pii_financial | pii_conversation | pii_audit_payload | pii_research_consented`).
+
+v1.10.1 hygiene-cycle pattern preserved.
 
 This document defines the complex types referenced by other contracts. It is operative for **shape only** — it does not define policy. Policy lives in the contracts that reference these types.
 
