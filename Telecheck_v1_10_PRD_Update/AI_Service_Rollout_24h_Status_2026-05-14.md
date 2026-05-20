@@ -4001,3 +4001,85 @@ Estimated Codex convergence: 2-3 rounds (lower than SI-021 itself because schema
 **Discipline note:** the SI-021 ratification ceremony is the second instance in the Q2 2026 cycle of an architectural-judgment ratifier ceremony executed via chat-message ratification rather than a multi-artifact decision-brief packet (the first was P-026 Q2 Batched Ratifier Ceremony Phase A). The pattern is justified by (a) SI-021's 5 OQs being narrow, well-specified, recommendation-led, and (b) the R3-R5 Codex convergence cycle having already validated the technical surface area + escalation discipline (0 architectural-judgment items closed inline). Chat-message ratification of working-recommendation OQs is appropriate when the OQs are RATIFIER-READY at §10-cadence boundary with clear recommendations + 0 architectural-judgment escalations needed mid-cycle. The OQ surface has been Codex-vetted across 5 convergence rounds; the ratification ceremony reduces to confirming the working recommendations as canonical decisions.
 
 — Claude (Opus 4.7, 1M context), SI-021 ratification ceremony close-out 2026-05-20 per Evans's chat-message "ratify". SI-021 v1.0 RATIFIED. Registry v2.15. P-028 appended. Phase A FULLY CLOSED. CDM v1.5 amendment cycle queued as next autonomous-work deliverable.
+
+---
+
+## Addendum 57 — CDM v1.5 + AUDIT_EVENTS v5.7 + CCR_RUNTIME v5.4 amendment cycle LANDED via auto-proceed; merge `e9cf962`; Artifact Registry v2.15 → v2.16; Phase B follow-on exit gate SATISFIED; 4 process novelties codified in CLAUDE.md across the cycle
+
+**Date:** 2026-05-20
+**Trigger:** Cycle ratified via auto-proceed rule (CLAUDE.md commit `f483535`); Claude + Codex Pass-2 (synthesis) converged on READY-TO-MERGE with conditions; Pass-2 conditions applied inline.
+
+**Auto-proceed execution authority:** Evans's standing-authorization directive 2026-05-20 *"For my move I need a recommendation from both of you. If you both agree on next steps then automatically do it without waiting for me"* delegated merge execution to Claude when Claude + Codex Pass-2 agree on the next concrete step.
+
+### Cycle metrics (final)
+
+| Cycle phase | Rounds | Findings closed | Notes |
+|---|---|---|---|
+| Adversarial-review | R1-R5 | 1 CRIT + 8 HIGH + 1 MED = 10 | §10-cadence boundary at R5 per SI-021 precedent |
+| Merge-readiness consult cycles 1-4 | 4 | 3 HIGH + 1 MED = 4 | Single-pass shared-context pattern |
+| Two-pass cycle (Pass-1 + Pass-2) | 1 | 0 new findings; reconciled Pass-1 NEEDS-WORK → Pass-2 APPROVE-CONDITIONAL | First cycle under two-pass discipline |
+| **Total** | **10 cycles** | **14 findings (1 CRIT + 11 HIGH + 2 MED)** | **0 hard-floor item 6 violations** |
+
+### Process novelties codified across the cycle
+
+The cycle produced 4 canonical-process amendments to CLAUDE.md:
+
+1. **`f3a6469`** — Dual-recommendation process codified (Claude + Codex side-by-side on hard-floor item 6 escalations).
+2. **`4f42a00`** — Broadened: dual-recommendation applies to ANY ratifier question (not just hard-floor item 6).
+3. **`16d7244`** — Two-pass Codex flow: Pass-1 source-first independent → Pass-2 contrast-and-synthesize. Supersedes prior single-pass shared-context pattern.
+4. **`f483535`** — Auto-proceed: when Claude + Codex Pass-2 agree on next step, Claude executes without waiting for Evans's chat-message confirmation. Disagreement still escalates.
+
+This cycle IS the worked example for all four novelties. The amendment artifact + ERR + Promotion Ledger entries P-028 + P-028a + P-029 form the canonical reference precedent.
+
+### Content landed at `e9cf962`
+
+- **CDM v1.4 → v1.5:** 4 new audit-chain-archival entities at `Telecheck_CDM_v1_4_to_v1_5_Amendment.md` v0.8 (filename retained per v1.10.1 hygiene-cycle headers-govern pattern):
+  - `audit_event_hash_chain` (per-row hash-chain projection)
+  - `audit_event_hash_chain_anchor_intent` (5-phase crash-safe commit state machine)
+  - `audit_event_hash_chain_anchor` (canonical committed-anchor with transparency-log + composite supersession-FK)
+  - `audit_event_hash_chain_anchor_corruption_evidence` (corruption-evidence with dual-control auth)
+- **AUDIT_EVENTS v5.6 → v5.7:** 15 new Cat A events under `audit_archive.*` namespace.
+- **CCR_RUNTIME v5.3 → v5.4:** `tenant.audit_archive_signing_interval_seconds`.
+- **Artifact Registry v2.15 → v2.16** (P-029 content-change promotion).
+- **Promotion Ledger:** P-029 appended (content-change promotion) + P-028a appended (Option A chain-schema tenant-isolation mini-review reconciliation).
+
+### Pass-2 conditions applied inline + carried forward
+
+| Condition | Application |
+|---|---|
+| Fill P-029 verbatim + merge-commit SHA | DONE inline (Evans's standing-authorization directive as verbatim; merge SHA `e9cf962`) |
+| Carry OQ6 hardened-tenant-helper to future SI-024 | DONE — documented in P-029 §5 + this addendum; SI-024 "Canonical Hardened Tenant/Platform RLS Helper Pattern" queued for future cross-CDM hardening cycle |
+| Non-endorsement of raw GUC as intrinsically safe | DONE — P-029 explicitly states "Pass-2 approval is for THIS isolated amendment merge gate only, not a corpus-wide ratification of the GUC pattern" |
+
+### Three-way recommendation summary (per auto-proceed post-action report structure)
+
+| Reviewer | Verdict |
+|---|---|
+| Claude | READY-TO-MERGE |
+| Codex Pass-1 (independent) | NEEDS-WORK (raw GUC + placeholder) |
+| Codex Pass-2 (synthesis) | APPROVE-CONDITIONAL |
+
+Convergence on next step: Pass-2 + Claude → auto-proceed merge. Pass-1 divergence carried forward as SI-024 known-followup.
+
+### Rollback path
+
+If post-merge defects are discovered:
+- `git revert -m 1 e9cf962` reverts the merge commit while preserving the spec branch for re-work.
+- Promotion Ledger remains append-only — any reversal requires a new entry P-029a explicitly recording the revert + reason.
+- Artifact Registry header would bump again on the revert commit (v2.16 → v2.17) per the lockstep rule (revert is itself a content-change).
+
+### Outstanding queue
+
+1. **SI-024 cross-CDM hardened-tenant-helper SI** — queued for future cycle per OQ6 deferral; covers all v1.10-era PHI-bearing entities, not just SI-021 chain tables.
+2. **Phase C procedure-side implementation** — `telecheck-app` code repo deliverable; canonical schemas now lockstep-promoted via P-029.
+3. **Quantum-resistance migration roadmap SI** — deferred to Phase 3+ per OQ-I.
+
+### Discipline observation (cumulative)
+
+Across the Q2 2026 cycle:
+- **0 hard-floor item 6 violations** across all SI-021-class work (~10 sub-cycles cumulative).
+- Dual-recommendation + two-pass + auto-proceed jointly produce a high-confidence convergence signal with low manual-confirmation burden.
+- The merge-readiness consult pattern caught defects (raw GUC + identity-key + trigger-lookup + placeholder + append-only) that adversarial-review rounds missed. Pre-merge consult as final correctness gate is now canonical.
+- Pass-1 + Pass-2 divergence is the highest-value signal (Pass-1 caught raw-GUC as merge-blocker; Pass-2 reconciled to conditional approval via prior-context awareness). The two-pass flow operationally validates Evans's intuition that single-pass leaks anchoring bias.
+
+— Claude (Opus 4.7, 1M context), CDM v1.5 amendment cycle close-out 2026-05-20 via auto-proceed. Main at `e9cf962`. Registry v2.16. P-029 + P-028a appended. 4 process novelties codified. Phase B follow-on exit gate SATISFIED. SI-024 queued as next autonomous-work deliverable (when prioritized) for OQ6 closure.
