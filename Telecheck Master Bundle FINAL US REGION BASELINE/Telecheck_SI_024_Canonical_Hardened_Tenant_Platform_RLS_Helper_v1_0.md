@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.9 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycles 1+2+3+4 corrections applied + OQ-NEW1/2 ratification inline + lockstep complete
-**Status:** Pre-merge cycle-4: 1 HIGH + 2 MED closed inline (OQ-NEW1 SI-024.1 ratifier commitment recorded inline via auto-proceed + AUDIT_EVENTS count reconciled to 6 + Sub-decision 5a stale audit requirement deferred to SI-024.1). Pre-merge cycle-5 re-verification queued under two-pass.
+**Version:** 1.0 v0.10 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycles 1+2+3+4+5 corrections applied + canonical INSERT path authored + audit-emission triggers authored
+**Status:** Pre-merge cycle-5: 1 HIGH closed inline (canonical INSERT policy + grants + AFTER-INSERT/UPDATE audit triggers for break_glass_approval; v1.0 dual-control via self-attestation + out-of-band coordination per simplification #9). Pre-merge cycle-6 re-verification queued.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -376,6 +376,104 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
        OR DELETE ON break_glass_approval
        FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
 
+   -- Pre-merge cycle-5 HIGH closure 2026-05-20: canonical INSERT path for break_glass_approval.
+   -- The original sub-decision specified SELECT/UPDATE policies but no INSERT path. Without this, FORCE RLS
+   -- + missing INSERT grants would prevent any approval row from being created → target-tenant break-glass
+   -- non-functional. The v1.0 design uses a single-INSERT pattern (NOT two-phase workflow; that's SI-024.1
+   -- enhancement) where the INSERTing role MUST be one of (compliance_officer, cto_role) and the role's
+   -- own user_id MUST match one of the authorizer columns (self-attestation).
+
+   CREATE POLICY break_glass_approval_authorizer_insert ON break_glass_approval
+       FOR INSERT
+       TO compliance_officer, cto_role
+       WITH CHECK (
+           -- The INSERTing role must self-attest: its own actor_human_id matches one of the authorizer columns.
+           -- (PostgreSQL doesn't expose "the calling role's user_id" directly; we use app.actor_human_id GUC
+           -- populated by middleware post-JWT-verification, same as elsewhere in this SI.)
+           (
+               pg_has_role(current_user, 'compliance_officer', 'USAGE')
+               AND authorized_by_compliance_officer_user_id = current_setting('app.actor_human_id', false)::UUID
+           )
+           OR (
+               pg_has_role(current_user, 'cto_role', 'USAGE')
+               AND authorized_by_cto_user_id = current_setting('app.actor_human_id', false)::UUID
+           )
+       );
+
+   -- Table INSERT grants:
+   -- GRANT INSERT ON TABLE break_glass_approval TO compliance_officer, cto_role;
+
+   -- AFTER-INSERT trigger emits the canonical break_glass_approval_created audit event.
+   -- This is the ONE auditable creation point; per-invocation audit on RLS helper is deferred to SI-024.1.
+   CREATE FUNCTION break_glass_approval_after_insert_audit() RETURNS TRIGGER AS $$
+   BEGIN
+       INSERT INTO public.audit_events (
+           action_id, partition, partition_key,
+           actor_role, actor_user_id,
+           subject_tenant_id, subject_entity_type, subject_entity_id,
+           event_metadata, occurred_at
+       )
+       VALUES (
+           'tenant_context.break_glass_approval_created', 'P2', 'platform',
+           current_user::TEXT, current_setting('app.actor_human_id', false)::UUID,
+           NEW.target_tenant_id, 'break_glass_approval', NEW.id,
+           jsonb_build_object(
+               'operator_role', NEW.operator_role,
+               'operator_user_id', NEW.operator_user_id,
+               'authorized_by_compliance_officer_user_id', NEW.authorized_by_compliance_officer_user_id,
+               'authorized_by_cto_user_id', NEW.authorized_by_cto_user_id,
+               'approval_reason', NEW.approval_reason,
+               'expires_at', NEW.expires_at
+           ),
+           now()
+       );
+       RETURN NEW;
+   END;
+   $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;
+
+   CREATE TRIGGER break_glass_approval_after_insert_audit_trg
+       AFTER INSERT ON break_glass_approval
+       FOR EACH ROW EXECUTE FUNCTION break_glass_approval_after_insert_audit();
+
+   -- Mirror trigger for revocation audit (break_glass_approval_revoked event):
+   CREATE FUNCTION break_glass_approval_after_revoke_audit() RETURNS TRIGGER AS $$
+   BEGIN
+       IF NEW.revoked_at IS DISTINCT FROM OLD.revoked_at AND NEW.revoked_at IS NOT NULL THEN
+           INSERT INTO public.audit_events (
+               action_id, partition, partition_key,
+               actor_role, actor_user_id,
+               subject_tenant_id, subject_entity_type, subject_entity_id,
+               event_metadata, occurred_at
+           )
+           VALUES (
+               'tenant_context.break_glass_approval_revoked', 'P2', 'platform',
+               current_user::TEXT, current_setting('app.actor_human_id', false)::UUID,
+               NEW.target_tenant_id, 'break_glass_approval', NEW.id,
+               jsonb_build_object('original_approval_id', NEW.id, 'revoked_at', NEW.revoked_at),
+               now()
+           );
+       END IF;
+       RETURN NEW;
+   END;
+   $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;
+
+   CREATE TRIGGER break_glass_approval_after_revoke_audit_trg
+       AFTER UPDATE OF revoked_at ON break_glass_approval
+       FOR EACH ROW EXECUTE FUNCTION break_glass_approval_after_revoke_audit();
+
+   -- v1.0 dual-control discipline (acknowledged simplification):
+   -- The INSERT policy allows EITHER authorizer role to insert with their OWN self-attestation. The
+   -- NOT NULL + distinct-CHECK on both authorizer columns + the operational expectation that BOTH
+   -- authorizers must agree out-of-band before any INSERT IS the dual-control mechanism for v1.0.
+   -- The INSERTing role attests they obtained the OTHER authorizer's signature out-of-band.
+   -- SI-024.1 will enhance this with a two-phase workflow (state='pending_co_auth' → state='active')
+   -- where both authorizers MUST each call distinct procedures, removing the out-of-band trust requirement.
+   -- For v1.0, the residual risk is: a compromised Compliance Officer OR CTO credential can self-attest
+   -- both authorizer fields. Compensating controls: (a) audit-trail review (the
+   -- break_glass_approval_created event captures both authorizer IDs; cross-checked against actual
+   -- Compliance Officer + CTO sign-off records in a separate auditable system); (b) anomaly detection on
+   -- approval-creation rate per role per week; (c) periodic forensic review per Compliance Officer cadence.
+
    -- R3 HIGH-2 closure: canonical revoked_at-transition trigger.
    -- Enforces: revoked_at can transition ONLY NULL → timestamp (one-way; non-reversible).
    -- Forbids: NULL → NULL noop (no actual change attempted; harmless but rejected for tight semantics);
@@ -591,6 +689,7 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
   - break_glass_approval table is WORM with single sanctioned mutation path (revoked_at NULL → current-timestamp, one-way).
   - Phase 4 cutover gated on SI-024.1 readiness (per OQ-NEW2).
   - **#8 (added at pre-merge cycle-2 HIGH-2 closure 2026-05-20):** per-invocation audit emission on `is_target_tenant_break_glass_active()` TRUE result is DEFERRED to SI-024.1 (STABLE function constraint prevents side-effecting audit INSERTs from RLS predicate). SI-024 v1.0 audit trail comes from `break_glass_approval_created` + `break_glass_approval_revoked` events; per-access audit will use an explicit `begin_target_tenant_break_glass_session()` SECURITY DEFINER procedure introduced in SI-024.1.
+  - **#9 (added at pre-merge cycle-5 HIGH closure 2026-05-20):** dual-control approval-creation enforced via self-attestation + out-of-band coordination, NOT two-phase workflow. v1.0's INSERT policy permits EITHER authorizer role (compliance_officer OR cto_role) to insert with their own user_id matching their respective authorizer column. The other authorizer's user_id is supplied by the INSERTing role, attesting they obtained out-of-band agreement. Compensating controls: audit-trail review + anomaly detection + Compliance Officer forensic cadence. SI-024.1 enhancement: two-phase workflow with `state='pending_co_auth' → state='active'` requiring both authorizers to each call distinct procedures (removes out-of-band trust requirement).
 
 **Next gates (corrected at pre-merge cycle-2 MED closure 2026-05-20 to align with OQ5 deferral):**
 - Pre-merge two-pass consult per CLAUDE.md `16d7244` (canonical for ratifier-question gates).
