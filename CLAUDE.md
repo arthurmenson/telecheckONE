@@ -228,6 +228,59 @@ The authorization does NOT cover, and these still require explicit user input mi
 5. **Cross-tenant break-glass operations** — I-024 platform-floor; always operator-gated.
 6. **Any Codex finding that proposes net-new architecture, schema, or invariant amendment beyond the ratified sub-decision scope of the SI under review is a hard STOP requiring ratifier escalation. Do not close it inline.** (Added 2026-05-19 per the SI-010 trust-anchor rejection cycle worked example: PR #10 ran 30 iterations past the first architectural-judgment finding (R3 round-3 HIGH on rollback-independent commit path), each new iteration extending unratified architecture. PR #11 STOPPED at R1 architectural-judgment finding, escalated via Engineering Review Request artifact, returned with the unanimous NO answer in ~24h, and converged to APPROVE in 5 rounds. The contrast IS the worked example: same Codex tool, same iteration mechanism, two different cycle outcomes driven by whether STOP-and-escalate was honored. Discriminator: a finding is architectural-judgment when it proposes (a) net-new canonical schema fields, (b) net-new canonical invariants or invariant amendments, (c) net-new platform-floor primitives (DB roles, audit-chain partitions, role-elevation patterns, dedicated infrastructure instances, etc.), or (d) any amendment to a canonical contract surface that the SI under review has not already scoped as a sub-decision. Closing it inline by iterating with prose changes within the same SI source-file violates the discipline. The proper response is to author an escalation artifact — Decision Memo, Engineering Review Request, or ratifier mini-review — and route to the appropriate quorum. Prose-consistency findings, within-scope clarifications, and SUPERSEDED-annotation discipline closures DO NOT trigger this hard floor; they remain closeable inline within the standard 2-rounds-then-§10-escalation cadence per v1.10.1 hygiene-cycle precedent.)
 
+### Dual-recommendation process for hard-floor item 6 escalations (codified 2026-05-20 per Evans's directive)
+
+When hard-floor item 6 fires and an Engineering Review Request (or Decision Memo, or ratifier mini-review) is authored, **Claude AND Codex each produce an independent recommendation on the open question before the ratifier decides.** Both recommendations are surfaced side-by-side; the ratifier sees the consensus (or disagreement) explicitly + chooses A / B / C / etc. from the joint analysis.
+
+**Worked example (codification trigger):** the SI-021 follow-on CDM v1.5 amendment cycle R1 CRITICAL on chain-schema tenant-isolation (2026-05-20). Codex authored the CRITICAL finding flagging tenant_id absence on the 4 new chain tables. Claude correctly STOP-and-escalated rather than closing inline, authoring the ERR `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-SI-021-Chain-Schema-Tenant-Isolation-2026-05-20.md` with three options (A/B/C). Evans then asked Claude "what is codex recommendation or comment on your choice?" — surfacing the value of having BOTH recommendations side-by-side. Codex was re-invoked with a structured consult prompt (not adversarial-review framing) and returned an independent recommendation on A/B/C. Both converged on Option A. Codex additionally caught a defect in Claude's Option C framing (collapsed P2 chains incorrectly) that would have surfaced as a HIGH/CRITICAL in R2 if the ratifier had chosen C. The dual-recommendation pattern caught the framing defect at the ratifier-decision stage, BEFORE pivoting to R2 — saving a Codex round + preserving a clean discipline-floor profile.
+
+**Process steps (canonical):**
+
+1. **Hard-floor item 6 fires** during a Codex review cycle (Codex finding proposes net-new schema/invariant/platform-floor beyond ratified scope).
+2. **Claude STOPs the cycle** and authors an escalation artifact (ERR / Decision Memo / ratifier mini-review). The escalation artifact presents options (typically 2-4) with pros/cons/deal-breakers + Claude's recommendation + rationale.
+3. **Claude commits the escalation artifact** to the spec branch. R2 is BLOCKED at this point; no further closures on the SI under review until ratifier decides.
+4. **Claude invokes Codex independently** on the escalation artifact via the companion script with a **consult-framing prompt** (NOT adversarial-review framing):
+   - Tell Codex: this is a ratifier consult, not a defect-finding adversarial review.
+   - Provide the escalation artifact path + the relevant ratified-source files (SI-021, INVARIANTS, the proposed amendment artifact, etc.) + the convergent canonical pattern references.
+   - Request: (a) Codex's recommended option; (b) strongest argument FOR each option; (c) strongest argument AGAINST each option; (d) considerations Claude's artifact missed; (e) any deal-breaker disqualifier on any option.
+   - Verdict label: "recommend" not "needs-attention".
+5. **Claude surfaces both recommendations side-by-side to the ratifier** in chat — clearly labeled (Claude's recommendation / Codex's recommendation) with the per-option analysis + any disagreements or consensus + framing defects Codex caught.
+6. **Ratifier (Evans + Engineering Lead + CDM owner) decides** via chat-message ratification. The decision is recorded in the escalation artifact as a "Ratifier decision" section + carried into a Promotion Ledger entry (e.g., P-028a mini-review supplemental entry, or rolled into the primary P-N entry).
+7. **Claude implements the ratified option** on the spec branch (schema changes, RLS policies, CHECK constraints, FK constraints per Codex's missed-considerations + Claude's analysis).
+8. **Claude re-invokes Codex** for R2 verification of the implementation in standard adversarial-review framing. R2 cycle continues per §10-cadence boundary discipline.
+
+**Invocation command for consult-framing (standard incantation):**
+
+```bash
+node "C:/Users/menso/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/codex-companion.mjs" \
+  adversarial-review \
+  "--background --base main <ERR_path> — Independent recommendation request on <option list>. \
+   This is NOT a defect-finding adversarial review; it is a ratifier consult on an architectural-judgment question. \
+   Context: <brief>. Please read: <list of authoritative files + their paths>. \
+   Then return: 1) your recommended option; 2) strongest argument FOR each option; \
+   3) strongest argument AGAINST each option; 4) any considerations Claude's escalation artifact missed; \
+   5) any deal-breaker disqualifier on any option. \
+   Format the response as a structured recommendation, not as a defect-finding review. \
+   Verdict should be 'recommend' not 'needs-attention'."
+```
+
+**When the dual-recommendation process applies:**
+
+- **Always** when hard-floor item 6 fires (Codex finding proposes net-new schema/invariant/platform-floor primitive beyond ratified scope).
+- **Always** when the escalation artifact presents ≥ 2 options that the ratifier must choose between (single-option escalations don't need a Codex consult since there's nothing to weigh).
+- **Optionally** when Claude is uncertain about a non-hard-floor decision and a Codex second opinion is valuable; in that case Claude flags the uncertainty to the ratifier and asks whether to invoke the consult.
+
+**When it does NOT apply:**
+
+- Routine Codex closures within a single SI's Codex convergence cycle (HIGH / MEDIUM / LOW within-scope findings) — Claude closes inline per the standard cadence.
+- Prose-consistency findings — closeable inline within 2 rounds.
+- SUPERSEDED-annotation discipline closures — closeable inline.
+- Ratifier ceremonies driven by Evans's standing chat-message authority (e.g., a clean P-N ratification of a ratifier-ready SI at working recommendations) — no architectural-judgment open; no Codex consult needed.
+
+**Discipline anchor:** the dual-recommendation pattern operationalizes "trust but verify" between Claude (who authored the escalation artifact + has the working analysis context) and Codex (who has independent threat-modeling + canonical-source-reading context). Disagreement between them is informative (the ratifier sees the divergence + can probe further). Agreement strengthens the case. Either way, the ratifier decides with strictly more information than either reviewer alone would provide.
+
+**Reference precedents:** PR #11 SI-010 5-round prose-scrub convergence after R1 architectural-judgment escalation (single-reviewer pattern; pre-dual-recommendation codification). SI-021 R3-R5 5-round convergence (no escalation; standard inline cadence applied). CDM v1.5 amendment R1 chain-schema tenant-isolation (THE codification trigger; both reviewers converged on Option A; Codex caught a framing defect in Claude's Option C).
+
 ### Discipline floor (always-on, even under loop)
 
 - **Codex APPROVE is mandatory before any merge.** No exceptions for time pressure.
