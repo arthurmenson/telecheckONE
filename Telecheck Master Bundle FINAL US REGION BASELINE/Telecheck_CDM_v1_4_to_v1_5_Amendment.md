@@ -1,7 +1,7 @@
 # CDM v1.4 → v1.5 Amendment (SI-021 follow-on)
 
-**Version:** 0.4 DRAFT
-**Status:** R3 ALL FINDINGS CLOSED INLINE (2 HIGH — phase-1 tenant_id grant restoration + monotonic-transition trigger with per-phase immutability). R4 verification PENDING.
+**Version:** 0.5 DRAFT
+**Status:** R4 HIGH CLOSED INLINE (phase-immutability rules tightened to freeze on entry to completed state). R5 verification PENDING (per OQ5 boundary up to R5).
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-028 (SI-021 v1.0 RATIFIED) OQ4 canonical decision — file SI-021's 4 new audit-chain-archival entities as a CDM v1.4 → v1.5 amendment cycle co-bumped with AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4.
 **Owner:** SRE Lead + Security Engineering Lead + Compliance Officer (same as SI-021 owner triad).
@@ -259,37 +259,45 @@ BEGIN
         END IF;
     END IF;
 
-    -- (b) Per-phase persisted-field immutability rules
-    -- Phase 2 fields (signature, signed_at_intent, signature_computed_at) IMMUTABLE once intent_state >= 's3_write_committed'
-    IF OLD.intent_state IN ('s3_write_committed', 'transparency_log_appended', 'COMMITTED') THEN
+    -- (b) Per-phase persisted-field immutability rules (R4 HIGH closure 2026-05-20: freeze on entry to phase's completed state, not on entry to next phase).
+    -- Phase 2 fields (signature, signed_at_intent, signature_computed_at) IMMUTABLE once OLD.intent_state is signature_computed OR later;
+    -- this means once the row IS at signature_computed (the phase-2-completed state), the phase-2 evidence is frozen. The single transition
+    -- intent_reserved → signature_computed allows phase-2 fields to be set in NEW; from signature_computed onward they cannot change.
+    IF OLD.intent_state IN ('signature_computed', 's3_write_committed', 'transparency_log_appended', 'COMMITTED') THEN
         IF NEW.signature IS DISTINCT FROM OLD.signature
             OR NEW.signed_at_intent IS DISTINCT FROM OLD.signed_at_intent
             OR NEW.signature_computed_at IS DISTINCT FROM OLD.signature_computed_at THEN
-            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent phase-2 fields (signature, signed_at_intent, signature_computed_at) are immutable once intent_state >= s3_write_committed'
+            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent phase-2 fields (signature, signed_at_intent, signature_computed_at) are immutable once intent_state >= signature_computed'
                 USING ERRCODE = 'invalid_column_reference';
         END IF;
     END IF;
-    -- Phase 3 fields IMMUTABLE once intent_state >= 'transparency_log_appended'
-    IF OLD.intent_state IN ('transparency_log_appended', 'COMMITTED') THEN
+    -- Phase 3 fields IMMUTABLE once OLD.intent_state is s3_write_committed OR later
+    IF OLD.intent_state IN ('s3_write_committed', 'transparency_log_appended', 'COMMITTED') THEN
         IF NEW.s3_object_key IS DISTINCT FROM OLD.s3_object_key
             OR NEW.s3_us_east_1_etag IS DISTINCT FROM OLD.s3_us_east_1_etag
             OR NEW.s3_us_west_2_etag IS DISTINCT FROM OLD.s3_us_west_2_etag
             OR NEW.s3_object_sha256 IS DISTINCT FROM OLD.s3_object_sha256
             OR NEW.s3_write_committed_at IS DISTINCT FROM OLD.s3_write_committed_at THEN
-            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent phase-3 fields (s3_object_key, s3_*_etag, s3_object_sha256, s3_write_committed_at) are immutable once intent_state >= transparency_log_appended'
+            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent phase-3 fields (s3_object_key, s3_*_etag, s3_object_sha256, s3_write_committed_at) are immutable once intent_state >= s3_write_committed'
                 USING ERRCODE = 'invalid_column_reference';
         END IF;
     END IF;
-    -- Phase 4 fields IMMUTABLE once intent_state = 'COMMITTED'
-    IF OLD.intent_state = 'COMMITTED' THEN
+    -- Phase 4 fields IMMUTABLE once OLD.intent_state is transparency_log_appended OR later
+    IF OLD.intent_state IN ('transparency_log_appended', 'COMMITTED') THEN
         IF NEW.transparency_log_id IS DISTINCT FROM OLD.transparency_log_id
             OR NEW.transparency_log_entry_index IS DISTINCT FROM OLD.transparency_log_entry_index
             OR NEW.transparency_log_sth_at_append IS DISTINCT FROM OLD.transparency_log_sth_at_append
             OR NEW.transparency_log_sth_signature IS DISTINCT FROM OLD.transparency_log_sth_signature
             OR NEW.transparency_log_inclusion_proof IS DISTINCT FROM OLD.transparency_log_inclusion_proof
-            OR NEW.transparency_log_appended_at IS DISTINCT FROM OLD.transparency_log_appended_at
-            OR NEW.committed_at IS DISTINCT FROM OLD.committed_at THEN
-            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent phase-4 + phase-5 fields are immutable once intent_state = COMMITTED'
+            OR NEW.transparency_log_appended_at IS DISTINCT FROM OLD.transparency_log_appended_at THEN
+            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent phase-4 fields (transparency_log_*) are immutable once intent_state >= transparency_log_appended'
+                USING ERRCODE = 'invalid_column_reference';
+        END IF;
+    END IF;
+    -- Phase 5 field (committed_at) IMMUTABLE once OLD.intent_state = COMMITTED
+    IF OLD.intent_state = 'COMMITTED' THEN
+        IF NEW.committed_at IS DISTINCT FROM OLD.committed_at THEN
+            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent phase-5 field (committed_at) is immutable once intent_state = COMMITTED'
                 USING ERRCODE = 'invalid_column_reference';
         END IF;
     END IF;
@@ -680,6 +688,25 @@ All 4 chain tables (§4.NEW1 audit_event_hash_chain + §4.NEW2 audit_event_hash_
 **0 hard-floor item 6 violations on R3.** Both findings were in-scope correctness defects from prior closures, not architectural-judgment.
 
 **R4 verification queued.** Per OQ5 working recommendation of 2-3 rounds for mechanical amendment cycles, the cycle has now extended to R4 — comparable to SI-021's own R5-cadence-boundary precedent. Standard cadence allows up to R5 boundary if needed; convergence to APPROVE expected at R4 since R3 closures were in-scope corrections to R2-introduced surface area only.
+
+**v0.5 R4 closure 2026-05-20:** 1 HIGH closed inline.
+
+| Round | Findings | Status |
+|---|---|---|
+| R4 | **HIGH** completed phase evidence remains mutable until the next phase advances (the R3 immutability rules fired one phase too late — phase-2 fields only frozen when OLD.intent_state IN ('s3_write_committed', ...), allowing same-state UPDATEs to rewrite signature/signed_at_intent while the row is still in signature_computed; same defect for phase-3 in s3_write_committed and phase-4 in transparency_log_appended) | Closed inline |
+
+**R4 closure pattern recap:**
+
+- **HIGH (closed inline):** R3's monotonic-transition trigger had an off-by-one-state bug in the per-phase immutability guards. Codex correctly identified that "after that phase has been completed" should freeze evidence on entry to that phase's completed state, NOT on entry to the next phase. Fixed:
+  - Phase-2 fields (signature, signed_at_intent, signature_computed_at) immutable when `OLD.intent_state IN ('signature_computed', 's3_write_committed', 'transparency_log_appended', 'COMMITTED')` — previously was missing 'signature_computed' from the immutable set.
+  - Phase-3 fields (s3_*) immutable when `OLD.intent_state IN ('s3_write_committed', 'transparency_log_appended', 'COMMITTED')` — previously was missing 's3_write_committed'.
+  - Phase-4 fields (transparency_log_*) immutable when `OLD.intent_state IN ('transparency_log_appended', 'COMMITTED')` — previously was missing 'transparency_log_appended'.
+  - Phase-5 field (committed_at) immutable when `OLD.intent_state = 'COMMITTED'` — separated from phase-4 block since phase-4 fields are set during the transparency_log_appended → COMMITTED transition while committed_at is set DURING that transition.
+- **Semantic correctness:** the single transition INTO each completed state allows the phase's fields to be set in NEW; from that state onward they cannot change. This matches SI-021 §2 Sub-decision 6 recovery semantics (phase-N crash recovery resumes from durable phase-N-completed state without re-running phase N).
+
+**0 hard-floor item 6 violations on R4.** In-scope correction of a logic bug introduced in R3.
+
+**R5 verification queued.** Per SI-021's own R5-cadence-boundary precedent (also applied to this cycle), R5 is the canonical final boundary round. If R5 returns APPROVE OR only-known-OQ-deferrals, the cycle closes at §10-cadence boundary regardless of residual findings (per SI-021 R5-close pattern).
 
 Authored on `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` branch off main at `8d44bde` (post-P-028 ratification). Merged main `f3a6469` (CLAUDE.md dual-recommendation codification) into branch 2026-05-20.
 
