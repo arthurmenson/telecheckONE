@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.1 DRAFT
-**Status:** PRE-CODEX (awaiting Pass-1 source-first independent review per CLAUDE.md two-pass discipline)
+**Version:** 1.0 v0.2 DRAFT
+**Status:** R1 Pass-1 + Pass-2 closed: 1 CRITICAL inline + 1 CRITICAL via scope-narrowing inline closure (Option C hybrid per Pass-2 synthesis) + 2 HIGH inline. SI-024.1 queued as follow-on for cryptographic B-2 binding. R2 verification PENDING.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -12,16 +12,30 @@
 
 ## 1. Purpose + scope
 
-**Problem statement:** the canonical v1.10-era tenant-isolation pattern across all PHI-bearing CDM entities is:
+**Problem statement (NARROWED at R1 Pass-2 closure 2026-05-20 per CRITICAL-2):** the canonical v1.10-era tenant-isolation pattern across all PHI-bearing CDM entities is:
 
 ```sql
 CREATE POLICY <table>_tenant_isolation ON <table>
     USING (tenant_id = current_setting('app.tenant_id')::VARCHAR);
 ```
 
-PostgreSQL custom GUCs (`app.tenant_id`, `app.platform_operator_break_glass`) are **session-settable by any role that can issue SQL** unless explicitly constrained. A compromised application-tier credential OR a database role with direct table grants can set the GUC to satisfy RLS and read/write outside its real tenant context. This is a corpus-wide trust-boundary weakness that affects every PHI-bearing entity in CDM v1.5 (75 entities + the audit-chain projection tables).
+PostgreSQL custom GUCs (`app.tenant_id`, `app.platform_operator_break_glass`) are **session-settable by any role that can issue SQL** unless explicitly constrained. **SI-024 v1.0 addresses ONE class of this weakness: direct-DB-role spoofing.** A database role with direct PHI-table grants but NOT in the canonical middleware-context-writer allowlist can today set `app.tenant_id` to any value and read/write across tenants. SI-024 v1.0 closes this by requiring the canonical hardened helper functions to verify the **caller's role identity** against the middleware-writer allowlist before trusting the GUC.
 
-**SI-024 authors the canonical hardened tenant/platform RLS helper pattern** to replace raw `current_setting()` predicates across the entire canonical schema. The pattern hardens the trust boundary by binding tenant-identity to a verified middleware-context-binding mechanism rather than caller-settable GUCs.
+**OUT OF SCOPE for SI-024 v1.0 (explicit residual risk):** a compromised application-tier credential that **already possesses the `app_middleware_writer` role** can still spoof `app.tenant_id` to bypass tenant isolation. Closing this stronger threat model requires cryptographic binding between the verified JWT context and the DB-level tenant_id assertion. **SI-024 v1.0 does NOT claim to close this class of threat.** Cryptographic-binding closure is queued as **SI-024.1 — Cryptographic Tenant-Context Binding for Hardened RLS Helper** (provisional title) as the immediate follow-on cycle; see §6 OQ-NEW1 below.
+
+**SI-024 v1.0 authors the canonical role-constrained-GUC hardened tenant/platform RLS helper pattern** to replace raw `current_setting()` predicates across the entire canonical schema. The pattern hardens the trust boundary by adding (a) role-identity verification against an explicit middleware-writer allowlist and (b) executable DDL-level defense-in-depth (FORCE RLS + WITH CHECK + SECURITY INVOKER + search_path hardening) on top of the existing role-grant model.
+
+**Threat model coverage matrix:**
+
+| Threat | SI-024 v1.0 (B-1 role-constrained-GUC) closes? | SI-024.1 (B-2 cryptographic binding) closes? |
+|---|---|---|
+| Non-allowlisted DB role with direct PHI grants sets `app.tenant_id` to spoof | YES (helper rejects via role-check) | YES |
+| Allowlisted middleware role (`app_middleware_writer`) compromised → attacker sets `app.tenant_id` | NO (residual risk; explicit in v1.0) | YES (JWT signature verification prevents forgery) |
+| Table-owner / superuser bypass of RLS | Mitigated by FORCE ROW LEVEL SECURITY | Same |
+| Object-redirection attack via attacker-controlled search_path | Closed by SET search_path = pg_catalog, public on helper | Same |
+| Break-glass abuse (operator setting platform_operator_break_glass GUC) | Closed by role-based break-glass detection (not GUC-trusting) | Same |
+
+**Explicit residual-risk acknowledgment (Pass-2 closure §C condition):** Adopting SI-024 v1.0 WITHOUT SI-024.1 means the compromised-middleware-credential threat remains open. Operational compensating controls (middleware-credential rotation discipline, anomaly detection on cross-tenant query patterns, audit-trail review per §sub-decision-8) reduce but do not eliminate this residual risk. **SI-024 v1.0 promotion to canonical REQUIRES explicit ratifier acceptance of this residual risk + a committed SI-024.1 ratifier date/owner.**
 
 **In scope:**
 
@@ -49,36 +63,37 @@ PostgreSQL custom GUCs (`app.tenant_id`, `app.platform_operator_break_glass`) ar
 
 ### Sub-decision 1 — Hardened helper function shape
 
-**Decision shape:** define canonical SQL functions for tenant-identity resolution + platform-operator break-glass detection:
+**Decision shape:** define canonical SQL functions for tenant-identity resolution + platform-operator break-glass detection. **R1 CRITICAL-1 closure 2026-05-20:** helpers use `SECURITY INVOKER` (default) — NOT `SECURITY DEFINER` — because `current_user` inside a `SECURITY DEFINER` function returns the function OWNER's role, not the calling role. `SECURITY INVOKER` ensures `current_user` correctly identifies the actual caller for the role-allowlist check. Search_path hardening still applies via `SET search_path = pg_catalog, public` declaration (defeats unrelated object-redirection attacks).
 
 ```sql
 -- Canonical hardened helper for tenant_id resolution.
 -- Returns: tenant_id_t of the current session's verified tenant context, OR raises exception.
--- Trust-anchor: see Sub-decision 2.
--- Performance: stable function, query-result-cacheable per execution context.
+-- Trust-anchor: Option B-1 (middleware-GUC with role-binding hardening) — see Sub-decision 2.
+-- Security: SECURITY INVOKER so current_user reports the actual caller's role (not the function owner).
+-- Performance: STABLE function, query-result-cacheable per execution context (per-query cache, not per-row).
 CREATE FUNCTION current_tenant_id_strict() RETURNS tenant_id_t AS $$
 DECLARE
     resolved_tenant_id tenant_id_t;
 BEGIN
-    -- Implementation per Sub-decision 2's selected trust-anchor pattern.
-    -- For Option B-1 (middleware-GUC with role-binding hardening):
-    --   IF current_user IS NOT IN (the set of roles permitted to set app.tenant_id):
-    --     RAISE EXCEPTION 'tenant context not bound (current_user=% lacks tenant-context-write authority)', current_user
-    --     USING ERRCODE = 'insufficient_privilege';
-    --   END IF;
-    --   resolved_tenant_id := current_setting('app.tenant_id', false)::tenant_id_t;
-    --   RETURN resolved_tenant_id;
-    -- For Option B-2 (JWT-claim-derived GUC with cryptographic-binding):
-    --   See Sub-decision 2.
-    RAISE EXCEPTION 'current_tenant_id_strict() implementation pending Sub-decision 2 ratification'
-        USING ERRCODE = 'feature_not_supported';
+    -- Role-allowlist check: only middleware-context-writer roles (Sub-decision 2) can supply app.tenant_id.
+    -- SECURITY INVOKER means current_user is the actual caller; the check correctly rejects non-allowlisted roles.
+    IF current_user NOT IN (
+        'app_middleware_writer',
+        'app_middleware_reader_via_writer_proxy'
+    ) THEN
+        RAISE EXCEPTION 'tenant context not bound (current_user=% lacks tenant-context-write authority)', current_user
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    -- Fail-closed GUC resolution: current_setting(..., false) raises if app.tenant_id is unset (no silent empty-string).
+    resolved_tenant_id := current_setting('app.tenant_id', false)::tenant_id_t;
+    RETURN resolved_tenant_id;
 END;
-$$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
+$$ LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = pg_catalog, public;
 
 -- Canonical break-glass detection.
 -- Returns: TRUE iff session is operating under a platform-operator break-glass context.
 -- Trust-anchor: role-based (current_user IN platform_operator_break_glass_role_set).
--- Never relies on caller-settable GUC alone.
+-- Never relies on caller-settable GUC. SECURITY INVOKER preserves caller-role semantics.
 CREATE FUNCTION is_platform_operator_break_glass_active() RETURNS BOOLEAN AS $$
 BEGIN
     RETURN current_user IN (
@@ -87,7 +102,7 @@ BEGIN
         'platform_operator_compliance_audit'
     );
 END;
-$$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
+$$ LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = pg_catalog, public;
 ```
 
 Canonical RLS policy pattern post-SI-024:
@@ -171,18 +186,102 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 **Decision shape:** the migration covers all v1.5-era PHI-bearing entities + their RLS policies. Sequencing:
 
 1. **Phase 1 (foundation):** create the canonical hardened helper functions (Sub-decision 1) + provision the trust-anchor (Sub-decision 2) + grant `EXECUTE` to all roles that currently can use raw `current_setting('app.tenant_id')` in RLS. No RLS policy changes yet; helpers coexist with raw GUC.
-2. **Phase 2 (additive policy):** for each PHI-bearing entity, ADD a parallel RLS policy using the hardened helper, leaving the existing raw-GUC policy active. Reads/writes must satisfy BOTH (intersection semantics; CREATE POLICY semantics use OR by default — see implementation note). This ensures the hardened helper is exercised in production WITHOUT removing the existing safety net.
-3. **Phase 3 (telemetry):** run the dual-policy state for a tenant-launch-readiness window (suggested 30 days per Sprint 17 cadence) collecting telemetry on hardened-helper invocations + any spoofing-attempt audit events.
-4. **Phase 4 (cutover):** for each entity, DROP the raw-GUC RLS policy; the hardened-helper policy becomes the sole canonical enforcement.
+2. **Phase 2 (RESTRICTIVE parallel policy):** for each PHI-bearing entity, ADD a parallel RLS policy using the hardened helper **with `AS RESTRICTIVE`** so the new policy intersects (AND-combines) with the existing permissive raw-GUC policy. **R1 HIGH-1 closure 2026-05-20:** prior wording said "must satisfy BOTH" implying intersection; but PostgreSQL permissive RLS policies OR-combine by default. Using `AS RESTRICTIVE` explicitly produces the intersection (a row satisfies the table policy iff ALL permissive policies' USING/WITH CHECK is true AND ALL restrictive policies' USING/WITH CHECK is true).
+
+   Canonical Phase 2 DDL pattern:
+   ```sql
+   CREATE POLICY <table>_tenant_isolation_hardened_intersection
+       ON <table>
+       AS RESTRICTIVE
+       USING (
+           tenant_id = current_tenant_id_strict()
+           OR (is_platform_operator_break_glass_active()
+               AND tenant_id IN (current_tenant_id_strict(), '00000000-0000-0000-0000-000000000000'::tenant_id_t))
+       )
+       WITH CHECK (tenant_id = current_tenant_id_strict());
+   ```
+   This ensures: a row admitted under raw-GUC but rejected by the hardened helper is REJECTED during Phase 2 (catches spoofing attempts in telemetry); a row admitted by both is allowed (no false negatives for legitimate traffic).
+
+3. **Phase 3 (telemetry):** run the dual-policy state for a tenant-launch-readiness window (suggested 30 days per Sprint 17 cadence) collecting telemetry on hardened-helper invocations + any spoofing-attempt audit events. **Required test before Phase 4:** integration test demonstrating that a row admitted under the raw-GUC permissive policy + rejected by the hardened-helper restrictive policy is actually denied during Phase 2 (validates the RESTRICTIVE intersection semantics in production).
+4. **Phase 4 (cutover):** for each entity, DROP the raw-GUC permissive RLS policy; the hardened-helper RESTRICTIVE policy + any other permissive policies become the canonical enforcement. (Note: at cutover, the hardened-helper policy may be DROPPED and re-CREATED as permissive instead of restrictive, since it's the sole tenant-isolation policy — restrictive is only needed during the dual-coexistence window.)
 5. **Phase 5 (deprecation):** raw `current_setting('app.tenant_id')` predicates are forbidden in new CDM amendments post-Phase 4. INVARIANTS bumped to add I-036 ("RLS predicates MUST use the canonical hardened helper functions; raw `current_setting()` is forbidden for tenant/platform-context resolution").
 
 ### Sub-decision 4 — Backward-compatibility + coexistence
 
 **Decision shape:** during Phases 1-3, raw `current_setting()` predicates coexist with the hardened helper. Phase 4 cutover is per-entity, not corpus-wide atomic. CDM v1.5 amendment-cycle chain tables (audit_event_hash_chain + 3 siblings) participate in the same migration on their own per-entity timeline; OQ6 in the CDM v1.5 amendment §6 is resolved by SI-024 ratification + Phase 4 cutover for those tables.
 
-### Sub-decision 5 — Break-glass posture
+### Sub-decision 5 — Break-glass posture (role-based detection)
 
 **Decision shape:** platform-operator break-glass uses `is_platform_operator_break_glass_active()` role-based check (Sub-decision 1 helper). The session-GUC `app.platform_operator_break_glass` referenced in CDM v1.5 amendment §4.NEW1-4 RLS policies is **DEPRECATED at Phase 4 cutover**. All future break-glass access uses dedicated `platform_operator_*` roles per Sub-decision 1's role-set enumeration. Cross-tenant break-glass access still requires I-024 platform-floor approval (operator-gated; not auto-proceedable per CLAUDE.md hard-floor item 5).
+
+### Sub-decision 5a — Target-tenant break-glass binding (R1 HIGH-2 closure 2026-05-20)
+
+**Decision shape:** the canonical RLS policy under SI-024 (shown in Sub-decision 1) only permits break-glass access to the PLATFORM_TENANT_ID sentinel row, NOT to a target tenant's PHI rows. This is insufficient for legitimate cross-tenant break-glass per I-024 (e.g., DR recovery operator needs to read victim-tenant PHI to validate DR completeness; compliance auditor needs to inspect a specific tenant's audit chain during regulatory investigation).
+
+**Target-tenant break-glass binding contract:**
+
+1. **Approval mechanism (out-of-RLS-policy):** target-tenant break-glass requires a dedicated `break_glass_approval` table entry (CDM v1.5+ entity; canonical schema deferred to Sub-decision 5a follow-on detail OR a separate companion SI):
+   ```sql
+   CREATE TABLE break_glass_approval (
+       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       operator_role TEXT NOT NULL,            -- 'platform_operator_break_glass' | etc. (Sub-decision 5 enum)
+       operator_user_id UUID NOT NULL,         -- The human-identity per iam_principal_human_binding (Sprint 18 RBAC)
+       target_tenant_id tenant_id_t NOT NULL,
+       approval_reason TEXT NOT NULL,          -- Free-text + structured tags
+       authorized_by_compliance_officer_user_id UUID NOT NULL,
+       authorized_by_cto_user_id UUID NOT NULL,
+       CONSTRAINT break_glass_approval_dual_control CHECK (authorized_by_compliance_officer_user_id <> authorized_by_cto_user_id),
+       approved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+       expires_at TIMESTAMPTZ NOT NULL,        -- Time-bound; canonical max 4 hours per request
+       revoked_at TIMESTAMPTZ,                 -- Compliance Officer or CTO can revoke before expires_at
+       CONSTRAINT break_glass_approval_time_bound CHECK (expires_at > approved_at AND expires_at <= approved_at + INTERVAL '4 hours')
+   );
+   ```
+
+2. **RLS helper extension:**
+   ```sql
+   -- Canonical target-tenant break-glass check.
+   -- Returns: TRUE iff session role is platform-operator AND there's an active approval for target_tenant_id.
+   CREATE FUNCTION is_target_tenant_break_glass_active(target_tenant_id tenant_id_t) RETURNS BOOLEAN AS $$
+   BEGIN
+       IF NOT is_platform_operator_break_glass_active() THEN
+           RETURN FALSE;
+       END IF;
+       RETURN EXISTS (
+           SELECT 1 FROM public.break_glass_approval
+           WHERE break_glass_approval.target_tenant_id = is_target_tenant_break_glass_active.target_tenant_id
+               AND operator_role = current_user
+               AND operator_user_id = current_setting('app.actor_human_id', false)::UUID
+               AND approved_at <= now()
+               AND expires_at > now()
+               AND revoked_at IS NULL
+       );
+   END;
+   $$ LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = pg_catalog, public;
+   ```
+
+3. **Canonical RLS policy under SI-024 v1.0 (revised for target-tenant break-glass):**
+   ```sql
+   CREATE POLICY <table>_tenant_isolation ON <table>
+       USING (
+           tenant_id = current_tenant_id_strict()
+           OR is_target_tenant_break_glass_active(tenant_id)
+           OR (is_platform_operator_break_glass_active()
+               AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+       )
+       WITH CHECK (
+           tenant_id = current_tenant_id_strict()
+           OR is_target_tenant_break_glass_active(tenant_id)
+       );
+   ```
+
+4. **Audit emission:** every invocation of `is_target_tenant_break_glass_active()` that returns TRUE emits Cat A audit event `tenant_context.target_tenant_break_glass_invoked` (Sub-decision 8 below adds this to the event taxonomy) with operator_role + operator_user_id + target_tenant_id + approval_id references.
+
+5. **Time-bound enforcement:** max 4-hour approval window per request; renewal requires a NEW dual-control authorization. The `expires_at` check is encoded in `is_target_tenant_break_glass_active()`, so expiry is enforced at query-time, not just at approval-time.
+
+6. **Compensating control:** post-action review — every break_glass_approval row triggers an after-the-fact Compliance Officer review within 24h. The review record is a child entity of `break_glass_approval` (schema deferred to follow-on detail).
+
+**Why this shape:** addresses Pass-1 HIGH-2 finding that the canonical policy only exposed platform-sentinel rows. Target-tenant break-glass is now first-class in the canonical pattern with explicit approval + time-bound + audit + dual-control. Operators cannot bypass RLS via raw SQL because the FORCE ROW LEVEL SECURITY discipline (Sub-decision 1's canonical policy) applies to break-glass roles too.
 
 ### Sub-decision 6 — Performance + caching
 
@@ -204,8 +303,11 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 
 - `tenant_context.hardened_helper_role_check_rejected` (Cat A; P2 keyed by 'platform') — fires when `current_tenant_id_strict()` rejects a non-allowlisted role.
 - `tenant_context.platform_operator_break_glass_invoked` (Cat A; P2 keyed by 'platform') — fires when `is_platform_operator_break_glass_active()` returns TRUE.
+- `tenant_context.target_tenant_break_glass_invoked` (Cat A; P2 keyed by 'platform' + target_tenant_id reference) — R1 HIGH-2 closure: fires when `is_target_tenant_break_glass_active()` returns TRUE; carries operator_role + operator_user_id + target_tenant_id + break_glass_approval.id references.
 - `tenant_context.guc_set_without_role_authority_attempt` (Cat A; P2 keyed by 'platform') — fires when a role lacking write-authority attempts to SET `app.tenant_id` (requires PostgreSQL session-trigger or event-trigger to detect; implementation deferred to Sub-decision 9).
-- `tenant_context.cross_tenant_read_blocked_by_hardened_helper` (Cat A; P2 keyed by 'platform') — fires when the hardened-helper policy blocks a read that would have been permitted under raw GUC (telemetry for Phase 3 dual-policy state).
+- `tenant_context.cross_tenant_read_blocked_by_hardened_helper` (Cat A; P2 keyed by 'platform') — fires when the hardened-helper RESTRICTIVE policy blocks a read that would have been permitted under raw-GUC permissive policy (telemetry for Phase 3 dual-policy state).
+- `tenant_context.break_glass_approval_created` (Cat A; P2 keyed by 'platform') — fires on INSERT to `break_glass_approval` table; carries operator + authorizing-officers + target_tenant_id + reason + time-bound.
+- `tenant_context.break_glass_approval_revoked` (Cat A; P2 keyed by 'platform') — fires on `revoked_at` UPDATE; carries who-revoked + reason.
 
 ### Sub-decision 9 — INVARIANTS amendment
 
@@ -238,12 +340,34 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 5. **OQ5 — I-036 platform-floor invariant (Sub-decision 9) — timing.** Recommendation: I-036 lands at INVARIANTS v5.6 co-bumped with the FIRST Phase 4 entity cutover, not at SI-024 ratification itself (avoids declaring an invariant that no entity yet satisfies).
 6. **OQ6 — Codex pre-ratification target.** Recommendation: 3-4 rounds under two-pass discipline (per CLAUDE.md `16d7244` standard cadence; OQ-I quantum-resistance roadmap precedent).
 7. **OQ7 — Application-middleware contract.** Recommendation: SI-024 specifies the SQL-layer contract; the Track 2 application-middleware implementation files a separate spec stipulating how the middleware satisfies the contract. The middleware spec is OUT-OF-SCOPE for SI-024 promotion; SI-024 promotion does NOT block on it.
+8. **OQ-NEW1 — SI-024.1 cryptographic-binding follow-on ratifier date/owner (R1 CRITICAL-2 closure 2026-05-20).** Recommendation: SI-024 v1.0 promotion is CONDITIONAL on Evans committing to a SI-024.1 ratifier date + owner-triad. Suggested commitment: SI-024.1 v0.1 DRAFT authored within 30 days of SI-024 v1.0 promotion; ratifier ceremony within 90 days. Without this commitment, SI-024 v1.0 should NOT be promoted — the residual compromised-middleware-credential risk is too high to leave open indefinitely.
+9. **OQ-NEW2 — Phase 4 cutover gating on SI-024.1 readiness (R1 CRITICAL-2 closure 2026-05-20).** Recommendation: Phase 4 cutover of SI-024 v1.0 (removing raw-GUC permissive policy; hardened helper becomes sole canonical enforcement) gates on SI-024.1 ratification + implementation. RATIONALE: Phase 4 commits the corpus to the role-constrained-GUC pattern as canonical floor; if SI-024.1 ratifies cryptographic binding mid-Phase-4, the SI-024 v1.0 RLS policies would need a second migration. Better to align: complete SI-024 v1.0 Phases 1-3 (foundation + RESTRICTIVE coexistence + telemetry) WHILE SI-024.1 is being authored + ratified; cutover (Phase 4) when SI-024.1 lands and its cryptographic binding is integrated into the helper.
 
 ---
 
 ## 5. Codex pre-ratification status
 
-**v1.0 v0.1 DRAFT 2026-05-20:** pre-Codex-review; awaiting Pass-1 source-first independent review per CLAUDE.md `16d7244` two-pass discipline.
+**v1.0 v0.1 DRAFT 2026-05-20:** pre-Codex-review; authored under auto-proceed continuation per CLAUDE.md `f483535`.
+
+**v0.1 R1 Pass-1 + Pass-2 closure 2026-05-20:** 2 CRITICAL + 2 HIGH closed inline (Pass-2 synthesis: scope-narrowing on CRITICAL-2 is legitimate inline closure, not hard-floor item 6).
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 Pass-1 | CRITICAL-1 SECURITY DEFINER current_user gates on definer not caller; CRITICAL-2 Option B-1 doesn't close compromised-middleware-credential threat; HIGH-1 dual-policy migration doesn't enforce intersection (PG RLS policies OR-combine by default); HIGH-2 break-glass policy only allows platform-sentinel rows | All 4 surfaced |
+| R1 Pass-2 synthesis | Confirmed CRITICAL-1 + HIGH-1 + HIGH-2 inline-closeable per Claude classification; **DIVERGED on CRITICAL-2**: Claude classified as hard-floor item 6 (B-2 promotion would be net-new architecture); Pass-2 reframed as inline-closeable via scope-narrowing — narrowing the SI's own scope claim is NOT hard-floor item 6 (only B-2 promotion would be). Synthesis: hybrid C path (narrow scope + queue SI-024.1) is the legitimate inline closure. | All 4 closed inline |
+
+**R1 closure pattern recap:**
+
+- **CRITICAL-1 (closed inline):** helpers changed from `SECURITY DEFINER` to `SECURITY INVOKER`. `current_user` now correctly reports the actual caller's role under INVOKER semantics (not the function owner). Search_path hardening preserved via `SET search_path = pg_catalog, public`. Negative-path test specified in Sub-decision 7 to validate that non-allowlisted roles cannot pass.
+- **CRITICAL-2 (closed inline via scope-narrowing — Pass-2 synthesis Option C hybrid):** problem statement narrowed: SI-024 v1.0 closes the **direct-DB-role spoofing** class only; does NOT claim to close compromised-middleware-credential spoofing. Threat-model coverage matrix added making the residual risk explicit. Promotion of SI-024 v1.0 CONDITIONAL on Evans committing to SI-024.1 ratifier date/owner (new OQ-NEW1). Phase 4 cutover gating on SI-024.1 readiness (new OQ-NEW2) avoids two-migration churn.
+- **HIGH-1 (closed inline):** Phase 2 RLS policy changed to `CREATE POLICY ... AS RESTRICTIVE` so the new policy intersects (AND-combines) with the existing permissive raw-GUC policy. Canonical Phase 2 DDL pattern documented. Integration test required before Phase 4 cutover validating the intersection semantics in production.
+- **HIGH-2 (closed inline):** new Sub-decision 5a authoring target-tenant break-glass binding. `break_glass_approval` table with dual-control authorization + time-bound (4-hour max) + revocation. New helper `is_target_tenant_break_glass_active(target_tenant_id)` checks: caller's role is platform_operator + active approval row exists for (operator_role, operator_user_id, target_tenant_id). Canonical RLS policy revised to call the new helper. 2 new audit events (`target_tenant_break_glass_invoked` + `break_glass_approval_created` + `break_glass_approval_revoked`).
+
+**Pass-2 verdict:** the closure path is converged between Claude + Pass-2 (synthesis). Both agree on the next concrete step: inline closures + OQ-NEW1/2 for SI-024.1 follow-on. **Auto-proceed per CLAUDE.md `f483535`**: Claude executes the closures inline; surfaces three-way as informational post-action report.
+
+**Discipline observation:** Pass-2 refined Claude's hard-floor item 6 classification of CRITICAL-2. Claude treated "B-2 promotion to v1.0" as the only possible response to CRITICAL-2; Pass-2 showed that scope-narrowing of the SI's own claim is a third option that is NOT hard-floor item 6 (the discriminator is "net-new architecture" — narrowing scope adds no architecture). This is exactly the kind of framing-defect catch the two-pass discipline is designed to surface. Pass-1's independent finding + Pass-2's synthesis together produced a closure path Claude alone would have escalated unnecessarily.
+
+**R2 verification queued.** Codex re-invocation in standard adversarial-review framing on the v0.2 (post-R1-closures) state.
 
 Authored on `spec/si-024-hardened-tenant-platform-rls-helper-2026-05-20` branch off main at `5afdc82` (post-P-029 + Addendum 57 cockpit refresh).
 
