@@ -1,7 +1,7 @@
 # CDM v1.4 → v1.5 Amendment (SI-021 follow-on)
 
-**Version:** 0.5 DRAFT
-**Status:** R4 HIGH CLOSED INLINE (phase-immutability rules tightened to freeze on entry to completed state). R5 verification PENDING (per OQ5 boundary up to R5).
+**Version:** 0.6 DRAFT — RATIFIER-READY at §10-cadence boundary (R5 final boundary close 2026-05-20)
+**Status:** R5 HIGH closed inline (composite FK binding supersession anchor to same-tenant + same-chain + same-sequence corruption-evidence). §10-cadence boundary reached per SI-021 R5-precedent. CYCLE COMPLETE pending Evans's merge decision (dual-recommendation).
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-028 (SI-021 v1.0 RATIFIED) OQ4 canonical decision — file SI-021's 4 new audit-chain-archival entities as a CDM v1.4 → v1.5 amendment cycle co-bumped with AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4.
 **Owner:** SRE Lead + Security Engineering Lead + Compliance Officer (same as SI-021 owner triad).
@@ -448,6 +448,10 @@ CREATE TABLE audit_event_hash_chain_anchor_corruption_evidence (
         UNIQUE (transparency_log_id, transparency_log_entry_index),
     CONSTRAINT corruption_evidence_single_per_corrupted_seq
         UNIQUE (corrupted_partition, corrupted_partition_key, corrupted_sequence_no),
+    -- R5 HIGH closure 2026-05-20: composite UNIQUE on (id, tenant_id, corrupted_partition, corrupted_partition_key, corrupted_sequence_no)
+    -- targetable by composite FK from §4.NEW3 anchor's supersession columns (binds evidence to same tenant + chain + sequence).
+    CONSTRAINT corruption_evidence_composite_supersession_target
+        UNIQUE (id, tenant_id, corrupted_partition, corrupted_partition_key, corrupted_sequence_no),
     -- P2 tenant-consistency (Option A consistency constraint #2 + #3): tenant_id derived from corrupted chain's partition/partition_key
     CONSTRAINT corruption_evidence_p2_tenant_consistency CHECK (
         corrupted_partition = 'P1'
@@ -496,11 +500,15 @@ CREATE TRIGGER audit_event_hash_chain_anchor_corruption_evidence_p1_tenant_match
     BEFORE INSERT ON audit_event_hash_chain_anchor_corruption_evidence
     FOR EACH ROW EXECUTE FUNCTION audit_event_hash_chain_anchor_corruption_evidence_p1_tenant_match();
 
--- Forward-reference FK from §4.NEW3 anchor to this corruption-evidence table
+-- Forward-reference FK from §4.NEW3 anchor to this corruption-evidence table.
+-- R5 HIGH closure 2026-05-20: COMPOSITE FK on (supersedes_corruption_evidence_id, tenant_id, partition, partition_key, supersedes_corrupted_sequence_no)
+-- binding the supersession-anchor row to the corruption-evidence row that describes the SAME (tenant, chain, sequence). Replaces the prior id-only FK
+-- which allowed a committed supersession anchor to cite valid evidence for a different chain or tenant while claiming to supersede this chain's sequence.
+-- The composite FK targets the corruption_evidence_composite_supersession_target UNIQUE constraint declared in §4.NEW4 above.
 ALTER TABLE audit_event_hash_chain_anchor
-    ADD CONSTRAINT audit_event_hash_chain_anchor_corruption_evidence_fk
-        FOREIGN KEY (supersedes_corruption_evidence_id)
-        REFERENCES audit_event_hash_chain_anchor_corruption_evidence(id);
+    ADD CONSTRAINT audit_event_hash_chain_anchor_corruption_evidence_composite_fk
+        FOREIGN KEY (supersedes_corruption_evidence_id, tenant_id, partition, partition_key, supersedes_corrupted_sequence_no)
+        REFERENCES audit_event_hash_chain_anchor_corruption_evidence(id, tenant_id, corrupted_partition, corrupted_partition_key, corrupted_sequence_no);
 ```
 
 **Cross-references:** SI-021 §2 Sub-decision 7 (phase-state-aware corruption-evidence handling); Sprint 18 RBAC v1.2 §3 Group C (dual-control roles for break-glass-class operations); SI-021 §3 Cat A audit events `corruption_evidence_recorded_pre_phase_4`.
@@ -707,6 +715,31 @@ All 4 chain tables (§4.NEW1 audit_event_hash_chain + §4.NEW2 audit_event_hash_
 **0 hard-floor item 6 violations on R4.** In-scope correction of a logic bug introduced in R3.
 
 **R5 verification queued.** Per SI-021's own R5-cadence-boundary precedent (also applied to this cycle), R5 is the canonical final boundary round. If R5 returns APPROVE OR only-known-OQ-deferrals, the cycle closes at §10-cadence boundary regardless of residual findings (per SI-021 R5-close pattern).
+
+**v0.6 R5 closure 2026-05-20 (§10-cadence boundary):** 1 HIGH closed inline.
+
+| Round | Findings | Status |
+|---|---|---|
+| R5 | **HIGH** supersession FK does not bind evidence to same chain or tenant (id-only FK allowed a committed supersession anchor to cite valid evidence for a different chain or tenant while claiming to supersede this chain's sequence; broke the forensic repair trail) | Closed inline at §10-cadence boundary |
+
+**R5 closure pattern recap:**
+
+- **HIGH (closed inline):** Composite UNIQUE constraint added to `audit_event_hash_chain_anchor_corruption_evidence`: `UNIQUE (id, tenant_id, corrupted_partition, corrupted_partition_key, corrupted_sequence_no)` targetable by composite FK. The supersession FK from `audit_event_hash_chain_anchor` rewritten as a composite: `FOREIGN KEY (supersedes_corruption_evidence_id, tenant_id, partition, partition_key, supersedes_corrupted_sequence_no) REFERENCES audit_event_hash_chain_anchor_corruption_evidence(id, tenant_id, corrupted_partition, corrupted_partition_key, corrupted_sequence_no)`. This binds the supersession anchor's row to the corruption-evidence row that describes the SAME (tenant, chain, sequence) — Codex's recommended composite-binding pattern is implemented exactly. Cryptographic + relational integrity now match: the audit-chain repair trail can be independently verified row-by-row without ambiguity about which corrupted sequence is being superseded.
+- **0 hard-floor item 6 violations on R5.** In-scope correction of supersession-FK weakness.
+
+**Status at R5 close (§10-cadence boundary):** **RATIFIER-READY-AT-§10-CADENCE-BOUNDARY** per SI-021 R5-precedent. Per the precedent established at SI-021 R5 close ("R5 is the final §10-cadence boundary round regardless of residual findings"), this cycle closes at R5. No R6 verification is run — any remaining residual findings become known OQs for future cycles (e.g., SI-024 cross-CDM hardening cycle which already covers OQ6 hardened-helper).
+
+**Cumulative cycle metrics:**
+- **R1-R5: 11 findings closed across 5 rounds (1 CRITICAL + 9 HIGH + 1 MED).**
+- **0 hard-floor item 6 violations** across all 5 rounds.
+- **1 ratifier mini-review** (Option A chain-schema tenant-isolation via dual-recommendation process — codification trigger).
+- **1 cross-CDM deferral** (OQ6 hardened-helper to future SI-024).
+- **2 closure shape novelties documented** for canonical process:
+  - Dual-recommendation process codified in CLAUDE.md (commit `f3a6469`; later broadened at `4f42a00`).
+  - Partial-inline-close + cross-CDM-defer closure shape (third option alongside full-inline-close + ERR-escalation), Codex-validated at R3.
+- **Cycle duration:** 5 Codex rounds + 1 ratifier mini-review + 2 CLAUDE.md amendments (codifications) — all on 2026-05-20.
+
+**Authored on** `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` branch off main at `8d44bde` (post-P-028 ratification). Merged main `f3a6469` (CLAUDE.md dual-recommendation codification) + `4f42a00` (CLAUDE.md broadened rule) into branch 2026-05-20.
 
 Authored on `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` branch off main at `8d44bde` (post-P-028 ratification). Merged main `f3a6469` (CLAUDE.md dual-recommendation codification) into branch 2026-05-20.
 
