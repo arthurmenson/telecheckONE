@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.8 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycles 1+2+3 corrections applied + lockstep promotion artifacts pre-authored
-**Status:** Pre-merge cycle-3: 1 HIGH + 1 MED closed inline (P-030 + Registry v2.16 → v2.17 pre-authored as lockstep; Sub-decision 7 Test 2 corrected from RAISE-expectation to NULL-return-expectation per v0.6 design). Pre-merge cycle-4 re-verification queued under two-pass.
+**Version:** 1.0 v0.9 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycles 1+2+3+4 corrections applied + OQ-NEW1/2 ratification inline + lockstep complete
+**Status:** Pre-merge cycle-4: 1 HIGH + 2 MED closed inline (OQ-NEW1 SI-024.1 ratifier commitment recorded inline via auto-proceed + AUDIT_EVENTS count reconciled to 6 + Sub-decision 5a stale audit requirement deferred to SI-024.1). Pre-merge cycle-5 re-verification queued under two-pass.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -429,7 +429,7 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
        );
    ```
 
-4. **Audit emission:** every invocation of `is_target_tenant_break_glass_active()` that returns TRUE emits Cat A audit event `tenant_context.target_tenant_break_glass_invoked` (Sub-decision 8 below adds this to the event taxonomy) with operator_role + operator_user_id + target_tenant_id + approval_id references.
+4. **Audit emission (revised at pre-merge cycle-4 MED-2 closure 2026-05-20):** ~~every invocation of `is_target_tenant_break_glass_active()` that returns TRUE emits Cat A audit event~~ — **DEFERRED to SI-024.1** per acknowledged simplification #8. PostgreSQL STABLE functions used in RLS predicates cannot perform side-effecting INSERTs. SI-024 v1.0 audit trail for cross-tenant break-glass access comes from **`tenant_context.break_glass_approval_created`** (Cat A; records authorization at INSERT to break_glass_approval) and **`tenant_context.break_glass_approval_revoked`** (Cat A; records revocation at revoked_at UPDATE). Per-invocation audit (one event per RLS-predicate-pass) is the explicit known gap; SI-024.1 will route break-glass through an explicit `begin_target_tenant_break_glass_session()` SECURITY DEFINER procedure (VOLATILE; emits audit at session start; the RLS helper then checks active-session vs. active-approval). The implementer contract for SI-024 v1.0: **do NOT attempt RLS-side audit emission from the STABLE helper** — it will fail (PostgreSQL refuses side-effecting writes from STABLE functions) and would represent reimplementing a defect that R3-R4 + cycle-2 closures already rejected.
 
 5. **Time-bound enforcement:** max 4-hour approval window per request; renewal requires a NEW dual-control authorization. The `expires_at` check is encoded in `is_target_tenant_break_glass_active()`, so expiry is enforced at query-time, not just at approval-time.
 
