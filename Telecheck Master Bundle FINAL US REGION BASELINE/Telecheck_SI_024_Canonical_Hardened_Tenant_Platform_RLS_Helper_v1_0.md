@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.13 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + Pass-2 B+ + cycle-6 + cycle-7 closures applied
-**Status:** Cycle-7 HIGH closure: Phase 2 RLS DDL pattern revised to add companion PERMISSIVE break-glass admission policy (POLICY 2) alongside the existing permissive raw-GUC policy (POLICY 1) and the new RESTRICTIVE hardened-helper intersection policy (POLICY 3). PostgreSQL RLS composition semantics now correct: ALL restrictive policies pass AND at least one permissive passes; legitimate cross-tenant break-glass admitted; spoofing denied + telemetry; tenant reads work normally. Integration test specified.
+**Version:** 1.0 v0.14 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + Pass-2 B+ + cycles 6-7-8 closures applied
+**Status:** Cycle-8 HIGH closure: Phase 2 RLS write-admission tightened — POLICY 2 scoped to FOR SELECT (no WITH CHECK clause; reads only); POLICY 3 WITH CHECK constrained to tenant_id = current_tenant_id_strict() (break-glass branches REMOVED from WRITE-side; cross-tenant writes blocked at canonical layer until SI-024.1). Cycle-8 MED: P-030 metadata refreshed to v0.14 + final cycle state.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -207,25 +207,27 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
    -- POLICY 1 (EXISTING; preserved): Permissive raw-GUC tenant-isolation policy already in place from pre-SI-024 baseline.
    -- (Not authored by SI-024; preserved during Phase 2 coexistence; DROPPED at Phase 4 cutover.)
 
-   -- POLICY 2 (NEW at Phase 2; permissive): Break-glass admission policy.
-   -- Required because PostgreSQL admits a row IFF (all RESTRICTIVE policies pass) AND (at least one PERMISSIVE passes).
-   -- The existing raw-GUC permissive policy (POLICY 1) only passes for tenant_id = current_setting('app.tenant_id'),
-   -- so it FAILS for legitimate cross-tenant break-glass reads. POLICY 2 provides the permissive admission path
-   -- for those break-glass reads; POLICY 3 (restrictive) then enforces the hardened helper verification.
+   -- POLICY 2 (NEW at Phase 2; permissive; SELECT-only): Break-glass READ-admission policy.
+   -- Cycle-8 HIGH closure 2026-05-20: scoped to FOR SELECT and NO WITH CHECK clause. Break-glass is a READ
+   -- path only during Phase 2; cross-tenant WRITES (INSERT/UPDATE/DELETE) remain BLOCKED until SI-024.1
+   -- defines the write authorization model with per-write audit. This aligns with the production-break-glass-
+   -- blocked-until-SI-024.1 guidance in Sub-decision 5a.
    CREATE POLICY <table>_break_glass_permissive_admission
        ON <table>
+       FOR SELECT
        AS PERMISSIVE
        USING (
            is_target_tenant_break_glass_active(tenant_id)
            OR (is_platform_operator_break_glass_active()
                AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
-       )
-       WITH CHECK (
-           is_target_tenant_break_glass_active(tenant_id)
        );
+   -- No WITH CHECK clause: FOR SELECT policies have no write semantics.
 
    -- POLICY 3 (NEW at Phase 2; restrictive): Hardened-helper intersection policy.
    -- ALL restrictive policies must pass; this enforces the hardened helper verification on every admitted row.
+   -- Cycle-8 HIGH closure 2026-05-20: WITH CHECK constrained to `tenant_id = current_tenant_id_strict()` only.
+   -- Break-glass branches REMOVED from WITH CHECK so cross-tenant WRITES are NOT admitted during Phase 2.
+   -- The USING clause retains break-glass branches for cross-tenant READS (which POLICY 2 admits permissively).
    CREATE POLICY <table>_tenant_isolation_hardened_intersection
        ON <table>
        AS RESTRICTIVE
@@ -236,8 +238,8 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
                AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
        )
        WITH CHECK (
+           -- WRITE-side: no break-glass branches. Cross-tenant writes blocked at the canonical layer until SI-024.1.
            tenant_id = current_tenant_id_strict()
-           OR is_target_tenant_break_glass_active(tenant_id)
        );
    ```
 

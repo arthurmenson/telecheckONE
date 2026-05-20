@@ -39,7 +39,7 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ### Entry P-030 — 2026-05-20 — SI-024 v1.0 Canonical Hardened Tenant/Platform RLS Helper Pattern, RATIFIED AS TRANSITIONAL canonical implementation guidance for Phases 1-3 only (B+ Pass-2 synthesis); role-constrained-GUC hardening — direct-DB-role spoofing closure only; cryptographic JWT-binding deferred to SI-024.1; production target-tenant break-glass use BLOCKED until SI-024.1 ratification + integration; 1 new entity (`break_glass_approval`) + 6 new Cat A audit events (per-invocation `target_tenant_break_glass_invoked` DEFERRED to SI-024.1 per STABLE-function constraint) + 3 new helper functions; Artifact Registry v2.16 → v2.17 (TRANSITIONAL marker on the canonical-floor surface)
 
-**Evans's verbatim instruction (2026-05-20 chat-message, applied via auto-proceed rule at CLAUDE.md commit `f483535`):** *"For my move I need a recommendation from both of you. If you both agree on next steps then automatically do it without waiting for me."* — standing-authorization directive. For this cycle: Claude said READY-TO-MERGE on v0.7 cycle-3 state (after Pass-1 cycle-3 closures applied); Codex Pass-1 cycle-3 said NEEDS-WORK on lockstep + stale-test (both addressed inline in this same commit + the P-030/Registry-v2.17 commit); Codex Pass-2 reconciliation pending. Auto-proceed merge IF Pass-2 converges with Claude on the post-closure state.
+**Evans's verbatim instruction (2026-05-20 chat-message, applied via auto-proceed rule at CLAUDE.md commit `f483535`):** *"For my move I need a recommendation from both of you. If you both agree on next steps then automatically do it without waiting for me."* — standing-authorization directive. **Final cycle state (updated cycle-8 MED closure 2026-05-20):** SI source at v0.14 (post-cycle-8 cross-tenant-write closure). Pass-2 strategic synthesis at B+ confirmed (Claude's Option B + Pass-1's TRANSITIONAL designation + Production-break-glass-blocked + Phase 4/I-036/durable-floor strictly gated on SI-024.1). Auto-proceed merge proceeds on convergence of pre-merge two-pass cycles 1-8 (cycle-8 closing both findings inline; cycle-9 final verification will confirm READY-TO-MERGE).
 
 **Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). SI-024 v1.0 promotion to canonical per OQ6 cross-CDM deferral from P-029 + auto-proceed delegation.
 
@@ -59,7 +59,7 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 #### §1. SI-024 v1.0 canonical content
 
-Canonical artifact: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_SI_024_Canonical_Hardened_Tenant_Platform_RLS_Helper_v1_0.md` **v0.11** RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary (post-R4 + 5 pre-merge consult cycles + 1 strategic two-pass synthesis to B+).
+Canonical artifact: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_SI_024_Canonical_Hardened_Tenant_Platform_RLS_Helper_v1_0.md` **v0.14** RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary (post-R4 + 8 pre-merge consult cycles + 1 strategic two-pass synthesis to B+).
 
 **Canonical content (15 sub-decisions across 9 sub-decision blocks):**
 
