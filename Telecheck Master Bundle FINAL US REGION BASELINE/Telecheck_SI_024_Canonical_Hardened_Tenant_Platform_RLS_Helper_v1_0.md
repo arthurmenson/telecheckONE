@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.4 DRAFT
-**Status:** R3 closed: 2 HIGH inline (split-helper pattern with INVOKER outer + DEFINER inner for SET-ROLE/pool compatibility; revoked_at transition guard authored inline; authorizer policy split into SELECT + UPDATE with tight WITH CHECK). R4 verification PENDING.
+**Version:** 1.0 v0.5 DRAFT — RATIFIER-READY at §10-cadence boundary (R4 boundary close 2026-05-20)
+**Status:** R4 closed: 1 HIGH inline (CONSOLIDATED single-DEFINER design with EXECUTE-GRANT trust-anchor; replaces R3 split-helper which had direct-invocation bypass). §10-cadence boundary reached per OQ6 3-4 round target.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -251,25 +251,22 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
    );
    ```
 
-2. **RLS helper extension (R3 HIGH-1 closure 2026-05-20: SPLIT into SECURITY INVOKER outer wrapper + SECURITY DEFINER inner privileged lookup; the outer's `current_user` correctly reports the post-`SET ROLE` effective role; the inner receives the verified caller-role as a parameter):**
+2. **RLS helper extension (R4 HIGH closure 2026-05-20: CONSOLIDATED into single SECURITY DEFINER function using EXECUTE-GRANT as the trust anchor — replaces the R3 split-helper design which had a direct-invocation bypass):**
 
-   Rationale: under PostgreSQL `SECURITY DEFINER`, neither `session_user` (the LOGIN role; unchanged by SET ROLE) nor `current_user` (the function OWNER under DEFINER) reports the post-`SET ROLE` effective role of the caller. The R2 design used `session_user` which breaks for the documented connection-pool pattern where pools log in as a generic `pool_role` and `SET ROLE platform_operator_*` per request. The R3 split-helper design solves this by doing the role-membership check in the OUTER wrapper under SECURITY INVOKER (where `current_user` correctly reports the post-`SET ROLE` effective role), then calling the INNER privileged-lookup function with the verified effective-role passed as a parameter.
+   Rationale: the R3 split-helper design (outer INVOKER + inner DEFINER with caller-supplied params) had a critical bypass — GRANT EXECUTE on the inner function to PUBLIC let any SQL role call it directly with forged identity parameters, defeating the outer wrapper. The R4 design replaces this with a single SECURITY DEFINER function where the **EXECUTE GRANT itself is the trust anchor**: only roles in the platform-operator membership set are granted EXECUTE, so the fact that the function executes proves the caller has at least one platform-operator membership. The function then matches approvals by `operator_user_id` (the caller's human-id from the `app.actor_human_id` session GUC populated by middleware post-JWT-verification).
 
    ```sql
-   -- OUTER WRAPPER: SECURITY INVOKER.
-   -- current_user under INVOKER correctly reports the post-SET-ROLE effective role of the caller.
-   -- Performs role-membership check + extracts human-id; if both pass, calls the INNER privileged lookup.
+   -- CONSOLIDATED helper: single SECURITY DEFINER function with EXECUTE-GRANT as the trust anchor.
+   -- The function is GRANTed EXECUTE ONLY to the three platform-operator roles; if it executes,
+   -- the caller has at least one platform-operator membership (PostgreSQL EXECUTE-grant semantics).
+   -- The function does NOT trust caller-supplied parameters; it reads only the human-id from session GUC
+   -- (which middleware populates post-JWT-verification) and the target_tenant_id from the RLS predicate context.
    CREATE FUNCTION is_target_tenant_break_glass_active(target_tenant_id tenant_id_t) RETURNS BOOLEAN AS $$
    DECLARE
-       effective_role TEXT := current_user;   -- post-SET-ROLE effective role under INVOKER
        caller_human_id UUID;
    BEGIN
-       -- Role-membership check on the post-SET-ROLE effective role.
-       IF NOT (pg_has_role(effective_role, 'platform_operator_break_glass', 'USAGE')
-           OR pg_has_role(effective_role, 'platform_operator_dr_recovery', 'USAGE')
-           OR pg_has_role(effective_role, 'platform_operator_compliance_audit', 'USAGE')) THEN
-           RETURN FALSE;
-       END IF;
+       -- NO inline role-membership check needed: EXECUTE GRANT (below) gates which roles can invoke this.
+       -- Reaching this body means the caller's effective role has EXECUTE membership in the granted set.
        -- Human-identity resolution via session GUC populated by middleware at session-start.
        BEGIN
            caller_human_id := current_setting('app.actor_human_id', false)::UUID;
@@ -278,28 +275,14 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
                -- Operator's human-id not bound → break-glass check fails closed.
                RETURN FALSE;
        END;
-       -- Delegate to INNER privileged lookup with verified parameters.
-       RETURN _internal_check_break_glass_approval(target_tenant_id, effective_role, caller_human_id);
-   END;
-   $$ LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = pg_catalog, public;
-
-   -- INNER PRIVILEGED LOOKUP: SECURITY DEFINER.
-   -- Owned by sec_break_glass_lookup which has SELECT on break_glass_approval + RLS policy permitting its reads.
-   -- Trust model: the OUTER wrapper verified the caller's effective_role + human_id under INVOKER semantics;
-   -- this function trusts those parameters and performs the privileged table lookup.
-   -- The two-prefixed _ underscore + REVOKE FROM PUBLIC + specific GRANT to the outer wrapper enforce
-   -- that this function is only callable through the canonical wrapper path.
-   CREATE FUNCTION _internal_check_break_glass_approval(
-       p_target_tenant_id tenant_id_t,
-       p_caller_effective_role TEXT,
-       p_caller_human_id UUID
-   ) RETURNS BOOLEAN AS $$
-   BEGIN
+       -- Approval lookup runs under DEFINER privileges (sec_break_glass_lookup has SELECT on break_glass_approval).
+       -- Match by (target_tenant_id, operator_user_id, active-window). Does NOT match by operator_role —
+       -- a human with multiple platform-operator memberships can use any active approval issued to them
+       -- (acknowledged v1.0 simplification; SI-024.1 cryptographic JWT-binding closes this).
        RETURN EXISTS (
            SELECT 1 FROM public.break_glass_approval
-           WHERE break_glass_approval.target_tenant_id = p_target_tenant_id
-               AND pg_has_role(p_caller_effective_role, operator_role, 'USAGE')
-               AND operator_user_id = p_caller_human_id
+           WHERE break_glass_approval.target_tenant_id = is_target_tenant_break_glass_active.target_tenant_id
+               AND operator_user_id = caller_human_id
                AND approved_at <= now()
                AND expires_at > now()
                AND revoked_at IS NULL
@@ -307,16 +290,20 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
    END;
    $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
 
-   -- Function ownership + grants:
-   -- ALTER FUNCTION _internal_check_break_glass_approval(tenant_id_t, TEXT, UUID) OWNER TO sec_break_glass_lookup;
-   -- REVOKE EXECUTE ON FUNCTION _internal_check_break_glass_approval(tenant_id_t, TEXT, UUID) FROM PUBLIC;
-   -- GRANT EXECUTE ON FUNCTION _internal_check_break_glass_approval(tenant_id_t, TEXT, UUID)
-   --   TO PUBLIC;   -- Callable from the INVOKER wrapper which itself has restricted EXECUTE.
+   -- Function ownership + grants (the trust-anchor mechanism):
+   -- ALTER FUNCTION is_target_tenant_break_glass_active(tenant_id_t) OWNER TO sec_break_glass_lookup;
    -- REVOKE EXECUTE ON FUNCTION is_target_tenant_break_glass_active(tenant_id_t) FROM PUBLIC;
    -- GRANT EXECUTE ON FUNCTION is_target_tenant_break_glass_active(tenant_id_t)
-   --   TO platform_operator_break_glass, platform_operator_dr_recovery, platform_operator_compliance_audit,
-   --      app_middleware_writer, app_middleware_reader_via_writer_proxy;
+   --   TO platform_operator_break_glass, platform_operator_dr_recovery, platform_operator_compliance_audit;
+   -- NOTE: do NOT grant to app_middleware_* roles. The middleware path uses current_tenant_id_strict() for
+   -- normal tenant-bound access, not the break-glass path. If middleware needs to expose break-glass UI to
+   -- operators, the middleware connects as the operator's role via SET ROLE before invoking — never as a
+   -- middleware role.
    ```
+
+   **EXECUTE-GRANT trust-anchor reasoning (R4 HIGH closure):** PostgreSQL's EXECUTE-grant check is performed against the caller's POST-`SET ROLE` effective role (the same role `current_user` reports under SECURITY INVOKER). Therefore the EXECUTE-gate correctly catches the post-SET-ROLE effective role without needing the function body to check it. The function body cannot determine WHICH of the three platform-operator roles the caller used (PostgreSQL doesn't expose that under DEFINER), so v1.0 doesn't bind approvals to a specific operator_role at lookup time — only to the human_id. This is the v1.0 simplification: a human with multiple operator-role memberships can use any active approval issued to them, regardless of which specific role's authority the approval was originally issued under. SI-024.1 with cryptographic JWT-binding closes this by carrying the verified role-claim in the JWT.
+
+   **Negative-path test required for SI-024 v1.0 promotion (R4 HIGH closure):** integration test verifying that a SQL role NOT in the platform-operator membership set receives `permission denied for function is_target_tenant_break_glass_active` when attempting direct invocation. This proves the EXECUTE-grant trust-anchor mechanism is active.
 
    **break_glass_approval table access model (R2 HIGH-1 closure):**
 
@@ -559,6 +546,37 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 - 1 cross-CDM deferral (SI-024.1 cryptographic-binding follow-on per OQ-NEW1/2).
 
 **R4 verification queued.** Per OQ6 working recommendation 3-4 rounds, R4 should be the boundary (convergence or only-minor-residual).
+
+**v0.5 R4 closure 2026-05-20 (§10-cadence boundary):** 1 HIGH closed inline.
+
+| Round | Findings | Status |
+|---|---|---|
+| R4 | **HIGH** R3 split-helper pattern had a direct-invocation bypass — `_internal_check_break_glass_approval` granted EXECUTE to PUBLIC let any SQL role call it directly with forged identity parameters, defeating the outer wrapper's role-membership + human-id checks | Closed inline |
+
+**R4 closure pattern recap:**
+
+- **HIGH (closed inline — consolidated single-DEFINER design):** R3 split-helper REPLACED with single SECURITY DEFINER function using EXECUTE-GRANT as the trust anchor. The function is GRANTed EXECUTE ONLY to the three platform-operator roles; PostgreSQL's EXECUTE check is performed against the caller's POST-`SET ROLE` effective role, so the EXECUTE-gate catches the post-SET-ROLE effective role correctly. The function does NOT trust caller-supplied parameters (only takes `target_tenant_id` from RLS context); reads `caller_human_id` from `app.actor_human_id` session GUC (populated by middleware post-JWT-verification). Approvals matched by `(target_tenant_id, operator_user_id, active-window)` — does NOT bind to a specific `operator_role` at lookup time (acknowledged v1.0 simplification; SI-024.1 cryptographic JWT-binding closes this by carrying the verified role-claim in the JWT). Negative-path test required: SQL role not in platform-operator membership set receives `permission denied for function` when attempting direct invocation, proving the EXECUTE-grant trust-anchor mechanism is active.
+
+**Status at R4 close (§10-cadence boundary):** **RATIFIER-READY-AT-§10-CADENCE-BOUNDARY**. Per OQ6 working recommendation of 3-4 rounds for this mechanical-hardening amendment cycle, R4 IS the §10-cadence boundary. Per SI-021's R5-precedent (close at the boundary regardless of residual findings), SI-024 closes at R4. Any residual findings become known OQs for SI-024.1 cycle.
+
+**Cumulative cycle metrics (final):**
+- R1-R4: **10 findings closed** (2 CRITICAL + 7 HIGH + 1 MED) across 4 rounds.
+- 0 hard-floor item 6 violations.
+- 0 ERR escalations (Pass-2 framing-defect catch at R1 saved one).
+- 1 cross-CDM deferral (SI-024.1 cryptographic-binding follow-on per OQ-NEW1/2).
+- 7 acknowledged v1.0 simplifications:
+  - Compromised middleware-credential spoofing NOT closed (scope-narrowed at R1; SI-024.1 closes via JWT signature verification).
+  - Approval matching by human_id only, not by specific operator_role (R4 simplification; SI-024.1 closes via JWT role-claim).
+  - Middleware-writer membership MUST be disjoint from direct-PHI-grant set (deployment audit requirement).
+  - app.actor_human_id session GUC trusted as middleware-populated post-JWT (SI-024.1 closes via cryptographic binding).
+  - SET ROLE convention: connection pools may use either LOGIN-role-with-membership or explicit SET ROLE (both supported via pg_has_role).
+  - break_glass_approval table is WORM with single sanctioned mutation path (revoked_at NULL → current-timestamp, one-way).
+  - Phase 4 cutover gated on SI-024.1 readiness (per OQ-NEW2).
+
+**Next gates:**
+- Pre-merge two-pass consult per CLAUDE.md `16d7244` (canonical for ratifier-question gates).
+- Promotion Ledger P-030 + INVARIANTS v5.5 (I-036) co-bump pending merge ceremony.
+- Phase 1 (foundation) implementation begins post-merge in `telecheck-app` code repo.
 
 Authored on `spec/si-024-hardened-tenant-platform-rls-helper-2026-05-20` branch off main at `5afdc82` (post-P-029 + Addendum 57 cockpit refresh).
 
