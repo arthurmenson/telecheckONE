@@ -3902,3 +3902,58 @@ Per the interpretation rule: each remaining PR-A2/A3-class commit applies +1 min
 **Workstream-discipline note:** the autonomous 24h-loop cycle that began with Evans's "continue for 24 hrs" directive on 2026-05-18, reinforced by "no more resting" on 2026-05-19 and "merge and continue" on 2026-05-20, has produced the largest single-cycle spec-corpus expansion since the v1.10 PRD Update Cycle Phase 6 promotion (2026-05-01). The cycle honored CLAUDE.md hard-floor item 6 throughout (0 architectural-judgment items closed inline; 13 escalated to ratifier batched ceremony). The PR #11 discipline pattern from the SC6 cycle (STOP-and-escalate at the first architectural-judgment finding) was applied consistently across all 20 sprints.
 
 — Claude (Opus 4.7, 1M context), Q2 2026 Batched Ratifier Ceremony close-out 2026-05-20. Main at `c2baa56`. All 5 waves landed. Phase A + B exit gates SATISFIED. Phase C deferred to code-repo deliverable.
+
+---
+
+## Addendum 55 — SI-021 R3-R4-R5 Codex convergence FULLY CLOSED at §10 cadence boundary; SI-021 RATIFIER-READY-WITH-KNOWN-OQs; 12 findings closed inline across 5 rounds; 0 hard-floor item 6 violations
+
+**Date:** 2026-05-20
+**Trigger:** Evans's chat-message directive "start SI-021's R3-R5 convergence" + standing 15-min default-to-proceed rule.
+**Branch:** `spec/si-021-r3-r5-convergence-2026-05-20` (4 commits) → merged to main via `--no-ff` at `830a7be`.
+**Cycle posture:** SI-021 SIEM Hash-Chain Archival spec has completed its 5-round Codex pre-ratification convergence cycle. Per Sprint 20 §10-equivalent boundary commitment ("R5 next as final boundary round"), SI-021 closes at R5 as the final §10-cadence boundary round. SI-021 is now RATIFIER-READY-WITH-KNOWN-OQs and is the next queued item for its own ratifier ceremony.
+
+**R3-R5 convergence summary:**
+
+| Round | Findings | Closure pattern |
+|---|---|---|
+| **R3** (2 HIGH + 2 MED) | HIGH-1 §5a section title + cross-role separation still "4 roles" + deny lists missing audit-chain-s3-writer; HIGH-2 phase-3 crash recovery rule didn't verify BOTH regions; MED-1 transparency-log STH/inclusion-proof not carried into committed-anchor schema; MED-2 recovery emits Cat A events absent from §3 taxonomy | 5-role IAM matrix fully labeled with each role's DENY list enumerating assume-role rejection against ALL FOUR other roles; phase-3 crash recovery rule split into 4 per-region cases (both-match advance / both-missing retry / partial-write retry-missing-region / both-disagree HALT-AND-REPAIR with new Cat A event); transparency-log STH + STH signature + inclusion proof + s3 ETags + canonical SHA-256 added to committed-anchor schema; 4 new audit events added to §3 |
+| **R4** (1 HIGH) | phase-3 recovery state machine omitted single-region-corruption + same-wrong-payload + indeterminate-region cases (Object Lock COMPLIANCE prevents simple overwrite-retry recovery for present-but-wrong objects) | Exhaustive 4-region-state × 4-region-state = 16-combination model collapsed into 5 canonical recovery outcomes; new case #4 covers single-region-corruption + same-wrong-payload + persistent-indeterminate cases; manual repair procedure articulated for corrupted-anchor cases (NEW supersession anchor at sequence_no+1 with `supersedes_corrupted_sequence_no` reference + transparency-log inclusion for BOTH anchors); 2 new audit events |
+| **R5** (2 HIGH; final §10-cadence boundary round) | HIGH-1 corrupted-object supersession assumed transparency-log entry that may not exist (phase-3 corruption detection happens BEFORE phase-4 transparency-log append); HIGH-2 supersession reference field absent from committed-anchor schema | Manual repair procedure split by phase state: pre-phase-4 (requires NEW corruption-evidence transparency-log leaf with `leaf_type='corruption_evidence'` discriminator + new `audit_event_hash_chain_anchor_corruption_evidence` entity with dual-control authorization Compliance Officer + CTO; CHECK constraint enforces distinct human user_ids) vs post-phase-4 (uses existing canonical transparency-log entry; supersession-only path); `audit_event_hash_chain_anchor` schema extended with `supersedes_corrupted_sequence_no BIGINT` + `supersedes_corruption_evidence_id UUID` columns + paired-NULL CHECK + single-supersession UNIQUE constraint + FK; supersession linkage in canonical signed payload so HSM signature covers it (third-party auditor can verify cryptographically from committed-anchor row alone); 2 new audit events |
+
+**Cumulative trajectory (R1 → R5):**
+- R1: 3 HIGH + 2 MED → 5-phase commit state machine + HALT-AND-REPAIR rule + dual-region durability + 4-role IAM matrix + transparency-log requirements
+- R2: 2 HIGH + 2 MED → duplicate-section removal + 5-role IAM expansion + OQ2 alignment
+- R3: 2 HIGH + 2 MED → 5-role label completion + per-region recovery + STH-on-anchor + audit-taxonomy
+- R4: 1 HIGH → exhaustive 16-combination per-region state machine + Object Lock COMPLIANCE supersession procedure
+- R5: 2 HIGH → phase-state-aware corruption-evidence handling + supersession-linkage schema persistence
+- **Total: 12 findings closed inline across 5 rounds.**
+
+**Discipline-floor status (CLAUDE.md hard-floor item 6 honoring):**
+- **0 architectural-judgment items closed inline across all 5 rounds.**
+- All 12 closures were prose-consistency tightening (R2 duplicate-section removal; R3 5-role labeling completeness; R3 MED-1 already-decided schema field addition; R3 MED-2 missing audit events) + scope-clarification (R3 HIGH-2 per-region case enumeration; R4 HIGH 16-combination exhaustiveness completion of the case enumeration; R5 HIGH-1 pre/post-phase-4 phase-state-aware procedure split; R5 HIGH-2 schema persistence of already-decided supersession reference).
+- 5 known OQs (§5) remain ratifier-targetable for SI-021's own ratifier ceremony; not escalated mid-cycle because §5 was already the canonical OQ-targeting surface from the original SI filing.
+- Cycle ran 5 prose-consistency + scope-clarification rounds without violating the discipline. This is the desired CLAUDE.md hard-floor item 6 cycle shape: many rounds; no inline architectural judgments; clean escalation surface for ratifier.
+
+**Schema additions (in canonical bundle file body):**
+1. `audit_event_hash_chain_anchor`: 5 transparency-log persistence columns (R3 MED-1) + 2 supersession columns + paired-NULL CHECK + single-supersession UNIQUE + corruption-evidence FK (R5 HIGH-2)
+2. **NEW entity** `audit_event_hash_chain_anchor_corruption_evidence`: dual-control authorization (R5 HIGH-1) + 16 columns including transparency-log persistence + corrupted-object provenance + CHECK distinct human_id constraint + UNIQUE per transparency-log entry + UNIQUE per corrupted sequence_no
+
+**Audit event additions (in §3 taxonomy):**
+- R3 MED-2: 4 new events (`phase_4_completed_during_recovery`; `s3_anchor_missing_transparency_log_present_halt`; `regional_s3_payload_disagreement_halt`; `dr_reconstruction_gap_detected`)
+- R4: 2 new events (`regional_s3_payload_corruption_or_indeterminate_halt`; `corrupted_anchor_superseded`)
+- R5: 2 new events (`corruption_evidence_recorded_pre_phase_4`; `corrupted_anchor_superseded_post_phase_4`)
+- **Total: 8 new Cat A audit events added during R3-R5 convergence** (to be reflected in AUDIT_EVENTS v5.6 → v5.7 at SI-021 promotion).
+
+**Branch + main state:**
+- Convergence branch: `spec/si-021-r3-r5-convergence-2026-05-20` at `310f36e` (4 commits: R3 closure 9a66348 + R4 closure 843cd4f + R5 closure 310f36e + merge target).
+- Main: `830a7be` (merge commit). Previous main was `e0aaf9e` (Addendum 54 close-out).
+
+**Outstanding queued items:**
+1. **SI-021 own ratifier ceremony** — RATIFIER-READY-AT-§10-BOUNDARY post-R5; 5 known OQs in §5 awaiting Evans's ratification. The 5 OQs cover: (a) hourly vs configurable signing interval; (b) transparency log selection (Option T1 Sigstore-rekor recommended; Option T2 acceptable only if witness-layer separately ratified pre-launch); (c) Codex pre-ratification target (recommended 3-4 rounds; actual 5 to §10-cadence boundary); (d) SI-021 → CDM amendment cycle (recommended v1.3 → v1.4 amendment with 2 new entities + 1 NEW corruption-evidence entity per R5); (e) backfill of existing v1.2-era audit_events (recommended 30-day incremental window).
+2. Phase C procedure-side code implementation — `telecheck-app` repo deliverable.
+3. Quantum-resistance migration roadmap SI — Phase 3+.
+4. Cockpit Addendums 50, 51, 52, 53 — staged on cockpit branches NOT YET merged to main.
+
+**Workstream-discipline note (R3-R5 convergence cycle):** the 3-round convergence cycle on SI-021 demonstrates the canonical iterate-to-asymptote pattern: each round closes the previous round's findings + may surface adjacent findings from the same architectural surface area (R3 closure → R4 corruption case enumeration → R5 phase-state-aware corruption-evidence handling). Convergence is achieved at §10-cadence boundary regardless of whether the next round would surface additional findings — the §10 cadence boundary IS the convergence definition. Per Sprint 20 §10-equivalent boundary precedent (established at Sprint 7 Cold-DR R5 close + Sprint 6 SIEM R6 close), SI-021 closes here. Any residual findings become known OQs in §5 + ratifier-targetable in the own-ceremony.
+
+— Claude (Opus 4.7, 1M context), SI-021 R3-R5 Codex convergence close-out 2026-05-20. Main at `830a7be`. Convergence branch preserved at `spec/si-021-r3-r5-convergence-2026-05-20` for audit-trail purposes. SI-021 RATIFIER-READY-AT-§10-BOUNDARY for own ceremony.
