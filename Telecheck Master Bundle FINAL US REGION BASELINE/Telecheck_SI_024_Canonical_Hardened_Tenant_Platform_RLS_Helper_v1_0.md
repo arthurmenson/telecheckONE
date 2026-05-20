@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.6 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycle-1 corrections applied
-**Status:** R4 + pre-merge cycle-1: 2 HIGH + 1 MED closed inline (helper redesigned SECURITY INVOKER + EXECUTE PUBLIC with inline pg_has_role check + defense-in-depth break_glass_approval RLS; Phase 2 RESTRICTIVE policy includes target-tenant break-glass branch; I-036 timing aligned to Phase 4 cutover, NOT at SI-024 merge). Pre-merge re-verification pending.
+**Version:** 1.0 v0.7 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycles 1+2 corrections applied
+**Status:** Pre-merge cycle-2: 2 HIGH + 1 MED closed inline (Sub-decision 5a consolidated to single canonical design — stale R3+R4 narratives removed; per-invocation audit emission deferred to SI-024.1 per STABLE-function constraint; Next gates aligned with OQ5 INVARIANTS deferral). Pre-merge re-verification queued.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -255,9 +255,11 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
    );
    ```
 
-2. **RLS helper extension (R4 HIGH closure 2026-05-20: CONSOLIDATED into single SECURITY DEFINER function using EXECUTE-GRANT as the trust anchor — replaces the R3 split-helper design which had a direct-invocation bypass):**
+2. **RLS helper extension (current canonical design as of pre-merge cycle-2 closure 2026-05-20: SECURITY INVOKER + EXECUTE TO PUBLIC + inline `pg_has_role` check + defense-in-depth break_glass_approval RLS).**
 
-   Rationale: the R3 split-helper design (outer INVOKER + inner DEFINER with caller-supplied params) had a critical bypass — GRANT EXECUTE on the inner function to PUBLIC let any SQL role call it directly with forged identity parameters, defeating the outer wrapper. The R4 design replaces this with a single SECURITY DEFINER function where the **EXECUTE GRANT itself is the trust anchor**: only roles in the platform-operator membership set are granted EXECUTE, so the fact that the function executes proves the caller has at least one platform-operator membership. The function then matches approvals by `operator_user_id` (the caller's human-id from the `app.actor_human_id` session GUC populated by middleware post-JWT-verification).
+   **Design-evolution note (pre-merge cycle-2 HIGH-1 closure 2026-05-20):** prior R3 split-helper (had direct-invocation bypass) and R4 EXECUTE-GRANT-only-to-platform-operator (broke normal RLS access for middleware roles) are both SUPERSEDED. The canonical v1.0 design below is the single source of truth; prior design narratives in this file are removed to eliminate ratifier ambiguity. Negative-path test expectation: direct invocation by non-platform-operator role returns FALSE (NOT permission-denied) because EXECUTE is granted to PUBLIC for RLS compatibility; the inline `pg_has_role` check + break_glass_approval RLS provide the fail-closed behavior.
+
+   Rationale for the v0.6 design: under PostgreSQL `SECURITY DEFINER`, neither `session_user` (LOGIN role) nor `current_user` (function OWNER) reports the post-`SET ROLE` effective role of the caller. Under `SECURITY INVOKER`, `current_user` correctly reports the post-`SET ROLE` effective role. Therefore the function uses INVOKER for correct role-identity semantics. EXECUTE is granted to PUBLIC because PostgreSQL checks EXECUTE permission before invoking — if the function is referenced in an RLS predicate that ALL middleware roles must evaluate (USING + WITH CHECK on every PHI table), restricting EXECUTE would cause normal tenant reads to fail with permission-denied. The trust anchor is therefore the **inline `pg_has_role` role-membership check + defense-in-depth RLS on `break_glass_approval`**.
 
    ```sql
    -- Pre-merge HIGH-1 closure 2026-05-20: SECURITY INVOKER + EXECUTE TO PUBLIC pattern.
@@ -455,7 +457,7 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 
 - `tenant_context.hardened_helper_role_check_rejected` (Cat A; P2 keyed by 'platform') — fires when `current_tenant_id_strict()` rejects a non-allowlisted role.
 - `tenant_context.platform_operator_break_glass_invoked` (Cat A; P2 keyed by 'platform') — fires when `is_platform_operator_break_glass_active()` returns TRUE.
-- `tenant_context.target_tenant_break_glass_invoked` (Cat A; P2 keyed by 'platform' + target_tenant_id reference) — R1 HIGH-2 closure: fires when `is_target_tenant_break_glass_active()` returns TRUE; carries operator_role + operator_user_id + target_tenant_id + break_glass_approval.id references.
+- ~~`tenant_context.target_tenant_break_glass_invoked`~~ — **REMOVED at pre-merge cycle-2 HIGH-2 closure 2026-05-20.** The original design called for an audit event on every TRUE return from `is_target_tenant_break_glass_active()`, but PostgreSQL STABLE functions (required for RLS predicate use) cannot perform side-effecting INSERTs. Per-invocation audit emission is **deferred to SI-024.1** (cryptographic JWT-binding follow-on) which will route break-glass access through an explicit operator-initiated `begin_target_tenant_break_glass_session()` SECURITY DEFINER procedure (VOLATILE; emits audit at session start; RLS helper then checks active session). For SI-024 v1.0, the audit trail for cross-tenant break-glass access is constructed from: (a) `break_glass_approval_created` (records authorization); (b) `break_glass_approval_revoked` (records revocation). Per-access invocation audit is a known gap covered by SI-024.1. This is acknowledged simplification #8 in §5 cycle metrics.
 - `tenant_context.guc_set_without_role_authority_attempt` (Cat A; P2 keyed by 'platform') — fires when a role lacking write-authority attempts to SET `app.tenant_id` (requires PostgreSQL session-trigger or event-trigger to detect; implementation deferred to Sub-decision 9).
 - `tenant_context.cross_tenant_read_blocked_by_hardened_helper` (Cat A; P2 keyed by 'platform') — fires when the hardened-helper RESTRICTIVE policy blocks a read that would have been permitted under raw-GUC permissive policy (telemetry for Phase 3 dual-policy state).
 - `tenant_context.break_glass_approval_created` (Cat A; P2 keyed by 'platform') — fires on INSERT to `break_glass_approval` table; carries operator + authorizing-officers + target_tenant_id + reason + time-bound.
@@ -579,7 +581,7 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 - 0 hard-floor item 6 violations.
 - 0 ERR escalations (Pass-2 framing-defect catch at R1 saved one).
 - 1 cross-CDM deferral (SI-024.1 cryptographic-binding follow-on per OQ-NEW1/2).
-- 7 acknowledged v1.0 simplifications:
+- 8 acknowledged v1.0 simplifications:
   - Compromised middleware-credential spoofing NOT closed (scope-narrowed at R1; SI-024.1 closes via JWT signature verification).
   - Approval matching by human_id only, not by specific operator_role (R4 simplification; SI-024.1 closes via JWT role-claim).
   - Middleware-writer membership MUST be disjoint from direct-PHI-grant set (deployment audit requirement).
@@ -587,11 +589,16 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
   - SET ROLE convention: connection pools may use either LOGIN-role-with-membership or explicit SET ROLE (both supported via pg_has_role).
   - break_glass_approval table is WORM with single sanctioned mutation path (revoked_at NULL → current-timestamp, one-way).
   - Phase 4 cutover gated on SI-024.1 readiness (per OQ-NEW2).
+  - **#8 (added at pre-merge cycle-2 HIGH-2 closure 2026-05-20):** per-invocation audit emission on `is_target_tenant_break_glass_active()` TRUE result is DEFERRED to SI-024.1 (STABLE function constraint prevents side-effecting audit INSERTs from RLS predicate). SI-024 v1.0 audit trail comes from `break_glass_approval_created` + `break_glass_approval_revoked` events; per-access audit will use an explicit `begin_target_tenant_break_glass_session()` SECURITY DEFINER procedure introduced in SI-024.1.
 
-**Next gates:**
+**Next gates (corrected at pre-merge cycle-2 MED closure 2026-05-20 to align with OQ5 deferral):**
 - Pre-merge two-pass consult per CLAUDE.md `16d7244` (canonical for ratifier-question gates).
-- Promotion Ledger P-030 + INVARIANTS v5.5 (I-036) co-bump pending merge ceremony.
-- Phase 1 (foundation) implementation begins post-merge in `telecheck-app` code repo.
+- **Merge ceremony artifacts:** Promotion Ledger P-030 + Artifact Registry v2.16 → v2.17 (content-change promotion). **INVARIANTS v5.4 → v5.5 (I-036) is EXPLICITLY DEFERRED to the first Phase 4 entity cutover per OQ5** — NOT lockstep with SI-024 merge. This avoids declaring I-036 as canonical floor before any entity satisfies it.
+- Phase 1 (foundation) implementation begins post-merge in `telecheck-app` code repo: helper functions + `break_glass_approval` table + RLS policies created; helpers coexist with raw GUC (no entity migrations yet).
+- Phase 2 (RESTRICTIVE coexistence) per-entity rollout in Sub-decision 3 sequence (tenant-bound PHI entities first; audit-chain projection tables last per OQ2).
+- Phase 3 (30-day telemetry per OQ3) collecting hardened-helper invocations + spoofing-attempt audit events.
+- Phase 4 (cutover) per-entity in OQ2 sequence — **THIS is when I-036 lands at INVARIANTS v5.5 co-bumped with the first Phase 4 entity**.
+- SI-024.1 cryptographic JWT-binding follow-on cycle (OQ-NEW1/2 + acknowledged simplification #8 per-invocation audit emission).
 
 Authored on `spec/si-024-hardened-tenant-platform-rls-helper-2026-05-20` branch off main at `5afdc82` (post-P-029 + Addendum 57 cockpit refresh).
 
