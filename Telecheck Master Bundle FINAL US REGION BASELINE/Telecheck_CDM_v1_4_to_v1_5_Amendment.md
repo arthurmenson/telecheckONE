@@ -1,7 +1,7 @@
 # CDM v1.4 → v1.5 Amendment (SI-021 follow-on)
 
-**Version:** 0.7 DRAFT — RATIFIER-READY at §10-cadence boundary (R5 final boundary close 2026-05-20) + pre-merge identity-constraint hardening (Codex merge-readiness consult HIGH closed)
-**Status:** R5 + pre-merge HIGH both closed inline. tenant_id woven into all 4 chain tables' PRIMARY KEY + UNIQUE + supersession-FK identity constraints. CYCLE COMPLETE pending Evans's merge decision (dual-recommendation converged on GO).
+**Version:** 0.8 DRAFT — RATIFIER-READY at §10-cadence boundary + 2 pre-merge consult cycles complete (identity-constraint hardening + P1 trigger-lookup tenant-scoping)
+**Status:** All HIGHs closed across R1-R5 + 2 pre-merge consult cycles. tenant_id woven into all 4 chain tables' PRIMARY KEY + UNIQUE + supersession-FK identity constraints + all 3 P1 tenant-match triggers' chain-lookup WHERE clauses. CYCLE COMPLETE pending Evans's merge decision (dual-recommendation convergence pending final consult verification).
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-028 (SI-021 v1.0 RATIFIED) OQ4 canonical decision — file SI-021's 4 new audit-chain-archival entities as a CDM v1.4 → v1.5 amendment cycle co-bumped with AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4.
 **Owner:** SRE Lead + Security Engineering Lead + Compliance Officer (same as SI-021 owner triad).
@@ -211,8 +211,8 @@ DECLARE chain_tenant_id tenant_id_t;
 BEGIN
     IF NEW.partition = 'P1' THEN
         SELECT tenant_id INTO chain_tenant_id
-            FROM public.audit_event_hash_chain   -- R2 HIGH-2 closure: schema-qualified
-            WHERE partition = NEW.partition AND partition_key = NEW.partition_key AND sequence_no = NEW.sequence_no_head;
+            FROM public.audit_event_hash_chain   -- R2 HIGH-2 closure: schema-qualified; v0.8 pre-merge HIGH closure: tenant-scoped lookup binds to v0.7 (tenant_id, partition, partition_key, sequence_no) identity
+            WHERE tenant_id = NEW.tenant_id AND partition = NEW.partition AND partition_key = NEW.partition_key AND sequence_no = NEW.sequence_no_head;
         IF chain_tenant_id IS NULL OR chain_tenant_id <> NEW.tenant_id THEN
             RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent P1 row tenant_id (%) must match audit_event_hash_chain.tenant_id (%) at (partition=%, partition_key=%, sequence_no=%)',
                 NEW.tenant_id, chain_tenant_id, NEW.partition, NEW.partition_key, NEW.sequence_no_head
@@ -401,8 +401,8 @@ DECLARE chain_tenant_id tenant_id_t;
 BEGIN
     IF NEW.partition = 'P1' THEN
         SELECT tenant_id INTO chain_tenant_id
-            FROM public.audit_event_hash_chain   -- R2 HIGH-2 closure: schema-qualified
-            WHERE partition = NEW.partition AND partition_key = NEW.partition_key AND sequence_no = NEW.sequence_no_head;
+            FROM public.audit_event_hash_chain   -- R2 HIGH-2 closure: schema-qualified; v0.8 pre-merge HIGH closure: tenant-scoped lookup binds to v0.7 (tenant_id, partition, partition_key, sequence_no) identity
+            WHERE tenant_id = NEW.tenant_id AND partition = NEW.partition AND partition_key = NEW.partition_key AND sequence_no = NEW.sequence_no_head;
         IF chain_tenant_id IS NULL OR chain_tenant_id <> NEW.tenant_id THEN
             RAISE EXCEPTION 'audit_event_hash_chain_anchor P1 row tenant_id mismatch at (partition=%, partition_key=%, sequence_no=%)',
                 NEW.partition, NEW.partition_key, NEW.sequence_no_head
@@ -488,8 +488,8 @@ DECLARE chain_tenant_id tenant_id_t;
 BEGIN
     IF NEW.corrupted_partition = 'P1' THEN
         SELECT tenant_id INTO chain_tenant_id
-            FROM public.audit_event_hash_chain   -- R2 HIGH-2 closure: schema-qualified
-            WHERE partition = NEW.corrupted_partition AND partition_key = NEW.corrupted_partition_key AND sequence_no = NEW.corrupted_sequence_no;
+            FROM public.audit_event_hash_chain   -- R2 HIGH-2 closure: schema-qualified; v0.8 pre-merge HIGH closure: tenant-scoped lookup binds to v0.7 identity
+            WHERE tenant_id = NEW.tenant_id AND partition = NEW.corrupted_partition AND partition_key = NEW.corrupted_partition_key AND sequence_no = NEW.corrupted_sequence_no;
         IF chain_tenant_id IS NULL OR chain_tenant_id <> NEW.tenant_id THEN
             RAISE EXCEPTION 'audit_event_hash_chain_anchor_corruption_evidence P1 row tenant_id mismatch at corrupted (partition=%, partition_key=%, sequence_no=%)',
                 NEW.corrupted_partition, NEW.corrupted_partition_key, NEW.corrupted_sequence_no
@@ -772,6 +772,26 @@ All 4 chain tables (§4.NEW1 audit_event_hash_chain + §4.NEW2 audit_event_hash_
   - Dual-recommendation process codified in CLAUDE.md (commit `f3a6469`; later broadened at `4f42a00`).
   - Partial-inline-close + cross-CDM-defer closure shape (third option alongside full-inline-close + ERR-escalation), Codex-validated at R3.
   - **Pre-merge dual-recommendation consult as a final correctness gate** — Codex's merge-readiness consult surfaced a HIGH that the adversarial-review rounds R1-R5 had not caught; the consult-framing invocation pattern complements the adversarial-review-framing pattern by asking a different question and getting a different angle of analysis. This is now documented as a canonical use of the dual-recommendation process: every merge question is implicitly a defect-catch opportunity.
+
+**v0.8 pre-merge cycle-2 HIGH closure 2026-05-20 (Codex re-merge-readiness consult finding):** 1 HIGH closed inline.
+
+| Round | Findings | Status |
+|---|---|---|
+| Pre-merge consult cycle 2 | **HIGH** P1 child-table tenant-match triggers (audit_event_hash_chain_anchor_intent + audit_event_hash_chain_anchor + audit_event_hash_chain_anchor_corruption_evidence) still looked up chain rows by (partition, partition_key, sequence_no) without tenant_id. Once v0.7's PRIMARY KEY (tenant_id, partition, partition_key, sequence_no) allowed cross-tenant duplicate P1 coordinates, the tenant-less SELECT INTO became ambiguous: false rejects, accepting/validating against a non-deterministic row depending on plan/order | Closed inline |
+
+**v0.8 closure pattern recap:**
+
+- **HIGH (closed inline):** All 3 P1 tenant-match trigger functions' chain-lookup WHERE clauses augmented with `tenant_id = NEW.tenant_id` (for the anchor + intent triggers) or `tenant_id = NEW.tenant_id` (for corruption-evidence, paired with corrupted_partition/key/sequence_no). The lookups now bind to the v0.7 (tenant_id, partition, partition_key, sequence_no) identity, making them deterministic across cross-tenant duplicate P1 coordinates.
+- **Direct consequence of v0.7 identity-key extension:** v0.7's PRIMARY KEY change introduced a new failure mode in the v0.6 triggers. The v0.8 fix is the necessary completion of the v0.7 closure.
+- **0 hard-floor item 6 violations** on this cycle-2 pre-merge closure.
+
+**Discipline observation (compounded):** the dual-recommendation merge-readiness consult caught a HIGH (cycle 1) + caught a follow-on HIGH introduced by the cycle-1 fix (cycle 2). Two rounds of consult after the §10-cadence boundary, both surfacing real defects, both Codex-flagged + Claude-closed inline. The broadened dual-recommendation rule (every ratifier question gets a Codex consult) is now operationally validated as a recursive defect-catch mechanism: each closure round invites another consult round until convergence.
+
+**Cumulative cycle metrics (revised final):**
+- **R1-R5 + 2 pre-merge consult closures: 13 findings closed across 5 adversarial-review rounds + 2 dual-recommendation merge-readiness consults (1 CRITICAL + 11 HIGH + 1 MED).**
+- **0 hard-floor item 6 violations** across all 7 closure cycles.
+
+**Codex re-merge-readiness consult queued for v0.8 verification.** Expected outcome: APPROVE / READY-TO-MERGE → Evans's merge question can be posed with both Claude + Codex converged on GO.
 
 Authored on `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` branch off main at `8d44bde` (post-P-028 ratification). Merged main `f3a6469` (CLAUDE.md dual-recommendation codification) into branch 2026-05-20.
 
