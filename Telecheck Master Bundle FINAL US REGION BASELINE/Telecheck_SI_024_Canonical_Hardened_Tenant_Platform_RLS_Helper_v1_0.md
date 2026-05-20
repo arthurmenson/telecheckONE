@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.16 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + cycles 6-7-8-9-10 closures applied
-**Status:** Cycle-10 stale-snippet sweep: HIGH closure P-030 swept v0.14 → v0.16 (alignment with current SI version); MED closure §1 scope + Sub-decision 1 §Why this shape + Sub-decision 7 Test 5 all updated to SECURITY INVOKER + SET search_path discipline (corrected stale SECURITY DEFINER references that contradicted Sub-decision 1's canonical helper definition).
+**Version:** 1.0 v0.17 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + cycles 6-7-8-9-10-11 closures applied
+**Status:** Cycle-11 stale-snippet sweep: HIGH closure §1 scope item 7 (SECURITY DEFINER → SECURITY INVOKER + explicit audit-trigger DEFINER carve-out); MED closure Registry row 64 inventory body row updated with P-030 current-state header (preserving pre-P-030 historical detail for audit-trail).
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -45,7 +45,7 @@ PostgreSQL custom GUCs (`app.tenant_id`, `app.platform_operator_break_glass`) ar
 4. Backward-compatibility path (raw `current_setting()` predicates coexist during migration; cutover discipline).
 5. Break-glass posture (platform_operator break-glass clause in the new helper; role-based authorization vs. GUC-based).
 6. Performance / caching implications (helper invocation per row vs. per query; SECURITY DEFINER vs. SECURITY INVOKER).
-7. SECURITY DEFINER + `search_path = pg_catalog, public` discipline (R2 HIGH-2 closure from CDM v1.5 amendment cycle is canonical).
+7. SECURITY INVOKER on helpers + SET `search_path = pg_catalog, public` discipline (cycle-11 HIGH closure 2026-05-20: helpers are INVOKER per R1 CRITICAL-1 closure; search_path hardening applies under both INVOKER and DEFINER and IS the actual object-redirection defense per R2 HIGH-2 closure pattern in CDM v1.5 amendment. SECURITY DEFINER remains intentional on audit-trigger functions only — they need elevated privilege to write `audit_events`; helpers themselves are INVOKER).
 8. Test coverage (negative-path coverage proving compromised role cannot spoof tenant identity).
 9. Cross-SI alignment with the four CDM v1.5 amendment-cycle chain tables (which already use raw `current_setting()` per OQ6 deferral) + the broader v1.5 canonical entity set.
 10. Audit event taxonomy for helper invocation + spoofing-attempt detection.
