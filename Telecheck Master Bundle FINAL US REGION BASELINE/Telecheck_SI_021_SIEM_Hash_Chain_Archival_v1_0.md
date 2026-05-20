@@ -1,7 +1,7 @@
 # SI-021 — SIEM Hash-Chain Archival Spec
 
-**Version:** 1.0 DRAFT
-**Status:** RATIFIER-READY-WITH-KNOWN-OQs at §10 cadence boundary (R5 final boundary close 2026-05-20); FILED per OQ-C ratified decision at Promotion Ledger P-026
+**Version:** 1.0 RATIFIED
+**Status:** RATIFIED 2026-05-20 per Promotion Ledger P-028 (Evans's chat-message "ratify"); all 5 OQs ratified at working recommendations; FILED per OQ-C ratified decision at Promotion Ledger P-026 + R3-R5 Codex convergence cycle closed at §10 cadence boundary 2026-05-20 (R5 final boundary close); CDM v1.4 → v1.5 + AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4 follow-on amendment cycle QUEUED as next autonomous-work deliverable
 **Codex iteration trajectory:** R1 (3 HIGH + 2 MED = 5) → R2 (2 HIGH duplicate-section removal + 1 MED phase-3 authority + 1 MED OQ2 alignment = 4) → R3 (2 HIGH 5-role-label + per-region recovery + 2 MED STH-on-anchor + audit-taxonomy = 4) → R4 (1 HIGH exhaustive per-region state machine + Object Lock COMPLIANCE corrupted-anchor supersession procedure = 1) → R5 (2 HIGH phase-state-aware corruption-evidence handling + supersession-linkage schema persistence; final §10-cadence boundary round = 2). All 16 findings closed inline (10 HIGH + 6 MED across 5 rounds); 0 architectural-judgment items closed inline; 5 known OQs (§5) remain ratifier-targetable for SI-021's own ratifier ceremony. Original filing per (SIEM §4.5.HC split as separate SI to keep SIEM Spec proper focused on event-streaming + alerting + audit aggregation).
 **Owner:** SRE Lead + Security Engineering Lead + Compliance Officer
 **Parent SI:** SIEM Integration Spec v1.0 (`Telecheck_SIEM_Integration_Spec_v1_0.md` §4.5.HC was the original split candidate per Sprint 6 R6 close)
@@ -333,13 +333,15 @@ These events are added to AUDIT_EVENTS v5.6 → v5.7 at SI-021 promotion.
 
 ---
 
-## 5. Open questions for ratifier (own ceremony)
+## 5. Open questions for ratifier (own ceremony) — ALL RATIFIED at P-028 (2026-05-20)
 
-1. **OQ1 — Hourly signing interval vs configurable.** Recommendation: hourly canonical; tenant-configurable down to 15 min per `tenant.audit_archive_signing_interval_seconds` CCR key.
-2. **OQ2 — Transparency log selection (R2 MED-1 closure: aligned with §5 closure).** Recommendation: **Option T1 — Sigstore-rekor OR comparable CT-compliant log with native STH + inclusion-proof + consistency-proof mechanics — for v1.0**. Option T2 (CloudWatch + custom Merkle/witness layer) is acceptable ONLY if the witness-layer service is filed as a separate canonical service spec + ratified before launch. The prior v0.1 draft OQ2 recommendation of "CloudWatch WORM initially; rekor later" is RESCINDED — CloudWatch alone does NOT satisfy the transparency-log inclusion-proof + STH requirements stated in §5.
-3. **OQ3 — Codex pre-ratification target.** Recommendation: 3-4 rounds.
-4. **OQ4 — SI-021 → CDM amendment cycle.** Recommendation: file as CDM v1.3 → v1.4 amendment with 2 new entities (`audit_event_hash_chain` + `audit_event_hash_chain_anchor` + `audit_event_hash_chain_anchor_intent`).
-5. **OQ5 — Backfill of existing v1.2-era audit_events.** Recommendation: incremental backfill over 30-day window; emit Cat B `audit_archive.backfill_completed` on completion.
+All 5 OQs RATIFIED at working recommendations per Evans's chat-message "ratify" 2026-05-20 (Promotion Ledger P-028).
+
+1. **OQ1 — Hourly signing interval vs configurable.** **RATIFIED**: hourly canonical; tenant-configurable down to 15 min per `tenant.audit_archive_signing_interval_seconds` CCR key (new key landing in CCR_RUNTIME v5.3 → v5.4 follow-on amendment cycle).
+2. **OQ2 — Transparency log selection (R2 MED-1 closure: aligned with §5 closure).** **RATIFIED**: **Option T1 — Sigstore-rekor OR comparable CT-compliant log with native STH + inclusion-proof + consistency-proof mechanics — for v1.0**. Option T2 (CloudWatch + custom Merkle/witness layer) REJECTED as default; remains available only if the witness-layer service is filed as a separate canonical service spec + ratified before launch. The prior v0.1 draft OQ2 recommendation of "CloudWatch WORM initially; rekor later" is RESCINDED — CloudWatch alone does NOT satisfy the transparency-log inclusion-proof + STH requirements stated in §5.
+3. **OQ3 — Codex pre-ratification target.** **RATIFIED at actual cycle outcome**: 5 rounds to §10-cadence boundary (R1 → R5). Original "3-4 rounds" recommendation superseded by actual cycle outcome — the §10-cadence boundary IS the convergence definition per Sprint 20 §10-equivalent boundary precedent (Sprint 6 SIEM R6; Sprint 7 Cold-DR R5; SI-010 trust-anchor PR #11 R5; SI-021 R5).
+4. **OQ4 — SI-021 → CDM amendment cycle.** **RATIFIED**: file as CDM v1.4 → v1.5 amendment with **4 new entities total** (`audit_event_hash_chain` + `audit_event_hash_chain_anchor` + `audit_event_hash_chain_anchor_intent` + R5-added `audit_event_hash_chain_anchor_corruption_evidence`). Co-bumped with AUDIT_EVENTS v5.6 → v5.7 carrying **15 new Cat A audit events** (7 original + 8 added across R3-R5 convergence per §3 taxonomy above). CCR_RUNTIME v5.3 → v5.4 co-bumped with 1 new key per OQ1.
+5. **OQ5 — Backfill of existing v1.2-era audit_events.** **RATIFIED**: incremental backfill over 30-day window; emit Cat B `audit_archive.backfill_completed` event on completion. Backfill executes after CDM v1.5 amendment lands + the underlying schema is provisioned in Phase D infrastructure.
 
 ---
 

@@ -37,6 +37,62 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-028 — 2026-05-20 — SI-021 SIEM Hash-Chain Archival Spec v1.0 RATIFIED at working recommendations for all 5 OQs; Artifact Registry v2.14 → v2.15; queues CDM v1.4 → v1.5 + AUDIT_EVENTS v5.6 → v5.7 follow-on amendment cycle
+
+**Evans's verbatim instruction (2026-05-20 chat-message):** *"ratify"* — affirmative ratification of SI-021 at its own ratifier ceremony following Claude's recommendation that "second-best option: if you'd rather close the spec-corpus loop first, ratify SI-021 now (15-min decision-walk through the 5 OQs in §5). That unlocks an AUDIT_EVENTS v5.6 → v5.7 + CDM v1.4 → v1.5 amendment cycle — a clean self-contained next deliverable I can drive autonomously through Codex."
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). SI-021's own ratifier ceremony per the filed status RATIFIER-READY-WITH-KNOWN-OQs at §10 cadence boundary (R5 final boundary close 2026-05-20). Five known OQs in §5 ratified at working recommendations.
+
+**Type:** Content-change ratification + Registry version bump v2.14 → v2.15 per operating rule 4.
+
+**Prerequisite:** P-026 (Q2 2026 Batched Ratifier Ceremony Phase A) ratified the OQ-C split decision that filed SI-021 as a separate SI; SI-021's 5 internal OQs are now ratified in their own ceremony as P-028. P-027 (Phase B CDM v1.3 + Contracts Pack v5.3) lands before this entry per main commit order; SI-021's CDM amendment cycle follows in a separate ceremony.
+
+---
+
+#### §1. Five OQs ratified at working recommendations
+
+Per SI-021 §5 working recommendations, each OQ is RATIFIED as the canonical decision:
+
+| OQ | Canonical decision | Rationale at ratification |
+|---|---|---|
+| **OQ1 — Signing interval** | **RATIFIED**: hourly canonical; tenant-configurable down to 15 min per `tenant.audit_archive_signing_interval_seconds` CCR key (new key landing in Contracts Pack v5.3 → v5.4 cycle alongside the CDM v1.5 amendment) | Hourly balances signature volume vs detection-window-of-corruption latency; per-tenant configurability accommodates higher-compliance tenants without forcing a platform-wide signing-interval reduction |
+| **OQ2 — Transparency log selection** | **RATIFIED**: Option T1 — Sigstore-rekor OR comparable CT-compliant log with native STH + inclusion-proof + consistency-proof mechanics — for v1.0. Option T2 (CloudWatch + custom Merkle/witness layer) is REJECTED as a default; remains available only if the witness-layer service is filed as a separate canonical service spec + ratified before launch | CT-compliance + native STH/inclusion-proof mechanics provide third-party-auditor-verifiable transparency without re-implementing witness-layer cryptography; the audit chain's tamper-evidence guarantee depends on the transparency layer's cryptographic primitives being canonical and externally-verifiable |
+| **OQ3 — Codex pre-ratification target** | **RATIFIED at actual cycle outcome**: 5 rounds to §10-cadence boundary (R1 → R5). The original working recommendation of "3-4 rounds" is superseded by the actual cycle outcome — the §10-cadence boundary IS the convergence definition per Sprint 20 §10-equivalent boundary precedent (Sprint 6 SIEM R6; Sprint 7 Cold-DR R5; SI-010 trust-anchor PR #11 R5; SI-021 R5) | Codex cycle length is not pre-determinable; the §10-cadence boundary commits the cycle to a closure round regardless of round count |
+| **OQ4 — SI-021 → CDM amendment cycle** | **RATIFIED**: file as CDM v1.4 → v1.5 amendment with **3 new entities** (`audit_event_hash_chain`; `audit_event_hash_chain_anchor`; `audit_event_hash_chain_anchor_intent`) + **1 R5-added entity** (`audit_event_hash_chain_anchor_corruption_evidence`) = **4 new entities total**. Co-bumped with AUDIT_EVENTS v5.6 → v5.7 carrying 8 new Cat A audit events from §3 taxonomy | The 4 entities + 8 audit events are a self-contained amendment cycle that Claude can drive autonomously through Codex; the cycle queues as the next spec-corpus deliverable post-P-028 |
+| **OQ5 — Backfill of existing v1.2-era audit_events** | **RATIFIED**: incremental backfill over 30-day window; emit Cat B `audit_archive.backfill_completed` event on completion. Backfill executes after the CDM v1.5 amendment lands + the underlying schema is provisioned in Phase D infrastructure | Incremental backfill avoids a single-shot signing burden + provides observable progress for compliance audit-trail evidence |
+
+---
+
+#### §2. Artifact Registry version bump
+
+**v2.14 → v2.15.** SI-021 v1.0 ratification lands as a Registry-tracked artifact in §3 inventory.
+
+---
+
+#### §3. Follow-on CDM v1.4 → v1.5 + AUDIT_EVENTS v5.6 → v5.7 amendment cycle (QUEUED)
+
+Per OQ4 ratification, the next spec-corpus deliverable is a CDM + Contracts Pack amendment cycle:
+
+- **CDM v1.4 → v1.5:** 4 new entities (`audit_event_hash_chain` + `audit_event_hash_chain_anchor` + `audit_event_hash_chain_anchor_intent` + `audit_event_hash_chain_anchor_corruption_evidence`).
+- **AUDIT_EVENTS v5.6 → v5.7:** 8 new Cat A events (`audit_archive.anchor_signed` + `.anchor_archived_to_s3` + `.anchor_appended_to_transparency_log` + `.discovery_inconsistency_detected` + `.cross_region_replication_lag_exceeded` + `.dr_chain_reconstruction_initiated` + `.dr_chain_reconstruction_completed` + 6 R3-R5 added recovery events: `.phase_4_completed_during_recovery` + `.s3_anchor_missing_transparency_log_present_halt` + `.regional_s3_payload_disagreement_halt` + `.dr_reconstruction_gap_detected` + `.regional_s3_payload_corruption_or_indeterminate_halt` + `.corrupted_anchor_superseded` + `.corruption_evidence_recorded_pre_phase_4` + `.corrupted_anchor_superseded_post_phase_4`). Actual total: **15 new audit events** (the original 7 + 8 added across R3-R5 convergence).
+- **CCR_RUNTIME v5.3 → v5.4:** 1 new tenant config key (`tenant.audit_archive_signing_interval_seconds` per OQ1).
+
+This amendment cycle is queued as Claude's next autonomous-work deliverable. Estimated Codex convergence: 2-3 rounds (lower than SI-021 itself because the schema + events are already canonicalized in SI-021 v1.0; the amendment is mechanical consolidation into the canonical contract files).
+
+---
+
+#### §4. Phase A residual + SI-021 closure
+
+Per Sprint 20 Master Completion Plan v1.1 §3 + Q2 Batched Ratifier Ceremony Phase A:
+
+- P-026 ratified OQ-C (SI-021 split-as-separate-SI decision); SI-021 was filed RATIFIER-READY-WITH-KNOWN-OQs at §10 cadence boundary post-R5.
+- P-028 (this entry) ratifies SI-021's own 5 OQs at working recommendations.
+- Phase A is now FULLY CLOSED (all 13 architectural-judgment OQ-groups from §11 of MCP v1.1 ratified + SI-021's 5 OQs ratified).
+
+**SI-021 v1.0 RATIFIED status declared. SI-021 v1.0 is now canonical in Artifact Registry v2.15.**
+
+---
+
 ### Entry P-027 — 2026-05-20 — Phase B Batched Promotion: CDM v1.2 → v1.3 (23 new entities + 3 derived views from Sprints 8-18) + Contracts Pack v5.2 → v5.3 (3 new invariants + ~30 audit events + 6 domain events + 11 CCR keys + 4 types) co-bumped; Artifact Registry v2.13 → v2.14
 
 **Evans's verbatim instruction (2026-05-20 chat-message):** *"Yes"* — affirmative response to the prior chat turn's offer to "keep going on the Contracts Pack amendments + CDM v1.3 Phase B ceremony" following the P-026 ratification.

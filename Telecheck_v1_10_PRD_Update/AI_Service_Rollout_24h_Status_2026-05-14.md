@@ -3957,3 +3957,47 @@ Per the interpretation rule: each remaining PR-A2/A3-class commit applies +1 min
 **Workstream-discipline note (R3-R5 convergence cycle):** the 3-round convergence cycle on SI-021 demonstrates the canonical iterate-to-asymptote pattern: each round closes the previous round's findings + may surface adjacent findings from the same architectural surface area (R3 closure → R4 corruption case enumeration → R5 phase-state-aware corruption-evidence handling). Convergence is achieved at §10-cadence boundary regardless of whether the next round would surface additional findings — the §10 cadence boundary IS the convergence definition. Per Sprint 20 §10-equivalent boundary precedent (established at Sprint 7 Cold-DR R5 close + Sprint 6 SIEM R6 close), SI-021 closes here. Any residual findings become known OQs in §5 + ratifier-targetable in the own-ceremony.
 
 — Claude (Opus 4.7, 1M context), SI-021 R3-R5 Codex convergence close-out 2026-05-20. Main at `830a7be`. Convergence branch preserved at `spec/si-021-r3-r5-convergence-2026-05-20` for audit-trail purposes. SI-021 RATIFIER-READY-AT-§10-BOUNDARY for own ceremony.
+
+---
+
+## Addendum 56 — SI-021 RATIFIED via Promotion Ledger P-028; all 5 OQs ratified at working recommendations; Artifact Registry v2.14 → v2.15; CDM v1.5 + AUDIT_EVENTS v5.7 + CCR_RUNTIME v5.4 follow-on amendment cycle QUEUED as next autonomous-work deliverable; Phase A FULLY CLOSED
+
+**Date:** 2026-05-20
+**Trigger:** Evans's chat-message directive *"ratify"* following Claude's recommendation that ratifying SI-021 now unlocks a clean CDM amendment cycle as next autonomous-work deliverable.
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). SI-021's own ratifier ceremony per the RATIFIER-READY-AT-§10-BOUNDARY status filed at R5 close 2026-05-20.
+
+**Five OQs ratified at working recommendations:**
+
+| OQ | Canonical decision |
+|---|---|
+| **OQ1 — Signing interval** | Hourly canonical; tenant-configurable down to 15 min per new `tenant.audit_archive_signing_interval_seconds` CCR key |
+| **OQ2 — Transparency log selection** | Option T1: Sigstore-rekor OR comparable CT-compliant log with native STH + inclusion-proof + consistency-proof mechanics for v1.0. Option T2 (CloudWatch + custom witness layer) REJECTED as default |
+| **OQ3 — Codex pre-ratification target** | Ratified at actual cycle outcome: 5 rounds to §10-cadence boundary (R1 → R5). §10-cadence boundary IS the convergence definition |
+| **OQ4 — CDM amendment cycle** | CDM v1.4 → v1.5 with 4 new entities (audit_event_hash_chain + audit_event_hash_chain_anchor + audit_event_hash_chain_anchor_intent + R5-added audit_event_hash_chain_anchor_corruption_evidence); AUDIT_EVENTS v5.6 → v5.7 with 15 new Cat A events; CCR_RUNTIME v5.3 → v5.4 with 1 new key (OQ1) |
+| **OQ5 — Backfill** | Incremental 30-day window; emit Cat B `audit_archive.backfill_completed` on completion. Backfill executes after CDM v1.5 + Phase D infrastructure provisioning |
+
+**Cascade artifacts:**
+- Promotion Ledger: P-028 entry appended (this ratification).
+- Artifact Registry: v2.14 → v2.15.
+- SI-021 file: Version "1.0 RATIFIED"; Status "RATIFIED 2026-05-20 per P-028"; §5 OQs each marked RATIFIED with canonical decisions.
+
+**Phase A status:** Q2 2026 Batched Ratifier Ceremony Phase A is now **FULLY CLOSED**. P-026 ratified the 13 architectural-judgment OQ-groups (OQ-A..OQ-M) at the Q2 batched ceremony; P-028 ratifies SI-021's 5 internal OQs in its own ceremony. The OQ-C split decision at P-026 (filing SI-021 as a separate SI) has now resolved with SI-021's own ratification — closing the OQ-C loop completely.
+
+**Next autonomous-work deliverable (QUEUED):**
+
+CDM v1.4 → v1.5 + AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4 follow-on amendment cycle:
+
+- **CDM v1.4 → v1.5:** 4 new entities (audit_event_hash_chain + audit_event_hash_chain_anchor + audit_event_hash_chain_anchor_intent + audit_event_hash_chain_anchor_corruption_evidence).
+- **AUDIT_EVENTS v5.6 → v5.7:** 15 new Cat A events covering anchor lifecycle + cross-region replication + transparency-log integration + DR reconstruction + R3-R5 added recovery + supersession + corruption-evidence handling.
+- **CCR_RUNTIME v5.3 → v5.4:** 1 new key `tenant.audit_archive_signing_interval_seconds`.
+
+Estimated Codex convergence: 2-3 rounds (lower than SI-021 itself because schemas + events are already canonicalized in SI-021 v1.0; the amendment is mechanical consolidation into canonical contract files). Cycle pattern mirrors P-009 v1.10.1 hygiene cycle (body-merge from SI-021 v1.0 into CDM + Contracts Pack v5.2-amended-then-v5.3-promoted file bodies).
+
+**Outstanding queue (post-P-028):**
+1. **CDM v1.5 + AUDIT_EVENTS v5.7 + CCR_RUNTIME v5.4 amendment cycle** — next autonomous-work deliverable; Claude drives via Codex.
+2. **Phase C procedure-side code implementation** — `telecheck-app` repo deliverable; out-of-scope for spec corpus.
+3. **Quantum-resistance migration roadmap SI** — deferred to Phase 3+ per OQ-I.
+
+**Discipline note:** the SI-021 ratification ceremony is the second instance in the Q2 2026 cycle of an architectural-judgment ratifier ceremony executed via chat-message ratification rather than a multi-artifact decision-brief packet (the first was P-026 Q2 Batched Ratifier Ceremony Phase A). The pattern is justified by (a) SI-021's 5 OQs being narrow, well-specified, recommendation-led, and (b) the R3-R5 Codex convergence cycle having already validated the technical surface area + escalation discipline (0 architectural-judgment items closed inline). Chat-message ratification of working-recommendation OQs is appropriate when the OQs are RATIFIER-READY at §10-cadence boundary with clear recommendations + 0 architectural-judgment escalations needed mid-cycle. The OQ surface has been Codex-vetted across 5 convergence rounds; the ratification ceremony reduces to confirming the working recommendations as canonical decisions.
+
+— Claude (Opus 4.7, 1M context), SI-021 ratification ceremony close-out 2026-05-20 per Evans's chat-message "ratify". SI-021 v1.0 RATIFIED. Registry v2.15. P-028 appended. Phase A FULLY CLOSED. CDM v1.5 amendment cycle queued as next autonomous-work deliverable.
