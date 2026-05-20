@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.5 DRAFT — RATIFIER-READY at §10-cadence boundary (R4 boundary close 2026-05-20)
-**Status:** R4 closed: 1 HIGH inline (CONSOLIDATED single-DEFINER design with EXECUTE-GRANT trust-anchor; replaces R3 split-helper which had direct-invocation bypass). §10-cadence boundary reached per OQ6 3-4 round target.
+**Version:** 1.0 v0.6 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycle-1 corrections applied
+**Status:** R4 + pre-merge cycle-1: 2 HIGH + 1 MED closed inline (helper redesigned SECURITY INVOKER + EXECUTE PUBLIC with inline pg_has_role check + defense-in-depth break_glass_approval RLS; Phase 2 RESTRICTIVE policy includes target-tenant break-glass branch; I-036 timing aligned to Phase 4 cutover, NOT at SI-024 merge). Pre-merge re-verification pending.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -201,19 +201,23 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 1. **Phase 1 (foundation):** create the canonical hardened helper functions (Sub-decision 1) + provision the trust-anchor (Sub-decision 2) + grant `EXECUTE` to all roles that currently can use raw `current_setting('app.tenant_id')` in RLS. No RLS policy changes yet; helpers coexist with raw GUC.
 2. **Phase 2 (RESTRICTIVE parallel policy):** for each PHI-bearing entity, ADD a parallel RLS policy using the hardened helper **with `AS RESTRICTIVE`** so the new policy intersects (AND-combines) with the existing permissive raw-GUC policy. **R1 HIGH-1 closure 2026-05-20:** prior wording said "must satisfy BOTH" implying intersection; but PostgreSQL permissive RLS policies OR-combine by default. Using `AS RESTRICTIVE` explicitly produces the intersection (a row satisfies the table policy iff ALL permissive policies' USING/WITH CHECK is true AND ALL restrictive policies' USING/WITH CHECK is true).
 
-   Canonical Phase 2 DDL pattern:
+   Canonical Phase 2 DDL pattern (pre-merge HIGH-2 closure 2026-05-20: target-tenant break-glass branch added so legitimate DR/compliance access survives the coexistence window):
    ```sql
    CREATE POLICY <table>_tenant_isolation_hardened_intersection
        ON <table>
        AS RESTRICTIVE
        USING (
            tenant_id = current_tenant_id_strict()
+           OR is_target_tenant_break_glass_active(tenant_id)
            OR (is_platform_operator_break_glass_active()
-               AND tenant_id IN (current_tenant_id_strict(), '00000000-0000-0000-0000-000000000000'::tenant_id_t))
+               AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
        )
-       WITH CHECK (tenant_id = current_tenant_id_strict());
+       WITH CHECK (
+           tenant_id = current_tenant_id_strict()
+           OR is_target_tenant_break_glass_active(tenant_id)
+       );
    ```
-   This ensures: a row admitted under raw-GUC but rejected by the hardened helper is REJECTED during Phase 2 (catches spoofing attempts in telemetry); a row admitted by both is allowed (no false negatives for legitimate traffic).
+   This ensures: (a) a row admitted under raw-GUC but rejected by the hardened helper is REJECTED during Phase 2 (catches spoofing attempts in telemetry); (b) a row admitted by both is allowed (no false negatives for legitimate traffic); (c) **legitimate target-tenant break-glass reads survive the coexistence window** (closed pre-merge HIGH-2; DR/compliance investigation paths are not denied during the migration meant to harden them); (d) platform-sentinel break-glass reads also survive. The Phase 2 RESTRICTIVE policy MIRRORS the final canonical policy from Sub-decision 5a §3.
 
 3. **Phase 3 (telemetry):** run the dual-policy state for a tenant-launch-readiness window (suggested 30 days per Sprint 17 cadence) collecting telemetry on hardened-helper invocations + any spoofing-attempt audit events. **Required test before Phase 4:** integration test demonstrating that a row admitted under the raw-GUC permissive policy + rejected by the hardened-helper restrictive policy is actually denied during Phase 2 (validates the RESTRICTIVE intersection semantics in production).
 4. **Phase 4 (cutover):** for each entity, DROP the raw-GUC permissive RLS policy; the hardened-helper RESTRICTIVE policy + any other permissive policies become the canonical enforcement. (Note: at cutover, the hardened-helper policy may be DROPPED and re-CREATED as permissive instead of restrictive, since it's the sole tenant-isolation policy — restrictive is only needed during the dual-coexistence window.)
@@ -256,17 +260,23 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
    Rationale: the R3 split-helper design (outer INVOKER + inner DEFINER with caller-supplied params) had a critical bypass — GRANT EXECUTE on the inner function to PUBLIC let any SQL role call it directly with forged identity parameters, defeating the outer wrapper. The R4 design replaces this with a single SECURITY DEFINER function where the **EXECUTE GRANT itself is the trust anchor**: only roles in the platform-operator membership set are granted EXECUTE, so the fact that the function executes proves the caller has at least one platform-operator membership. The function then matches approvals by `operator_user_id` (the caller's human-id from the `app.actor_human_id` session GUC populated by middleware post-JWT-verification).
 
    ```sql
-   -- CONSOLIDATED helper: single SECURITY DEFINER function with EXECUTE-GRANT as the trust anchor.
-   -- The function is GRANTed EXECUTE ONLY to the three platform-operator roles; if it executes,
-   -- the caller has at least one platform-operator membership (PostgreSQL EXECUTE-grant semantics).
-   -- The function does NOT trust caller-supplied parameters; it reads only the human-id from session GUC
-   -- (which middleware populates post-JWT-verification) and the target_tenant_id from the RLS predicate context.
+   -- Pre-merge HIGH-1 closure 2026-05-20: SECURITY INVOKER + EXECUTE TO PUBLIC pattern.
+   -- The function is callable by ALL roles (no EXECUTE-denial inside RLS predicates).
+   -- The function body checks pg_has_role(current_user, 'platform_operator_*', 'USAGE') and returns FALSE
+   -- for non-platform-operator callers. Under INVOKER, current_user is the post-SET-ROLE effective role.
+   -- Lookup against break_glass_approval runs under INVOKER privileges — the caller's RLS on
+   -- break_glass_approval applies (Policy 3 grants platform-operator self-service SELECT on own active
+   -- approvals; non-operator callers see zero rows even if the role-check were bypassed).
    CREATE FUNCTION is_target_tenant_break_glass_active(target_tenant_id tenant_id_t) RETURNS BOOLEAN AS $$
    DECLARE
        caller_human_id UUID;
    BEGIN
-       -- NO inline role-membership check needed: EXECUTE GRANT (below) gates which roles can invoke this.
-       -- Reaching this body means the caller's effective role has EXECUTE membership in the granted set.
+       -- Role-membership check on the post-SET-ROLE effective role (under INVOKER current_user is correct).
+       IF NOT (pg_has_role(current_user, 'platform_operator_break_glass', 'USAGE')
+           OR pg_has_role(current_user, 'platform_operator_dr_recovery', 'USAGE')
+           OR pg_has_role(current_user, 'platform_operator_compliance_audit', 'USAGE')) THEN
+           RETURN FALSE;
+       END IF;
        -- Human-identity resolution via session GUC populated by middleware at session-start.
        BEGIN
            caller_human_id := current_setting('app.actor_human_id', false)::UUID;
@@ -275,10 +285,10 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
                -- Operator's human-id not bound → break-glass check fails closed.
                RETURN FALSE;
        END;
-       -- Approval lookup runs under DEFINER privileges (sec_break_glass_lookup has SELECT on break_glass_approval).
-       -- Match by (target_tenant_id, operator_user_id, active-window). Does NOT match by operator_role —
-       -- a human with multiple platform-operator memberships can use any active approval issued to them
-       -- (acknowledged v1.0 simplification; SI-024.1 cryptographic JWT-binding closes this).
+       -- Approval lookup runs under INVOKER privileges — break_glass_approval RLS policies (declared below)
+       -- enforce row visibility: Policy 3 grants platform-operator self-service SELECT on own active approvals.
+       -- Match by (target_tenant_id, operator_user_id, active-window); does NOT match by operator_role
+       -- (v1.0 simplification; SI-024.1 cryptographic JWT-binding closes this).
        RETURN EXISTS (
            SELECT 1 FROM public.break_glass_approval
            WHERE break_glass_approval.target_tenant_id = is_target_tenant_break_glass_active.target_tenant_id
@@ -288,22 +298,27 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
                AND revoked_at IS NULL
        );
    END;
-   $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
+   $$ LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = pg_catalog, public;
 
-   -- Function ownership + grants (the trust-anchor mechanism):
-   -- ALTER FUNCTION is_target_tenant_break_glass_active(tenant_id_t) OWNER TO sec_break_glass_lookup;
-   -- REVOKE EXECUTE ON FUNCTION is_target_tenant_break_glass_active(tenant_id_t) FROM PUBLIC;
-   -- GRANT EXECUTE ON FUNCTION is_target_tenant_break_glass_active(tenant_id_t)
+   -- Function grants:
+   -- GRANT EXECUTE ON FUNCTION is_target_tenant_break_glass_active(tenant_id_t) TO PUBLIC;
+   -- The EXECUTE-TO-PUBLIC grant is REQUIRED so that RLS predicates (which call this function for every PHI
+   -- table read/write across all middleware-writer + platform-operator roles) do not fail with permission-denied.
+   -- The fail-closed behavior is enforced INSIDE the function body via pg_has_role + early-return for
+   -- non-platform-operator callers. Defense-in-depth: even if the role-check were bypassed (e.g., via a
+   -- pg_has_role implementation defect), the break_glass_approval RLS policies prevent non-operators from
+   -- seeing approval rows — EXISTS would return FALSE regardless.
+
+   -- Table grants:
+   -- GRANT SELECT ON TABLE break_glass_approval
    --   TO platform_operator_break_glass, platform_operator_dr_recovery, platform_operator_compliance_audit;
-   -- NOTE: do NOT grant to app_middleware_* roles. The middleware path uses current_tenant_id_strict() for
-   -- normal tenant-bound access, not the break-glass path. If middleware needs to expose break-glass UI to
-   -- operators, the middleware connects as the operator's role via SET ROLE before invoking — never as a
-   -- middleware role.
+   -- These grants are REQUIRED so that platform-operator roles invoking the function can reach the table;
+   -- the break_glass_approval Policy 3 RLS filters which rows they actually see (only their own active).
    ```
 
-   **EXECUTE-GRANT trust-anchor reasoning (R4 HIGH closure):** PostgreSQL's EXECUTE-grant check is performed against the caller's POST-`SET ROLE` effective role (the same role `current_user` reports under SECURITY INVOKER). Therefore the EXECUTE-gate correctly catches the post-SET-ROLE effective role without needing the function body to check it. The function body cannot determine WHICH of the three platform-operator roles the caller used (PostgreSQL doesn't expose that under DEFINER), so v1.0 doesn't bind approvals to a specific operator_role at lookup time — only to the human_id. This is the v1.0 simplification: a human with multiple operator-role memberships can use any active approval issued to them, regardless of which specific role's authority the approval was originally issued under. SI-024.1 with cryptographic JWT-binding closes this by carrying the verified role-claim in the JWT.
+   **Defense-in-depth posture (R4 HIGH + pre-merge HIGH-1 closure 2026-05-20):** the design uses THREE independent layers — (a) inline `pg_has_role` role-check returning FALSE for non-platform-operators; (b) break_glass_approval table FORCE ROW LEVEL SECURITY + Policy 3 restricting platform-operator visibility to their own active approvals; (c) `operator_user_id = caller_human_id` predicate binding to the middleware-verified human-id. Bypassing any single layer doesn't grant unauthorized break-glass access. Acknowledged residual: app.actor_human_id GUC is middleware-trusted (not cryptographically bound in v1.0; SI-024.1 closes via JWT signature verification).
 
-   **Negative-path test required for SI-024 v1.0 promotion (R4 HIGH closure):** integration test verifying that a SQL role NOT in the platform-operator membership set receives `permission denied for function is_target_tenant_break_glass_active` when attempting direct invocation. This proves the EXECUTE-grant trust-anchor mechanism is active.
+   **Negative-path tests required for SI-024 v1.0 promotion:** (1) Non-platform-operator role direct invocation returns FALSE (role-check fail-closed). (2) Platform-operator role invocation with no `app.actor_human_id` GUC set returns FALSE (GUC exception fail-closed). (3) Platform-operator role invocation with a forged human-id (mismatched against any approval) returns FALSE (no matching approval). (4) Normal middleware role invoking from RLS predicate succeeds without permission-denied + returns FALSE (the OR-branch short-circuit isn't relied on; the function itself returns FALSE).
 
    **break_glass_approval table access model (R2 HIGH-1 closure):**
 
@@ -474,7 +489,7 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 2. **OQ2 — Phase 4 cutover sequencing.** Recommendation: per-entity rollout in dependency order (audit-chain projection tables LAST since they're cross-cutting; tenant-bound PHI entities FIRST since they have the highest exposure). Ratifier confirms.
 3. **OQ3 — Phase 3 telemetry window duration.** Recommendation: 30 days minimum + per-tenant launch-readiness verification per Sprint 17 P-15.
 4. **OQ4 — Break-glass role-set enumeration (Sub-decision 5).** Recommendation: 3 roles (`platform_operator_break_glass` + `platform_operator_dr_recovery` + `platform_operator_compliance_audit`). Ratifier confirms vs. consolidation to fewer roles.
-5. **OQ5 — I-036 platform-floor invariant (Sub-decision 9) — timing.** Recommendation: I-036 lands at INVARIANTS v5.6 co-bumped with the FIRST Phase 4 entity cutover, not at SI-024 ratification itself (avoids declaring an invariant that no entity yet satisfies).
+5. **OQ5 — I-036 platform-floor invariant (Sub-decision 9) — timing.** Recommendation: **I-036 lands at INVARIANTS v5.5 co-bumped with the FIRST Phase 4 entity cutover, NOT at SI-024 v1.0 ratification.** This avoids declaring an invariant that no entity yet satisfies. **Pre-merge MED closure 2026-05-20:** the SI-024 v1.0 merge ceremony (P-030 + Registry v2.16 → v2.17 content-change promotion) does NOT include INVARIANTS bump. INVARIANTS bump is queued as a separate co-bump with first Phase 4 entity cutover (post-merge milestone). This aligns sources: the SI body, OQ5 timing, and the merge ceremony all reference Phase 4 as the I-036 trigger.
 6. **OQ6 — Codex pre-ratification target.** Recommendation: 3-4 rounds under two-pass discipline (per CLAUDE.md `16d7244` standard cadence; OQ-I quantum-resistance roadmap precedent).
 7. **OQ7 — Application-middleware contract.** Recommendation: SI-024 specifies the SQL-layer contract; the Track 2 application-middleware implementation files a separate spec stipulating how the middleware satisfies the contract. The middleware spec is OUT-OF-SCOPE for SI-024 promotion; SI-024 promotion does NOT block on it.
 8. **OQ-NEW1 — SI-024.1 cryptographic-binding follow-on ratifier date/owner (R1 CRITICAL-2 closure 2026-05-20).** Recommendation: SI-024 v1.0 promotion is CONDITIONAL on Evans committing to a SI-024.1 ratifier date + owner-triad. Suggested commitment: SI-024.1 v0.1 DRAFT authored within 30 days of SI-024 v1.0 promotion; ratifier ceremony within 90 days. Without this commitment, SI-024 v1.0 should NOT be promoted — the residual compromised-middleware-credential risk is too high to leave open indefinitely.
