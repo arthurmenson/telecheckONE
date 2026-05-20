@@ -59,7 +59,7 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 #### §1. SI-024 v1.0 canonical content
 
-Canonical artifact: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_SI_024_Canonical_Hardened_Tenant_Platform_RLS_Helper_v1_0.md` v0.7 RATIFIER-READY-AT-§10-CADENCE-BOUNDARY (post-R4 + 3 pre-merge consult cycles).
+Canonical artifact: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_SI_024_Canonical_Hardened_Tenant_Platform_RLS_Helper_v1_0.md` **v0.11** RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary (post-R4 + 5 pre-merge consult cycles + 1 strategic two-pass synthesis to B+).
 
 **Canonical content (15 sub-decisions across 9 sub-decision blocks):**
 
@@ -118,7 +118,7 @@ To be added to AUDIT_EVENTS at SI-024 Phase 1 (foundation) implementation. NOT i
 
 #### §6. Phase 1 implementation gate
 
-P-030 ratifies SI-024 v1.0 as the canonical floor specification. **Phase 1 implementation (helper functions + `break_glass_approval` table + RLS policies; no entity migrations) is UNBLOCKED post-P-030 merge.** Phase 2/3/4 cutovers gated on subsequent ratifier review per Sub-decision 3 sequencing + OQ-NEW2 (Phase 4 cutover gating on SI-024.1 readiness).
+P-030 ratifies SI-024 v1.0 as **TRANSITIONAL canonical implementation guidance for Phases 1-3 only** (per Pass-2 B+ synthesis). Durable canonical-floor status gates strictly on SI-024.1 cryptographic-binding ratification + integration; SI-024 v1.0 alone does NOT constitute the durable canonical-floor. **Phase 1 implementation (helper functions + `break_glass_approval` table + RLS policies; no entity migrations) is UNBLOCKED post-P-030 merge**, with the explicit caveat that **production target-tenant break-glass operations remain BLOCKED until SI-024.1 lands** (Phase 1 may scaffold the tables/functions but production use of `is_target_tenant_break_glass_active()` for cross-tenant PHI access is forbidden until SI-024.1's cryptographic JWT-binding + per-access audit close the two acknowledged gaps). Phase 2/3 cutovers gated on subsequent ratifier review per Sub-decision 3 sequencing + production break-glass block. **Phase 4 cutover (raw-GUC policy DROP; hardened helper as sole canonical enforcement) + INVARIANTS I-036 ratification both gate strictly on SI-024.1** per OQ-NEW2.
 
 ---
 

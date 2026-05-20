@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.11 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + Pass-2 strategic-synthesis B+ closures applied
-**Status:** Pass-2 strategic synthesis 2026-05-20 reconciled Claude's B (ship with explicit residual-risk acceptance) + Pass-1's C (don't canonize incomplete trust anchor) into **B+: ship as TRANSITIONAL canonical implementation guidance for Phases 1-3 only**. Phase 4 cutover + I-036 invariant + any durable canonical-floor language gates strictly on SI-024.1 cryptographic-binding ratification + integration. Production target-tenant break-glass use blocked until SI-024.1 lands (Phase 1 may scaffold tables/functions). P-030 metrics corrected to v0.11 / cycle-5 / 22 findings / 9 simplifications. Final cycle-6 verification under two-pass queued before auto-proceed merge.
+**Version:** 1.0 v0.12 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + Pass-2 strategic-synthesis B+ closures applied + cycle-6 cleanup
+**Status:** Cycle-6 final cleanup: 1 HIGH + 1 MED inline (stale break_glass_approval_lookup_owner policy removed — sec_break_glass_lookup role no longer referenced; P-030 stale v0.7/canonical-floor language replaced with v0.11 TRANSITIONAL language). Pre-merge cycle-7 final two-pass verification queued before auto-proceed merge.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -330,11 +330,13 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
    ALTER TABLE break_glass_approval ENABLE ROW LEVEL SECURITY;
    ALTER TABLE break_glass_approval FORCE ROW LEVEL SECURITY;
 
-   -- Policy 1: sec_break_glass_lookup (the function-owner role) can read all rows for the helper's EXISTS lookup.
-   CREATE POLICY break_glass_approval_lookup_owner ON break_glass_approval
-       FOR SELECT
-       TO sec_break_glass_lookup
-       USING (TRUE);
+   -- Pre-merge cycle-6 HIGH closure 2026-05-20: REMOVED stale Policy 1 (break_glass_approval_lookup_owner)
+   -- which granted sec_break_glass_lookup full SELECT for a R2-era SECURITY DEFINER design. The current
+   -- canonical helper (pre-merge cycle-2 closure 2026-05-20) is SECURITY INVOKER + EXECUTE PUBLIC, so the
+   -- sec_break_glass_lookup role + its policy are not needed and would represent a stale privileged read path.
+   -- Implementation note: do NOT create sec_break_glass_lookup role; do NOT grant any SELECT on
+   -- break_glass_approval to that role. The platform-operator self-service Policy 3 is the only required
+   -- SELECT path for the INVOKER helper's EXISTS lookup.
 
    -- Policy 2: Compliance Officer + CTO can SELECT approvals they authorized + revoke them (UPDATE narrow).
    -- R3 HIGH-2 closure 2026-05-20: split FOR ALL into FOR SELECT + FOR UPDATE with tight WITH CHECK preserving
