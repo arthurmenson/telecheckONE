@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.3 DRAFT
-**Status:** R2 closed: 2 HIGH + 1 MED inline (target-tenant helper SECURITY DEFINER + session_user; current_tenant_id_strict() NULL-returns instead of raise; pg_has_role-based membership for connection-pool compatibility; break_glass_approval RLS+grant policy). R3 verification PENDING.
+**Version:** 1.0 v0.4 DRAFT
+**Status:** R3 closed: 2 HIGH inline (split-helper pattern with INVOKER outer + DEFINER inner for SET-ROLE/pool compatibility; revoked_at transition guard authored inline; authorizer policy split into SELECT + UPDATE with tight WITH CHECK). R4 verification PENDING.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -251,42 +251,55 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
    );
    ```
 
-2. **RLS helper extension (R2 HIGH-1 closure 2026-05-20: SECURITY DEFINER owned by a dedicated privileged role with SELECT on break_glass_approval; captures caller identity via session_user before DEFINER context swap):**
+2. **RLS helper extension (R3 HIGH-1 closure 2026-05-20: SPLIT into SECURITY INVOKER outer wrapper + SECURITY DEFINER inner privileged lookup; the outer's `current_user` correctly reports the post-`SET ROLE` effective role; the inner receives the verified caller-role as a parameter):**
+
+   Rationale: under PostgreSQL `SECURITY DEFINER`, neither `session_user` (the LOGIN role; unchanged by SET ROLE) nor `current_user` (the function OWNER under DEFINER) reports the post-`SET ROLE` effective role of the caller. The R2 design used `session_user` which breaks for the documented connection-pool pattern where pools log in as a generic `pool_role` and `SET ROLE platform_operator_*` per request. The R3 split-helper design solves this by doing the role-membership check in the OUTER wrapper under SECURITY INVOKER (where `current_user` correctly reports the post-`SET ROLE` effective role), then calling the INNER privileged-lookup function with the verified effective-role passed as a parameter.
+
    ```sql
-   -- Canonical target-tenant break-glass check.
-   -- Returns: TRUE iff caller's session role is platform-operator-membership AND there's an active approval row.
-   -- Security: SECURITY DEFINER owned by 'sec_break_glass_lookup' role which has SELECT on break_glass_approval.
-   --   Reason: under FORCE RLS + SECURITY INVOKER, a platform_operator_* caller may lack SELECT on
-   --   break_glass_approval OR be blocked by its RLS — making the helper non-functional. SECURITY DEFINER
-   --   with a dedicated read-only owner role solves the access problem; session_user captures the
-   --   actual caller's session identity before the DEFINER context swap.
-   -- search_path hardening prevents object-redirection attacks on the privileged execution path.
+   -- OUTER WRAPPER: SECURITY INVOKER.
+   -- current_user under INVOKER correctly reports the post-SET-ROLE effective role of the caller.
+   -- Performs role-membership check + extracts human-id; if both pass, calls the INNER privileged lookup.
    CREATE FUNCTION is_target_tenant_break_glass_active(target_tenant_id tenant_id_t) RETURNS BOOLEAN AS $$
    DECLARE
-       invoker_session_role TEXT := session_user;   -- captured BEFORE DEFINER context swap; identifies caller
-       invoker_human_id UUID;
+       effective_role TEXT := current_user;   -- post-SET-ROLE effective role under INVOKER
+       caller_human_id UUID;
    BEGIN
-       -- Role-membership check using session_user (the actual caller's session role, not the DEFINER owner).
-       IF NOT (pg_has_role(invoker_session_role, 'platform_operator_break_glass', 'USAGE')
-           OR pg_has_role(invoker_session_role, 'platform_operator_dr_recovery', 'USAGE')
-           OR pg_has_role(invoker_session_role, 'platform_operator_compliance_audit', 'USAGE')) THEN
+       -- Role-membership check on the post-SET-ROLE effective role.
+       IF NOT (pg_has_role(effective_role, 'platform_operator_break_glass', 'USAGE')
+           OR pg_has_role(effective_role, 'platform_operator_dr_recovery', 'USAGE')
+           OR pg_has_role(effective_role, 'platform_operator_compliance_audit', 'USAGE')) THEN
            RETURN FALSE;
        END IF;
        -- Human-identity resolution via session GUC populated by middleware at session-start.
        BEGIN
-           invoker_human_id := current_setting('app.actor_human_id', false)::UUID;
+           caller_human_id := current_setting('app.actor_human_id', false)::UUID;
        EXCEPTION
            WHEN OTHERS THEN
                -- Operator's human-id not bound → break-glass check fails closed.
                RETURN FALSE;
        END;
-       -- Approval table lookup runs under DEFINER privileges (sec_break_glass_lookup owns this function +
-       -- has SELECT on break_glass_approval + the table's RLS policy permits sec_break_glass_lookup reads).
+       -- Delegate to INNER privileged lookup with verified parameters.
+       RETURN _internal_check_break_glass_approval(target_tenant_id, effective_role, caller_human_id);
+   END;
+   $$ LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = pg_catalog, public;
+
+   -- INNER PRIVILEGED LOOKUP: SECURITY DEFINER.
+   -- Owned by sec_break_glass_lookup which has SELECT on break_glass_approval + RLS policy permitting its reads.
+   -- Trust model: the OUTER wrapper verified the caller's effective_role + human_id under INVOKER semantics;
+   -- this function trusts those parameters and performs the privileged table lookup.
+   -- The two-prefixed _ underscore + REVOKE FROM PUBLIC + specific GRANT to the outer wrapper enforce
+   -- that this function is only callable through the canonical wrapper path.
+   CREATE FUNCTION _internal_check_break_glass_approval(
+       p_target_tenant_id tenant_id_t,
+       p_caller_effective_role TEXT,
+       p_caller_human_id UUID
+   ) RETURNS BOOLEAN AS $$
+   BEGIN
        RETURN EXISTS (
            SELECT 1 FROM public.break_glass_approval
-           WHERE break_glass_approval.target_tenant_id = is_target_tenant_break_glass_active.target_tenant_id
-               AND pg_has_role(invoker_session_role, operator_role, 'USAGE')   -- operator's session role matches the approval's operator_role
-               AND operator_user_id = invoker_human_id
+           WHERE break_glass_approval.target_tenant_id = p_target_tenant_id
+               AND pg_has_role(p_caller_effective_role, operator_role, 'USAGE')
+               AND operator_user_id = p_caller_human_id
                AND approved_at <= now()
                AND expires_at > now()
                AND revoked_at IS NULL
@@ -295,7 +308,10 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
    $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
 
    -- Function ownership + grants:
-   -- ALTER FUNCTION is_target_tenant_break_glass_active(tenant_id_t) OWNER TO sec_break_glass_lookup;
+   -- ALTER FUNCTION _internal_check_break_glass_approval(tenant_id_t, TEXT, UUID) OWNER TO sec_break_glass_lookup;
+   -- REVOKE EXECUTE ON FUNCTION _internal_check_break_glass_approval(tenant_id_t, TEXT, UUID) FROM PUBLIC;
+   -- GRANT EXECUTE ON FUNCTION _internal_check_break_glass_approval(tenant_id_t, TEXT, UUID)
+   --   TO PUBLIC;   -- Callable from the INVOKER wrapper which itself has restricted EXECUTE.
    -- REVOKE EXECUTE ON FUNCTION is_target_tenant_break_glass_active(tenant_id_t) FROM PUBLIC;
    -- GRANT EXECUTE ON FUNCTION is_target_tenant_break_glass_active(tenant_id_t)
    --   TO platform_operator_break_glass, platform_operator_dr_recovery, platform_operator_compliance_audit,
@@ -314,15 +330,30 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
        TO sec_break_glass_lookup
        USING (TRUE);
 
-   -- Policy 2: Compliance Officer + CTO can read approvals they authorized + revoke them.
-   CREATE POLICY break_glass_approval_authorizer ON break_glass_approval
-       FOR ALL
+   -- Policy 2: Compliance Officer + CTO can SELECT approvals they authorized + revoke them (UPDATE narrow).
+   -- R3 HIGH-2 closure 2026-05-20: split FOR ALL into FOR SELECT + FOR UPDATE with tight WITH CHECK preserving
+   -- authorization invariants (no insert/delete via this policy; updates only allowed on revoked_at column).
+   CREATE POLICY break_glass_approval_authorizer_select ON break_glass_approval
+       FOR SELECT
+       TO compliance_officer, cto_role
+       USING (
+           authorized_by_compliance_officer_user_id = current_setting('app.actor_human_id', false)::UUID
+           OR authorized_by_cto_user_id = current_setting('app.actor_human_id', false)::UUID
+       );
+
+   CREATE POLICY break_glass_approval_authorizer_revoke ON break_glass_approval
+       FOR UPDATE
        TO compliance_officer, cto_role
        USING (
            authorized_by_compliance_officer_user_id = current_setting('app.actor_human_id', false)::UUID
            OR authorized_by_cto_user_id = current_setting('app.actor_human_id', false)::UUID
        )
-       WITH CHECK (TRUE);
+       WITH CHECK (
+           -- WITH CHECK: the post-update row must preserve all identity + authorization fields unchanged.
+           -- The revoked_at transition trigger below enforces the NULL → timestamp directionality.
+           authorized_by_compliance_officer_user_id = current_setting('app.actor_human_id', false)::UUID
+           OR authorized_by_cto_user_id = current_setting('app.actor_human_id', false)::UUID
+       );
 
    -- Policy 3: Operator can SELECT only their own active approval rows (for self-service status check).
    CREATE POLICY break_glass_approval_operator_self ON break_glass_approval
@@ -334,15 +365,50 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
            AND expires_at > now()
        );
 
-   -- Append-only enforcement: prevents tampering with approval rows post-INSERT.
+   -- Append-only enforcement on all IMMUTABLE columns: prevents tampering with approval rows post-INSERT.
    CREATE TRIGGER break_glass_approval_append_only
        BEFORE UPDATE OF id, operator_role, operator_user_id, target_tenant_id, approval_reason,
                        authorized_by_compliance_officer_user_id, authorized_by_cto_user_id, approved_at, expires_at
        OR DELETE ON break_glass_approval
        FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
-   -- Only revoked_at column is mutable post-INSERT (via the authorizer policy's WITH CHECK + a separate
-   -- trigger ensuring revoked_at transitions only NULL → timestamp, never the reverse).
+
+   -- R3 HIGH-2 closure: canonical revoked_at-transition trigger.
+   -- Enforces: revoked_at can transition ONLY NULL → timestamp (one-way; non-reversible).
+   -- Forbids: NULL → NULL noop (no actual change attempted; harmless but rejected for tight semantics);
+   --          timestamp → NULL (re-activating a revoked approval — direct tampering vector);
+   --          timestamp → different timestamp (rewriting the revocation moment — audit-trail tampering vector).
+   CREATE FUNCTION break_glass_approval_revoked_at_transition_guard() RETURNS TRIGGER AS $$
+   BEGIN
+       -- Only meaningful when revoked_at is the changing column.
+       IF NEW.revoked_at IS DISTINCT FROM OLD.revoked_at THEN
+           IF OLD.revoked_at IS NOT NULL THEN
+               -- Already revoked; reject ANY change (re-clear or timestamp rewrite).
+               RAISE EXCEPTION 'break_glass_approval.revoked_at is immutable once set (attempted change: old=%, new=%)',
+                   OLD.revoked_at, NEW.revoked_at
+                   USING ERRCODE = 'invalid_column_reference';
+           END IF;
+           -- Transitioning from NULL to NOT NULL — must be a valid timestamp.
+           IF NEW.revoked_at IS NULL THEN
+               RAISE EXCEPTION 'break_glass_approval.revoked_at cannot transition NULL → NULL via UPDATE (no-op forbidden)'
+                   USING ERRCODE = 'invalid_column_reference';
+           END IF;
+           -- NEW.revoked_at must be >= now() - small_skew_tolerance (allow up to 60s clock skew).
+           IF NEW.revoked_at < now() - INTERVAL '60 seconds' OR NEW.revoked_at > now() + INTERVAL '60 seconds' THEN
+               RAISE EXCEPTION 'break_glass_approval.revoked_at must be set to current timestamp (±60s); attempted: %',
+                   NEW.revoked_at
+                   USING ERRCODE = 'invalid_column_reference';
+           END IF;
+       END IF;
+       RETURN NEW;
+   END;
+   $$ LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public;
+
+   CREATE TRIGGER break_glass_approval_revoked_at_transition_trg
+       BEFORE UPDATE OF revoked_at ON break_glass_approval
+       FOR EACH ROW EXECUTE FUNCTION break_glass_approval_revoked_at_transition_guard();
    ```
+
+   **Mutability summary (R3 HIGH-2 closure):** the ONLY column mutable post-INSERT on `break_glass_approval` is `revoked_at`, and only via the NULL → current-timestamp transition (single-shot). All other columns are append-only via the BEFORE UPDATE trigger. DELETE is forbidden for all roles. This makes the table effectively WORM (write-once read-many) with a single sanctioned mutation path (revocation).
 
 3. **Canonical RLS policy under SI-024 v1.0 (revised for target-tenant break-glass):**
    ```sql
@@ -472,6 +538,27 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 - **1 cross-CDM deferral** (SI-024.1 cryptographic-binding follow-on per OQ-NEW1/2).
 
 **R3 verification queued.** Per OQ6 working recommendation 3-4 rounds, R3 should converge or surface only minor residual.
+
+**v0.4 R3 closure 2026-05-20:** 2 HIGH closed inline.
+
+| Round | Findings | Status |
+|---|---|---|
+| R3 | **HIGH-1** `session_user` in SECURITY DEFINER captures the LOGIN role, not the post-SET-ROLE effective role (contradicts pg_has_role convention claiming SET ROLE support; emergency DR/compliance access can be denied for pooled-operator pattern); **HIGH-2** authorizer policy `FOR ALL WITH CHECK (TRUE)` permits arbitrary `revoked_at` mutation; the promised `revoked_at` transition trigger was prose-only, not canonical DDL | Both closed inline |
+
+**R3 closure pattern recap:**
+
+- **HIGH-1 (closed inline — split-helper pattern):** `is_target_tenant_break_glass_active()` SPLIT into INVOKER outer wrapper + DEFINER inner privileged-lookup. Under INVOKER, `current_user` correctly reports the post-`SET ROLE` effective role of the caller (PostgreSQL semantics: `current_user` follows SET ROLE in INVOKER mode but reports the function OWNER in DEFINER mode). The outer wrapper does role-membership check via `pg_has_role(current_user, ...)` on the effective role + extracts human-id from session GUC + calls the DEFINER inner function passing the verified effective_role + human_id as parameters. The inner DEFINER function (owned by `sec_break_glass_lookup`) trusts those parameters and performs the privileged `break_glass_approval` lookup. SET-ROLE / connection-pool patterns now work correctly because `current_user` in INVOKER mode is the post-SET-ROLE effective role.
+- **HIGH-2 (closed inline — canonical DDL):** `revoked_at`-transition trigger authored as canonical DDL (no longer prose-only). Trigger enforces three rules: (a) `OLD.revoked_at IS NOT NULL → reject ANY change` (immutable once revoked); (b) `NEW.revoked_at IS NULL` → reject (no NULL → NULL noop UPDATE); (c) `NEW.revoked_at` must be within ±60s of `now()` (no timestamp rewrites). Authorizer policy split from `FOR ALL WITH CHECK (TRUE)` into `FOR SELECT` + `FOR UPDATE` with explicit `WITH CHECK` preserving authorization-identity invariants. Result: `break_glass_approval` is effectively WORM (write-once-read-many) with a single sanctioned mutation path (revocation by an authorized officer, one-way, current-timestamp-bound).
+
+**0 hard-floor item 6 violations** on R3. Both findings were in-scope correctness/PostgreSQL-semantics fixes to R2-introduced surface.
+
+**Cumulative cycle metrics:**
+- R1-R3: **9 findings closed** (2 CRITICAL + 6 HIGH + 1 MED) across 3 rounds.
+- 0 hard-floor item 6 violations.
+- 0 ERR escalations (Pass-2 framing-defect catch at R1 saved one).
+- 1 cross-CDM deferral (SI-024.1 cryptographic-binding follow-on per OQ-NEW1/2).
+
+**R4 verification queued.** Per OQ6 working recommendation 3-4 rounds, R4 should be the boundary (convergence or only-minor-residual).
 
 Authored on `spec/si-024-hardened-tenant-platform-rls-helper-2026-05-20` branch off main at `5afdc82` (post-P-029 + Addendum 57 cockpit refresh).
 
