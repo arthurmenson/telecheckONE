@@ -2,7 +2,7 @@
 
 **Version:** 1.0 DRAFT
 **Status:** RATIFIER-READY-WITH-KNOWN-OQs (R2 prose-consistency close 2026-05-20); FILED per OQ-C ratified decision at Promotion Ledger P-026
-**Codex iteration trajectory:** R1 (3 HIGH + 2 MED) → R2 (2 HIGH duplicate-section removal + 1 MED phase-3 authority + 1 MED OQ2 alignment) → R3 (2 HIGH 5-role-label + per-region recovery + 2 MED STH-on-anchor + audit-taxonomy). All 7 findings closed inline; 0 architectural-judgment items closed inline; 5 known OQs (§5) remain ratifier-targetable. Original filing per (SIEM §4.5.HC split as separate SI to keep SIEM Spec proper focused on event-streaming + alerting + audit aggregation)
+**Codex iteration trajectory:** R1 (3 HIGH + 2 MED) → R2 (2 HIGH duplicate-section removal + 1 MED phase-3 authority + 1 MED OQ2 alignment) → R3 (2 HIGH 5-role-label + per-region recovery + 2 MED STH-on-anchor + audit-taxonomy) → R4 (1 HIGH exhaustive per-region state machine + Object Lock COMPLIANCE corrupted-anchor supersession procedure). All 7 findings closed inline; 0 architectural-judgment items closed inline; 5 known OQs (§5) remain ratifier-targetable. Original filing per (SIEM §4.5.HC split as separate SI to keep SIEM Spec proper focused on event-streaming + alerting + audit aggregation)
 **Owner:** SRE Lead + Security Engineering Lead + Compliance Officer
 **Parent SI:** SIEM Integration Spec v1.0 (`Telecheck_SIEM_Integration_Spec_v1_0.md` §4.5.HC was the original split candidate per Sprint 6 R6 close)
 **Companion documents:** Promotion Ledger P-026 (ratification authority for the split decision); Sprint 6 SIEM Integration Spec R6 close-out observation; Sprint 13 KMS Architecture Spec (HSM-signing key infrastructure shared); Sprint 7 Cold-DR Runbook (cross-region replication topology shared); INVARIANTS v5.4 §I-027 (audit append-only platform floor).
@@ -182,11 +182,15 @@ intent_reserved → signature_computed → s3_write_committed → transparency_l
 
 - Crash in phase 1: intent row exists in `intent_reserved`; recovery retries from phase 2 using the same idempotency key.
 - Crash in phase 2: intent row in `signature_computed`; recovery proceeds to phase 3 with the existing signature (no re-signing; HSM signatures are deterministic for the same payload).
-- Crash in phase 3 (R3 HIGH-2 closure: per-region recovery; advance only when BOTH regions valid): intent row in `signature_computed` but no S3 write OR partial dual-region S3 write; recovery checks S3 via HEAD + GET against BOTH us-east-1 + us-west-2 buckets (per Sub-decision 7 discovery-first). Four cases:
-  1. **Both regions contain matching object + hash matches signature payload:** advance to phase 4.
-  2. **Both regions missing the object:** retry phase 3 (issues dual-region PutObject with `If-None-Match: *`; both writes must succeed before state transitions to `s3_write_committed`).
-  3. **One region has matching object + other region missing:** retry the missing regional write with `If-None-Match: *` (first-write acceptance control ensures the regional retry succeeds for the empty region; the existing region's object is preserved); advance to phase 4 only after BOTH regions confirm matching objects.
-  4. **Both regions have objects but payloads/hashes DISAGREE:** HALT-AND-REPAIR (cryptographic-disagreement case per Sub-decision 7); emit Cat A `audit_archive.regional_s3_payload_disagreement_halt` (added to §3 audit taxonomy per R3 MED-2 closure); P0 PagerDuty alert; manual investigation required — never auto-resume; the dual-region durability invariant is preserved (never advance past partial-write state).
+- Crash in phase 3 (R3 HIGH-2 + R4 HIGH closure: exhaustive per-region recovery state machine; Object Lock COMPLIANCE constrains repair options): intent row in `signature_computed`; recovery probes BOTH us-east-1 + us-west-2 buckets via HEAD + GET + canonical SHA-256 re-hash against the signed canonical payload bytes (per Sub-decision 7 discovery-first). **Per-region state has FOUR possible values:** `missing` (HEAD returns 404); `present_and_matches_signature` (GET succeeds + SHA-256 re-hash equals signature's canonical payload hash); `present_but_hash_mismatch` (GET succeeds + SHA-256 differs from signature payload); `indeterminate` (HEAD/GET fails with 5xx / network error — recovery retries the probe with exponential backoff up to 5 min; persistent indeterminate state escalates to HALT-AND-REPAIR per below). The 4×4 = 16 cross-region combinations collapse into 5 canonical recovery outcomes:
+
+  1. **Both regions `present_and_matches_signature`:** advance to phase 4.
+  2. **Both regions `missing`:** retry phase 3 (issues dual-region PutObject with `If-None-Match: *`; both writes must succeed before state transitions to `s3_write_committed`).
+  3. **One region `present_and_matches_signature` + other `missing`:** retry the missing regional write with `If-None-Match: *` (first-write acceptance control ensures the regional retry succeeds for the empty region; the existing region's object is preserved); advance to phase 4 only after BOTH regions confirm matching objects.
+  4. **Any region in `present_but_hash_mismatch` OR `indeterminate` (after exponential backoff exhaustion):** HALT-AND-REPAIR (cryptographic-corruption-OR-infrastructure-failure case; cannot auto-recover because Object Lock COMPLIANCE prevents overwrite/delete of the wrong object within the retention period). Emit Cat A `audit_archive.regional_s3_payload_corruption_or_indeterminate_halt` (R4 HIGH closure new event; added to §3 taxonomy below); P0 PagerDuty alert; **manual repair procedure required (see §below).** This case covers: single-region corruption (1 region matches, 1 region has wrong-payload object); same-wrong-payload in both regions (cryptographic-corruption case; both regions wrong); single-region indeterminate (1 region 5xx persistent); both-regions indeterminate (likely network partition affecting probe paths — distinct from the dual-write partition case in Sub-decision 8).
+  5. **Both regions `present_but_hash_mismatch` with DIFFERENT payloads:** HALT-AND-REPAIR (regional disagreement; emit Cat A `audit_archive.regional_s3_payload_disagreement_halt`). This was the original R3 HIGH-2 closure case; preserved as a distinct sub-case of #4 with a distinct event for forensic discrimination.
+
+**Manual repair procedure for case #4 + #5 (R4 HIGH closure):** because Object Lock COMPLIANCE prevents overwrite of the wrong object within the retention period (canonical retention = 7 years for Cat A; 3 years Cat B; 90 days Cat C), the wrong object cannot be repaired in place. The canonical procedure: (a) Compliance Officer + CTO authorize a NEW anchor at sequence_no_head+1 with the original signed canonical payload re-signed under a NEW deterministic anchor_idempotency_key (the original sequence_no_head is reserved-but-corrupted; the new sequence_no+1 anchor carries `supersedes_corrupted_sequence_no = N` reference); (b) the transparency log appends BOTH the corrupted-anchor inclusion proof (already done) AND the supersession-anchor inclusion proof, both verifiable; (c) Cat A `audit_archive.corrupted_anchor_superseded` event emitted (P2 keyed by 'platform' + linked to both anchor sequence_no values); (d) downstream reconstruction logic per Sub-decision 8 skips the corrupted sequence_no + uses the supersession anchor's chain head as canonical. The corrupted object remains in S3 (cannot be deleted under COMPLIANCE) but is no longer referenced as canonical. This preserves cryptographic integrity (the corrupted object's signature is still valid under the original key; the audit trail records the supersession; third-party auditors can independently verify both).
 - Crash in phase 4: S3 write succeeded but transparency log append did not; recovery checks transparency log for the inclusion proof; if missing, retry phase 4; if present, advance to phase 5.
 - Crash in phase 5 (between transparency append + setting canonical signed_at): the S3 + transparency log both attest the anchor; recovery sets `signed_at = transparency_log_appended_at` (preserves chronological accuracy) + promotes to `audit_event_hash_chain_anchor`.
 
@@ -251,6 +255,8 @@ The reconstruction is bounded by the available S3 + transparency-log state; chai
 | `audit_archive.s3_anchor_missing_transparency_log_present_halt` (R3 MED-2 closure) | A | P2 keyed by 'platform' |
 | `audit_archive.regional_s3_payload_disagreement_halt` (R3 HIGH-2 closure) | A | P2 keyed by 'platform' |
 | `audit_archive.dr_reconstruction_gap_detected` (R3 MED-2 closure) | A | P2 keyed by 'platform' |
+| `audit_archive.regional_s3_payload_corruption_or_indeterminate_halt` (R4 HIGH closure) | A | P2 keyed by 'platform' |
+| `audit_archive.corrupted_anchor_superseded` (R4 HIGH closure: supersession-anchor pattern under Object Lock COMPLIANCE) | A | P2 keyed by 'platform'; carries `supersedes_corrupted_sequence_no` reference |
 
 These events are added to AUDIT_EVENTS v5.6 → v5.7 at SI-021 promotion.
 
@@ -297,6 +303,17 @@ These events are added to AUDIT_EVENTS v5.6 → v5.7 at SI-021 promotion.
 - MED-2: Sub-decision 5 rewritten with explicit transparency-log requirements (Merkle root + STH + inclusion proofs + consistency proofs + auditor API). Option T1 (Sigstore-rekor or comparable) recommended; Option T2 (CloudWatch + custom witness layer) acknowledged as requiring NEW canonical service.
 
 No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. 5 known OQs (§5) remain ratifier-targetable.
+
+**v1.0 R4 closure 2026-05-20:** 1 HIGH closed inline:
+
+| Round | Findings | Status |
+|---|---|---|
+| R4 | HIGH phase-3 recovery state machine omitted single-region-corruption + same-wrong-payload + indeterminate-region cases (Object Lock COMPLIANCE prevents simple overwrite-retry recovery for present-but-wrong objects) | Closed inline |
+
+**R4 closure pattern recap:**
+- Phase-3 recovery state machine rewritten as exhaustive 4-region-state × 4-region-state = 16-combination model collapsed into 5 canonical recovery outcomes. New case #4 covers single-region-corruption + same-wrong-payload + persistent-indeterminate cases with new Cat A `regional_s3_payload_corruption_or_indeterminate_halt` event.
+- Manual repair procedure articulated for corrupted-anchor cases: NEW supersession anchor at sequence_no+1 with `supersedes_corrupted_sequence_no` reference + transparency-log inclusion for BOTH anchors + Cat A `corrupted_anchor_superseded` event. Object Lock COMPLIANCE constraint honored (corrupted object remains in S3 + transparency log; new supersession anchor is canonical for downstream reconstruction).
+- 2 new audit events added to §3 taxonomy.
 
 **v1.0 R3 closure 2026-05-20:** 2 HIGH + 2 MED closed inline:
 
