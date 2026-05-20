@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 158,
+  "revision": 159,
   "updated": "2026-05-20",
   "lifecycle": {
     "current": "foundation-build",
@@ -588,7 +588,7 @@
         "Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md"
       ],
       "stage": "foundation-build",
-      "updatedAt": "2026-05-18T14:35:27.798Z"
+      "updatedAt": "2026-05-20T16:11:36.230Z"
     },
     {
       "id": "impl-identity",
@@ -602,7 +602,7 @@
         "Telecheck_Identity_Authentication_Spec_v1_0.md"
       ],
       "stage": "foundation-build",
-      "updatedAt": "2026-05-18T14:35:27.798Z"
+      "updatedAt": "2026-05-20T16:11:36.230Z"
     },
     {
       "id": "impl-ai-skeleton",
@@ -616,7 +616,7 @@
         "Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md"
       ],
       "stage": "foundation-build",
-      "updatedAt": "2026-05-18T14:35:27.798Z"
+      "updatedAt": "2026-05-20T16:11:36.230Z"
     },
     {
       "id": "impl-tenant-config",
@@ -633,6 +633,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-20T03:00:00.000Z",
-  "lastSyncedSha": "830a7be"
+  "updatedAt": "2026-05-20T16:11:36.230Z",
+  "lastSyncedSha": "61fbd38"
 }
