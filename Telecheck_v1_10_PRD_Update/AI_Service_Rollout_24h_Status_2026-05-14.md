@@ -4083,3 +4083,70 @@ Across the Q2 2026 cycle:
 - Pass-1 + Pass-2 divergence is the highest-value signal (Pass-1 caught raw-GUC as merge-blocker; Pass-2 reconciled to conditional approval via prior-context awareness). The two-pass flow operationally validates Evans's intuition that single-pass leaks anchoring bias.
 
 — Claude (Opus 4.7, 1M context), CDM v1.5 amendment cycle close-out 2026-05-20 via auto-proceed. Main at `e9cf962`. Registry v2.16. P-029 + P-028a appended. 4 process novelties codified. Phase B follow-on exit gate SATISFIED. SI-024 queued as next autonomous-work deliverable (when prioritized) for OQ6 closure.
+
+---
+
+## Addendum 58 — SI-024 v0.17 TRANSITIONAL LANDED via auto-proceed; merge `3fcbef8`; Registry v2.16 → v2.17; 35 findings closed across 17 cycles; SI-024.1 cryptographic JWT-binding follow-on cycle queued
+
+**Date:** 2026-05-20
+**Trigger:** Auto-proceed execution at Codex Pass-2 + Claude convergence per CLAUDE.md commit `f483535`.
+
+**Two-pass dual-recommendation convergence:**
+
+| Reviewer | Verdict |
+|---|---|
+| Claude | Option B: ship as floor with explicit residual-risk acceptance |
+| Codex Pass-1 (independent) | Option C: collapse SI-024 + SI-024.1 into SI-025; don't canonize incomplete trust anchor |
+| Codex Pass-2 (synthesis) | **B+**: TRANSITIONAL canonical implementation guidance for Phases 1-3 only; Phase 4/I-036/durable-floor strictly gated on SI-024.1; production target-tenant break-glass BLOCKED until SI-024.1 |
+
+Pass-2 + Claude agreed on B+ → auto-proceed merge executed.
+
+**Cycle metrics (final):**
+
+- **17 total Codex cycles** (4 adversarial-review R1-R4 + 12 pre-merge consult cycles + 1 strategic two-pass synthesis)
+- **35 findings closed inline** (2 CRITICAL + 21 HIGH + 12 MED)
+- **0 hard-floor item 6 violations** across all cycles
+- **0 ERR escalations** (Pass-2 framing-defect catch at R1 saved one; Pass-2 strategic synthesis avoided B/C escalation)
+- **9 acknowledged v1.0 simplifications** all carried forward to SI-024.1
+
+**Content landed (TRANSITIONAL canonical for Phases 1-3 only):**
+
+- SI-024 v0.17: Canonical Hardened Tenant/Platform RLS Helper Pattern (760 lines)
+  - SECURITY INVOKER + EXECUTE TO PUBLIC + inline `pg_has_role` membership check helpers
+  - Defense-in-depth (3 layers: role-check + FORCE RLS + per-row identity binding)
+  - Phase 2 RESTRICTIVE + PERMISSIVE coexistence DDL with correct PostgreSQL composition (READ-side break-glass admitted; WRITE-side blocked until SI-024.1)
+  - `break_glass_approval` table with dual-control + 4-hour time-bound + WORM mutation discipline + revoked_at one-way transition trigger
+  - Canonical INSERT path with self-attestation + AFTER-INSERT/UPDATE audit triggers
+- Promotion Ledger P-030: SI-024 v0.17 TRANSITIONAL ratification entry
+- Artifact Registry v2.16 → v2.17
+
+**Production gates (explicit):**
+
+| Phase | Status post-P-030 merge |
+|---|---|
+| Phase 1 (foundation: helpers + table + RLS policies; no entity migrations) | **UNBLOCKED** |
+| Phase 2 (RESTRICTIVE coexistence) | Permitted before SI-024.1 |
+| Phase 3 (30-day telemetry) | Permitted before SI-024.1 |
+| Phase 4 (cutover; raw-GUC policy DROP) | **BLOCKED on SI-024.1** |
+| INVARIANTS I-036 platform-floor | **BLOCKED on SI-024.1** (lands with first Phase 4 cutover) |
+| Production target-tenant break-glass use | **BLOCKED on SI-024.1** (Phase 1 may scaffold infra; no production use) |
+
+**Process novelties demonstrated end-to-end:**
+
+1. **Two-pass Codex discipline at the strategic level** — Pass-1 source-first (Option C) + Pass-2 contrast-and-synthesize produced B+ synthesis that neither Claude (B) nor Pass-1 (C) alone proposed. This validated Evans's two-pass rationale (Pass-1 catches what Claude's framing might hide; Pass-2 reconciles).
+2. **Pre-merge dual-recommendation consult as recursive defect-catch mechanism** — 12 pre-merge cycles caught defects R1-R4 adversarial cycles missed (Phase 2 RLS composition, cross-tenant write admission, stale-snippet drift, version-number alignment).
+3. **Auto-proceed on Claude + Pass-2 agreement** (CLAUDE.md commit `f483535`) operationalized end-to-end: no Evans-interruption between Pass-2 synthesis and merge execution; post-action report (this Addendum) substitutes for pre-action ask.
+
+**Rollback path:** `git revert -m 1 3fcbef8` reverts the merge while preserving the spec branch. Would require new P-030a ledger entry recording the revert + Registry v2.17 → v2.18 bump per the lockstep rule.
+
+**Outstanding queue (post-P-030):**
+
+1. **SI-024.1 cryptographic JWT-binding follow-on** — REQUIRED to unblock Phase 4 + I-036 + durable-floor + production break-glass. Per OQ-NEW1 commitment: 30-day v0.1 DRAFT target (by 2026-06-19); 90-day ratifier ceremony target (by 2026-08-18). Same owner triad as SI-024. Queues as next autonomous-work deliverable.
+2. **Phase 1 implementation** in `telecheck-app` code repo — UNBLOCKED post-P-030; helper functions + `break_glass_approval` table + RLS policies + audit triggers.
+3. **Quantum-resistance migration roadmap SI** — Phase 3+ per OQ-I.
+
+**Discipline observation (cumulative across Q2 2026 cycle):**
+
+The Q2 2026 cycle has now ratified 4 successive SIs via the codified dual-recommendation + two-pass + auto-proceed disciplines: P-026 (Q2 batched ratifier ceremony), P-028 (SI-021 SIEM Hash-Chain Archival), P-029 (CDM v1.5 SI-021 follow-on), P-030 (SI-024 v0.17 TRANSITIONAL). Each cycle has produced novel process insights codified back into CLAUDE.md (`f3a6469` → `4f42a00` → `16d7244` → `f483535`). SI-024 specifically demonstrated the discipline's value at scale: 17 cycles iteratively converging on a substantively correct v1.0 floor despite the extreme difficulty of the PostgreSQL trust-anchor surface area. 0 hard-floor item 6 violations across all cycles validates the STOP-and-escalate discipline; the strategic Pass-2 synthesis (B+ Option) demonstrated the dual-recommendation's value at the merge-gate (catching framing defects neither reviewer alone would surface).
+
+— Claude (Opus 4.7, 1M context), SI-024 v0.17 TRANSITIONAL cycle close-out 2026-05-20 via auto-proceed. Main at `3fcbef8`. Registry v2.17. P-030 appended. SI-024.1 queued as next autonomous-work deliverable per OQ-NEW1/2 commitments.
