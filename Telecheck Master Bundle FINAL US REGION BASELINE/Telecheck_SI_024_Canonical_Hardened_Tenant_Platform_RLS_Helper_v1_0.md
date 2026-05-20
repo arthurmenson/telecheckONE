@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.2 DRAFT
-**Status:** R1 Pass-1 + Pass-2 closed: 1 CRITICAL inline + 1 CRITICAL via scope-narrowing inline closure (Option C hybrid per Pass-2 synthesis) + 2 HIGH inline. SI-024.1 queued as follow-on for cryptographic B-2 binding. R2 verification PENDING.
+**Version:** 1.0 v0.3 DRAFT
+**Status:** R2 closed: 2 HIGH + 1 MED inline (target-tenant helper SECURITY DEFINER + session_user; current_tenant_id_strict() NULL-returns instead of raise; pg_has_role-based membership for connection-pool compatibility; break_glass_approval RLS+grant policy). R3 verification PENDING.
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -67,43 +67,56 @@ PostgreSQL custom GUCs (`app.tenant_id`, `app.platform_operator_break_glass`) ar
 
 ```sql
 -- Canonical hardened helper for tenant_id resolution.
--- Returns: tenant_id_t of the current session's verified tenant context, OR raises exception.
+-- Returns: tenant_id_t of the current session's verified tenant context, OR NULL if the caller is not in the
+--          middleware-context-writer membership set. Raises ONLY if the caller IS in the membership set but
+--          the app.tenant_id GUC is unset (legitimate middleware bug; fail loudly).
 -- Trust-anchor: Option B-1 (middleware-GUC with role-binding hardening) — see Sub-decision 2.
 -- Security: SECURITY INVOKER so current_user reports the actual caller's role (not the function owner).
--- Performance: STABLE function, query-result-cacheable per execution context (per-query cache, not per-row).
+-- R2 MED closure 2026-05-20: pg_has_role-based membership check covers connection-pool role-switching +
+-- role-inheritance scenarios. Apps using middleware-writer membership via grants (not SET ROLE) are still admitted.
+-- R2 HIGH-2 closure 2026-05-20: returns NULL (instead of RAISE) when caller lacks middleware-writer membership.
+-- This allows RLS predicates that OR-combine current_tenant_id_strict() with break-glass branches to evaluate
+-- the break-glass branch when current_user is a platform_operator_* role (which is not in the middleware membership).
+-- NULL = anything in PostgreSQL returns UNKNOWN, which RLS treats as FALSE for policy admission — so the
+-- tenant-equality predicate is fail-closed even with NULL return; it just doesn't abort the outer predicate.
 CREATE FUNCTION current_tenant_id_strict() RETURNS tenant_id_t AS $$
 DECLARE
     resolved_tenant_id tenant_id_t;
 BEGIN
-    -- Role-allowlist check: only middleware-context-writer roles (Sub-decision 2) can supply app.tenant_id.
-    -- SECURITY INVOKER means current_user is the actual caller; the check correctly rejects non-allowlisted roles.
-    IF current_user NOT IN (
-        'app_middleware_writer',
-        'app_middleware_reader_via_writer_proxy'
-    ) THEN
-        RAISE EXCEPTION 'tenant context not bound (current_user=% lacks tenant-context-write authority)', current_user
-            USING ERRCODE = 'insufficient_privilege';
+    -- Role-membership check via pg_has_role (handles inherited memberships + connection-pool role-switching).
+    -- The middleware-writer membership is granted to the actual login/connection role; pg_has_role(current_user, ...,
+    -- 'USAGE') returns TRUE iff the current role has the membership transitively.
+    IF NOT pg_has_role(current_user, 'app_middleware_writer', 'USAGE')
+        AND NOT pg_has_role(current_user, 'app_middleware_reader_via_writer_proxy', 'USAGE') THEN
+        -- Caller is NOT in the middleware-writer membership; return NULL so RLS OR-branches can still evaluate.
+        -- NOT a hard error because non-middleware callers (e.g., platform_operator_* roles invoking RLS via break-glass)
+        -- legitimately reach this helper through the RLS predicate's first OR branch.
+        RETURN NULL;
     END IF;
-    -- Fail-closed GUC resolution: current_setting(..., false) raises if app.tenant_id is unset (no silent empty-string).
+    -- Fail-closed GUC resolution for middleware-membership callers: current_setting(..., false) raises if GUC unset.
+    -- Reaching this point means the caller IS authorized to set app.tenant_id; unset GUC is a middleware bug.
     resolved_tenant_id := current_setting('app.tenant_id', false)::tenant_id_t;
     RETURN resolved_tenant_id;
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = pg_catalog, public;
 
 -- Canonical break-glass detection.
--- Returns: TRUE iff session is operating under a platform-operator break-glass context.
--- Trust-anchor: role-based (current_user IN platform_operator_break_glass_role_set).
+-- Returns: TRUE iff session has membership in any platform-operator break-glass role.
+-- Trust-anchor: role-membership-based via pg_has_role (covers inherited memberships + connection-pool role-switching).
 -- Never relies on caller-settable GUC. SECURITY INVOKER preserves caller-role semantics.
+-- R2 MED closure 2026-05-20: pg_has_role-based membership check.
 CREATE FUNCTION is_platform_operator_break_glass_active() RETURNS BOOLEAN AS $$
 BEGIN
-    RETURN current_user IN (
-        'platform_operator_break_glass',
-        'platform_operator_dr_recovery',
-        'platform_operator_compliance_audit'
-    );
+    RETURN pg_has_role(current_user, 'platform_operator_break_glass', 'USAGE')
+        OR pg_has_role(current_user, 'platform_operator_dr_recovery', 'USAGE')
+        OR pg_has_role(current_user, 'platform_operator_compliance_audit', 'USAGE');
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = pg_catalog, public;
 ```
+
+**Role-membership convention (R2 MED closure 2026-05-20):** the canonical convention for app middleware connection pools is to grant `app_middleware_writer` membership to the LOGIN role (the role connection pools log in as) WITHOUT requiring explicit `SET ROLE` per query. `pg_has_role(current_user, ..., 'USAGE')` returns TRUE because membership is transitive. This is the **default deployment pattern**. Alternative pattern (explicit SET ROLE) is also supported — `pg_has_role` returns TRUE for the explicitly set role too.
+
+**What is FORBIDDEN:** granting `app_middleware_writer` membership to a role that ALSO has direct PHI-table grants outside the middleware-context-writer envelope. The membership convention assumes that a role holding `app_middleware_writer` membership only accesses PHI through middleware-mediated query paths. Direct PHI access by an `app_middleware_writer`-holding role bypasses the threat-model assumptions; deployments MUST audit that the membership set + direct-PHI-grant set are disjoint.
 
 Canonical RLS policy pattern post-SI-024:
 
@@ -238,26 +251,97 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
    );
    ```
 
-2. **RLS helper extension:**
+2. **RLS helper extension (R2 HIGH-1 closure 2026-05-20: SECURITY DEFINER owned by a dedicated privileged role with SELECT on break_glass_approval; captures caller identity via session_user before DEFINER context swap):**
    ```sql
    -- Canonical target-tenant break-glass check.
-   -- Returns: TRUE iff session role is platform-operator AND there's an active approval for target_tenant_id.
+   -- Returns: TRUE iff caller's session role is platform-operator-membership AND there's an active approval row.
+   -- Security: SECURITY DEFINER owned by 'sec_break_glass_lookup' role which has SELECT on break_glass_approval.
+   --   Reason: under FORCE RLS + SECURITY INVOKER, a platform_operator_* caller may lack SELECT on
+   --   break_glass_approval OR be blocked by its RLS — making the helper non-functional. SECURITY DEFINER
+   --   with a dedicated read-only owner role solves the access problem; session_user captures the
+   --   actual caller's session identity before the DEFINER context swap.
+   -- search_path hardening prevents object-redirection attacks on the privileged execution path.
    CREATE FUNCTION is_target_tenant_break_glass_active(target_tenant_id tenant_id_t) RETURNS BOOLEAN AS $$
+   DECLARE
+       invoker_session_role TEXT := session_user;   -- captured BEFORE DEFINER context swap; identifies caller
+       invoker_human_id UUID;
    BEGIN
-       IF NOT is_platform_operator_break_glass_active() THEN
+       -- Role-membership check using session_user (the actual caller's session role, not the DEFINER owner).
+       IF NOT (pg_has_role(invoker_session_role, 'platform_operator_break_glass', 'USAGE')
+           OR pg_has_role(invoker_session_role, 'platform_operator_dr_recovery', 'USAGE')
+           OR pg_has_role(invoker_session_role, 'platform_operator_compliance_audit', 'USAGE')) THEN
            RETURN FALSE;
        END IF;
+       -- Human-identity resolution via session GUC populated by middleware at session-start.
+       BEGIN
+           invoker_human_id := current_setting('app.actor_human_id', false)::UUID;
+       EXCEPTION
+           WHEN OTHERS THEN
+               -- Operator's human-id not bound → break-glass check fails closed.
+               RETURN FALSE;
+       END;
+       -- Approval table lookup runs under DEFINER privileges (sec_break_glass_lookup owns this function +
+       -- has SELECT on break_glass_approval + the table's RLS policy permits sec_break_glass_lookup reads).
        RETURN EXISTS (
            SELECT 1 FROM public.break_glass_approval
            WHERE break_glass_approval.target_tenant_id = is_target_tenant_break_glass_active.target_tenant_id
-               AND operator_role = current_user
-               AND operator_user_id = current_setting('app.actor_human_id', false)::UUID
+               AND pg_has_role(invoker_session_role, operator_role, 'USAGE')   -- operator's session role matches the approval's operator_role
+               AND operator_user_id = invoker_human_id
                AND approved_at <= now()
                AND expires_at > now()
                AND revoked_at IS NULL
        );
    END;
-   $$ LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = pg_catalog, public;
+   $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
+
+   -- Function ownership + grants:
+   -- ALTER FUNCTION is_target_tenant_break_glass_active(tenant_id_t) OWNER TO sec_break_glass_lookup;
+   -- REVOKE EXECUTE ON FUNCTION is_target_tenant_break_glass_active(tenant_id_t) FROM PUBLIC;
+   -- GRANT EXECUTE ON FUNCTION is_target_tenant_break_glass_active(tenant_id_t)
+   --   TO platform_operator_break_glass, platform_operator_dr_recovery, platform_operator_compliance_audit,
+   --      app_middleware_writer, app_middleware_reader_via_writer_proxy;
+   ```
+
+   **break_glass_approval table access model (R2 HIGH-1 closure):**
+
+   ```sql
+   ALTER TABLE break_glass_approval ENABLE ROW LEVEL SECURITY;
+   ALTER TABLE break_glass_approval FORCE ROW LEVEL SECURITY;
+
+   -- Policy 1: sec_break_glass_lookup (the function-owner role) can read all rows for the helper's EXISTS lookup.
+   CREATE POLICY break_glass_approval_lookup_owner ON break_glass_approval
+       FOR SELECT
+       TO sec_break_glass_lookup
+       USING (TRUE);
+
+   -- Policy 2: Compliance Officer + CTO can read approvals they authorized + revoke them.
+   CREATE POLICY break_glass_approval_authorizer ON break_glass_approval
+       FOR ALL
+       TO compliance_officer, cto_role
+       USING (
+           authorized_by_compliance_officer_user_id = current_setting('app.actor_human_id', false)::UUID
+           OR authorized_by_cto_user_id = current_setting('app.actor_human_id', false)::UUID
+       )
+       WITH CHECK (TRUE);
+
+   -- Policy 3: Operator can SELECT only their own active approval rows (for self-service status check).
+   CREATE POLICY break_glass_approval_operator_self ON break_glass_approval
+       FOR SELECT
+       USING (
+           is_platform_operator_break_glass_active()
+           AND operator_user_id = current_setting('app.actor_human_id', false)::UUID
+           AND revoked_at IS NULL
+           AND expires_at > now()
+       );
+
+   -- Append-only enforcement: prevents tampering with approval rows post-INSERT.
+   CREATE TRIGGER break_glass_approval_append_only
+       BEFORE UPDATE OF id, operator_role, operator_user_id, target_tenant_id, approval_reason,
+                       authorized_by_compliance_officer_user_id, authorized_by_cto_user_id, approved_at, expires_at
+       OR DELETE ON break_glass_approval
+       FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
+   -- Only revoked_at column is mutable post-INSERT (via the authorizer policy's WITH CHECK + a separate
+   -- trigger ensuring revoked_at transitions only NULL → timestamp, never the reverse).
    ```
 
 3. **Canonical RLS policy under SI-024 v1.0 (revised for target-tenant break-glass):**
@@ -368,6 +452,26 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 **Discipline observation:** Pass-2 refined Claude's hard-floor item 6 classification of CRITICAL-2. Claude treated "B-2 promotion to v1.0" as the only possible response to CRITICAL-2; Pass-2 showed that scope-narrowing of the SI's own claim is a third option that is NOT hard-floor item 6 (the discriminator is "net-new architecture" — narrowing scope adds no architecture). This is exactly the kind of framing-defect catch the two-pass discipline is designed to surface. Pass-1's independent finding + Pass-2's synthesis together produced a closure path Claude alone would have escalated unnecessarily.
 
 **R2 verification queued.** Codex re-invocation in standard adversarial-review framing on the v0.2 (post-R1-closures) state.
+
+**v0.3 R2 closure 2026-05-20:** 2 HIGH + 1 MED closed inline.
+
+| Round | Findings | Status |
+|---|---|---|
+| R2 | **HIGH-1** break_glass_approval lookup non-functional under FORCE RLS + SECURITY INVOKER (caller may lack SELECT or be blocked by RLS); **HIGH-2** Phase 2 RESTRICTIVE policy raises exception when platform_operator_* roles invoke `current_tenant_id_strict()` (no membership in middleware-writer set → role-check RAISE → aborts entire RLS predicate); **MED** role-allowlist via `current_user` literal equality breaks under role-inheritance / SET ROLE / connection-pool scenarios | All 3 closed inline |
+
+**R2 closure pattern recap:**
+
+- **HIGH-2 (closed inline first because HIGH-1 depended on its closure pattern):** `current_tenant_id_strict()` now **returns NULL** when caller lacks middleware-writer membership (instead of `RAISE EXCEPTION`). NULL = anything in PostgreSQL returns UNKNOWN which RLS treats as FALSE for policy admission — so the tenant-equality predicate is fail-closed for non-middleware roles. The break-glass branches (`is_target_tenant_break_glass_active()` + sentinel) can now evaluate independently without the OR predicate being aborted by an exception. GUC-unset case still raises (legitimate middleware-writer with unset GUC is a bug; fails loudly per existing policy).
+- **HIGH-1 (closed inline):** `is_target_tenant_break_glass_active()` changed to `SECURITY DEFINER` owned by a dedicated `sec_break_glass_lookup` role that has SELECT on `break_glass_approval` + RLS policy permitting its reads. Caller identity captured via `session_user` BEFORE the DEFINER context swap (so the role-check correctly identifies the actual caller's session role, not the DEFINER owner). `search_path` hardening preserved. Explicit `break_glass_approval` access model documented: Policy 1 grants `sec_break_glass_lookup` full SELECT for the helper's EXISTS lookup; Policy 2 grants Compliance Officer + CTO access to approvals they authorized + ability to revoke; Policy 3 grants operator self-service SELECT on their own active approvals. Append-only trigger on `break_glass_approval` prevents tampering (only `revoked_at` transitions NULL → timestamp are permitted).
+- **MED (closed inline):** all role-membership checks now use `pg_has_role(current_user, 'role_name', 'USAGE')` instead of `current_user = 'role_name'` literal equality. This covers (a) middleware connection pools where the LOGIN role is granted `app_middleware_writer` MEMBERSHIP (membership is transitive; `pg_has_role` returns TRUE); (b) explicit `SET ROLE` usage; (c) role-inheritance chains. Convention documented: middleware-writer membership MUST be disjoint from direct-PHI-grant set (deployment audit requirement to prevent threat-model bypass).
+
+**Cumulative cycle metrics:**
+- R1-R2: 2 CRITICAL + 4 HIGH + 1 MED = **7 findings closed** across 2 rounds.
+- **0 hard-floor item 6 violations.**
+- **0 ERR escalations** (Pass-2 framing-defect catch at R1 saved one unnecessary escalation).
+- **1 cross-CDM deferral** (SI-024.1 cryptographic-binding follow-on per OQ-NEW1/2).
+
+**R3 verification queued.** Per OQ6 working recommendation 3-4 rounds, R3 should converge or surface only minor residual.
 
 Authored on `spec/si-024-hardened-tenant-platform-rls-helper-2026-05-20` branch off main at `5afdc82` (post-P-029 + Addendum 57 cockpit refresh).
 
