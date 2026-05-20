@@ -37,6 +37,70 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-029 — 2026-05-20 — CDM v1.4 → v1.5 + AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4 (SI-021 follow-on amendment cycle) co-bumped: 4 new audit-chain-archival entities (with Option A tenant_id-in-identity + 5-role separation + monotonic-transition triggers + composite-FK supersession-binding) + 15 new Cat A audit events + 1 new CCR key; Artifact Registry v2.15 → v2.16
+
+**Evans's verbatim instruction (2026-05-20 chat-message):** *"<merge-authorization message — TO BE FILLED AT MERGE TIME from Evans's chat-message merge instruction>"* — affirmative ratification authorizing merge to main of `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` HEAD `<merge-commit-sha-TBD>` post-Codex-convergence (5 adversarial-review rounds + multi-cycle merge-readiness consult with all findings closed inline + 1 cross-CDM deferral to OQ6 + 1 ratifier mini-review at P-028a for Option A chain-schema tenant-isolation).
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). Content-change promotion of the SI-021 follow-on amendment cycle per Promotion Ledger P-028 OQ4 ratified decision. Mini-review at P-028a (Option A chain-schema tenant-isolation) is the architectural-judgment authority for the implementation pattern used in this amendment.
+
+**Type:** Content-change promotion + Registry version bump v2.15 → v2.16 per operating rule 4. Lockstep with the spec branch's body content.
+
+**Prerequisite:** P-028 (SI-021 v1.0 RATIFIED) + P-028a (Option A chain-schema tenant-isolation mini-review). P-029 closes the OQ4 amendment-cycle deliverable promised at P-028.
+
+---
+
+#### §1. CDM v1.4 → v1.5 — 4 new audit-chain-archival entities
+
+Canonical amendment: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_CDM_v1_4_to_v1_5_Amendment.md` v0.8 (post-Codex-convergence).
+
+**4 new active entities** (CDM v1.4 baseline: 71 active entities → v1.5 target: 75 active entities + 3 derived views):
+
+1. **`audit_event_hash_chain`** (§4.NEW1) — per-row hash-chain projection. PRIMARY KEY `(tenant_id, partition, partition_key, sequence_no)` (Option A identity-key hardening). Three-layer tenant isolation per I-023 (RLS + FORCE + WITH CHECK + per-tenant DEK).
+2. **`audit_event_hash_chain_anchor_intent`** (§4.NEW2) — crash-safe 5-phase commit state machine table. 5-role separation enforced via column-level GRANTs; mutable-by-design with monotonic-forward transitions + per-phase-immutability + identity-field-immutability triggers.
+3. **`audit_event_hash_chain_anchor`** (§4.NEW3) — canonical committed-anchor table with transparency-log STH + inclusion proof + supersession-linkage to corruption-evidence via composite FK.
+4. **`audit_event_hash_chain_anchor_corruption_evidence`** (§4.NEW4) — corruption-evidence table for pre-phase-4 corruption detection. Dual-control authorization (Compliance Officer + CTO; CHECK constraint enforces distinct human_id).
+
+All 4 entities carry `enforce_append_only()` triggers (anchor + intent excluded for monotonic-transition; clarified in §4.NEW2). All 4 have FORCE ROW LEVEL SECURITY + WITH CHECK + fail-closed GUC RLS predicates. All 4 P1-coordinate triggers do tenant-scoped lookups.
+
+---
+
+#### §2. AUDIT_EVENTS v5.6 → v5.7 — 15 new Cat A events
+
+Canonical amendment §3 of the CDM v1.5 amendment artifact:
+
+7 original SI-021 §3 events + 8 R3-R5 convergence additions = **15 new Cat A events** under the `audit_archive.*` namespace covering anchor lifecycle + cross-region replication + transparency-log integration + DR reconstruction + R3-R5 recovery + supersession + corruption-evidence handling. `audit_events.action_id CHECK` constraint amended to enumerate the 15 new action IDs per I-012 closure rule.
+
+---
+
+#### §3. CCR_RUNTIME v5.3 → v5.4 — 1 new tenant config key
+
+`tenant.audit_archive_signing_interval_seconds` — INTEGER; default 3600 (hourly canonical); range [900, 86400]; rejects with `audit_archive_signing_interval_out_of_range` error on out-of-range writes; emits Cat A audit on rejection per I-007.
+
+---
+
+#### §4. Artifact Registry version bump
+
+**v2.15 → v2.16.** CDM v1.4 → v1.5 + AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4 are co-bumped artifacts in this single Phase B follow-on ceremony.
+
+---
+
+#### §5. Cycle convergence metrics
+
+- **5 adversarial-review rounds (R1-R5)** + **3 merge-readiness consult cycles** = 8 total Codex closure cycles.
+- **13 findings closed: 1 CRITICAL + 11 HIGH + 1 MED.**
+- **0 hard-floor item 6 violations** across all 8 cycles.
+- **1 ratifier mini-review** (Option A chain-schema tenant-isolation via dual-recommendation — codification trigger for the dual-recommendation process).
+- **1 cross-CDM deferral** (OQ6 hardened-helper to future SI-024 cross-CDM hardening cycle).
+- **3 closure shape novelties documented** for canonical process: dual-recommendation process codified (CLAUDE.md `f3a6469`) + broadened (`4f42a00`); partial-inline + cross-CDM-defer closure shape; pre-merge dual-recommendation consult as final correctness gate (compounded recursive defect-catch validated this cycle).
+
+---
+
+#### §6. Phase B follow-on exit gate
+
+Per Master Completion Plan v1.1 §3 Phase B + the OQ4 amendment-cycle scope at P-028: this P-029 entry closes the SI-021 follow-on CDM v1.5 amendment cycle. Phase B is now FULLY CLOSED (P-027 batched CDM v1.3 + Contracts Pack v5.3 + P-029 SI-021 follow-on CDM v1.5 + Contracts Pack subset v5.7 bumps). **Phase C (procedure-side implementation in `telecheck-app` code repo) remains the next gating ceremony.**
+
+---
+
 ### Entry P-028a — 2026-05-20 — SI-021 chain-schema tenant-isolation Option A mini-review ratified via dual-recommendation process (codification cycle); CDM v1.5 amendment §4.NEW1-4 extended with tenant_id + RLS + P1 trigger + P2 CHECK consistency; SI-021 v1.0 §2 Sub-decision 1-7 schemas superseded for canonical implementation purposes (preserved in SI-021 file for traceability)
 
 **Evans's verbatim instructions (2026-05-20 chat-messages):**
