@@ -100,21 +100,117 @@ CREATE TABLE audit_event_hash_chain_anchor (
 - **Replication SLA:** 99.99% of objects replicated within 15 minutes; tracked via S3 Replication Time Control (RTC).
 - **Cross-region archive accessibility:** during DR failover per Cold-DR Runbook Sprint 7, the us-west-2 replica is the canonical archive source.
 
-### Sub-decision 5 — External transparency log integration
+### Sub-decision 5 — External transparency log integration (R1 MED-2 closure: actual Merkle-tree witness layer required for inclusion proofs)
 
-**Decision shape:** per Sprint 6 SIEM §4.5.HC §"Independent transparency anchor", each chain anchor is additionally appended to an external transparency log (Certificate-Transparency-style append-only verifiable log; e.g., AWS CloudWatch Logs in dedicated `audit-transparency-log` log group with immutable retention OR external Sigstore-rekor instance):
+**Decision shape:** per Sprint 6 SIEM §4.5.HC §"Independent transparency anchor", each chain anchor is appended to an external transparency log providing canonical inclusion-proof + consistency-proof mechanics.
 
-- **Transparency log append:** invoked after Sub-decision 2 signing completes + Sub-decision 3 S3 write succeeds.
-- **Append witness:** a separate IAM role (`audit-transparency-log-append-witness`) writes to the transparency log; the writer + signer + verifier + transparency-log-append-witness are 4 distinct IAM identities per Sprint 6 R4 closure.
-- **External verifiability:** the transparency log is independently auditable; third-party auditors can detect anchor omission OR forgery via the log's inclusion-proof mechanism.
+**Canonical transparency log requirements (R1 MED-2 closure):** the transparency log MUST provide:
 
-### Sub-decision 6 — 2-phase crash-safe signing protocol
+1. **Append-only log structure with Merkle-tree root** — each appended anchor becomes a new leaf; the Merkle root (signed tree head; STH) is published + cryptographically signed.
+2. **Signed tree heads (STH)** — periodically published (per anchor append + at canonical intervals) so external auditors can pin the canonical state at a point in time.
+3. **Inclusion proofs** — for any leaf, the log produces a Merkle inclusion proof verifiable against an STH.
+4. **Consistency proofs** — for any two STHs at different log sizes, the log produces a proof that the larger contains the smaller (no rewriting/forking).
+5. **Auditor-accessible API** — STHs + inclusion proofs + consistency proofs queryable by external third parties.
 
-**Decision shape (per Sprint 6 R5 closure):** signing protocol is 2-phase to handle crashes between Sub-decision 2 sign + Sub-decision 3 S3 write:
+**Canonical implementation options (ratifier confirms via OQ2):**
 
-- **Phase 1 (intent):** writer INSERTs intent row into `audit_event_hash_chain_anchor_intent` table with `signed_at=NULL`. Intent rows are reserved sequence numbers.
-- **Phase 2 (commit):** signer signs the chain head; writes signature back to intent row + sets `signed_at=now()`. S3 write happens AFTER signed_at is set.
-- **Crash between phases:** discovery-first crash-recovery per Sub-decision 7 reconciles intent rows without committed signatures.
+- **Option T1 (recommended for v1.0):** dedicated Sigstore-rekor instance OR comparable CT-compliant transparency log; canonical Merkle/witness layer built-in; canonical inclusion-proof + consistency-proof + STH mechanics.
+- **Option T2 (NOT recommended for v1.0):** AWS CloudWatch Logs with WORM retention as a STORAGE layer + custom Merkle/witness layer built on top. CloudWatch Logs alone does NOT provide inclusion proofs OR signed tree heads; an additional canonical app-layer service would compute Merkle roots + sign STHs + serve inclusion proofs. This was the prior v0.1 draft option but is NOT defensible as "transparency log with inclusion proofs" without the custom witness layer.
+
+**Recommendation (per R1 MED-2 closure):** adopt Option T1 (Sigstore-rekor OR comparable). Option T2 path requires the witness-layer to be a NEW canonical service in its own right (defer to Phase 3+ if T1 is not acceptable for v1.0).
+
+- **Transparency log append:** invoked after Sub-decision 6 phase 3 (`s3_write_committed`).
+- **Append witness:** a separate IAM role (`audit-transparency-log-append-witness`) per the 4-role separation matrix in Sub-decision 5a below.
+- **External verifiability:** the transparency log is independently auditable via inclusion-proof + consistency-proof + STH-pinning; third-party auditors can detect anchor omission OR forgery cryptographically.
+
+### Sub-decision 5a — 4-role separation IAM permission matrix (R1 MED-1 closure)
+
+The 4 roles + their IAM/DB/KMS/S3 permission boundaries:
+
+| Role | Permitted actions | Explicit Deny boundaries |
+|---|---|---|
+| `audit-chain-writer` | INSERT on `audit_event_hash_chain_anchor_intent` (intent rows in phase 1); INSERT on `audit_event_hash_chain` (hash chain rows); NO direct INSERT on `audit_event_hash_chain_anchor` (committed anchors only via phase 5 promotion procedure) | DENY `kms:Sign` on archive-signing-key; DENY S3 PutObject (writer does NOT write to S3 directly; writer issues phase 3 via canonical app-layer); DENY UPDATE/DELETE on any audit-archive table (I-027 + enforce_append_only) |
+| `audit-chain-archive-signer` | `kms:Sign` on `archive-signing-key` (HSM-backed CMK); UPDATE on `audit_event_hash_chain_anchor_intent` ONLY to fill in `signature` + `signed_at_intent` (no row INSERT/DELETE) | DENY INSERT on any audit-archive table; DENY S3 PutObject; DENY `kms:Decrypt`; DENY assume-role on `audit-chain-writer`/`audit-chain-verifier`/`audit-transparency-log-append-witness` |
+| `audit-chain-verifier` | SELECT on `audit_event_hash_chain` + `_anchor` + `_anchor_intent`; S3 GetObject on archive bucket; transparency-log read operations + inclusion-proof retrieval | DENY all writes; DENY `kms:Sign`; DENY `kms:Decrypt`; DENY assume-role on signer/writer/witness |
+| `audit-transparency-log-append-witness` | Transparency-log Append + STH read operations; UPDATE on `audit_event_hash_chain_anchor_intent` ONLY to fill in `transparency_log_inclusion_proof` + transition state to `transparency_log_appended` | DENY INSERT/DELETE on intent table; DENY S3 PutObject; DENY `kms:Sign`; DENY assume-role on other 3 roles |
+
+**Cross-role human-identity separation (per Sprint 18 RBAC v1.2 Inv-1 + Inv-2 pattern):** no single `human_id` (via `iam_principal_human_binding` table) may hold more than one of these 4 roles. Grant-time enforcement via DB constraint + IAM AssumeRole trust-policy condition rejecting same-human-id assumption across roles.
+
+**Canonical S3 bucket policy DENY conditions:** the archive bucket's policy denies `s3:PutObject` from any principal not in the `audit-chain-writer` canonical principal set; denies `s3:GetObject` from any principal not in `audit-chain-writer` ∪ `audit-chain-verifier`; denies `s3:DeleteObject` UNIVERSALLY (Object Lock COMPLIANCE handles retention).
+
+**Canonical KMS key policy DENY conditions:** the `archive-signing-key` policy permits `kms:Sign` ONLY from `audit-chain-archive-signer`; explicit DENY from all other principals including `audit-chain-writer`.
+
+### Sub-decision 6 — Multi-phase crash-safe signing protocol (R1 HIGH-1 closure: no anchor is "committed" until S3 + transparency log are durably recorded)
+
+Per Sprint 6 R5 closure refined: the protocol uses an explicit state machine where NO anchor is considered committed until BOTH the immutable S3 write AND the transparency-log append have durably succeeded.
+
+**Anchor state machine:**
+
+```
+intent_reserved → signature_computed → s3_write_committed → transparency_log_appended → COMMITTED
+                                                                                        |
+                                                          (any earlier state = INCOMPLETE; recovery applies)
+```
+
+**Phase 1 — `intent_reserved`:** writer INSERTs intent row into `audit_event_hash_chain_anchor_intent` table with `state='intent_reserved'`, reserving the sequence number. Intent rows carry a deterministic `anchor_idempotency_key` derived from `(partition, partition_key, sequence_no_head, row_hash_head)`. Re-runs with the same key are idempotent.
+
+**Phase 2 — `signature_computed`:** signer computes the HSM signature over the canonical anchor payload + appends `(signature, signed_at_intent=now())` to the intent row + transitions state to `signature_computed`. **DOES NOT yet set the final canonical `signed_at`.**
+
+**Phase 3 — `s3_write_committed`:** writer issues S3 PutObject with `If-None-Match: *` (per Sprint 6 R5 first-write acceptance control) + object content = canonical anchor payload + signature + per-row dump. S3 returns success only if no prior write exists for the deterministic key. On 2xx response, intent row state → `s3_write_committed`.
+
+**Phase 4 — `transparency_log_appended`:** transparency-log-append-witness role appends the signed anchor payload + obtains an inclusion proof. The inclusion proof is durably recorded on the intent row + state → `transparency_log_appended`.
+
+**Phase 5 — `COMMITTED`:** ONLY when phase 4 completes does the canonical `signed_at` get set + the anchor is promoted to `audit_event_hash_chain_anchor`. Until phase 5, downstream consumers MUST treat the anchor as in-flight, not authoritative.
+
+**Crash between phases — recovery rules (per Sub-decision 7):**
+
+- Crash in phase 1: intent row exists in `intent_reserved`; recovery retries from phase 2 using the same idempotency key.
+- Crash in phase 2: intent row in `signature_computed`; recovery proceeds to phase 3 with the existing signature (no re-signing; HSM signatures are deterministic for the same payload).
+- Crash in phase 3: intent row in `signature_computed` but no S3 write OR partial S3 write; recovery checks S3 via HEAD + GET (per Sub-decision 7 discovery-first); if S3 object exists + hash matches, advance to phase 4; if missing, retry phase 3 with `If-None-Match: *` (which succeeds because there's no existing object).
+- Crash in phase 4: S3 write succeeded but transparency log append did not; recovery checks transparency log for the inclusion proof; if missing, retry phase 4; if present, advance to phase 5.
+- Crash in phase 5 (between transparency append + setting canonical signed_at): the S3 + transparency log both attest the anchor; recovery sets `signed_at = transparency_log_appended_at` (preserves chronological accuracy) + promotes to `audit_event_hash_chain_anchor`.
+
+This eliminates the orphaned-signed-intent + duplicate-sequence-on-retry windows that the prior R1 HIGH-1 surface identified.
+
+### Sub-decision 7 — Discovery-first crash-recovery with cryptographic-disagreement halt-and-repair (R1 HIGH-2 closure)
+
+Per Sprint 6 R6 closure + R1 HIGH-2 corrective: on crash recovery, the canonical procedure does NOT trust local state; it queries S3 + the transparency log to discover canonical state. **Disagreement between S3 + transparency log triggers HALT-AND-REPAIR, not silent older-side selection.**
+
+1. Scan S3 for archive objects per `(partition, partition_key)` in increasing sequence_no order.
+2. For each S3 object: GetObject + SHA-256 re-hash bytes (per Sprint 6 R6: AWS S3 ETag does NOT equal SHA-256 for multipart uploads; canonical integrity check is GetObject + re-hash) + verify HSM signature over the canonical payload.
+3. Query transparency log for inclusion proofs per `(partition, partition_key)`.
+4. **Reconciliation rules (R1 HIGH-2 closure):**
+   - S3 anchor present + signature valid + transparency log has matching inclusion proof + signed payload hash = HEAD: CANONICAL (resume from this head).
+   - S3 anchor present + signature valid + transparency log MISSING the inclusion proof: this means phase 4 was incomplete. Recovery COMPLETES phase 4 (deterministic + idempotent transparency append). Emit Cat A `audit_archive.phase_4_completed_during_recovery`.
+   - S3 anchor MISSING but transparency log has an inclusion proof for a signed payload: this is the dangerous case (S3 write was lost OR rolled back; transparency log is independently-verifiable + authoritative). HALT-AND-REPAIR: emit Cat A `audit_archive.s3_anchor_missing_transparency_log_present_halt` + alert Compliance Officer + Engineering Lead via PagerDuty P0. Recovery DOES NOT auto-resume; manual investigation required (could indicate tampering OR catastrophic infrastructure failure).
+   - Both present but signatures or hashes DISAGREE: HALT-AND-REPAIR (similar Cat A event + P0). NEVER auto-rollback to older side.
+   - Both missing for a partition: legitimate fresh-start case; resume from sequence_no=0.
+
+5. Cryptographic proof is the canonical resolver. The earlier "older-side wins" rule is rescinded per R1 HIGH-2 closure.
+
+### Sub-decision 8 — DR reconstruction with bounded RPO + dual-write durability (R1 HIGH-3 closure)
+
+Per R1 HIGH-3 corrective: the 99.99%-within-15-min CRR SLA leaves a bounded RPO window where unreplicated objects could be lost in catastrophic primary-region loss. The amended DR posture:
+
+**Dual-write durability requirement (R1 HIGH-3 closure):** phase 3 S3 write is configured as **multi-region durable write**:
+- Primary write to us-east-1 S3 (Object Lock COMPLIANCE).
+- Synchronous secondary write to us-west-2 S3 (Object Lock COMPLIANCE).
+- BOTH writes must succeed before phase 3 transitions to `s3_write_committed`.
+- This is implemented via S3 multi-region access points OR application-level dual-PUT pattern (the canonical implementation is application-level for control + auditability).
+
+This eliminates the "unreplicated primary-region archive" gap. RPO for archive objects is now 0 within the dual-write window.
+
+**Bounded RPO acknowledgment:** within the dual-write window (phase 3 in-flight), if the primary region fails before the secondary write succeeds, the not-yet-dual-written anchor MAY be lost. This is a transient window measured in milliseconds (typical S3 PUT latency). The transparency log append (phase 4) acts as the canonical cross-region durability backstop — the inclusion proof is independent of S3 + survives single-region-S3-loss.
+
+**DR chain reconstruction procedure (amended):**
+
+1. From us-west-2 S3 replica + transparency log inclusion proofs, fetch every committed anchor in chronological order.
+2. For each anchor: GetObject + re-hash + verify HSM signature + cross-check transparency log inclusion proof.
+3. Re-compute the chain hashes; verify each anchor's chain_head matches the prior anchor's chain_head_next.
+4. If reconstruction matches the most-recent transparency-log entry + the most-recent S3 us-west-2 anchor + ALL signatures verify: chain fully recovered (RPO=0 within dual-write semantics).
+5. If reconstruction encounters a gap (e.g., transparency log has anchor N+1 but us-west-2 S3 is missing anchor N): emit Cat A `audit_archive.dr_reconstruction_gap_detected` + halt for manual investigation per Sub-decision 7 disagreement rules.
+
+The reconstruction is bounded by the available S3 + transparency-log state; chain integrity is verified cryptographically, not assumed.
 
 ### Sub-decision 7 — Discovery-first crash-recovery
 
@@ -180,6 +276,21 @@ These events are added to AUDIT_EVENTS v5.6 → v5.7 at SI-021 promotion.
 ## 6. Codex pre-ratification status
 
 **v1.0 DRAFT 2026-05-20:** filed per OQ-C ratified at P-026; awaiting Codex R1 in its own ratifier ceremony cycle.
+
+**v1.0 R1 closure 2026-05-20:** 3 HIGH + 2 MED closed inline:
+
+| Round | Findings | Status |
+|---|---|---|
+| R1 | HIGH-1 two-phase commit marked signed_at before S3 write; HIGH-2 disagreement-rollback rule could lose anchors; HIGH-3 DR reconstruction couldn't recover unreplicated primary-region archives; MED-1 4-role separation not IAM-enforceable; MED-2 CloudWatch Logs doesn't actually provide inclusion proofs | All 5 closed inline |
+
+**R1 closure pattern recap:**
+- HIGH-1: 5-phase state machine (intent_reserved → signature_computed → s3_write_committed → transparency_log_appended → COMMITTED); canonical signed_at NOT set until phase 5; deterministic anchor_idempotency_key + per-phase recovery rules.
+- HIGH-2: Sub-decision 7 disagreement = HALT-AND-REPAIR (cryptographic-proof-required) with explicit Cat A P0 alerts. Older-side-wins rule rescinded.
+- HIGH-3: Sub-decision 8 amended for dual-write durability (synchronous us-east-1 + us-west-2 S3 writes before phase 3 commits). Transparency log append (phase 4) as cross-region durability backstop.
+- MED-1: Sub-decision 5a added with full IAM/DB/KMS/S3 permission matrix per role (4-role separation + canonical Deny conditions + cross-role human-identity binding per Sprint 18 RBAC).
+- MED-2: Sub-decision 5 rewritten with explicit transparency-log requirements (Merkle root + STH + inclusion proofs + consistency proofs + auditor API). Option T1 (Sigstore-rekor or comparable) recommended; Option T2 (CloudWatch + custom witness layer) acknowledged as requiring NEW canonical service.
+
+No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honored. 5 known OQs (§5) remain ratifier-targetable.
 
 ---
 
