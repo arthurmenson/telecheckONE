@@ -3905,7 +3905,7 @@ Per the interpretation rule: each remaining PR-A2/A3-class commit applies +1 min
 
 ---
 
-## Addendum 55 — SI-021 R3-R4-R5 Codex convergence FULLY CLOSED at §10 cadence boundary; SI-021 RATIFIER-READY-WITH-KNOWN-OQs; 12 findings closed inline across 5 rounds; 0 hard-floor item 6 violations
+## Addendum 55 — SI-021 R3-R4-R5 Codex convergence FULLY CLOSED at §10 cadence boundary; SI-021 RATIFIER-READY-WITH-KNOWN-OQs; 16 findings closed inline (10 HIGH + 6 MED) across 5 rounds; 0 hard-floor item 6 violations
 
 **Date:** 2026-05-20
 **Trigger:** Evans's chat-message directive "start SI-021's R3-R5 convergence" + standing 15-min default-to-proceed rule.
@@ -3926,7 +3926,7 @@ Per the interpretation rule: each remaining PR-A2/A3-class commit applies +1 min
 - R3: 2 HIGH + 2 MED → 5-role label completion + per-region recovery + STH-on-anchor + audit-taxonomy
 - R4: 1 HIGH → exhaustive 16-combination per-region state machine + Object Lock COMPLIANCE supersession procedure
 - R5: 2 HIGH → phase-state-aware corruption-evidence handling + supersession-linkage schema persistence
-- **Total: 12 findings closed inline across 5 rounds.**
+- **Total: 16 findings closed inline across 5 rounds (10 HIGH + 6 MED).** Per-round breakdown: R1 5 (3+2); R2 4 (2+2); R3 4 (2+2); R4 1 (1+0); R5 2 (2+0).
 
 **Discipline-floor status (CLAUDE.md hard-floor item 6 honoring):**
 - **0 architectural-judgment items closed inline across all 5 rounds.**
