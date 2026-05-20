@@ -1,7 +1,7 @@
 # SI-024 — Canonical Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.15 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + cycles 6-7-8-9 closures applied
-**Status:** Cycle-9 stale-snippet sweep: HIGH closure removed break-glass branches from Sub-decision 5a §3 canonical RLS policy WITH CHECK (aligned with cycle-8 Phase 2 write-block); MED closure updated Sub-decision 2 Option B-1 sample to match Sub-decision 1's canonical helper (SECURITY INVOKER + pg_has_role + NULL return).
+**Version:** 1.0 v0.16 DRAFT — RATIFIER-READY-AS-TRANSITIONAL at §10-cadence boundary + cycles 6-7-8-9-10 closures applied
+**Status:** Cycle-10 stale-snippet sweep: HIGH closure P-030 swept v0.14 → v0.16 (alignment with current SI version); MED closure §1 scope + Sub-decision 1 §Why this shape + Sub-decision 7 Test 5 all updated to SECURITY INVOKER + SET search_path discipline (corrected stale SECURITY DEFINER references that contradicted Sub-decision 1's canonical helper definition).
 **Authoring date:** 2026-05-20
 **Trigger:** OQ6 cross-CDM deferral from CDM v1.5 amendment cycle (P-029 Pass-2 conditions §2 + Codex cycle-3 deferral approval). SI-024 closes the deferred hardened-helper question at corpus-wide scope.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner
@@ -134,7 +134,7 @@ CREATE POLICY <table>_tenant_isolation ON <table>
 
 **Why this shape:**
 - Single canonical resolver function → consistent enforcement across all entities; cannot be bypassed by varying GUC names per table.
-- SECURITY DEFINER + hardened `search_path` defeats object-redirection attacks (per R2 HIGH-2 closure pattern in CDM v1.5 amendment).
+- SECURITY INVOKER + hardened `search_path = pg_catalog, public` defeats object-redirection attacks (cycle-10 MED closure 2026-05-20: previously said "SECURITY DEFINER" but canonical helpers are INVOKER per R1 CRITICAL-1 closure; search_path hardening still applies under INVOKER and is the actual defense per R2 HIGH-2 closure pattern in CDM v1.5 amendment).
 - Break-glass is **role-based** (caller's `current_user`), not GUC-settable. Even if GUC `app.platform_operator_break_glass` is set, the helper ignores it; only the role identity counts.
 - STABLE function declaration enables PostgreSQL to cache the result per query for performance.
 - Trust-anchor selection (Sub-decision 2) is the architectural choice; the helper shape is decoupled from that choice.
@@ -601,7 +601,7 @@ Re-litigates the SI-010 trust-anchor architecture that was rejected at P-023a.
 - Test 2a (added at pre-merge cycle-3 MED closure 2026-05-20): Role IN middleware-writer membership but `app.tenant_id` GUC unset → `current_tenant_id_strict()` raises (fails loudly because this represents a legitimate middleware bug, not unauthorized access).
 - Test 3: Setting GUC `app.platform_operator_break_glass = 'true'` from a non-`platform_operator_*` role does NOT trigger break-glass clause.
 - Test 4: Cross-tenant read attempt by a compromised `app_middleware_writer` setting GUC to victim tenant_id — RLS still enforces the helper's verified context (if Option B-2 with cryptographic binding) OR demonstrates the residual risk (if Option B-1).
-- Test 5: SECURITY DEFINER + `search_path` discipline — helper invocation under attacker-controlled `search_path` does not redirect to attacker-controlled tables.
+- Test 5 (corrected at cycle-10 MED closure 2026-05-20): **SECURITY INVOKER + `SET search_path = pg_catalog, public` discipline** — helper invocation by a caller with an attacker-controlled session `search_path` does not redirect unqualified table references to attacker-controlled tables. Asserts (a) `current_tenant_id_strict()` under INVOKER correctly reports caller's effective role via `current_user` + `pg_has_role`; (b) `is_target_tenant_break_glass_active()` under INVOKER similarly correctly identifies caller; (c) the AFTER-INSERT/UPDATE audit triggers under SECURITY DEFINER explicitly resolve `public.audit_events` and `public.break_glass_approval` via the fixed search_path, NOT via session search_path. (Note: SECURITY DEFINER on the audit triggers is intentional — those need elevated privilege to write audit_events; the helpers themselves are INVOKER.)
 
 ### Sub-decision 8 — Audit event taxonomy
 
