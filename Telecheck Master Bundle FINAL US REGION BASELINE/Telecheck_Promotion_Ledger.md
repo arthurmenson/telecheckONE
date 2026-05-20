@@ -37,7 +37,7 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
-### Entry P-030 — 2026-05-20 — SI-024 v1.0 Canonical Hardened Tenant/Platform RLS Helper Pattern (role-constrained-GUC hardening — direct-DB-role spoofing closure only; cryptographic JWT-binding deferred to SI-024.1); 1 new entity (`break_glass_approval`) + 6 new Cat A audit events (per-invocation `target_tenant_break_glass_invoked` DEFERRED to SI-024.1 per STABLE-function constraint) + 3 new helper functions; Artifact Registry v2.16 → v2.17
+### Entry P-030 — 2026-05-20 — SI-024 v1.0 Canonical Hardened Tenant/Platform RLS Helper Pattern, RATIFIED AS TRANSITIONAL canonical implementation guidance for Phases 1-3 only (B+ Pass-2 synthesis); role-constrained-GUC hardening — direct-DB-role spoofing closure only; cryptographic JWT-binding deferred to SI-024.1; production target-tenant break-glass use BLOCKED until SI-024.1 ratification + integration; 1 new entity (`break_glass_approval`) + 6 new Cat A audit events (per-invocation `target_tenant_break_glass_invoked` DEFERRED to SI-024.1 per STABLE-function constraint) + 3 new helper functions; Artifact Registry v2.16 → v2.17 (TRANSITIONAL marker on the canonical-floor surface)
 
 **Evans's verbatim instruction (2026-05-20 chat-message, applied via auto-proceed rule at CLAUDE.md commit `f483535`):** *"For my move I need a recommendation from both of you. If you both agree on next steps then automatically do it without waiting for me."* — standing-authorization directive. For this cycle: Claude said READY-TO-MERGE on v0.7 cycle-3 state (after Pass-1 cycle-3 closures applied); Codex Pass-1 cycle-3 said NEEDS-WORK on lockstep + stale-test (both addressed inline in this same commit + the P-030/Registry-v2.17 commit); Codex Pass-2 reconciliation pending. Auto-proceed merge IF Pass-2 converges with Claude on the post-closure state.
 
@@ -105,14 +105,14 @@ To be added to AUDIT_EVENTS at SI-024 Phase 1 (foundation) implementation. NOT i
 
 ---
 
-#### §5. Cycle convergence metrics
+#### §5. Cycle convergence metrics (corrected at Pass-2 B+ closure 2026-05-20)
 
-- **4 adversarial-review rounds (R1-R4)** + **3 merge-readiness consult cycles** = 7 total Codex closure cycles.
-- **R1 used two-pass discipline (Pass-1 + Pass-2 + framing-defect catch); R2-R4 single-invocation; merge-readiness cycles all used two-pass.**
-- **17 findings closed** (2 CRITICAL + 12 HIGH + 3 MED) across 7 cycles.
+- **4 adversarial-review rounds (R1-R4)** + **5 merge-readiness consult cycles + 1 strategic two-pass synthesis** = **10 total Codex closure cycles**.
+- **R1 used two-pass discipline (Pass-1 + Pass-2 + framing-defect catch); R2-R4 single-invocation; merge-readiness cycles 1-5 used Pass-1 only (rapid iteration); strategic synthesis used full two-pass (Pass-1 Option C + Pass-2 synthesis to B+)**.
+- **22 findings closed** (2 CRITICAL + 14 HIGH + 6 MED) across 10 cycles.
 - **0 hard-floor item 6 violations.**
-- **0 ERR escalations** (Pass-2 framing-defect catch at R1 saved one; cycle-1+cycle-2+cycle-3 each surfaced new findings closed inline).
-- **8 acknowledged v1.0 simplifications** all carried forward to SI-024.1 cycle.
+- **0 ERR escalations** (R1 Pass-2 framing-defect catch saved one; strategic Pass-2 synthesis B+ avoided B/C disagreement escalation).
+- **9 acknowledged v1.0 simplifications** all carried forward to SI-024.1 cycle (including simplification #9 v1.0 dual-control via self-attestation).
 
 ---
 
