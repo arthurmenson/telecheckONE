@@ -1,8 +1,8 @@
 # SI-021 — SIEM Hash-Chain Archival Spec
 
 **Version:** 1.0 DRAFT
-**Status:** RATIFIER-READY-WITH-KNOWN-OQs (R2 prose-consistency close 2026-05-20); FILED per OQ-C ratified decision at Promotion Ledger P-026
-**Codex iteration trajectory:** R1 (3 HIGH + 2 MED) → R2 (2 HIGH duplicate-section removal + 1 MED phase-3 authority + 1 MED OQ2 alignment) → R3 (2 HIGH 5-role-label + per-region recovery + 2 MED STH-on-anchor + audit-taxonomy) → R4 (1 HIGH exhaustive per-region state machine + Object Lock COMPLIANCE corrupted-anchor supersession procedure). All 7 findings closed inline; 0 architectural-judgment items closed inline; 5 known OQs (§5) remain ratifier-targetable. Original filing per (SIEM §4.5.HC split as separate SI to keep SIEM Spec proper focused on event-streaming + alerting + audit aggregation)
+**Status:** RATIFIER-READY-WITH-KNOWN-OQs at §10 cadence boundary (R5 final boundary close 2026-05-20); FILED per OQ-C ratified decision at Promotion Ledger P-026
+**Codex iteration trajectory:** R1 (3 HIGH + 2 MED) → R2 (2 HIGH duplicate-section removal + 1 MED phase-3 authority + 1 MED OQ2 alignment) → R3 (2 HIGH 5-role-label + per-region recovery + 2 MED STH-on-anchor + audit-taxonomy) → R4 (1 HIGH exhaustive per-region state machine + Object Lock COMPLIANCE corrupted-anchor supersession procedure) → R5 (2 HIGH phase-state-aware corruption-evidence handling + supersession-linkage schema persistence; final §10-cadence boundary round). All 12 findings closed inline; 0 architectural-judgment items closed inline; 5 known OQs (§5) remain ratifier-targetable for SI-021's own ratifier ceremony. Original filing per (SIEM §4.5.HC split as separate SI to keep SIEM Spec proper focused on event-streaming + alerting + audit aggregation).
 **Owner:** SRE Lead + Security Engineering Lead + Compliance Officer
 **Parent SI:** SIEM Integration Spec v1.0 (`Telecheck_SIEM_Integration_Spec_v1_0.md` §4.5.HC was the original split candidate per Sprint 6 R6 close)
 **Companion documents:** Promotion Ledger P-026 (ratification authority for the split decision); Sprint 6 SIEM Integration Spec R6 close-out observation; Sprint 13 KMS Architecture Spec (HSM-signing key infrastructure shared); Sprint 7 Cold-DR Runbook (cross-region replication topology shared); INVARIANTS v5.4 §I-027 (audit append-only platform floor).
@@ -91,10 +91,52 @@ CREATE TABLE audit_event_hash_chain_anchor (
     s3_us_east_1_etag TEXT NOT NULL,
     s3_us_west_2_etag TEXT NOT NULL,
     s3_object_sha256 BYTEA NOT NULL,               -- Canonical content hash (re-verified at recovery per Sub-decision 7)
+    -- Supersession linkage (R5 HIGH-2 closure: persists corrupted-anchor relationship in committed-anchor schema)
+    supersedes_corrupted_sequence_no BIGINT,       -- NULL for normal anchors; set when this anchor supersedes a corrupted anchor at the named sequence_no
+    supersedes_corruption_evidence_id UUID,        -- FK to audit_event_hash_chain_anchor_corruption_evidence(id); set iff supersedes_corrupted_sequence_no IS NOT NULL
     CONSTRAINT audit_event_hash_chain_anchor_unique UNIQUE (partition, partition_key, sequence_no_head),
-    CONSTRAINT audit_event_hash_chain_anchor_log_entry_unique UNIQUE (transparency_log_id, transparency_log_entry_index)
+    CONSTRAINT audit_event_hash_chain_anchor_log_entry_unique UNIQUE (transparency_log_id, transparency_log_entry_index),
+    -- At most ONE canonical supersession per corrupted sequence_no per (partition, partition_key)
+    CONSTRAINT audit_event_hash_chain_anchor_single_supersession_uk
+        UNIQUE (partition, partition_key, supersedes_corrupted_sequence_no),
+    -- Both supersession fields must be NULL together OR both NOT NULL together
+    CONSTRAINT audit_event_hash_chain_anchor_supersession_paired
+        CHECK ((supersedes_corrupted_sequence_no IS NULL AND supersedes_corruption_evidence_id IS NULL)
+            OR (supersedes_corrupted_sequence_no IS NOT NULL AND supersedes_corruption_evidence_id IS NOT NULL))
 );
+
+-- R5 HIGH-1 closure: corruption-evidence table for pre-phase-4 corruption detection
+CREATE TABLE audit_event_hash_chain_anchor_corruption_evidence (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    corrupted_partition TEXT NOT NULL,
+    corrupted_partition_key TEXT NOT NULL,
+    corrupted_sequence_no BIGINT NOT NULL,
+    corrupted_object_s3_key TEXT NOT NULL,
+    observed_s3_sha256 BYTEA NOT NULL,             -- The wrong object's actual SHA-256
+    expected_signature_payload_sha256 BYTEA NOT NULL,  -- The canonical signed payload's SHA-256
+    observed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    intent_state_at_observation TEXT NOT NULL,     -- 'signature_computed' | 's3_write_committed' | 'transparency_log_appended' | 'COMMITTED'
+    transparency_log_id TEXT NOT NULL,             -- The transparency log instance ID
+    transparency_log_entry_index BIGINT NOT NULL,  -- The corruption-evidence leaf's log index
+    transparency_log_sth_at_append BYTEA NOT NULL,
+    transparency_log_sth_signature BYTEA NOT NULL,
+    transparency_log_inclusion_proof JSONB NOT NULL,
+    authorized_by_compliance_officer_user_id UUID NOT NULL,
+    authorized_by_cto_user_id UUID NOT NULL,
+    CONSTRAINT corruption_evidence_dual_control_distinct CHECK (authorized_by_compliance_officer_user_id <> authorized_by_cto_user_id),
+    CONSTRAINT corruption_evidence_log_entry_unique UNIQUE (transparency_log_id, transparency_log_entry_index),
+    -- At most ONE corruption-evidence per corrupted (partition, partition_key, sequence_no)
+    CONSTRAINT corruption_evidence_single_per_corrupted_seq UNIQUE (corrupted_partition, corrupted_partition_key, corrupted_sequence_no)
+);
+
+-- The supersession linkage FK is established AFTER both tables exist (forward reference)
+ALTER TABLE audit_event_hash_chain_anchor
+    ADD CONSTRAINT audit_event_hash_chain_anchor_corruption_evidence_fk
+        FOREIGN KEY (supersedes_corruption_evidence_id)
+        REFERENCES audit_event_hash_chain_anchor_corruption_evidence(id);
 ```
+
+**R5 HIGH-2 closure note:** the `supersedes_corrupted_sequence_no` + `supersedes_corruption_evidence_id` fields are included in the canonical signed payload (i.e., the HSM signature covers them), so the supersession linkage is cryptographically attested. A third-party auditor reading ONLY the committed-anchor row can: (a) verify the HSM signature over the canonical payload including the supersession fields; (b) follow the FK to the corruption-evidence row; (c) verify the corruption-evidence transparency-log inclusion proof; (d) verify the supersession anchor's own inclusion proof. This makes the corruption-and-supersession relationship cryptographically self-evident in the committed-anchor schema.
 
 **R3 MED-1 closure note:** the committed-anchor table now carries the full transparency-log inclusion-proof material + STH-at-append-time + the cryptographic signature over the STH. This means an external auditor querying ONLY the committed anchor table (without consulting the intent table OR the transparency log directly) has cryptographic proof of which STH the inclusion proof verifies against — the audit trail is self-contained for third-party verification. Consistency proofs between any two anchors' STHs can be requested from the transparency log; the canonical `transparency_log_id` + entry indices anchor the request.
 
@@ -190,7 +232,21 @@ intent_reserved → signature_computed → s3_write_committed → transparency_l
   4. **Any region in `present_but_hash_mismatch` OR `indeterminate` (after exponential backoff exhaustion):** HALT-AND-REPAIR (cryptographic-corruption-OR-infrastructure-failure case; cannot auto-recover because Object Lock COMPLIANCE prevents overwrite/delete of the wrong object within the retention period). Emit Cat A `audit_archive.regional_s3_payload_corruption_or_indeterminate_halt` (R4 HIGH closure new event; added to §3 taxonomy below); P0 PagerDuty alert; **manual repair procedure required (see §below).** This case covers: single-region corruption (1 region matches, 1 region has wrong-payload object); same-wrong-payload in both regions (cryptographic-corruption case; both regions wrong); single-region indeterminate (1 region 5xx persistent); both-regions indeterminate (likely network partition affecting probe paths — distinct from the dual-write partition case in Sub-decision 8).
   5. **Both regions `present_but_hash_mismatch` with DIFFERENT payloads:** HALT-AND-REPAIR (regional disagreement; emit Cat A `audit_archive.regional_s3_payload_disagreement_halt`). This was the original R3 HIGH-2 closure case; preserved as a distinct sub-case of #4 with a distinct event for forensic discrimination.
 
-**Manual repair procedure for case #4 + #5 (R4 HIGH closure):** because Object Lock COMPLIANCE prevents overwrite of the wrong object within the retention period (canonical retention = 7 years for Cat A; 3 years Cat B; 90 days Cat C), the wrong object cannot be repaired in place. The canonical procedure: (a) Compliance Officer + CTO authorize a NEW anchor at sequence_no_head+1 with the original signed canonical payload re-signed under a NEW deterministic anchor_idempotency_key (the original sequence_no_head is reserved-but-corrupted; the new sequence_no+1 anchor carries `supersedes_corrupted_sequence_no = N` reference); (b) the transparency log appends BOTH the corrupted-anchor inclusion proof (already done) AND the supersession-anchor inclusion proof, both verifiable; (c) Cat A `audit_archive.corrupted_anchor_superseded` event emitted (P2 keyed by 'platform' + linked to both anchor sequence_no values); (d) downstream reconstruction logic per Sub-decision 8 skips the corrupted sequence_no + uses the supersession anchor's chain head as canonical. The corrupted object remains in S3 (cannot be deleted under COMPLIANCE) but is no longer referenced as canonical. This preserves cryptographic integrity (the corrupted object's signature is still valid under the original key; the audit trail records the supersession; third-party auditors can independently verify both).
+**Manual repair procedure for case #4 + #5 (R4 HIGH + R5 HIGH-1 closure: phase-state-aware corruption-evidence handling):** because Object Lock COMPLIANCE prevents overwrite of the wrong object within the retention period (canonical retention = 7 years for Cat A; 3 years Cat B; 90 days Cat C), the wrong object cannot be repaired in place. The canonical procedure splits by phase state at corruption-detection time:
+
+**Pre-phase-4 corruption (phase-3 detection; transparency log has NOT yet appended an inclusion proof for the corrupted anchor):**
+
+1. The corrupted S3 object is `present_but_hash_mismatch` (case #4 or #5 of the phase-3 recovery rule above).
+2. Compliance Officer + CTO authorize a NEW corruption-evidence transparency-log entry: a structured leaf containing `{corrupted_partition, corrupted_partition_key, corrupted_sequence_no, corrupted_object_s3_key, observed_s3_sha256, expected_signature_payload_sha256, observed_at, intent_state_at_observation}`. This corruption-evidence leaf is DISTINCT from a valid-anchor leaf (it carries a `leaf_type='corruption_evidence'` discriminator); it preserves cryptographic provenance of the corruption observation BEFORE supersession.
+3. The corruption-evidence transparency-log entry's STH + inclusion proof are stored in a new `audit_event_hash_chain_anchor_corruption_evidence` table (R5 HIGH-1 closure new entity) with the same columns as the canonical anchor table's transparency-log persistence fields, plus the corrupted-object provenance fields above.
+4. Compliance Officer + CTO authorize a NEW canonical anchor at sequence_no_head+1 with the original signed canonical payload re-signed under a NEW deterministic anchor_idempotency_key. The supersession anchor's `supersedes_corrupted_sequence_no = N` field (R5 HIGH-2 closure schema addition; see §below) ties it to the corruption-evidence entry.
+5. The supersession anchor proceeds through phases 1-5 normally; its transparency-log inclusion proof is independently verifiable.
+6. Cat A `audit_archive.corrupted_anchor_superseded` event emitted with both the corruption-evidence and supersession-anchor references.
+7. Downstream reconstruction skips the corrupted sequence_no; uses the supersession anchor's chain head as canonical.
+
+**Post-phase-4 corruption (anchor was committed + transparency log appended successfully + corruption discovered later via Sub-decision 7 reconciliation):** the corrupted-anchor inclusion proof IS already in the transparency log. The procedure is the same as above except step 2-3 are skipped (corruption-evidence already exists in the canonical transparency log via the original phase-4 append); only the supersession anchor + Cat A audit emission are required.
+
+In both cases: the corrupted object remains in S3 under Object Lock (cannot be deleted within retention period); the supersession anchor is canonical for downstream reconstruction; third-party auditors can independently verify the corruption-evidence (from the transparency log) + the supersession anchor + the link between them via the `supersedes_corrupted_sequence_no` reference. Cryptographic integrity is preserved across the audit chain.
 - Crash in phase 4: S3 write succeeded but transparency log append did not; recovery checks transparency log for the inclusion proof; if missing, retry phase 4; if present, advance to phase 5.
 - Crash in phase 5 (between transparency append + setting canonical signed_at): the S3 + transparency log both attest the anchor; recovery sets `signed_at = transparency_log_appended_at` (preserves chronological accuracy) + promotes to `audit_event_hash_chain_anchor`.
 
@@ -257,6 +313,8 @@ The reconstruction is bounded by the available S3 + transparency-log state; chai
 | `audit_archive.dr_reconstruction_gap_detected` (R3 MED-2 closure) | A | P2 keyed by 'platform' |
 | `audit_archive.regional_s3_payload_corruption_or_indeterminate_halt` (R4 HIGH closure) | A | P2 keyed by 'platform' |
 | `audit_archive.corrupted_anchor_superseded` (R4 HIGH closure: supersession-anchor pattern under Object Lock COMPLIANCE) | A | P2 keyed by 'platform'; carries `supersedes_corrupted_sequence_no` reference |
+| `audit_archive.corruption_evidence_recorded_pre_phase_4` (R5 HIGH-1 closure: corruption-evidence transparency-log leaf appended for pre-phase-4 corruption detection) | A | P2 keyed by 'platform'; carries `corruption_evidence_id` + `corrupted_sequence_no` references |
+| `audit_archive.corrupted_anchor_superseded_post_phase_4` (R5 HIGH-1 closure: supersession variant for post-phase-4 corruption discovery; corruption-evidence already in canonical transparency log) | A | P2 keyed by 'platform'; carries `supersedes_corrupted_sequence_no` + canonical transparency-log entry-index reference |
 
 These events are added to AUDIT_EVENTS v5.6 → v5.7 at SI-021 promotion.
 
@@ -339,6 +397,20 @@ No architectural-judgment items closed inline; CLAUDE.md hard-floor item 6 honor
 - MED-2: OQ2 rewritten to align with §5 closure — Option T1 (Sigstore-rekor) recommended for v1.0; Option T2 (CloudWatch+witness) acceptable only if witness-layer is separately ratified pre-launch.
 
 **Status at R2 close:** RATIFIER-READY-WITH-KNOWN-OQs at §10 cadence. Sprint 20 §10-equivalent boundary applied; SI-021 closes at R2 with prose-consistency clean.
+
+**v1.0 R5 closure 2026-05-20:** 2 HIGH closed inline:
+
+| Round | Findings | Status |
+|---|---|---|
+| R5 | HIGH-1 corrupted-object supersession assumed transparency-log entry that may not exist (phase-3 corruption detection happens BEFORE phase-4 transparency-log append; corruption-evidence path required for pre-phase-4 corruption); HIGH-2 supersession reference field absent from committed-anchor schema (procedure described inline but no schema field to persist the corruption→supersession linkage cryptographically) | Both closed inline |
+
+**R5 closure pattern recap:**
+- HIGH-1: manual repair procedure for case #4 + #5 split by phase state into "Pre-phase-4 corruption" (requires NEW corruption-evidence transparency-log entry with `leaf_type='corruption_evidence'` discriminator + new `audit_event_hash_chain_anchor_corruption_evidence` entity) and "Post-phase-4 corruption" (uses existing canonical transparency-log entry; supersession-only path). Two distinct Cat A events added (`corruption_evidence_recorded_pre_phase_4` + `corrupted_anchor_superseded_post_phase_4`).
+- HIGH-2: `audit_event_hash_chain_anchor` schema extended with `supersedes_corrupted_sequence_no BIGINT` + `supersedes_corruption_evidence_id UUID` columns + paired-NULL CHECK constraint (both NULL OR both NOT NULL) + single-supersession UNIQUE constraint (one canonical supersession per corrupted sequence_no per (partition, partition_key)) + FK to corruption-evidence table. Supersession linkage included in canonical signed payload so HSM signature covers it — third-party auditor can verify the corruption-and-supersession relationship cryptographically from the committed-anchor row alone.
+- NEW entity: `audit_event_hash_chain_anchor_corruption_evidence` table with dual-control authorization (Compliance Officer + CTO; CHECK constraint enforces distinct human user_ids) + transparency-log persistence fields (STH + STH signature + inclusion proof) + corruption-observation provenance fields (corrupted_partition + partition_key + sequence_no + s3_key + observed_sha256 + expected_sha256 + observed_at + intent_state_at_observation).
+- 2 new audit events added to §3 taxonomy (`corruption_evidence_recorded_pre_phase_4`; `corrupted_anchor_superseded_post_phase_4`).
+
+**Status at R5 close (§10 cadence boundary):** RATIFIER-READY-WITH-KNOWN-OQs at §10 cadence boundary. Per Sprint 20 §10-equivalent boundary commitment made at R4 close ("R5 next as final boundary round"), SI-021 closes at R5 as the final §10-cadence boundary round regardless of residual findings. 12 findings closed inline across R1-R5 (5 HIGH at R1; 2 HIGH + 2 MED at R2; 2 HIGH + 2 MED at R3; 1 HIGH at R4; 2 HIGH at R5). 0 architectural-judgment items closed inline (CLAUDE.md hard-floor item 6 honored across all 5 rounds; the cycle ran 5 prose-consistency + scope-clarification rounds without violating the discipline). Any remaining issues become known OQs under §5 + ratifier-targetable in SI-021's own ratification ceremony.
 
 ---
 
