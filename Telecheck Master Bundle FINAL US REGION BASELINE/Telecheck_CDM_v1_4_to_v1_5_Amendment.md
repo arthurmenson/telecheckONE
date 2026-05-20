@@ -1,7 +1,7 @@
 # CDM v1.4 → v1.5 Amendment (SI-021 follow-on)
 
-**Version:** 0.6 DRAFT — RATIFIER-READY at §10-cadence boundary (R5 final boundary close 2026-05-20)
-**Status:** R5 HIGH closed inline (composite FK binding supersession anchor to same-tenant + same-chain + same-sequence corruption-evidence). §10-cadence boundary reached per SI-021 R5-precedent. CYCLE COMPLETE pending Evans's merge decision (dual-recommendation).
+**Version:** 0.7 DRAFT — RATIFIER-READY at §10-cadence boundary (R5 final boundary close 2026-05-20) + pre-merge identity-constraint hardening (Codex merge-readiness consult HIGH closed)
+**Status:** R5 + pre-merge HIGH both closed inline. tenant_id woven into all 4 chain tables' PRIMARY KEY + UNIQUE + supersession-FK identity constraints. CYCLE COMPLETE pending Evans's merge decision (dual-recommendation converged on GO).
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-028 (SI-021 v1.0 RATIFIED) OQ4 canonical decision — file SI-021's 4 new audit-chain-archival entities as a CDM v1.4 → v1.5 amendment cycle co-bumped with AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4.
 **Owner:** SRE Lead + Security Engineering Lead + Compliance Officer (same as SI-021 owner triad).
@@ -47,12 +47,13 @@ CREATE TABLE audit_event_hash_chain (
     tenant_id tenant_id_t NOT NULL,                -- Three-layer tenant enforcement per I-023; PLATFORM_TENANT_ID sentinel for P2 platform-scoped chains per I-024
     partition TEXT NOT NULL,                       -- 'P1' | 'P2'
     partition_key TEXT NOT NULL,                   -- patient_id (P1) | tenant_id::TEXT OR 'platform' literal (P2)
-    sequence_no BIGINT NOT NULL,                   -- Monotonic per (partition, partition_key)
+    sequence_no BIGINT NOT NULL,                   -- Monotonic per (tenant_id, partition, partition_key)
     audit_event_id UUID NOT NULL,                  -- FK to audit_events.id
     row_hash BYTEA NOT NULL,                       -- SHA-256(prior_row_hash || row_canonical_form)
     chained_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (partition, partition_key, sequence_no),
-    CONSTRAINT audit_event_hash_chain_event_unique UNIQUE (audit_event_id),
+    -- Pre-merge HIGH closure 2026-05-20: tenant_id woven into relational identity so a P1 chain row for tenant B with same patient_id/sequence_no as tenant A does NOT collide
+    PRIMARY KEY (tenant_id, partition, partition_key, sequence_no),
+    CONSTRAINT audit_event_hash_chain_event_unique UNIQUE (tenant_id, audit_event_id),   -- tenant-scoped uniqueness; audit_event_id is itself tenant-bound via parent
     CONSTRAINT audit_event_hash_chain_partition_check CHECK (partition IN ('P1', 'P2')),
     -- P2 tenant-consistency (Option A consistency constraint #2 + #3 per Codex's missed-considerations):
     CONSTRAINT audit_event_hash_chain_p2_tenant_consistency CHECK (
@@ -155,8 +156,9 @@ CREATE TABLE audit_event_hash_chain_anchor_intent (
     transparency_log_appended_at TIMESTAMPTZ,      -- Audit timestamp for phase 4 transition
     -- Phase 5 persistence (set by audit-chain-archive-signer OR audit-chain-verifier; required at intent_state = 'COMMITTED')
     committed_at TIMESTAMPTZ,                      -- Audit timestamp for phase 5 transition
-    CONSTRAINT audit_event_hash_chain_anchor_intent_unique UNIQUE (partition, partition_key, sequence_no_head),
-    CONSTRAINT audit_event_hash_chain_anchor_intent_idempotency_unique UNIQUE (anchor_idempotency_key),
+    -- Pre-merge HIGH closure 2026-05-20: tenant_id woven into relational identity
+    CONSTRAINT audit_event_hash_chain_anchor_intent_unique UNIQUE (tenant_id, partition, partition_key, sequence_no_head),
+    CONSTRAINT audit_event_hash_chain_anchor_intent_idempotency_unique UNIQUE (tenant_id, anchor_idempotency_key),
     CONSTRAINT audit_event_hash_chain_anchor_intent_state_check
         CHECK (intent_state IN ('intent_reserved', 'signature_computed', 's3_write_committed', 'transparency_log_appended', 'COMMITTED')),
     -- State-specific NOT-NULL CHECK: required persistence fields per phase
@@ -358,10 +360,11 @@ CREATE TABLE audit_event_hash_chain_anchor (
     -- Supersession linkage (R5 HIGH-2 closure)
     supersedes_corrupted_sequence_no BIGINT,
     supersedes_corruption_evidence_id UUID,
-    CONSTRAINT audit_event_hash_chain_anchor_unique UNIQUE (partition, partition_key, sequence_no_head),
-    CONSTRAINT audit_event_hash_chain_anchor_log_entry_unique UNIQUE (transparency_log_id, transparency_log_entry_index),
+    -- Pre-merge HIGH closure 2026-05-20: tenant_id woven into relational identity
+    CONSTRAINT audit_event_hash_chain_anchor_unique UNIQUE (tenant_id, partition, partition_key, sequence_no_head),
+    CONSTRAINT audit_event_hash_chain_anchor_log_entry_unique UNIQUE (tenant_id, transparency_log_id, transparency_log_entry_index),
     CONSTRAINT audit_event_hash_chain_anchor_single_supersession_uk
-        UNIQUE (partition, partition_key, supersedes_corrupted_sequence_no),
+        UNIQUE (tenant_id, partition, partition_key, supersedes_corrupted_sequence_no),
     CONSTRAINT audit_event_hash_chain_anchor_supersession_paired
         CHECK ((supersedes_corrupted_sequence_no IS NULL AND supersedes_corruption_evidence_id IS NULL)
             OR (supersedes_corrupted_sequence_no IS NOT NULL AND supersedes_corruption_evidence_id IS NOT NULL)),
@@ -444,10 +447,11 @@ CREATE TABLE audit_event_hash_chain_anchor_corruption_evidence (
     authorized_by_cto_user_id UUID NOT NULL,
     CONSTRAINT corruption_evidence_dual_control_distinct
         CHECK (authorized_by_compliance_officer_user_id <> authorized_by_cto_user_id),
+    -- Pre-merge HIGH closure 2026-05-20: tenant_id woven into relational identity
     CONSTRAINT corruption_evidence_log_entry_unique
-        UNIQUE (transparency_log_id, transparency_log_entry_index),
+        UNIQUE (tenant_id, transparency_log_id, transparency_log_entry_index),
     CONSTRAINT corruption_evidence_single_per_corrupted_seq
-        UNIQUE (corrupted_partition, corrupted_partition_key, corrupted_sequence_no),
+        UNIQUE (tenant_id, corrupted_partition, corrupted_partition_key, corrupted_sequence_no),
     -- R5 HIGH closure 2026-05-20: composite UNIQUE on (id, tenant_id, corrupted_partition, corrupted_partition_key, corrupted_sequence_no)
     -- targetable by composite FK from §4.NEW3 anchor's supersession columns (binds evidence to same tenant + chain + sequence).
     CONSTRAINT corruption_evidence_composite_supersession_target
@@ -740,6 +744,34 @@ All 4 chain tables (§4.NEW1 audit_event_hash_chain + §4.NEW2 audit_event_hash_
 - **Cycle duration:** 5 Codex rounds + 1 ratifier mini-review + 2 CLAUDE.md amendments (codifications) — all on 2026-05-20.
 
 **Authored on** `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` branch off main at `8d44bde` (post-P-028 ratification). Merged main `f3a6469` (CLAUDE.md dual-recommendation codification) + `4f42a00` (CLAUDE.md broadened rule) into branch 2026-05-20.
+
+**v0.7 pre-merge HIGH closure 2026-05-20 (Codex merge-readiness consult finding):** 1 HIGH closed inline.
+
+| Round | Findings | Status |
+|---|---|---|
+| Pre-merge consult | **HIGH** chain identity constraints omit tenant_id despite tenant-scoped partition keys (PRIMARY KEY (partition, partition_key, sequence_no) + UNIQUE (audit_event_id) across §4.NEW1; sibling tables copied same pattern; a P1 chain row for tenant B with the same patient_id/sequence_no as tenant A would either be rejected or forced into the same logical chain namespace) | Closed inline |
+
+**Pre-merge closure pattern recap:**
+
+- **HIGH (closed inline):** tenant_id woven into all 4 chain tables' relational identity:
+  - **§4.NEW1** `audit_event_hash_chain`: `PRIMARY KEY (tenant_id, partition, partition_key, sequence_no)` + `UNIQUE (tenant_id, audit_event_id)`.
+  - **§4.NEW2** `audit_event_hash_chain_anchor_intent`: `UNIQUE (tenant_id, partition, partition_key, sequence_no_head)` + `UNIQUE (tenant_id, anchor_idempotency_key)`.
+  - **§4.NEW3** `audit_event_hash_chain_anchor`: `UNIQUE (tenant_id, partition, partition_key, sequence_no_head)` + `UNIQUE (tenant_id, transparency_log_id, transparency_log_entry_index)` + `UNIQUE (tenant_id, partition, partition_key, supersedes_corrupted_sequence_no)`.
+  - **§4.NEW4** `audit_event_hash_chain_anchor_corruption_evidence`: `UNIQUE (tenant_id, transparency_log_id, transparency_log_entry_index)` + `UNIQUE (tenant_id, corrupted_partition, corrupted_partition_key, corrupted_sequence_no)`. The composite-FK target `corruption_evidence_composite_supersession_target` already includes tenant_id from R5 closure.
+- Cross-tenant chain-row collision now impossible at the relational level (was previously prevented only by RLS + application filtering — now also enforced at the canonical schema layer).
+- **0 hard-floor item 6 violations** on this pre-merge closure. In-scope correctness fix to the Option A implementation; tenant_id was already added as a column at R1, the pre-merge consult correctly identified that the column alone is insufficient without identity-constraint inclusion.
+
+**Cycle status post-pre-merge-closure:** RATIFIER-READY at §10-cadence boundary + identity-constraint hardened. Codex merge-readiness consult to be re-invoked on v0.7 for verification before the merge question posed to Evans.
+
+**Cumulative cycle metrics (final):**
+- **R1-R5 + 1 pre-merge consult closure: 12 findings closed across 5 adversarial-review rounds + 1 dual-recommendation merge-readiness consult (1 CRITICAL + 10 HIGH + 1 MED).**
+- **0 hard-floor item 6 violations** across all 6 closure cycles.
+- **1 ratifier mini-review** (Option A chain-schema tenant-isolation via dual-recommendation — codification trigger).
+- **1 cross-CDM deferral** (OQ6 hardened-helper to future SI-024).
+- **3 closure shape novelties documented** for canonical process:
+  - Dual-recommendation process codified in CLAUDE.md (commit `f3a6469`; later broadened at `4f42a00`).
+  - Partial-inline-close + cross-CDM-defer closure shape (third option alongside full-inline-close + ERR-escalation), Codex-validated at R3.
+  - **Pre-merge dual-recommendation consult as a final correctness gate** — Codex's merge-readiness consult surfaced a HIGH that the adversarial-review rounds R1-R5 had not caught; the consult-framing invocation pattern complements the adversarial-review-framing pattern by asking a different question and getting a different angle of analysis. This is now documented as a canonical use of the dual-recommendation process: every merge question is implicitly a defect-catch opportunity.
 
 Authored on `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` branch off main at `8d44bde` (post-P-028 ratification). Merged main `f3a6469` (CLAUDE.md dual-recommendation codification) into branch 2026-05-20.
 
