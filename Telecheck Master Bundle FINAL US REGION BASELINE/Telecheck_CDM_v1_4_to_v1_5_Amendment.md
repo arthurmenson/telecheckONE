@@ -1,7 +1,7 @@
 # CDM v1.4 → v1.5 Amendment (SI-021 follow-on)
 
-**Version:** 0.1 DRAFT
-**Status:** R1 CLOSED INLINE FOR HIGH-1 + HIGH-2 + MED; 1 CRITICAL ESCALATED via Engineering Review Request (CLAUDE.md hard-floor item 6 STOP-and-escalate); RATIFIER-MINI-REVIEW-OPEN on chain-schema tenant-isolation question. R2 BLOCKED until CRITICAL resolved.
+**Version:** 0.2 DRAFT
+**Status:** R1 ALL FINDINGS CLOSED (3 inline closures + 1 CRITICAL ratified via ERR mini-review per dual-recommendation process). Option A implemented in §4.NEW1-4 (tenant_id + RLS + P1 trigger + P2 CHECK consistency). R2 verification PENDING.
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-028 (SI-021 v1.0 RATIFIED) OQ4 canonical decision — file SI-021's 4 new audit-chain-archival entities as a CDM v1.4 → v1.5 amendment cycle co-bumped with AUDIT_EVENTS v5.6 → v5.7 + CCR_RUNTIME v5.3 → v5.4.
 **Owner:** SRE Lead + Security Engineering Lead + Compliance Officer (same as SI-021 owner triad).
@@ -40,24 +40,66 @@ All 4 entities are P2 governance-partition entities (per SI-018 partition rule: 
 
 Per-row hash-chain projection table maintaining the cryptographic chain of audit events within each (partition, partition_key) namespace. INSERT-only by the `audit-chain-writer` IAM role; no UPDATE/DELETE permissions for any role.
 
+**Tenant-isolation (R1 CRITICAL closure 2026-05-20 per ERR Option A ratification):** carries `tenant_id` + RLS + per-tenant KMS DEK binding per CLAUDE.md "every PHI record carries tenant_id" + I-023/I-024/I-025/I-027 platform-floor invariants. Three-layer enforcement: PostgreSQL RLS + application-layer filtering + per-tenant CMK-derived DEK for any future encrypted-payload extensions. Consistency constraints enforce P1 chain `tenant_id` matches parent `audit_events.tenant_id`; P2 tenant-keyed chains have `tenant_id::TEXT = partition_key`; P2 platform chains use the canonical `PLATFORM_TENANT_ID` sentinel per I-024.
+
 ```sql
 CREATE TABLE audit_event_hash_chain (
+    tenant_id tenant_id_t NOT NULL,                -- Three-layer tenant enforcement per I-023; PLATFORM_TENANT_ID sentinel for P2 platform-scoped chains per I-024
     partition TEXT NOT NULL,                       -- 'P1' | 'P2'
-    partition_key TEXT NOT NULL,                   -- patient_id (P1) | tenant_id OR 'platform' (P2)
+    partition_key TEXT NOT NULL,                   -- patient_id (P1) | tenant_id::TEXT OR 'platform' literal (P2)
     sequence_no BIGINT NOT NULL,                   -- Monotonic per (partition, partition_key)
     audit_event_id UUID NOT NULL,                  -- FK to audit_events.id
     row_hash BYTEA NOT NULL,                       -- SHA-256(prior_row_hash || row_canonical_form)
     chained_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (partition, partition_key, sequence_no),
     CONSTRAINT audit_event_hash_chain_event_unique UNIQUE (audit_event_id),
-    CONSTRAINT audit_event_hash_chain_partition_check CHECK (partition IN ('P1', 'P2'))
+    CONSTRAINT audit_event_hash_chain_partition_check CHECK (partition IN ('P1', 'P2')),
+    -- P2 tenant-consistency (Option A consistency constraint #2 + #3 per Codex's missed-considerations):
+    CONSTRAINT audit_event_hash_chain_p2_tenant_consistency CHECK (
+        partition = 'P1'
+        OR (partition = 'P2' AND partition_key <> 'platform' AND tenant_id::TEXT = partition_key)
+        OR (partition = 'P2' AND partition_key = 'platform' AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    ),
+    CONSTRAINT audit_event_hash_chain_audit_event_fk FOREIGN KEY (audit_event_id) REFERENCES audit_events(id)
 );
 
--- RLS: enforced at parent audit_events row level (no direct tenant_id on this projection)
--- Append-only: enforce_append_only() trigger applied at v1.5 promotion
+-- Three-layer RLS enforcement
+ALTER TABLE audit_event_hash_chain ENABLE ROW LEVEL SECURITY;
+CREATE POLICY audit_event_hash_chain_tenant_isolation ON audit_event_hash_chain
+    USING (
+        tenant_id = current_setting('app.tenant_id')::tenant_id_t
+        OR (current_setting('app.platform_operator_break_glass', true) = 'true'
+            AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    );
+
+-- Append-only enforcement
+CREATE TRIGGER audit_event_hash_chain_append_only
+    BEFORE UPDATE OR DELETE ON audit_event_hash_chain
+    FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
+
+-- P1 tenant-id-match trigger (Option A consistency constraint #1):
+-- P1 chain row's tenant_id MUST match parent audit_events.tenant_id.
+CREATE FUNCTION audit_event_hash_chain_p1_tenant_match() RETURNS TRIGGER AS $$
+DECLARE parent_tenant_id tenant_id_t;
+BEGIN
+    IF NEW.partition = 'P1' THEN
+        SELECT tenant_id INTO parent_tenant_id FROM audit_events WHERE id = NEW.audit_event_id;
+        IF parent_tenant_id IS NULL OR parent_tenant_id <> NEW.tenant_id THEN
+            RAISE EXCEPTION 'audit_event_hash_chain P1 row tenant_id (%) must match audit_events.tenant_id (%) for audit_event_id (%)',
+                NEW.tenant_id, parent_tenant_id, NEW.audit_event_id
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER audit_event_hash_chain_p1_tenant_match_trg
+    BEFORE INSERT ON audit_event_hash_chain
+    FOR EACH ROW EXECUTE FUNCTION audit_event_hash_chain_p1_tenant_match();
 ```
 
-**Cross-references:** audit_events parent table (CDM v1.2 §4.audit_events); INVARIANTS v5.4 §I-027 (append-only platform floor); SI-021 §2 Sub-decision 1.
+**Cross-references:** audit_events parent table (CDM v1.2 §4.audit_events; tenant_id source for P1 consistency); INVARIANTS v5.4 §I-023 (three-layer tenant isolation) + §I-024 (PLATFORM_TENANT_ID sentinel convention) + §I-025 (tenant-blind errors) + §I-027 (append-only platform floor); SI-021 §2 Sub-decision 1 (original tenant-id-less schema RATIFIED at P-028; superseded by this Option-A-amended schema per ERR P-028a mini-review ratification 2026-05-20); ERR `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-SI-021-Chain-Schema-Tenant-Isolation-2026-05-20.md` §7 Ratifier decision.
 
 ### §4.NEW2 — `audit_event_hash_chain_anchor_intent` (CDM v1.5 new)
 
@@ -75,9 +117,12 @@ Role-based RLS + column-level GRANTs enforce per-phase authority. Read-only by `
 
 **Intent-table persistence fields per phase (R1 HIGH-2 closure 2026-05-20):** the intent row carries all material needed to resume from durable state without re-signing or losing proofs. Phase 2 persists the signature + signed_at_intent so phase-3/4/5 crash recovery does not require re-signing. Phase 3 persists S3 dual-region provenance so phase-4 crash recovery does not require re-probing both regions. Phase 4 persists transparency-log inclusion proof + STH material so phase-5 crash recovery does not require re-fetching from the transparency log. At phase 5 the intent row's persisted material is copied into the canonical `audit_event_hash_chain_anchor` row (§4.NEW3) and the intent row may be retained for forensic audit-trail OR archived per retention policy.
 
+**Tenant-isolation (R1 CRITICAL closure 2026-05-20 per ERR Option A):** carries `tenant_id` + RLS + P2-consistency CHECK matching the §4.NEW1 pattern.
+
 ```sql
 CREATE TABLE audit_event_hash_chain_anchor_intent (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id tenant_id_t NOT NULL,                -- Three-layer tenant enforcement per I-023; PLATFORM_TENANT_ID for P2 platform-scoped per I-024
     partition TEXT NOT NULL,
     partition_key TEXT NOT NULL,
     sequence_no_head BIGINT NOT NULL,
@@ -130,8 +175,46 @@ CREATE TABLE audit_event_hash_chain_anchor_intent (
             AND (s3_write_committed_at IS NULL OR s3_write_committed_at >= COALESCE(signature_computed_at, intent_reserved_at))
             AND (transparency_log_appended_at IS NULL OR transparency_log_appended_at >= COALESCE(s3_write_committed_at, signature_computed_at, intent_reserved_at))
             AND (committed_at IS NULL OR committed_at >= COALESCE(transparency_log_appended_at, s3_write_committed_at, signature_computed_at, intent_reserved_at))
-        )
+        ),
+    -- P2 tenant-consistency (Option A consistency constraint #2 + #3):
+    CONSTRAINT audit_event_hash_chain_anchor_intent_p2_tenant_consistency CHECK (
+        partition = 'P1'
+        OR (partition = 'P2' AND partition_key <> 'platform' AND tenant_id::TEXT = partition_key)
+        OR (partition = 'P2' AND partition_key = 'platform' AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    )
 );
+
+-- Three-layer RLS enforcement
+ALTER TABLE audit_event_hash_chain_anchor_intent ENABLE ROW LEVEL SECURITY;
+CREATE POLICY audit_event_hash_chain_anchor_intent_tenant_isolation ON audit_event_hash_chain_anchor_intent
+    USING (
+        tenant_id = current_setting('app.tenant_id')::tenant_id_t
+        OR (current_setting('app.platform_operator_break_glass', true) = 'true'
+            AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    );
+
+-- P1 tenant-id-match enforced via the §4.NEW1 chain's tenant_id (anchor_intent's partition_key for P1 references the chain via FK below)
+-- For P1 chains, the anchor's tenant_id MUST equal the corresponding chain row's tenant_id.
+CREATE FUNCTION audit_event_hash_chain_anchor_intent_p1_tenant_match() RETURNS TRIGGER AS $$
+DECLARE chain_tenant_id tenant_id_t;
+BEGIN
+    IF NEW.partition = 'P1' THEN
+        SELECT tenant_id INTO chain_tenant_id
+            FROM audit_event_hash_chain
+            WHERE partition = NEW.partition AND partition_key = NEW.partition_key AND sequence_no = NEW.sequence_no_head;
+        IF chain_tenant_id IS NULL OR chain_tenant_id <> NEW.tenant_id THEN
+            RAISE EXCEPTION 'audit_event_hash_chain_anchor_intent P1 row tenant_id (%) must match audit_event_hash_chain.tenant_id (%) at (partition=%, partition_key=%, sequence_no=%)',
+                NEW.tenant_id, chain_tenant_id, NEW.partition, NEW.partition_key, NEW.sequence_no_head
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER audit_event_hash_chain_anchor_intent_p1_tenant_match_trg
+    BEFORE INSERT ON audit_event_hash_chain_anchor_intent
+    FOR EACH ROW EXECUTE FUNCTION audit_event_hash_chain_anchor_intent_p1_tenant_match();
 
 -- Column-level GRANT enforces per-phase role authority (illustrative; actual GRANT DDL deferred to Phase D infrastructure IaC):
 -- GRANT INSERT (partition, partition_key, sequence_no_head, row_hash_head, anchor_idempotency_key, intent_state, intent_reserved_at, signer_principal_arn) ON TABLE audit_event_hash_chain_anchor_intent TO audit_chain_writer;
@@ -148,9 +231,12 @@ CREATE TABLE audit_event_hash_chain_anchor_intent (
 
 Canonical committed-anchor table populated at phase 5 of the commit state machine after both S3 dual-region writes + transparency-log append have succeeded. INSERT by `audit-chain-archive-signer` role only after phase 4 success; no UPDATE/DELETE for any role.
 
+**Tenant-isolation (R1 CRITICAL closure 2026-05-20 per ERR Option A):** carries `tenant_id` + RLS + P2-consistency CHECK matching the §4.NEW1 + §4.NEW2 pattern.
+
 ```sql
 CREATE TABLE audit_event_hash_chain_anchor (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id tenant_id_t NOT NULL,                -- Three-layer tenant enforcement per I-023; PLATFORM_TENANT_ID for P2 platform-scoped per I-024
     partition TEXT NOT NULL,
     partition_key TEXT NOT NULL,
     sequence_no_head BIGINT NOT NULL,
@@ -177,9 +263,46 @@ CREATE TABLE audit_event_hash_chain_anchor (
         UNIQUE (partition, partition_key, supersedes_corrupted_sequence_no),
     CONSTRAINT audit_event_hash_chain_anchor_supersession_paired
         CHECK ((supersedes_corrupted_sequence_no IS NULL AND supersedes_corruption_evidence_id IS NULL)
-            OR (supersedes_corrupted_sequence_no IS NOT NULL AND supersedes_corruption_evidence_id IS NOT NULL))
+            OR (supersedes_corrupted_sequence_no IS NOT NULL AND supersedes_corruption_evidence_id IS NOT NULL)),
+    -- P2 tenant-consistency (Option A consistency constraint #2 + #3):
+    CONSTRAINT audit_event_hash_chain_anchor_p2_tenant_consistency CHECK (
+        partition = 'P1'
+        OR (partition = 'P2' AND partition_key <> 'platform' AND tenant_id::TEXT = partition_key)
+        OR (partition = 'P2' AND partition_key = 'platform' AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    )
 );
 -- FK to corruption-evidence table established AFTER §4.NEW4 below via forward-reference ALTER TABLE.
+
+-- Three-layer RLS enforcement
+ALTER TABLE audit_event_hash_chain_anchor ENABLE ROW LEVEL SECURITY;
+CREATE POLICY audit_event_hash_chain_anchor_tenant_isolation ON audit_event_hash_chain_anchor
+    USING (
+        tenant_id = current_setting('app.tenant_id')::tenant_id_t
+        OR (current_setting('app.platform_operator_break_glass', true) = 'true'
+            AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    );
+
+-- P1 tenant-id-match trigger: anchor's tenant_id MUST match corresponding chain row's tenant_id (Option A consistency constraint #1).
+CREATE FUNCTION audit_event_hash_chain_anchor_p1_tenant_match() RETURNS TRIGGER AS $$
+DECLARE chain_tenant_id tenant_id_t;
+BEGIN
+    IF NEW.partition = 'P1' THEN
+        SELECT tenant_id INTO chain_tenant_id
+            FROM audit_event_hash_chain
+            WHERE partition = NEW.partition AND partition_key = NEW.partition_key AND sequence_no = NEW.sequence_no_head;
+        IF chain_tenant_id IS NULL OR chain_tenant_id <> NEW.tenant_id THEN
+            RAISE EXCEPTION 'audit_event_hash_chain_anchor P1 row tenant_id mismatch at (partition=%, partition_key=%, sequence_no=%)',
+                NEW.partition, NEW.partition_key, NEW.sequence_no_head
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER audit_event_hash_chain_anchor_p1_tenant_match_trg
+    BEFORE INSERT ON audit_event_hash_chain_anchor
+    FOR EACH ROW EXECUTE FUNCTION audit_event_hash_chain_anchor_p1_tenant_match();
 ```
 
 **Cross-references:** SI-021 §2 Sub-decisions 2-7; INVARIANTS v5.4 §I-027 + §I-035 (append-only); Sprint 13 KMS Architecture §HSM-signer-role.
@@ -188,9 +311,12 @@ CREATE TABLE audit_event_hash_chain_anchor (
 
 Corruption-evidence table for pre-phase-4 corruption detection. INSERT requires dual-control authorization (Compliance Officer + CTO; distinct human user_ids enforced via CHECK constraint); no UPDATE/DELETE for any role.
 
+**Tenant-isolation (R1 CRITICAL closure 2026-05-20 per ERR Option A):** carries `tenant_id` matching the corrupted-chain's tenant via P1/P2 consistency rules + RLS.
+
 ```sql
 CREATE TABLE audit_event_hash_chain_anchor_corruption_evidence (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id tenant_id_t NOT NULL,                -- Three-layer tenant enforcement per I-023; matches the corrupted chain's tenant_id
     corrupted_partition TEXT NOT NULL,
     corrupted_partition_key TEXT NOT NULL,
     corrupted_sequence_no BIGINT NOT NULL,
@@ -211,8 +337,45 @@ CREATE TABLE audit_event_hash_chain_anchor_corruption_evidence (
     CONSTRAINT corruption_evidence_log_entry_unique
         UNIQUE (transparency_log_id, transparency_log_entry_index),
     CONSTRAINT corruption_evidence_single_per_corrupted_seq
-        UNIQUE (corrupted_partition, corrupted_partition_key, corrupted_sequence_no)
+        UNIQUE (corrupted_partition, corrupted_partition_key, corrupted_sequence_no),
+    -- P2 tenant-consistency (Option A consistency constraint #2 + #3): tenant_id derived from corrupted chain's partition/partition_key
+    CONSTRAINT corruption_evidence_p2_tenant_consistency CHECK (
+        corrupted_partition = 'P1'
+        OR (corrupted_partition = 'P2' AND corrupted_partition_key <> 'platform' AND tenant_id::TEXT = corrupted_partition_key)
+        OR (corrupted_partition = 'P2' AND corrupted_partition_key = 'platform' AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    )
 );
+
+-- Three-layer RLS enforcement
+ALTER TABLE audit_event_hash_chain_anchor_corruption_evidence ENABLE ROW LEVEL SECURITY;
+CREATE POLICY audit_event_hash_chain_anchor_corruption_evidence_tenant_isolation ON audit_event_hash_chain_anchor_corruption_evidence
+    USING (
+        tenant_id = current_setting('app.tenant_id')::tenant_id_t
+        OR (current_setting('app.platform_operator_break_glass', true) = 'true'
+            AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)
+    );
+
+-- P1 tenant-id-match trigger: corruption-evidence's tenant_id MUST match the corrupted chain row's tenant_id (Option A consistency constraint #1).
+CREATE FUNCTION audit_event_hash_chain_anchor_corruption_evidence_p1_tenant_match() RETURNS TRIGGER AS $$
+DECLARE chain_tenant_id tenant_id_t;
+BEGIN
+    IF NEW.corrupted_partition = 'P1' THEN
+        SELECT tenant_id INTO chain_tenant_id
+            FROM audit_event_hash_chain
+            WHERE partition = NEW.corrupted_partition AND partition_key = NEW.corrupted_partition_key AND sequence_no = NEW.corrupted_sequence_no;
+        IF chain_tenant_id IS NULL OR chain_tenant_id <> NEW.tenant_id THEN
+            RAISE EXCEPTION 'audit_event_hash_chain_anchor_corruption_evidence P1 row tenant_id mismatch at corrupted (partition=%, partition_key=%, sequence_no=%)',
+                NEW.corrupted_partition, NEW.corrupted_partition_key, NEW.corrupted_sequence_no
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER audit_event_hash_chain_anchor_corruption_evidence_p1_tenant_match_trg
+    BEFORE INSERT ON audit_event_hash_chain_anchor_corruption_evidence
+    FOR EACH ROW EXECUTE FUNCTION audit_event_hash_chain_anchor_corruption_evidence_p1_tenant_match();
 
 -- Forward-reference FK from §4.NEW3 anchor to this corruption-evidence table
 ALTER TABLE audit_event_hash_chain_anchor
@@ -348,7 +511,33 @@ The R1 CRITICAL finding proposes **net-new canonical schema fields** (tenant_id 
 
 **Verdict at R1 close:** RATIFIER-READY-WITH-OPEN-ESCALATION. 3 inline closures (HIGH-1 + HIGH-2 + MED) are clean; 1 CRITICAL is awaiting Evans's ratifier mini-review per the ERR. R2 should NOT run until the CRITICAL is resolved — running R2 against an unresolved CRITICAL would risk Codex closing the open question inline by proposing schema amendments that violate hard-floor item 6.
 
-Authored on `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` branch off main at `8d44bde` (post-P-028 ratification).
+**v0.2 R1 CRITICAL closure 2026-05-20 (Option A ratified via ERR mini-review + dual-recommendation process):**
+
+Evans's chat-message ratification *"after we go with A consensus recommendation"* 2026-05-20 ratified **Option A** following Claude + Codex side-by-side independent recommendations both converging on A. The dual-recommendation process was simultaneously codified in CLAUDE.md commit `f3a6469` on main (codification trigger = this very ERR cycle).
+
+**Option A implementation in this v0.2:**
+
+All 4 chain tables (§4.NEW1 audit_event_hash_chain + §4.NEW2 audit_event_hash_chain_anchor_intent + §4.NEW3 audit_event_hash_chain_anchor + §4.NEW4 audit_event_hash_chain_anchor_corruption_evidence) now carry:
+
+1. **`tenant_id tenant_id_t NOT NULL` column** — three-layer tenant enforcement per I-023.
+2. **ENABLE ROW LEVEL SECURITY + tenant_isolation policy** — PostgreSQL RLS enforcement keyed on `current_setting('app.tenant_id')`. Platform-operator break-glass clause for `tenant_id = PLATFORM_TENANT_ID` sentinel reads (per I-024).
+3. **P2 tenant-consistency CHECK constraint** (per Codex's missed-considerations):
+   - `(partition = 'P2' AND partition_key <> 'platform' AND tenant_id::TEXT = partition_key)` — tenant-keyed P2 chains have `tenant_id` matching `partition_key`.
+   - `(partition = 'P2' AND partition_key = 'platform' AND tenant_id = '00000000-0000-0000-0000-000000000000'::tenant_id_t)` — platform-scoped P2 chains use the PLATFORM_TENANT_ID sentinel.
+   - `(partition = 'P1')` — P1 consistency enforced via trigger (see #4).
+4. **P1 tenant-id-match trigger** (per Codex's missed-considerations #1):
+   - For `audit_event_hash_chain`: tenant_id MUST equal parent `audit_events.tenant_id` (the chain table is the canonical tenant-id source for P1 chains).
+   - For `audit_event_hash_chain_anchor_intent` + `audit_event_hash_chain_anchor` + `audit_event_hash_chain_anchor_corruption_evidence`: tenant_id MUST equal the chain row's tenant_id at the same `(partition, partition_key, sequence_no_head)` triple.
+
+**PLATFORM_TENANT_ID sentinel:** canonical `00000000-0000-0000-0000-000000000000` UUID per I-024 platform-record convention. Used across all v1.10+ platform-scoped entities.
+
+**Effect on SI-021 v1.0 RATIFIED schema:** SI-021's original tenant-id-less §2 Sub-decision 1-7 schemas are **superseded for canonical implementation purposes** by the Option-A-extended schemas in §4.NEW1-4 of this amendment. SI-021 file is preserved as ratified at P-028 for traceability; supersession recorded in ERR §7 + Promotion Ledger P-028a (this amendment cycle's mini-review supplemental entry).
+
+**0 hard-floor item 6 violations** on this R1 cycle. PR #11 STOP-and-escalate discipline applied + codified as canonical process for future cycles.
+
+**R2 verification pending.** Codex re-invocation queued in standard adversarial-review framing to verify the Option A implementation against (a) SI-021 v1.0 + ERR Option A ratification + Codex's missed-considerations consistency rules; (b) the convergent canonical v1.10 pattern across other CDM entities; (c) any residual defects in the new RLS policies + CHECK constraints + trigger functions.
+
+Authored on `spec/cdm-v1-5-audit-events-v5-7-ccr-v5-4-si021-followon-2026-05-20` branch off main at `8d44bde` (post-P-028 ratification). Merged main `f3a6469` (CLAUDE.md dual-recommendation codification) into branch 2026-05-20.
 
 ---
 

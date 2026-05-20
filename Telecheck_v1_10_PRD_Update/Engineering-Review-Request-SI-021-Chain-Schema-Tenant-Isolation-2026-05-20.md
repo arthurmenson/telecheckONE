@@ -123,4 +123,49 @@ Evans + Engineering Lead + CDM owner: please choose A / B / C and respond on thi
 
 ---
 
-— Claude (Opus 4.7, 1M context), Engineering Review Request authored 2026-05-20 per CLAUDE.md hard-floor item 6 STOP-and-escalate discipline. CDM v1.5 amendment cycle R1 CRITICAL routed to ratifier mini-review. R2 BLOCKED until A/B/C decision.
+## 6. Codex independent recommendation (consult-framing invocation 2026-05-20)
+
+Per the dual-recommendation process codified in CLAUDE.md (commit `f3a6469` on main), Codex was invoked with a consult-framing prompt on this ERR. Codex's full output preserved in task `btxzf4ges` output log.
+
+**Codex's verdict: APPROVE Option A** (converges with Claude's recommendation).
+
+**Codex's strongest argument:** "A is the only option that preserves I-023/I-027 literally: the invariant file says every PHI, audit, patient-identifying, or audit record carries tenant_id and is protected by RLS, app filtering, and per-tenant KMS. SI-021 makes P1 chain partition_key a patient_id and makes DR/discovery read by partition_key directly, so tenant-less chain metadata is not just a mechanical omission; it creates an exception to the platform floor."
+
+**Codex's per-option deal-breaker analysis:**
+
+| Option | Codex deal-breaker |
+|---|---|
+| A | None technically; only ratification-process cost |
+| B | Disqualified unless ratifier amends/waives I-023 + I-027 for chain projections |
+| C | Disqualified as written — leaves P2 tenant-governance chains ambiguous (P2 partition_key may be tenant_id OR 'platform'; Claude's Option C framing only covered the 'platform' case) |
+
+**Considerations Claude's ERR missed (per Codex):** Option A must specify **consistency constraints, not just columns**:
+1. P1 chain `tenant_id` must match `audit_events.tenant_id` (FK consistency).
+2. P2 tenant-keyed chains must have `tenant_id = partition_key`.
+3. P2 platform chains must use a platform sentinel or explicit platform-scope policy.
+
+Claude's ERR also missed that Option C needed a third case for P2 tenant-governance chains (the framing collapsed P2 into platform-only, which is incorrect).
+
+---
+
+## 7. Ratifier decision (Evans, 2026-05-20)
+
+**Evans's verbatim chat-message decision:** *"after we go with A consensus recommendation"* — affirmative ratification of **Option A** (consensus of Claude + Codex) following review of the dual-recommendation surfaced in this ERR + chat.
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). Mini-review ratification per the dual-recommendation process codified at `f3a6469`.
+
+**Ratified canonical decision:** add `tenant_id tenant_id_t NOT NULL` column + RLS policy `tenant_id = current_setting('app.tenant_id')::tenant_id_t` + per-tenant KMS DEK binding to all 4 chain tables (`audit_event_hash_chain` + `audit_event_hash_chain_anchor_intent` + `audit_event_hash_chain_anchor` + `audit_event_hash_chain_anchor_corruption_evidence`).
+
+**Consistency constraints (per Codex's missed-considerations, ratified as part of Option A):**
+
+1. **P1 chain tenant_id matches audit_events.tenant_id** — enforced via FK constraint OR application-layer CHECK on INSERT (FK preferred since `audit_event_hash_chain.audit_event_id` already FKs `audit_events`; the tenant-match becomes a derived consistency rule expressed via paired-INSERT trigger OR application-layer assertion).
+2. **P2 tenant-keyed chain tenant_id matches partition_key** — enforced via CHECK constraint: `(partition = 'P2' AND partition_key <> 'platform' AND tenant_id::TEXT = partition_key) OR (partition = 'P2' AND partition_key = 'platform' AND tenant_id = PLATFORM_TENANT_ID) OR (partition = 'P1')`.
+3. **P2 platform chains use PLATFORM_TENANT_ID sentinel** — per I-024 platform-record convention (canonical platform-tenant sentinel UUID; same sentinel used across other v1.10-era platform-scoped entities).
+
+**Effect on SI-021 v1.0 RATIFIED:** the chain-schema tenant-isolation amendment lands as an **extension** to SI-021's ratified §2 Sub-decisions 1-7 schemas via the CDM v1.5 amendment cycle's mini-review ratification (this ERR + Promotion Ledger entry P-028a). SI-021 v1.0's existing tenant-id-less schema is **superseded** for canonical implementation purposes; CDM v1.5 amendment artifact is the authoritative source for the chain-table schemas. SI-021 file is not edited (preserved as ratified at P-028 for traceability); supersession is recorded in this ERR + the CDM v1.5 amendment artifact's R1 closure narrative + the Promotion Ledger P-028a supplemental entry.
+
+**R2 UNBLOCKED.** Claude proceeds with Option A implementation + Codex R2 verification.
+
+---
+
+— Claude (Opus 4.7, 1M context), Engineering Review Request authored 2026-05-20 per CLAUDE.md hard-floor item 6 STOP-and-escalate discipline + dual-recommendation process (codification trigger). Option A ratified by Evans 2026-05-20 chat-message "after we go with A consensus recommendation". Implementation + R2 verification proceeding.

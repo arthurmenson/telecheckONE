@@ -37,6 +37,58 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-028a — 2026-05-20 — SI-021 chain-schema tenant-isolation Option A mini-review ratified via dual-recommendation process (codification cycle); CDM v1.5 amendment §4.NEW1-4 extended with tenant_id + RLS + P1 trigger + P2 CHECK consistency; SI-021 v1.0 §2 Sub-decision 1-7 schemas superseded for canonical implementation purposes (preserved in SI-021 file for traceability)
+
+**Evans's verbatim instructions (2026-05-20 chat-messages):**
+1. *"what is codex recommendation or comment on your choice?"* — request that triggered the Codex independent consult on the ERR.
+2. *"codify this approach into our process going forward so we have both of you recommending side by side with a consensus. after we go with A consensus recommendation"* — directive to (a) codify the dual-recommendation process in CLAUDE.md AND (b) ratify Option A as the consensus recommendation.
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). Mini-review ratification per the newly codified dual-recommendation process (CLAUDE.md commit `f3a6469`).
+
+**Type:** Supplemental ratification entry under P-028. **Reconciliation entry** — absorbs into existing Registry v2.15 without bumping (precedent: P-009 v1.10.1 hygiene cycle physical merge into Registry v2.10 without v2.11 bump; same pattern here since this entry refines P-028's OQ4 amendment-cycle scope rather than introducing new Registry-tracked artifact content). The Option-A-extended schemas land canonical at v2.15 alongside the prior P-028 ratification surface; the CDM v1.5 amendment artifact at v0.2 captures the implementation. **Registry absorption: v2.15 (preserved; not bumped).**
+
+**Prerequisite:** P-028 (SI-021 v1.0 RATIFIED including OQ4 follow-on CDM v1.5 amendment cycle). This P-028a is the OQ4 amendment cycle's first internal ratifier event — the chain-schema tenant-isolation mini-review.
+
+---
+
+#### §1. Codex R1 CRITICAL finding + STOP-and-escalate
+
+CDM v1.5 amendment v0.1 DRAFT Codex R1 returned 1 CRITICAL + 2 HIGH + 1 MED. The CRITICAL proposed net-new canonical schema fields (`tenant_id` + RLS + per-tenant KMS DEK binding on all 4 chain tables) beyond SI-021 v1.0 RATIFIED §2 Sub-decision 1 scope. Per CLAUDE.md hard-floor item 6 discriminator (a), Claude STOP-and-escalated rather than closing inline. HIGH-1, HIGH-2, MED closed inline (5-role intent-table authority + per-phase persistence fields + s3_object_key restoration).
+
+#### §2. ERR authored + dual-recommendation invoked
+
+Claude authored `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-SI-021-Chain-Schema-Tenant-Isolation-2026-05-20.md` presenting three options (A: tenant_id on all 4 tables; B: tenant-id-less faithful consolidation + INVARIANTS amendment; C: hybrid P1-only) with pros/cons/deal-breakers + Claude's recommendation (A).
+
+Evans requested Codex's independent recommendation. Codex was invoked with consult-framing (NOT adversarial-review) prompt. Codex's verdict: APPROVE Option A — converged with Claude. Codex additionally caught a defect in Claude's Option C framing (collapsed P2 into platform-only NULL tenant_id, but SI-021's P2 partition_key may be tenant_id OR 'platform'; tenant-governance P2 chains still need tenant enforcement) that would have surfaced as a HIGH/CRITICAL in R2 if Option C had been chosen. Codex also identified consistency constraints Claude's ERR missed (P1 parent-audit tenant matching; P2 tenant-key matching; P2 platform sentinel handling).
+
+#### §3. Process codification + Option A ratification
+
+Per Evans's chat-message *"codify this approach into our process going forward so we have both of you recommending side by side with a consensus. after we go with A consensus recommendation"* 2026-05-20:
+
+1. **Dual-recommendation process codified** in CLAUDE.md commit `f3a6469` on main — 8-step canonical process + standard Codex consult-framing invocation incantation + when-applies / when-doesn't-apply rules + discipline anchor (trust-but-verify operationalization) + reference precedents.
+2. **Option A ratified** as the consensus recommendation. ERR §7 updated with the ratifier-decision record. CDM v1.5 amendment artifact v0.2 implements Option A in §4.NEW1-4 (tenant_id + RLS + P1 trigger + P2 CHECK on all 4 chain tables).
+
+#### §4. SI-021 supersession discipline
+
+SI-021 v1.0 RATIFIED at P-028 carried tenant-id-less §2 Sub-decision 1-7 schemas. The Option A amendment extends those schemas with `tenant_id` + RLS + consistency constraints. **SI-021 file is NOT edited** (preserved as ratified at P-028 for traceability per the standard "do not edit Superseded files" rule + Promotion-Ledger append-only rule). The supersession is recorded in: (a) this P-028a entry; (b) ERR §7 Ratifier decision; (c) CDM v1.5 amendment artifact v0.2 §4.NEW1-4 cross-references + §7 R1 closure narrative. Engineers consulting bundle files for canonical chain-table schemas MUST read CDM v1.5 amendment v0.2, not SI-021 v1.0 §2 Sub-decisions 1-7.
+
+#### §5. Codification trigger + worked example
+
+This cycle IS the worked example for the dual-recommendation process codification. The CLAUDE.md amendment cites this cycle as the reference precedent. Future hard-floor item 6 escalations follow the same 8-step process: STOP → escalation artifact → independent Codex consult → side-by-side surfacing → ratifier decision → implementation → R2 verification.
+
+**Outcomes:**
+- 0 hard-floor item 6 violations on the cycle.
+- Both reviewers converged on Option A (consensus).
+- Codex's independent review caught a framing defect Claude missed (P2 tenant-governance disambiguation), preventing a future R2 surfacing.
+- Codex's missed-considerations callouts (consistency constraints) became part of the ratified Option A implementation.
+- Dual-recommendation process now canonical for all future hard-floor item 6 escalations.
+
+#### §6. Registry version impact
+
+**Registry: v2.15 (preserved).** Reconciliation entry per operating rule 4 carve-out. Justification: this entry refines the OQ4 amendment-cycle scope ratified at P-028 rather than introducing new Registry-tracked artifact content. The CDM v1.5 amendment artifact (v0.2 DRAFT post-Option-A-implementation) lands canonical at the eventual Registry v2.16 bump when the amendment cycle's full Codex convergence completes + merges to main as a content-change promotion entry P-029 (separate from this P-028a reconciliation entry).
+
+---
+
 ### Entry P-028 — 2026-05-20 — SI-021 SIEM Hash-Chain Archival Spec v1.0 RATIFIED at working recommendations for all 5 OQs; Artifact Registry v2.14 → v2.15; queues CDM v1.4 → v1.5 + AUDIT_EVENTS v5.6 → v5.7 follow-on amendment cycle
 
 **Evans's verbatim instruction (2026-05-20 chat-message):** *"ratify"* — affirmative ratification of SI-021 at its own ratifier ceremony following Claude's recommendation that "second-best option: if you'd rather close the spec-corpus loop first, ratify SI-021 now (15-min decision-walk through the 5 OQs in §5). That unlocks an AUDIT_EVENTS v5.6 → v5.7 + CDM v1.4 → v1.5 amendment cycle — a clean self-contained next deliverable I can drive autonomously through Codex."
