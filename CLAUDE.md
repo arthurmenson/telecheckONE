@@ -279,15 +279,66 @@ node "C:/Users/menso/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/code
 - Status-update / progress-report messages where Claude is informing Evans, not asking — no decision required → no consult.
 - Single-option-only escalations (where there's genuinely only one path) — there's nothing to weigh; Claude can proceed.
 
-**Operational shape for "always when asking a question":**
+**Operational shape — TWO-PASS Codex flow (codified 2026-05-20 per Evans's directive; supersedes prior single-pass shared-context pattern):**
 
-When Claude is about to post a question to Evans that requires a decision, Claude:
-1. Drafts the question + Claude's own recommendation + rationale.
-2. **Invokes Codex via consult-framing BEFORE sending the question to Evans.** The Codex invocation reads the same source material Claude consulted + returns its independent recommendation.
-3. Surfaces both recommendations side-by-side in the chat question to Evans, with explicit labels ("Claude's recommendation: X" / "Codex's recommendation: Y") + any convergence/divergence narrative + framing-defect catches.
-4. Evans decides with both recommendations visible.
+When Claude is about to post a question to Evans that requires a decision, Claude executes a **strict two-pass Codex flow**:
 
-**Latency note:** Codex consults typically take 1-3 minutes. For time-sensitive questions where waiting for Codex would block Evans materially, Claude can post the question with Claude's recommendation first + a note that "Codex consult in flight, will surface when complete" + then post Codex's recommendation as a follow-up. This is the exception path, not the default. The default is: wait for Codex, surface both together.
+**Pass 1 — Source-first independent.** Codex is given ONLY:
+- The source material (the SI / amendment / branch diff / decision context)
+- The decision question to make (e.g., "is this ready to merge?" or "which of options A/B/C?")
+- Authoritative reference files Codex should consult (canonical bundle docs, INVARIANTS, etc.)
+
+Codex is **NOT** given Claude's draft critique, recommendation, options framing, pros/cons analysis, or rationale. Codex produces its independent assessment from scratch — its own option enumeration (if applicable), its own recommendation, its own findings.
+
+This preserves Codex's analytical independence and prevents anchoring on Claude's framing. Two reviewers with the same source + question produce genuinely independent reads.
+
+**Pass 2 — Contrast-and-synthesize.** Codex is given:
+- Its own Pass-1 output (its independent assessment)
+- Claude's separate critique / recommendation / options framing (Claude drafts this in parallel to Pass 1, not as input to it)
+- Explicit request: contrast (where do we agree, where do we disagree, what did each miss, are there framing defects in either) + synthesize (final recommended path that accounts for both perspectives)
+
+Pass 2's output is a **synthesis** — not a re-do of Pass 1. The synthesis explicitly shows the diff between independent assessments and reconciles into a final recommendation.
+
+**Surface to Evans:**
+
+1. Claude's recommendation (drafted in parallel to Pass 1; unchanged by Codex's Pass-1 or Pass-2)
+2. **Codex Pass-1 (independent)** — Codex's source-first read without Claude's framing
+3. **Codex Pass-2 (synthesis)** — Codex's reconciliation of (1) and (2), with explicit diff narrative
+
+Evans decides with all three viewpoints visible. Convergence across all three strengthens the case. Divergence between Pass-1 and Pass-2 is informative (shows what changed when Codex saw Claude's perspective). Divergence between Claude and Codex Pass-1 is the highest-value signal (two independent reads disagreeing) — Pass-2 synthesis explicitly reckons with that divergence.
+
+**Why two-pass over single-pass:** the prior single-pass "shared-context consult" pattern (codified at `f3a6469`, broadened at `4f42a00`) included Claude's framing + options + recommendation in the Codex invocation prompt. That meant Codex saw Claude's analysis before producing its own — risking anchoring + collapsing the two-reviewer value into "Codex reviews Claude's analysis with source attached" rather than "two independent reviews of the same source." The two-pass flow restores genuine independence in Pass 1 while preserving synthesis value in Pass 2.
+
+**Invocation commands (canonical incantations):**
+
+```bash
+# PASS 1 — source-first independent
+node "C:/Users/menso/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/codex-companion.mjs" \
+  adversarial-review \
+  "--background --base main <source_path> — Pass-1 source-first independent recommendation. \
+   This is NOT a defect-finding adversarial review; it is the FIRST PASS of a two-pass ratifier consult. \
+   Read ONLY the source material + the authoritative reference files listed below; do NOT consult \
+   Claude's analysis or any external framing. Produce your own independent assessment from scratch. \
+   Decision question: <the question Evans must answer>. Authoritative references: <list of paths>. \
+   Return: (1) your independent recommended option / verdict; (2) your own option enumeration if applicable; \
+   (3) your rationale; (4) any findings or framing concerns you'd surface. \
+   Format as a structured recommendation. Verdict label 'recommend-pass-1' not 'needs-attention'."
+
+# PASS 2 — contrast-and-synthesize (after Pass-1 output is available AND Claude's recommendation drafted)
+node "C:/Users/menso/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/codex-companion.mjs" \
+  adversarial-review \
+  "--background --base main <source_path> — Pass-2 contrast-and-synthesize. This is the SECOND PASS \
+   of a two-pass ratifier consult. Your Pass-1 output is at <pass-1-output-path-or-inline>. \
+   Claude's separate recommendation is: <Claude's recommendation + rationale + option framing>. \
+   Contrast: where do you and Claude agree; where do you disagree; what did each miss; are there \
+   framing defects in either; what considerations are absent from both? Synthesize: final recommended \
+   path accounting for both perspectives, with explicit diff narrative showing what changed (if anything) \
+   when you saw Claude's perspective. Verdict label 'recommend-pass-2' not 'needs-attention'."
+```
+
+**Latency note:** two-pass adds ~2× the Codex turns (~3-6 minutes total vs. 1-3 for single-pass). For time-sensitive ratifier decisions where waiting would block Evans materially, the exception path is: surface Claude's recommendation + Pass-1 output first ("Pass-2 synthesis in flight"), then post Pass-2 as a follow-up. The default is: wait for both passes, surface all three together.
+
+**Retroactive application:** when this two-pass discipline is codified mid-cycle and there are open ratifier questions that were posed under the prior single-pass pattern, Claude re-runs the consult under two-pass before the ratifier decides — unless Evans explicitly authorizes using the existing single-pass output for that cycle. The default is retroactive re-run; the exception is explicit waiver.
 
 **Discipline anchor:** the dual-recommendation pattern operationalizes "trust but verify" between Claude (who authored the escalation artifact + has the working analysis context) and Codex (who has independent threat-modeling + canonical-source-reading context). Disagreement between them is informative (the ratifier sees the divergence + can probe further). Agreement strengthens the case. Either way, the ratifier decides with strictly more information than either reviewer alone would provide.
 
