@@ -1,7 +1,7 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.8 DRAFT
-**Status:** POST-PASS-2 R6 (R7 HIGH-9 closed: Pass-2 R6 caught that the R5 fix of GRANT SELECT TO PUBLIC on §4.NEW5 overexposed the fallback-gate state — every connectable role could enumerate which entities still allow raw-GUC fallback and whether fallback audit is enabled, giving an attacker a reconnaissance channel on the least-hardened surfaces. Fix per Pass-2 R6 verbatim recommendation: replace PUBLIC table grant with two SECURITY DEFINER helper functions (`is_jwt_required_for_entity` + `is_raw_guc_fallback_audited_for_entity`) owned by cdm_owner with locked search_path; GRANT EXECUTE on the helpers to PUBLIC; keep table SELECT restricted to cdm_owner only. Underlying table row state is now opaque to non-cdm_owner roles. Awaiting Pass-2 R7 verification.)
+**Version:** 0.9 DRAFT
+**Status:** POST-PASS-2 R7 (R8 HIGH-10 closed: Pass-2 R7 caught a SECURITY DEFINER name-resolution hazard in the v0.8 fallback-gate helpers — they referenced `FROM jwt_migration_entity_status` unqualified with `search_path = pg_catalog, public`, which allows search-path-shadowing attacks if any role can CREATE in `public` (pre-PostgreSQL-15 default). Fix: schema-qualify as `FROM public.jwt_migration_entity_status` so name resolution is independent of search_path; tighten `search_path = pg_catalog, pg_temp` (no user-schema in path); document `REVOKE CREATE ON SCHEMA public FROM PUBLIC` as platform-floor deployment requirement. Awaiting Pass-2 R8 verification.)
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
@@ -398,9 +398,19 @@ GRANT UPDATE (phase_4_cutover_eligible, raw_guc_fallback_audited, migrated_at, u
     ON jwt_migration_entity_status TO cdm_owner;
 
 -- SECURITY DEFINER helper functions (owned by cdm_owner) expose only the minimal boolean decision
--- interface needed by current_tenant_id_strict() and the fallback-audit emission path. Locked
--- search_path prevents search-path injection. PUBLIC gets EXECUTE on the helpers ONLY — the
--- underlying table row state remains opaque to non-cdm_owner roles.
+-- interface needed by current_tenant_id_strict() and the fallback-audit emission path. PUBLIC gets
+-- EXECUTE on the helpers ONLY — the underlying table row state remains opaque to non-cdm_owner roles.
+--
+-- R7 HIGH-10 closure 2026-05-20: Pass-2 R7 caught a SECURITY DEFINER name-resolution hazard — the
+-- previous helpers used unqualified `FROM jwt_migration_entity_status` with search_path = pg_catalog,
+-- public, allowing search-path-shadowing attacks if any role can CREATE objects in public (the
+-- pre-PostgreSQL-15 default). Fix: (a) schema-qualify the table reference as
+-- public.jwt_migration_entity_status so name resolution is independent of search_path; (b) restrict
+-- search_path to pg_catalog, pg_temp only (pg_temp last per PostgreSQL SECURITY DEFINER best
+-- practice — temp schemas always sit at the front of the resolution order anyway, but listing
+-- pg_temp last documents the intent and ensures no user-schema is in the path); (c) deployment
+-- requirement: REVOKE CREATE ON SCHEMA public FROM PUBLIC must be in baseline DDL (PostgreSQL 15+
+-- default; required for pre-15 installs as platform-floor).
 CREATE FUNCTION is_jwt_required_for_entity(p_entity_name TEXT) RETURNS BOOLEAN AS $$
 DECLARE
     v_phase_4_cutover BOOLEAN;
@@ -408,7 +418,7 @@ DECLARE
 BEGIN
     SELECT phase_4_cutover_eligible, production_break_glass_surface
         INTO v_phase_4_cutover, v_production_break_glass
-        FROM jwt_migration_entity_status
+        FROM public.jwt_migration_entity_status   -- schema-qualified per R7 HIGH-10
         WHERE entity_name = p_entity_name;
     IF NOT FOUND THEN
         -- Conservative default: unknown entities require JWT (fail-closed).
@@ -416,14 +426,14 @@ BEGIN
     END IF;
     RETURN v_phase_4_cutover OR v_production_break_glass;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = pg_catalog, public;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = pg_catalog, pg_temp;
 
 CREATE FUNCTION is_raw_guc_fallback_audited_for_entity(p_entity_name TEXT) RETURNS BOOLEAN AS $$
 DECLARE
     v_audited BOOLEAN;
 BEGIN
     SELECT raw_guc_fallback_audited INTO v_audited
-        FROM jwt_migration_entity_status
+        FROM public.jwt_migration_entity_status   -- schema-qualified per R7 HIGH-10
         WHERE entity_name = p_entity_name;
     IF NOT FOUND THEN
         -- Conservative default: unknown entities emit fallback audit (fail-loud).
@@ -431,12 +441,19 @@ BEGIN
     END IF;
     RETURN v_audited;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = pg_catalog, public;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = pg_catalog, pg_temp;
 
 REVOKE EXECUTE ON FUNCTION is_jwt_required_for_entity(TEXT) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION is_raw_guc_fallback_audited_for_entity(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION is_jwt_required_for_entity(TEXT) TO PUBLIC;
 GRANT EXECUTE ON FUNCTION is_raw_guc_fallback_audited_for_entity(TEXT) TO PUBLIC;
+
+-- Platform-floor deployment requirement (R7 HIGH-10 closure): the CDM baseline DDL MUST include
+-- `REVOKE CREATE ON SCHEMA public FROM PUBLIC` (PostgreSQL 15+ default; required for pre-15 installs).
+-- Without this, a low-privilege role could create a same-named relation in another schema that
+-- shadows public.jwt_migration_entity_status if search_path is ever widened. The schema-qualified
+-- reference above already prevents this, but the REVOKE is documented here as a defense-in-depth
+-- platform-floor requirement (tracked under SI-024.1 deployment runbook).
 
 -- Append-only on entity_name + production_break_glass_surface (those are determined by entity classification at creation).
 CREATE TRIGGER jwt_migration_entity_status_append_only
@@ -544,8 +561,11 @@ ALTER TABLE audit_events
 **v0.8 DRAFT 2026-05-20 — Pass-2 R6 closure (SECURITY DEFINER helper interface instead of PUBLIC SELECT on fallback-gate table):**
 - **HIGH-9 closed** — Pass-2 R6 caught that the v0.7 fix of GRANT SELECT TO PUBLIC overexposed the §4.NEW5 fallback-gate state. The table is explicitly the Phase B raw-GUC fallback gate; world-readability lets any low-privilege DB foothold enumerate which entities still allow fallback (`phase_4_cutover_eligible` / `production_break_glass_surface`) and whether fallback audit is enabled (`raw_guc_fallback_audited`), then target the least-hardened/least-observable surfaces. Fix per Pass-2 R6 verbatim recommendation: replace the PUBLIC table grant with two narrow SECURITY DEFINER helpers (`is_jwt_required_for_entity(p_entity_name TEXT) RETURNS BOOLEAN` returning `phase_4_cutover_eligible OR production_break_glass_surface`; `is_raw_guc_fallback_audited_for_entity(p_entity_name TEXT) RETURNS BOOLEAN`). Both helpers are owned by cdm_owner with locked `search_path = pg_catalog, public`. GRANT EXECUTE to PUBLIC on helpers; keep table SELECT restricted to cdm_owner only. Underlying table row state is now opaque — non-cdm_owner roles see only the boolean decisions for entity names they explicitly query, never the migration timeline or entity inventory. Helpers fail-closed/fail-loud on unknown entities (return TRUE).
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit `d76b24c`. v0.8 commit pending push for Pass-2 R7 verification.
+**v0.9 DRAFT 2026-05-20 — Pass-2 R7 closure (SECURITY DEFINER schema-qualification):**
+- **HIGH-10 closed** — Pass-2 R7 caught that the v0.8 SECURITY DEFINER helpers used unqualified `FROM jwt_migration_entity_status` with `search_path = pg_catalog, public`. Under SECURITY DEFINER, unqualified name resolution is a classic search-path-shadowing attack surface: if any role can CREATE objects in `public` (the PostgreSQL pre-15 default), it can create a same-named relation that the helper resolves to instead of the real table, while executing with `cdm_owner` privileges — returning attacker-controlled JWT-required and fallback-audit decisions. Fix per Pass-2 R7 verbatim recommendation: (a) schema-qualify the table reference as `public.jwt_migration_entity_status` so resolution is independent of search_path; (b) tighten `search_path = pg_catalog, pg_temp` (no user-writable schema in path; pg_temp last per PostgreSQL SECURITY DEFINER best practice); (c) document `REVOKE CREATE ON SCHEMA public FROM PUBLIC` as platform-floor deployment requirement (PostgreSQL 15+ default; required for pre-15 installs).
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit `d76b24c`. v0.8 commit `b33d017`. v0.9 commit pending push for Pass-2 R8 verification.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.8 DRAFT (Pass-2 R6 closure applied: SECURITY DEFINER narrow-helper interface replaces PUBLIC SELECT on §4.NEW5 fallback-gate table) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R7 verification queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.9 DRAFT (Pass-2 R7 closure applied: SECURITY DEFINER schema-qualification + search_path hardening + platform-floor deployment requirement) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R8 verification queued.
