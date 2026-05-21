@@ -1,7 +1,7 @@
 # SI-024.1 — Cryptographic JWT-Binding for Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.5 DRAFT — RATIFIER-READY at §10-cadence boundary (R4 boundary close per OQ7 4-5 round target)
-**Status:** R4 closed inline (1 HIGH): Sub-decision 8 dual-control procedures expanded from comment-stubs to deployable PL/pgSQL bodies — propose_break_glass_approval (caller role+time-bound+target-role validation, INSERT pending with caller's authorizer field, audit emission) + co_authorize_break_glass_approval (lock-for-update, distinct-role + distinct-human enforcement, atomic state transition to 'active', audit emission). 11 findings closed cumulative across R1-R4 + 2-pass synthesis. §10-cadence boundary reached per OQ7. Pre-merge two-pass consult queued.
+**Version:** 1.0 v0.6 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycle-1 closures applied
+**Status:** Pre-merge Pass-1 closed inline (2 HIGH + 1 MED): Phase A DDL ordered with explicit prerequisites + guarded ALTERs (closes HIGH-1 deployability gap); current_tenant_id_strict signature extended with p_entity_name TEXT parameter + jwt_migration_entity_status table + enforceable per-entity fallback gate body (closes HIGH-2 unenforceable contract); verify_session_jwt_and_extract_claims now compares all security-relevant admitted claims against parsed claims (closes MED claim-mismatch detection). 14 findings closed cumulative. Pass-2 contrast-and-synthesize queued.
 **Authoring date:** 2026-05-20
 **Trigger:** SI-024 v0.17 TRANSITIONAL ratification at Promotion Ledger P-030 (committed via auto-proceed merge `3fcbef8` on main). SI-024.1 closes the cryptographic-binding gap deferred from SI-024 v1.0 — specifically the compromised-middleware-credential threat class that the role-constrained-GUC pattern explicitly does NOT close. Per OQ-NEW1/2 commitments at P-030: SI-024.1 v0.1 DRAFT target 2026-06-19 (30 days from P-030); ratifier ceremony target 2026-08-18 (90 days from P-030). SI-024.1 IS the gate that lifts the "production target-tenant break-glass BLOCKED" + "Phase 4 cutover BLOCKED" + "INVARIANTS I-036 BLOCKED" constraints carried in SI-024 v1.0 TRANSITIONAL.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024).
@@ -180,6 +180,24 @@ BEGIN
         RAISE EXCEPTION 'session JWT not admitted on current backend (backend_pid=%, jwt_id=%); call admit_session_jwt() first',
             pg_backend_pid(), claims.jwt_id
             USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    -- Pre-merge Pass-1 MED closure 2026-05-20: claim-consistency check between admission record + parsed JWT.
+    -- Without this, an attacker who collided on jwt_id (extreme edge case) or who corrupted admission metadata
+    -- could have the verifier return claims that differ from what was admitted.
+    PERFORM 1 FROM public.session_jwt_admission a
+        WHERE a.backend_pid = pg_backend_pid()
+            AND a.backend_start_at = current_backend_start_at()
+            AND a.jwt_id = claims.jwt_id
+            AND a.tenant_id = claims.tenant_id
+            AND a.actor_human_id = claims.actor_human_id
+            AND a.actor_role = claims.actor_role
+            AND a.key_id = claims.key_id
+            AND a.key_purpose = claims.key_purpose
+            AND a.expires_at = claims.expires_at;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'admission claims mismatch for jwt_id=% (admitted claims differ from parsed claims); possible jti-collision or admission-metadata corruption',
+            claims.jwt_id
+            USING ERRCODE = 'data_corrupted';
     END IF;
     RETURN claims;
 END;
@@ -635,11 +653,87 @@ This closes SI-024 v0.17 simplification #9 — no longer requires out-of-band tr
 
 **Decision shape:** zero-downtime migration via helper-name versioning:
 
-- **Phase A (SI-024.1 foundation):** create `verify_session_jwt_and_extract_claims()` + `jwt_signing_key_public` table + `session_jwt_replay_set` table + `break_glass_active_session` table + `propose_break_glass_approval()` + `co_authorize_break_glass_approval()` procedures. New helpers coexist with SI-024 v0.17 helpers (under same names — function bodies updated; semantics extended).
-- **Phase B (middleware cutover):** middleware starts populating `app.session_jwt` GUC alongside (NOT instead of) `app.tenant_id`. **Helpers prefer JWT when present, fall back to raw GUC ONLY for entities NOT on the Phase 4 cutover list AND NOT in the production-break-glass surface (R1 MED closure 2026-05-20).** Specifically:
-  - **Per-entity fallback gate:** `current_tenant_id_strict()` accepts raw-GUC fallback only for entities marked `phase_4_cutover_eligible = FALSE` in a new `jwt_migration_entity_status` table. Phase 4-bound entities require JWT (raise on missing); fallback denied at the helper layer.
-  - **Production-break-glass surface:** `is_target_tenant_break_glass_active()` + `begin_target_tenant_break_glass_session()` REQUIRE JWT — NO raw-GUC fallback EVER. Production target-tenant break-glass operations cannot proceed without verified JWT during Phase B (closes SI-024 v0.17 production-break-glass block at Phase B, not Phase D).
+- **Phase A (SI-024.1 foundation; pre-merge HIGH-1 closure 2026-05-20: explicit ordered DDL migration with prerequisites + guarded ALTERs):**
+
+  **Prerequisite:** SI-024 v0.17 TRANSITIONAL must already be deployed in the target schema (i.e., `break_glass_approval` table exists with its v0.17 columns: `id`, `target_tenant_id`, `operator_user_id`, `operator_role`, `approval_reason`, `authorized_by_compliance_officer_user_id`, `authorized_by_cto_user_id`, `approved_at`, `expires_at`, `revoked_at`). SI-024.1 Phase A migration WILL FAIL if executed against a schema without SI-024 v0.17 baseline.
+
+  **Ordered migration steps:**
+
+  1. **ALTER break_glass_approval** (Sub-decision 8 prep): `ALTER TABLE break_glass_approval ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('pending_co_auth', 'active', 'rejected'));`. The DEFAULT 'active' preserves backward-compat — existing rows admitted at SI-024 v0.17 self-attested INSERT path remain 'active' without re-authorization. Going forward, all new rows come via `propose_break_glass_approval()` with state='pending_co_auth' until co-authorized.
+  2. **Create jwt_signing_key_public + session_jwt_replay_set + session_jwt_admission + jwt_migration_entity_status** tables (independent of break_glass_approval; no FK dependencies).
+  3. **Create break_glass_active_session** table (FK to break_glass_approval(id) — now safe because Step 1 ensured break_glass_approval exists + the FK only references `id` which is in the SI-024 baseline).
+  4. **Create canonical helper functions**: `current_backend_start_at()`, `admit_session_jwt()`, `verify_session_jwt_and_extract_claims()`, `is_target_tenant_break_glass_active()` (updated body), `is_platform_operator_break_glass_active()` (updated body), `current_tenant_id_strict(p_entity_name TEXT)` (updated signature per Sub-decision 9 closure below).
+  5. **Create procedures**: `begin_target_tenant_break_glass_session()`, `propose_break_glass_approval()`, `co_authorize_break_glass_approval()`.
+  6. **Audit trigger functions**: AFTER-INSERT/UPDATE triggers on `break_glass_approval` for `tenant_context.break_glass_approval_proposed/co_authorized/rejected` (replacing SI-024 v0.17's `break_glass_approval_created` since the proposed event supersedes for SI-024.1-managed rows; v0.17-era rows continue to fire `_created` for backward-compat).
+
+  **Idempotency discipline:** all CREATE statements use `IF NOT EXISTS` where syntactically valid; CREATE OR REPLACE for functions/procedures. Phase A migration is re-runnable.
+
+  **New helpers coexist** with SI-024 v0.17 helpers under same names — function bodies updated; semantics extended.
+- **Phase B (middleware cutover; pre-merge HIGH-2 closure 2026-05-20: enforceable per-entity fallback via entity_name parameter):** middleware starts populating `app.session_jwt` GUC alongside (NOT instead of) `app.tenant_id`. Helpers prefer JWT when present + fall back to raw GUC ONLY for entities marked Phase-4-INELIGIBLE in `jwt_migration_entity_status`.
+
+  **Helper signature change:** `current_tenant_id_strict()` becomes `current_tenant_id_strict(p_entity_name TEXT)`. RLS policies pass the entity name as a literal at policy-creation time:
+
+  ```sql
+  -- Per-entity policy passes the literal entity name at CREATE POLICY time:
+  CREATE POLICY medication_request_tenant_isolation ON medication_request
+      USING (tenant_id = current_tenant_id_strict('medication_request'));
+  ```
+
+  **`jwt_migration_entity_status` table:**
+
+  ```sql
+  CREATE TABLE jwt_migration_entity_status (
+      entity_name TEXT PRIMARY KEY,
+      phase_4_cutover_eligible BOOLEAN NOT NULL DEFAULT TRUE,  -- TRUE = JWT required; raw-GUC fallback denied
+      production_break_glass_surface BOOLEAN NOT NULL DEFAULT FALSE,  -- TRUE = JWT required regardless of phase_4 flag
+      raw_guc_fallback_audited BOOLEAN NOT NULL DEFAULT TRUE,  -- TRUE = emit tenant_context.raw_guc_fallback_used on fallback
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  -- Default posture: phase_4_cutover_eligible = TRUE → JWT required → no fallback. Entities explicitly flipped to FALSE during Phase B opt out per-entity.
+  -- All break_glass_* entities + Phase-4-bound PHI entities default-locked to JWT-only.
+  ```
+
+  **Helper body shape (closes the enforcement gap):**
+
+  ```sql
+  CREATE FUNCTION current_tenant_id_strict(p_entity_name TEXT) RETURNS tenant_id_t AS $$
+  DECLARE
+      claims verified_jwt_claims_t;
+      entity_status RECORD;
+      jwt_present BOOLEAN;
+  BEGIN
+      jwt_present := current_setting('app.session_jwt', true) IS NOT NULL
+                     AND current_setting('app.session_jwt', true) <> '';
+      IF jwt_present THEN
+          claims := verify_session_jwt_and_extract_claims();
+          RETURN claims.tenant_id;
+      END IF;
+      -- No JWT: check whether this entity permits raw-GUC fallback.
+      SELECT phase_4_cutover_eligible, production_break_glass_surface, raw_guc_fallback_audited
+        INTO entity_status
+        FROM public.jwt_migration_entity_status
+        WHERE entity_name = p_entity_name;
+      IF NOT FOUND OR entity_status.phase_4_cutover_eligible = TRUE
+         OR entity_status.production_break_glass_surface = TRUE THEN
+          -- No fallback permitted: entity is Phase-4-bound OR in production-break-glass surface OR unknown.
+          RAISE EXCEPTION 'current_tenant_id_strict(%) requires JWT; raw-GUC fallback denied (entity is Phase-4-bound or production-break-glass surface or unknown)',
+              p_entity_name
+              USING ERRCODE = 'insufficient_privilege';
+      END IF;
+      -- Fallback permitted: emit audit + return raw-GUC tenant_id.
+      IF entity_status.raw_guc_fallback_audited THEN
+          INSERT INTO public.audit_events (action_id, partition, partition_key, event_metadata, occurred_at)
+          VALUES ('tenant_context.raw_guc_fallback_used', 'P2', 'platform',
+                  jsonb_build_object('entity_name', p_entity_name, 'caller_role', current_user), now());
+      END IF;
+      RETURN current_setting('app.tenant_id', false)::tenant_id_t;
+  END;
+  $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
+  ```
+
+  - **Production-break-glass surface:** `is_target_tenant_break_glass_active()` + `begin_target_tenant_break_glass_session()` REQUIRE JWT — NO raw-GUC fallback EVER (enforced by the `production_break_glass_surface = TRUE` default for these entities + by the unconditional `verify_session_jwt_and_extract_claims()` call in the helper body which raises on missing JWT).
   - **Audit emission for fallback usage:** every raw-GUC fallback fires Cat A `tenant_context.raw_guc_fallback_used` event with the entity name + caller role + reason. Telemetry-tracked; >0 events for a Phase 4-bound entity = migration defect.
+  - **Migration discipline:** all NEW RLS policies authored post-SI-024.1 MUST use the entity_name-parameterized helper. Existing SI-024 v0.17 policies (using the old zero-arg helper) are migrated via a sweep: per-entity policy DROPs old policy + CREATEs new policy with entity_name literal. Sweep tracked in `jwt_migration_entity_status` via a `migrated_at TIMESTAMPTZ` column added at Phase B begin.
 - **Phase C (telemetry):** 30-day window measuring JWT-verification overhead + failure modes.
 - **Phase D (raw-GUC deprecation):** middleware stops populating raw `app.tenant_id`; helpers fail-closed if JWT absent.
 - **Phase E (SI-024 v0.17 Phase 4 cutover unlock):** with SI-024.1 in production, SI-024 v0.17's Phase 4 (drop raw-GUC permissive policy) is unblocked.
