@@ -1,7 +1,7 @@
 # SI-022 — Crisis Response Slice (Resource Lookup + Escalation Routing) Spec v1.0
 
-**Version:** 0.4 DRAFT
-**Status:** POST-R3 (1 HIGH + 1 MED closed inline: R3 HIGH-1 dispatch setup at STEP 2c-2e ahead of STEP 3 card render violated the 200ms patient-surface SLO under many recipients, transient DB contention, or provider-channel unavailability — moved dispatch setup to a new STEP 4 asynchronous bounded outbox worker invoked via same-tx outbox row from STEP 2 transaction; STEP 1+2+3 only is the synchronous patient-surface path (Cat A emit + crisis_event INSERT + card render); the 200ms SLO now applies to STEP 1-3 exclusively, with STEP 4 dispatch and STEP 5 CCR resolution out-of-band. R3 MED-1 SQL literal `VALUES (..., 'sms'), (..., 'email'), (..., 'in_app_push')` would have inserted unconditional rows for channels the tenant has not configured (false undeliverable_deadline misses + bogus dispatch_attempt_failed audit volume) — rewrote STEP 4a as SELECT-driven from `unnest(tenant.crisis.fanout_channels[])`; STEP 4b as SELECT-driven from a STABLE function `compute_crisis_recipient_mapping(crisis_event_id, severity)` that joins tenant config + care_team + consent_grant + severity for the exact recipient set; deployment preflight asserts `cardinality(tenant.crisis.fanout_channels[]) > 0` (I-019 platform-floor); worker FAILS CLOSED if empty at runtime. Previously POST-R2 (1 HIGH + 1 MED closed inline: R2 HIGH-1 Sub-decision 3 routing tree contradicted Sub-decision 2 STEP 1-5 emit ordering by listing "render card → Cat B emit → crisis_event INSERT" as the canonical sequence; implementer following Sub-decision 3 could reintroduce R1 HIGH-1 FLOOR-020 coupling. Fix: rewrote Sub-decision 3 to specify LOGICAL recipient routing only, with explicit execution-order assertion deferring entirely to Sub-decision 2 STEP 1-5; added "Sub-decision 2 is authoritative on emit ordering; Sub-decision 3 is authoritative on logical routing destinations only" anchor. R2 MED-1 audit category tally arithmetic ("5 Cat A + 0 Cat B + 2 Cat C" said but actual rows are 6 Cat A + 0 Cat B + 1 Cat C); corrected tally in §1 + §3 + R1 MED-1 log entry. Also fixed §8 SLO row "30 seconds of `crisis.no_acknowledgement_escalation` Cat B emit" → Cat A to match §3 table + Sub-decision 6 fail-closed claim. Previously POST-R1 (2 HIGH + 1 MED closed inline: R1 HIGH-1 CCR lookup was placed on FLOOR-020 synchronous emit path, contradicting non-blocking detection invariant — restructured Sub-decision 2 with explicit STEP 1-5 emit ordering placing Cat A `crisis_detection_trigger` synchronous and FLOOR-020 fail-closed; CCR resolution + `crisis.escalation_destination_resolved` Cat B explicitly DOWNSTREAM and asynchronous; Crisis Response Card MAY render with cached/generic content at STEP 3 then hydrate at STEP 5 after CCR resolution; resolver failure never blocks Cat A detection emission. R1 HIGH-2 dispatch_ledger UNIQUE(tenant_id, patient_id, server_signal_id, channel) cannot represent multi-recipient fan-out (care-team SMS + clinical-on-call SMS + emergency-contact SMS would collide on the channel-level UNIQUE) — restructured Sub-decision 5 to align with P-027 §4.66-4.67 canonical two-tier shape: §4.66 dispatch_ledger row per channel-class records the channel-level obligation; §4.67 provider_attempt row per (recipient_role, channel) tuple records per-recipient outcome; no schema amendment to P-027 required. R1 MED-1 Cat A vs Cat B mismatch on `crisis.no_acknowledgement_escalation` between Sub-decision 6 (claimed Cat A) and §3 AUDIT_EVENTS table (defined Cat B) — chose Cat A for safety-floor escalation fail-closed semantics; updated §1 in-scope tally from "4 Cat A + 1 Cat B + 2 Cat C" to "6 Cat A + 0 Cat B + 1 Cat C"; R2 Codex review queued)
+**Version:** 0.5 DRAFT
+**Status:** POST-R4 (3 HIGH closed inline: R4 HIGH-1 Sub-decision 3 had residual "executed at Sub-decision 2 STEP 2c-2d ... synchronous with STEP 2" text contradicting R3 HIGH-1 closure — rewrote routing tree as ELIGIBILITY only with execution explicitly delegated to STEP 4. R4 HIGH-2 Sub-decision 3 had stale "CCR resolvers at STEP 4 + hydration at STEP 5" mapping pre-R3 renumbering (post-R3 ordering: STEP 4 = dispatch setup, STEP 5 = CCR + hydration) — corrected mapping. R4 HIGH-3 (safety-critical) stuck STEP 4 outbox row would have denied the no-acknowledgement timer ever firing because escalation_obligation INSERT was at STEP 4c — moved escalation_obligation INSERT into STEP 2c (synchronous, in same transaction as Cat A audit + crisis_event INSERT) so the deadline source-of-truth row is guaranteed-armed; the Sub-decision 6 no-ack sweep now always has a row to find regardless of STEP 4 worker progress. Previously POST-R3 (1 HIGH + 1 MED closed inline: R3 HIGH-1 dispatch setup at STEP 2c-2e ahead of STEP 3 card render violated the 200ms patient-surface SLO under many recipients, transient DB contention, or provider-channel unavailability — moved dispatch setup to a new STEP 4 asynchronous bounded outbox worker invoked via same-tx outbox row from STEP 2 transaction; STEP 1+2+3 only is the synchronous patient-surface path (Cat A emit + crisis_event INSERT + card render); the 200ms SLO now applies to STEP 1-3 exclusively, with STEP 4 dispatch and STEP 5 CCR resolution out-of-band. R3 MED-1 SQL literal `VALUES (..., 'sms'), (..., 'email'), (..., 'in_app_push')` would have inserted unconditional rows for channels the tenant has not configured (false undeliverable_deadline misses + bogus dispatch_attempt_failed audit volume) — rewrote STEP 4a as SELECT-driven from `unnest(tenant.crisis.fanout_channels[])`; STEP 4b as SELECT-driven from a STABLE function `compute_crisis_recipient_mapping(crisis_event_id, severity)` that joins tenant config + care_team + consent_grant + severity for the exact recipient set; deployment preflight asserts `cardinality(tenant.crisis.fanout_channels[]) > 0` (I-019 platform-floor); worker FAILS CLOSED if empty at runtime. Previously POST-R2 (1 HIGH + 1 MED closed inline: R2 HIGH-1 Sub-decision 3 routing tree contradicted Sub-decision 2 STEP 1-5 emit ordering by listing "render card → Cat B emit → crisis_event INSERT" as the canonical sequence; implementer following Sub-decision 3 could reintroduce R1 HIGH-1 FLOOR-020 coupling. Fix: rewrote Sub-decision 3 to specify LOGICAL recipient routing only, with explicit execution-order assertion deferring entirely to Sub-decision 2 STEP 1-5; added "Sub-decision 2 is authoritative on emit ordering; Sub-decision 3 is authoritative on logical routing destinations only" anchor. R2 MED-1 audit category tally arithmetic ("5 Cat A + 0 Cat B + 2 Cat C" said but actual rows are 6 Cat A + 0 Cat B + 1 Cat C); corrected tally in §1 + §3 + R1 MED-1 log entry. Also fixed §8 SLO row "30 seconds of `crisis.no_acknowledgement_escalation` Cat B emit" → Cat A to match §3 table + Sub-decision 6 fail-closed claim. Previously POST-R1 (2 HIGH + 1 MED closed inline: R1 HIGH-1 CCR lookup was placed on FLOOR-020 synchronous emit path, contradicting non-blocking detection invariant — restructured Sub-decision 2 with explicit STEP 1-5 emit ordering placing Cat A `crisis_detection_trigger` synchronous and FLOOR-020 fail-closed; CCR resolution + `crisis.escalation_destination_resolved` Cat B explicitly DOWNSTREAM and asynchronous; Crisis Response Card MAY render with cached/generic content at STEP 3 then hydrate at STEP 5 after CCR resolution; resolver failure never blocks Cat A detection emission. R1 HIGH-2 dispatch_ledger UNIQUE(tenant_id, patient_id, server_signal_id, channel) cannot represent multi-recipient fan-out (care-team SMS + clinical-on-call SMS + emergency-contact SMS would collide on the channel-level UNIQUE) — restructured Sub-decision 5 to align with P-027 §4.66-4.67 canonical two-tier shape: §4.66 dispatch_ledger row per channel-class records the channel-level obligation; §4.67 provider_attempt row per (recipient_role, channel) tuple records per-recipient outcome; no schema amendment to P-027 required. R1 MED-1 Cat A vs Cat B mismatch on `crisis.no_acknowledgement_escalation` between Sub-decision 6 (claimed Cat A) and §3 AUDIT_EVENTS table (defined Cat B) — chose Cat A for safety-floor escalation fail-closed semantics; updated §1 in-scope tally from "4 Cat A + 1 Cat B + 2 Cat C" to "6 Cat A + 0 Cat B + 1 Cat C"; R2 Codex review queued)
 **Authoring date:** 2026-05-21
 **Trigger:** Master Completion Plan v1.0 pilot-viable scope item 4 (Crisis Response slice). Companion to AI Service Mode 1 Handler Spec v0.4 P-035 (FLOOR-020 crisis-detection emit path) and SI-013 P-025 (CCR crisis-helpline namespace).
 **Owner:** Crisis Response slice owner + Platform AI Safety + Mode 1 AI Service owner + Notification slice owner + Adverse-Event slice owner + Audit owner.
@@ -80,24 +80,33 @@ The card MUST render BEFORE any other UI mutation (no race with chat-stream comp
 2. **Cat A vs Cat B fail-mode mismatch:** `crisis_detection_trigger` is Cat A (fail-closed; FLOOR-020 discipline); `crisis.escalation_destination_resolved` is Cat B (fail-soft per P-025 Rule 4). Co-placing on the same synchronous path would have forced Cat B to inherit Cat A's fail-closed semantics OR forced Cat A to inherit Cat B's fail-soft tolerance — neither is correct.
 3. **Card render independence:** the Crisis Response Card MAY render with generic fallback copy (cached-last-known values OR "Call your local emergency services" + null helpline) BEFORE the CCR resolution completes, so the patient-facing safety surface is never blocked by resolver latency.
 
-**Canonical emit ordering (R3 HIGH-1 closure 2026-05-21: dispatch setup moved out of the synchronous patient-surface path; patient card render is no longer blocked by fan-out work):**
+**Canonical emit ordering (R3 HIGH-1 + R4 HIGH-3 closure 2026-05-21: dispatch *recipient fan-out* moved out of the synchronous patient-surface path; BUT the escalation-deadline source-of-truth row stays in STEP 2 transaction so the no-acknowledgement timer is guaranteed-armed even if the STEP 4 worker stalls):**
 
 ```
 STEP 1 (synchronous; FLOOR-020 fail-closed): crisis_detection_trigger Cat A emit
-STEP 2 (synchronous; FLOOR-020 fail-closed): INSERT crisis_event row + 'detected' lifecycle transition ONLY
-        (no dispatch_ledger / provider_attempt / escalation_obligation work in this step)
+STEP 2 (synchronous; FLOOR-020 fail-closed; SINGLE transaction):
+        2a. INSERT crisis_event row
+        2b. INSERT initial 'detected' lifecycle transition
+        2c. INSERT notification_crisis_escalation_obligation row with persisted undeliverable_deadline
+            (severity-tiered: 30s / 60s / 5min). **This row is the source-of-truth for the no-ack
+            timer (Sub-decision 6) and MUST be created in the STEP 2 transaction so the sweep has a
+            row to find even if the STEP 4 worker stalls, crashes, or poison-rows.** Per R4 HIGH-3
+            closure: a stuck outbox row before STEP 4c (recipient fan-out) cannot deny the
+            no-acknowledgement timer; the escalation_obligation deadline exists in STEP 2 transaction
+            unconditionally.
+        2d. INSERT crisis_dispatch_outbox row (same-tx outbox enqueue for STEP 4 worker)
 STEP 3 (synchronous; FLOOR-020 fail-closed; ≤ 200ms budget from STEP 1): render Crisis Response Card
-        with cached/generic content
-STEP 4 (asynchronous via bounded outbox worker; fail-closed via the worker's own audit + repair path):
-        dispatch obligation setup — INSERT one notification_crisis_dispatch_ledger row per CONFIGURED
+        with cached/generic content. **STEP 2 sub-steps 2a-2d are bounded-cost row inserts only; the
+        200ms SLO covers STEP 1+2+3 cumulatively.**
+STEP 4 (asynchronous via bounded outbox worker; consumes the crisis_dispatch_outbox row from STEP 2d):
+        recipient fan-out only — INSERT one notification_crisis_dispatch_ledger row per CONFIGURED
         channel-class in tenant `crisis.fanout_channels[]`; INSERT N provider_attempt rows per
-        Sub-decision 3 logical routing tree; INSERT notification_crisis_escalation_obligation row with
-        persisted undeliverable_deadline. Worker is invoked synchronously in STEP 2 transaction via
-        same-tx outbox row (Consent slice domain-event pattern from P-027 §4.66+), but does NOT block
-        STEP 3 card render. Outbox guarantees at-least-once delivery + idempotent worker retry; the
-        worker emits crisis.dispatch_attempt_failed Cat C on each provider-level failure and
-        crisis.no_acknowledgement_escalation Cat A if the undeliverable_deadline elapses without
-        acknowledgement (Sub-decision 6 sweep).
+        Sub-decision 3 logical routing tree. Worker emits crisis.dispatch_attempt_failed Cat C on
+        each provider-level failure. **The escalation_obligation row is NO LONGER created at STEP 4
+        — it is created at STEP 2c.** Worker uses idempotent retry against the same crisis_event_id
+        + outbox row; partial fan-out is forbidden (per-batch single-transaction discipline). The
+        no-acknowledgement sweep at Sub-decision 6 reads STEP 2c-created rows; STEP 4 stall does
+        NOT silently skip escalation.
 STEP 5 (asynchronous; Cat B fail-soft): call 3 CCR resolvers + emit crisis.escalation_destination_resolved
         Cat B (P-025); on resolution outcome, hydrate the already-rendered Crisis Response Card with
         resolved values via the patient client's normal reactive update path; otherwise the card stays
@@ -121,24 +130,29 @@ LOGICAL RECIPIENT 1 (always, executed at Sub-decision 2 STEP 3 — fallback card
    The patient receives the Crisis Response Card with cached/generic content
    (then hydrated reactively at STEP 5 after CCR resolution).
     ↓
-LOGICAL RECIPIENTS 2-5 (always, executed at Sub-decision 2 STEP 2c-2d — dispatch obligation setup
-   immediately after crisis_event INSERT; downstream of Cat A emit; synchronous with STEP 2;
-   never blocks STEP 1):
-2. ALL active care-team channels (sms, email, in_app_push) per tenant `crisis.fanout_channels[]` config
+LOGICAL RECIPIENTS 2-5 (eligibility-only; execution explicitly delegated to Sub-decision 2 STEP 4
+   async bounded outbox worker — these recipients are NEVER on the synchronous STEP 1-3 patient-surface
+   path; the routing tree only defines WHICH recipients are eligible, not WHEN they are dispatched):
+2. ALL active care-team channels in tenant `crisis.fanout_channels[]` config
 3. IF severity ∈ {imminent, life_threatening}: clinical-on-call recipient via tenant
-   `crisis.clinical_on_call_channel` config; ALSO emit `emergency_escalation` Cat A
+   `crisis.clinical_on_call_channel` config; ALSO emit `emergency_escalation` Cat A at STEP 4
 4. IF patient has designated emergency contact + consent grant scope ∈ {emergency_contact_share}:
    emergency contact recipient via SMS (separate provider_attempt row under SMS dispatch_ledger row)
 5. IF severity ∈ {life_threatening} AND tenant has regulatory_reporting=true:
-   emit `crisis.regulatory_threshold_reached` Cat A; Adverse-Event slice picks up
+   emit `crisis.regulatory_threshold_reached` Cat A at STEP 4; Adverse-Event slice picks up
    (regulatory authority is a downstream consumer, not a direct dispatch_ledger recipient)
     ↓
-LOGICAL STEP 6 (always, executed at Sub-decision 2 STEP 4 — asynchronous):
-   CCR resolvers + `crisis.escalation_destination_resolved` Cat B fail-soft per P-025
-    ↓
-LOGICAL STEP 7 (always, executed at Sub-decision 2 STEP 5 — reactive hydration):
-   Crisis Response Card hydrates with resolved values; OR remains at fallback if CCR unavailable
+LOGICAL ASYNC WORK ITEMS (delegated entirely to Sub-decision 2 STEP 4 + STEP 5; out-of-band from
+   the patient-surface 200ms SLO; never blocks STEP 1-3):
+- Dispatch obligation setup (notification_crisis_dispatch_ledger + provider_attempt fan-out for
+  LOGICAL RECIPIENTS 2-5 above): executed at Sub-decision 2 STEP 4
+- CCR resolvers + `crisis.escalation_destination_resolved` Cat B fail-soft per P-025: executed at
+  Sub-decision 2 STEP 5
+- Crisis Response Card hydration with resolved values (reactive client update): executed at
+  Sub-decision 2 STEP 5; OR card stays at fallback content if CCR unavailable
 ```
+
+**R4 HIGH-1 + HIGH-2 closure (2026-05-21):** prior text said "executed at Sub-decision 2 STEP 2c-2d ... synchronous with STEP 2" for logical recipients 2-5 (contradicting R3 HIGH-1 closure that moved dispatch to STEP 4 async); also said "CCR resolvers execute at Sub-decision 2 STEP 4 and hydration at STEP 5" (stale mapping pre-R3-renumbering: R3 made STEP 4 = dispatch setup, STEP 5 = CCR + hydration). Fix: removed all STEP 2c/2d references; CCR/hydration mapped to STEP 5 only; dispatch obligation setup explicitly at STEP 4 only; routing tree now reads as ELIGIBILITY only with execution explicitly delegated to Sub-decision 2.
 
 **Execution-order assertion (R2 HIGH-1 closure 2026-05-21):** the routing tree above lists LOGICAL routing only. The canonical EXECUTION ORDER is exclusively Sub-decision 2's STEP 1-5 sequence. Specifically: CCR resolution + Cat B audit emission MUST be ASYNCHRONOUS and DOWNSTREAM of Cat A FLOOR-020 emit + crisis_event INSERT; never synchronous with them. An implementer treating the routing tree as an execution sequence (i.e., emitting Cat B BEFORE crisis_event INSERT) would reintroduce the R1 HIGH-1 FLOOR-020 coupling defect. Sub-decision 2 is authoritative on emit ordering; Sub-decision 3 is authoritative on logical routing destinations only.
 
@@ -184,12 +198,19 @@ Transition triples enforced by CHECK on `crisis_event_lifecycle_transition` (NEW
 Wire-up via STEP 4 of Sub-decision 2 (asynchronous bounded outbox worker; downstream of synchronous Cat A emit + crisis_event INSERT + card render):
 
 ```sql
--- STEP 2 (synchronous, in same transaction as Cat A audit): same-tx outbox row enqueues the
--- dispatch setup work for STEP 4 worker. Does NOT block STEP 3 card render.
+-- STEP 2 (synchronous, in same transaction as Cat A audit; ALL of 2a-2d atomic):
+-- 2a. crisis_event INSERT (shown elsewhere)
+-- 2b. crisis_event_lifecycle_transition INSERT (shown elsewhere)
+-- 2c. escalation_obligation INSERT — guaranteed source-of-truth for no-ack timer (R4 HIGH-3):
+INSERT INTO notification_crisis_escalation_obligation
+    (tenant_id, patient_id, server_signal_id, escalation_key, undeliverable_deadline)
+VALUES (v_tenant_id, v_patient_id, v_server_signal_id, NULL,
+        now() + INTERVAL_for_severity(v_severity));
+-- 2d. crisis_dispatch_outbox row INSERT — same-tx outbox enqueue for STEP 4 fan-out worker:
 INSERT INTO crisis_dispatch_outbox (tenant_id, crisis_event_id, enqueued_at)
 VALUES (current_tenant_id_strict('crisis_dispatch_outbox'), v_crisis_event_id, now());
 
--- STEP 4 (asynchronous; bounded outbox worker; data-driven from tenant config):
+-- STEP 4 (asynchronous; bounded outbox worker; data-driven from tenant config; recipient fan-out only):
 -- The worker reads tenant.crisis.fanout_channels[] (CCR key per OQ4) which enumerates the
 -- channel-classes the tenant has provider configuration for (e.g., ['sms', 'in_app_push'] for
 -- a tenant without an email provider). I-019 platform-floor requires fanout_channels[] to be
@@ -223,21 +244,20 @@ FROM compute_crisis_recipient_mapping(v_crisis_event_id, v_severity) AS mapping;
 -- enumerations (sms/email/in_app_push) NEVER appear in DDL or in STEP 4 logic. Channels the
 -- tenant has not configured produce zero rows for that channel-class.
 
--- STEP 4c: INSERT notification_crisis_escalation_obligation row with persisted undeliverable_deadline
--- (deadline collapses to 60s for imminent, 30s for life_threatening per Sub-decision 5 SLO table)
-INSERT INTO notification_crisis_escalation_obligation
-    (tenant_id, patient_id, server_signal_id, escalation_key, undeliverable_deadline)
-VALUES (..., now() + INTERVAL_for_severity(v_severity));
+-- (STEP 4c: NOT applicable post-R4 HIGH-3 closure 2026-05-21. The escalation_obligation INSERT
+--  moved into STEP 2c per Sub-decision 2 ordering — the deadline source-of-truth row is created
+--  in the STEP 2 synchronous transaction so the no-acknowledgement sweep (Sub-decision 6) ALWAYS
+--  has a row to find even if the STEP 4 worker stalls or crashes before recipient fan-out
+--  completes. R4 HIGH-3 safety-floor gap closed: a stuck outbox row can no longer deny the
+--  acknowledgement timer.)
 
--- STEP 4 fail-closed posture: STEP 4a-c run in a single transaction. If any of STEP 4a-c fails,
--- the transaction rolls back; worker emits `crisis.dispatch_attempt_failed` Cat C per failure and
--- retries with exponential backoff under canonical outbox-worker semantics. The outbox row is NOT
--- marked "consumed" until STEP 4a-c succeed atomically (one transaction); partial application is
--- forbidden. The no-acknowledgement timer (Sub-decision 6) sweeps escalation_obligation rows
--- with `now() > undeliverable_deadline AND escalation_key IS NULL` — a stuck outbox row that
--- failed to create the escalation_obligation row CANNOT silently expire the escalation deadline
--- because no row exists for the sweep to find; the canonical outbox-worker SLO + dead-letter audit
--- captures stuck outbox rows for operator intervention.
+-- STEP 4 fail-closed posture: STEP 4a-b run in a single transaction. If either fails the
+-- transaction rolls back; worker emits `crisis.dispatch_attempt_failed` Cat C per failure and
+-- retries with exponential backoff under canonical outbox-worker semantics. The outbox row is
+-- NOT marked "consumed" until STEP 4a-b succeed atomically; partial application is forbidden.
+-- Even under indefinite worker stall, the escalation_obligation row from STEP 2c remains
+-- in place + the Sub-decision 6 sweep operates on it; the no-acknowledgement Cat A
+-- escalation will fire on schedule regardless of recipient-fan-out progress.
 ```
 
 **R3 MED-1 closure (data-driven channel enumeration):** prior SQL literal `VALUES (..., 'sms'), (..., 'email'), (..., 'in_app_push')` would have inserted unconditional rows for channels the tenant has not configured, causing false undeliverable_deadline misses, noisy provider-failure attempts, and bogus `crisis.dispatch_attempt_failed` Cat C audit volume. Fixed: STEP 4a INSERTs are SELECT-driven from tenant `crisis.fanout_channels[]` CCR key (per OQ4) via `unnest()`. STEP 4b INSERTs are SELECT-driven from the `compute_crisis_recipient_mapping()` STABLE function which joins tenant config + care_team + consent_grant + severity to derive the exact recipient set. Channels the tenant has not provisioned produce zero rows for that channel-class. Deployment preflight asserts `cardinality(tenant.crisis.fanout_channels[]) > 0` (I-019 platform-floor); worker FAILS CLOSED if the array is empty at runtime.
@@ -449,7 +469,12 @@ Preflight DO block mirrors P-038 §10 deployment preflight pattern.
 - **R1 HIGH-2 closed:** Sub-decision 5 proposed "one dispatch_ledger row per (recipient_role, channel)" — would have required amending P-027 §4.66 UNIQUE(tenant_id, patient_id, server_signal_id, channel) constraint to include recipient_role (structural change to ratified canonical schema; hard-floor item 6 territory). Fix: aligned with existing P-027 two-tier shape per Codex's recommendation — §4.66 dispatch_ledger row per channel-class records channel-level OBLIGATION (preserves canonical UNIQUE); §4.67 provider_attempt row per (recipient_role, channel) tuple records per-recipient OUTCOME (multiple SMS recipients = N provider_attempt rows under single SMS dispatch_ledger row). No P-027 schema amendment required.
 - **R1 MED-1 closed:** Sub-decision 6 claimed `crisis.no_acknowledgement_escalation` is Cat A; §3 AUDIT_EVENTS table defined the same action ID as Cat B. Chose Cat A — safety-floor escalation evidence MUST be fail-closed audit-complete when a safety timeout fires; Cat B fail-soft tolerance would risk silent loss of escalation evidence during the exact failure mode the timer exists to catch. Updated §3 table + §1 in-scope tally (4 Cat A + 1 Cat B + 2 Cat C → 6 Cat A + 0 Cat B + 1 Cat C).
 
-Authored on `spec/SI-022-crisis-response-slice-2026-05-21` branch off main at `fab0615` (post-P-038 merge). v0.1 commit `e7a7ebb`. v0.2 commit `c2b9e15`. v0.3 commit `f4001d2`. v0.4 commit pending push for R4 verification.
+Authored on `spec/SI-022-crisis-response-slice-2026-05-21` branch off main at `fab0615` (post-P-038 merge). v0.1 commit `e7a7ebb`. v0.2 commit `c2b9e15`. v0.3 commit `f4001d2`. v0.4 commit `6ec0cc9`. v0.5 commit pending push for R5 verification.
+
+**v0.5 DRAFT 2026-05-21 — R4 closures applied (3 HIGH):**
+- **R4 HIGH-1 closed:** Sub-decision 3 had residual "executed at Sub-decision 2 STEP 2c-2d ... synchronous with STEP 2" text that contradicted R3 HIGH-1 closure. Rewrote routing tree as ELIGIBILITY-only with explicit execution delegation to Sub-decision 2 STEP 4 (recipient fan-out) + STEP 5 (CCR + hydration). No STEP 2c-2d / "synchronous with STEP 2" language remains for logical recipients 2-5.
+- **R4 HIGH-2 closed:** Sub-decision 3 had stale "CCR resolvers at STEP 4 + hydration at STEP 5" mapping pre-R3 renumbering. Corrected to canonical post-R3 STEP 4 = dispatch setup, STEP 5 = CCR + hydration.
+- **R4 HIGH-3 closed (safety-critical):** stuck STEP 4 outbox row would have denied the no-acknowledgement timer ever firing because escalation_obligation INSERT was at STEP 4c. **Moved escalation_obligation INSERT into STEP 2c (synchronous, in same transaction as Cat A audit + crisis_event INSERT)** so the deadline source-of-truth row is guaranteed-armed; the Sub-decision 6 no-ack sweep now always has a row to find regardless of STEP 4 worker progress. STEP 2 sub-steps 2a (crisis_event) + 2b (lifecycle_transition) + 2c (escalation_obligation) + 2d (crisis_dispatch_outbox enqueue) all run in a single transaction; STEP 4 is recipient fan-out only.
 
 **v0.4 DRAFT 2026-05-21 — R3 closures applied (1 HIGH + 1 MED):**
 - **R3 HIGH-1 closed:** dispatch setup at STEP 2c-2e (synchronous; ahead of STEP 3 card render) violated the 200ms patient-surface SLO under many recipients, transient DB contention, or provider-channel unavailability. Fix: moved dispatch setup to a new STEP 4 asynchronous bounded outbox worker invoked via a same-tx outbox row inserted at STEP 2 (matches Consent slice domain-event same-tx outbox pattern from P-027 §4.66+); STEP 1+2+3 only is the synchronous patient-surface path (Cat A emit + crisis_event INSERT + card render); the 200ms SLO now applies to STEP 1-3 exclusively. STEP 4 worker emits `crisis.dispatch_attempt_failed` Cat C on provider failures + the no-ack sweep at Sub-decision 6 produces `crisis.no_acknowledgement_escalation` Cat A on deadline expiry. Outbox at-least-once + idempotent retry + dead-letter SLO captures stuck rows.
