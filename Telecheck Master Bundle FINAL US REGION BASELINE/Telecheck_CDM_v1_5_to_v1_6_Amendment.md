@@ -1,7 +1,7 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.11 DRAFT
-**Status:** POST-PASS-2 R9 (R10 MED-1 closed: Pass-2 R9 caught that the v0.10 `ALTER FUNCTION OWNER TO cdm_owner` DDL silently depends on an unstated prerequisite — the migration executor must be superuser OR a member of cdm_owner; absent that, the migration either fails mid-way after creating SECURITY DEFINER helpers OR operators work around it by omitting the ALTER, which regresses HIGH-11. Fix: add fail-fast preflight DO block at top of §4.NEW5 helper DDL that RAISES on missing cdm_owner role OR insufficient executor identity; document all required pre-existing roles + schema posture + migration-executor identity in new §4.5. R9 was 1 MED only — no HIGH findings — and Codex explicitly said "no other material defect is supported from the provided diff," signaling convergence. Awaiting Pass-2 R10 ship-it verification.)
+**Version:** 0.12 DRAFT
+**Status:** POST-PASS-2 R10 (R11 MED-1 closed: Pass-2 R10 caught that the v0.11 preflight was misplaced (inside §4.NEW5 — runs AFTER §4.NEW1-NEW4 reference prerequisite roles) and incomplete (only checked cdm_owner, not all 5). PostgreSQL would fail at the first missing-role reference before the preflight executed, leaving partial DDL behind. Fix: new §4.NEW0 consolidated preflight DO block at the very TOP of the migration DDL — runs BEFORE §4.NEW1, asserts all 5 required roles + executor identity + advisory probe for REVOKE CREATE ON SCHEMA public FROM PUBLIC. Old preflight at §4.NEW5 removed with explanatory cross-reference comment. Awaiting Pass-2 R11 ship-it verification.)
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
@@ -37,6 +37,60 @@ The amendment is mechanical consolidation of already-Codex-converged canonical c
 ## 2. New CDM entities (5)
 
 All 5 entities are P2 governance-partition entities (per SI-018 partition rule: tenant-context infrastructure is platform-scoped, not patient-bound). All carry `tenant_id` where applicable per I-023 three-layer tenant isolation; the `_legacy_v017_caller_` sentinel + platform-wide entries use `PLATFORM_TENANT_ID` sentinel per I-024.
+
+### §4.NEW0 — Migration prerequisites preflight (R10 MED-1 closure 2026-05-20)
+
+Pass-2 R10 caught that the v0.11 preflight DO block was misplaced (inside §4.NEW5 — runs AFTER §4.NEW1-NEW4 have already referenced prerequisite roles) and incomplete (only asserted cdm_owner, not all 5 required roles). PostgreSQL would fail at the first missing-role reference before the preflight executed, leaving partial DDL behind in non-transactional or manually replayed deployments. Fix per Pass-2 R10 verbatim recommendation: consolidated preflight DO block at the very top of the migration DDL — runs BEFORE any §4.NEW1-NEW5 statement, asserts ALL prerequisite conditions, fails fast if any are missing.
+
+```sql
+-- §4.NEW0 — Migration prerequisites preflight. MUST be the first DDL executed by this amendment.
+-- Asserts all 5 required pre-existing roles + executor identity for ALTER FUNCTION OWNER.
+-- Schema posture (REVOKE CREATE ON SCHEMA public FROM PUBLIC) is asserted at runtime via
+-- has_schema_privilege probe; the REVOKE itself is platform-floor baseline DDL (not enforced here
+-- because non-superuser executors can't REVOKE from PUBLIC on a schema they don't own — but the
+-- probe reports the misconfiguration loudly).
+DO $$
+DECLARE
+    v_missing_roles TEXT := '';
+    v_required_roles TEXT[] := ARRAY[
+        'cdm_owner',
+        'admit_session_jwt_owner',
+        'sec_jwt_cleanup',
+        'kms_rotation_operator',
+        'break_glass_procedure_owner'
+    ];
+    v_role TEXT;
+BEGIN
+    -- Assertion 1: all required roles must pre-exist.
+    FOREACH v_role IN ARRAY v_required_roles LOOP
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = v_role) THEN
+            v_missing_roles := v_missing_roles || v_role || ', ';
+        END IF;
+    END LOOP;
+    IF length(v_missing_roles) > 0 THEN
+        RAISE EXCEPTION 'CDM v1.6 amendment prerequisite missing: required roles do not exist: %',
+            rtrim(v_missing_roles, ', ')
+            USING ERRCODE = 'undefined_object';
+    END IF;
+
+    -- Assertion 2: migration executor must be superuser OR member of cdm_owner
+    -- (required for ALTER FUNCTION ... OWNER TO cdm_owner in §4.NEW5).
+    IF NOT (current_setting('is_superuser')::BOOLEAN
+            OR pg_has_role(current_user, 'cdm_owner', 'MEMBER')) THEN
+        RAISE EXCEPTION 'CDM v1.6 amendment prerequisite unmet: migration executor must be superuser OR member of cdm_owner (current_user=%, is_superuser=%)',
+            current_user, current_setting('is_superuser')
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+
+    -- Assertion 3 (advisory probe, RAISE NOTICE on misconfig — not RAISE EXCEPTION because
+    -- non-superuser executors can't fix it from inside this migration):
+    IF has_schema_privilege('public', 'public', 'CREATE') THEN
+        RAISE NOTICE 'CDM v1.6 amendment advisory: PUBLIC has CREATE on schema public — platform-floor REVOKE CREATE ON SCHEMA public FROM PUBLIC is missing. The §4.NEW5 SECURITY DEFINER helpers schema-qualify their table references so are unaffected, but the REVOKE is required as defense-in-depth per CLAUDE.md hard-floor.';
+    END IF;
+END $$;
+```
+
+**Cross-references:** §4.5 Deployment prerequisites (this preflight is the executable enforcement of §4.5's documented requirements); SI-024.1 deployment runbook.
 
 ### §4.NEW1 — `session_jwt_admission` (CDM v1.6 new; SI-024.1 Sub-decision 1)
 
@@ -397,24 +451,8 @@ GRANT SELECT, INSERT ON jwt_migration_entity_status TO cdm_owner;
 GRANT UPDATE (phase_4_cutover_eligible, raw_guc_fallback_audited, migrated_at, updated_at)
     ON jwt_migration_entity_status TO cdm_owner;
 
--- Deployment-prerequisite preflight assertion (R9 MED-1 closure 2026-05-20: Pass-2 R9 caught that the
--- v0.10 ALTER FUNCTION OWNER TO cdm_owner DDL requires the migration executor to be superuser OR a
--- member of cdm_owner; if that prerequisite isn't met, the migration either fails mid-way after
--- creating SECURITY DEFINER helpers, OR operators work around it by omitting the ALTER — which
--- regresses HIGH-11. Fail-fast preflight catches the misconfiguration before any helper DDL runs).
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cdm_owner') THEN
-        RAISE EXCEPTION 'CDM v1.6 amendment prerequisite missing: role cdm_owner must pre-exist before applying §4.NEW5 helper DDL'
-            USING ERRCODE = 'undefined_object';
-    END IF;
-    IF NOT (current_setting('is_superuser')::BOOLEAN
-            OR pg_has_role(current_user, 'cdm_owner', 'MEMBER')) THEN
-        RAISE EXCEPTION 'CDM v1.6 amendment prerequisite unmet: migration executor must be superuser OR member of cdm_owner to run ALTER FUNCTION OWNER TO cdm_owner (current_user=%, is_superuser=%)',
-            current_user, current_setting('is_superuser')
-            USING ERRCODE = 'insufficient_privilege';
-    END IF;
-END $$;
+-- (Deployment-prerequisite preflight moved to §4.NEW0 per R10 MED-1 closure — must run before
+--  §4.NEW1-NEW4 reference prerequisite roles, not inside §4.NEW5.)
 
 -- SECURITY DEFINER helper functions (owned by cdm_owner) expose only the minimal boolean decision
 -- interface needed by current_tenant_id_strict() and the fallback-audit emission path. PUBLIC gets
@@ -618,8 +656,11 @@ The amendment DDL assumes the following roles + schema posture exist BEFORE the 
 **v0.11 DRAFT 2026-05-20 — Pass-2 R9 closure (deployment-prerequisite preflight + role/schema documentation):**
 - **MED-1 closed** — Pass-2 R9 found 1 MED only (no HIGH), and explicitly stated "no other material defect is supported from the provided diff" — signaling convergence per the v1.10.1 hygiene-cycle long-tail asymptote pattern. The MED: v0.10's `ALTER FUNCTION ... OWNER TO cdm_owner` silently requires the migration executor to be superuser OR a member of `cdm_owner`; if unmet, the migration either fails partway after creating SECURITY DEFINER helpers OR operators work around by omitting the ALTER (regresses HIGH-11). Fix: (a) fail-fast preflight DO block at top of §4.NEW5 helper DDL that asserts cdm_owner role exists AND executor is superuser OR cdm_owner member, raising on either failure with explicit error messages and standard SQLSTATE codes; (b) new §4.5 "Deployment prerequisites" section documenting all 5 required pre-existing roles (cdm_owner, admit_session_jwt_owner, sec_jwt_cleanup, kms_rotation_operator, break_glass_procedure_owner), the required schema posture (REVOKE CREATE ON SCHEMA public FROM PUBLIC), and the required migration-executor identity.
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit `d76b24c`. v0.8 commit `b33d017`. v0.9 commit `905632c`. v0.10 commit `9a5dcc2`. v0.11 commit pending push for Pass-2 R10 ship-it verification.
+**v0.12 DRAFT 2026-05-20 — Pass-2 R10 closure (preflight relocation + completeness):**
+- **MED-1 closed** — Pass-2 R10 caught two defects in the v0.11 R9 preflight: (a) placement — preflight DO block was inside §4.NEW5, which runs AFTER §4.NEW1-NEW4 had already referenced `admit_session_jwt_owner`, `sec_jwt_cleanup`, `kms_rotation_operator`, `break_glass_procedure_owner` in their GRANT/POLICY statements. PostgreSQL would fail at the first missing-role reference before reaching the preflight, leaving partial DDL behind in non-transactional/manually-replayed deployments and pushing operators toward the same workaround class R9 was meant to close. (b) Completeness — preflight only asserted `cdm_owner` existed, missing the other 4 required roles. Fix per Pass-2 R10 verbatim recommendation: consolidated preflight DO block moved to new §4.NEW0 at the very TOP of the migration DDL — runs BEFORE §4.NEW1 creates or grants anything; asserts all 5 required roles in a single FOREACH loop with accumulated missing-role report; asserts executor identity (superuser OR cdm_owner member); advisory probe for `REVOKE CREATE ON SCHEMA public FROM PUBLIC` via `has_schema_privilege('public', 'public', 'CREATE')` (RAISE NOTICE not RAISE EXCEPTION — non-superuser executors can't fix it from inside the migration, but the misconfig is loudly reported). Old preflight at §4.NEW5 removed with explanatory cross-reference comment.
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit `d76b24c`. v0.8 commit `b33d017`. v0.9 commit `905632c`. v0.10 commit `9a5dcc2`. v0.11 commit `49a7450`. v0.12 commit pending push for Pass-2 R11 ship-it verification.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.11 DRAFT (Pass-2 R9 closure applied: fail-fast deployment-prerequisite preflight DO block + §4.5 Deployment prerequisites section) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R10 ship-it verification queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.12 DRAFT (Pass-2 R10 closure applied: §4.NEW0 consolidated preflight at top of migration DDL; all 5 roles + executor + schema-CREATE advisory probe) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R11 ship-it verification queued.
