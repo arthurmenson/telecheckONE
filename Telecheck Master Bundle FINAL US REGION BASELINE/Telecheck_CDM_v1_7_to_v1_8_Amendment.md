@@ -1,7 +1,7 @@
 # CDM v1.7 → v1.8 + AUDIT_EVENTS v5.9 → v5.10 + DOMAIN_EVENTS additive + CCR_RUNTIME v5.3 → v5.4 Amendment (Mode 1 Handler Spec follow-on)
 
-**Version:** 0.4 DRAFT
-**Status:** POST-R3 (1 MED closed inline: §9 OQ1 said `tenant.ai_provider` update audit event should be registered in a separate amendment cycle — but the R1 MED-2 closure (v0.2) had already registered `ccr.ai_provider_updated` in this amendment + added it to the CHECK constraint + set it as the CCR schema field. Contradiction would have let implementers defer the dedicated Cat B PHI-provider audit. Fix: §9 OQ1 rewritten to CLOSED-AT-R1 with explicit "no separate amendment cycle required". Previously POST-R2 (2 HIGH closed inline: HIGH-1 patient FK references `patient(id)` instead of tenant-scoped `patient(tenant_id, id)` → same cross-tenant referential corruption class as R1 closure on conversation FK; fix: composite tenant-scoped patient FKs on conversation + turn_admission + turn_result. HIGH-2 turn_result.patient_id could diverge from admission/conversation's patient_id since FKs only covered (tenant_id, turn_id) not patient_id; fix: added composite UNIQUE (tenant_id, id, patient_id) on conversation + admission; composite FKs from admission `(tenant_id, conversation_id, patient_id)` to conversation + from result `(tenant_id, turn_id, patient_id)` to admission + `(tenant_id, conversation_id, patient_id)` to conversation; enforces patient identity propagation from conversation through admission through result. Previously POST-R1 (2 HIGH + 2 MED closed inline: HIGH-1 single-column FKs to tenant-scoped parents enabled cross-tenant referential corruption → composite tenant-scoped FKs on turn_admission + detector_result + turn_result with required composite UNIQUE constraints on parents; HIGH-2 crisis_server_signal_id had no FK to i019_enqueue_ack_log → added tenant-scoped composite FK (DEFERRABLE INITIALLY DEFERRED for ordering); MED-1 audit event taxonomy inconsistent (3+0+6 in scope text vs 3+1+5 in §3 table; sampling posture inconsistent across Cat C) → normalized to 11 total events (3 Cat A + 3 Cat B + 5 Cat C) with explicit sampling column for every Cat C; MED-2 CCR `tenant.ai_provider` referenced placeholder audit action → registered real Cat B `ccr.ai_provider_updated` event + updated CHECK constraint + CCR schema field)
+**Version:** 0.5 DRAFT
+**Status:** POST-R4 (1 HIGH closed inline: `ai_mode1_conversation_turn_result` had two separate composite FKs `(tenant_id, turn_id, patient_id) → admission` + `(tenant_id, conversation_id, patient_id) → conversation` but neither proved that the admission's `conversation_id` matched the result's `conversation_id` — both FKs could pass while admission belonged to conversation A but result claimed conversation B for same tenant+patient. Result row would be valid + immutable + corrupt history attribution. Fix: composite UNIQUE `(tenant_id, id, conversation_id, patient_id)` on admission + single 4-column composite FK from result `(tenant_id, turn_id, conversation_id, patient_id) → admission(tenant_id, id, conversation_id, patient_id)` replaces the two separate FKs; conversation_id propagation conversation → admission → result is now fully closed. Previously POST-R3 (1 MED closed inline: §9 OQ1 said `tenant.ai_provider` update audit event should be registered in a separate amendment cycle — but the R1 MED-2 closure (v0.2) had already registered `ccr.ai_provider_updated` in this amendment + added it to the CHECK constraint + set it as the CCR schema field. Contradiction would have let implementers defer the dedicated Cat B PHI-provider audit. Fix: §9 OQ1 rewritten to CLOSED-AT-R1 with explicit "no separate amendment cycle required". Previously POST-R2 (2 HIGH closed inline: HIGH-1 patient FK references `patient(id)` instead of tenant-scoped `patient(tenant_id, id)` → same cross-tenant referential corruption class as R1 closure on conversation FK; fix: composite tenant-scoped patient FKs on conversation + turn_admission + turn_result. HIGH-2 turn_result.patient_id could diverge from admission/conversation's patient_id since FKs only covered (tenant_id, turn_id) not patient_id; fix: added composite UNIQUE (tenant_id, id, patient_id) on conversation + admission; composite FKs from admission `(tenant_id, conversation_id, patient_id)` to conversation + from result `(tenant_id, turn_id, patient_id)` to admission + `(tenant_id, conversation_id, patient_id)` to conversation; enforces patient identity propagation from conversation through admission through result. Previously POST-R1 (2 HIGH + 2 MED closed inline: HIGH-1 single-column FKs to tenant-scoped parents enabled cross-tenant referential corruption → composite tenant-scoped FKs on turn_admission + detector_result + turn_result with required composite UNIQUE constraints on parents; HIGH-2 crisis_server_signal_id had no FK to i019_enqueue_ack_log → added tenant-scoped composite FK (DEFERRABLE INITIALLY DEFERRED for ordering); MED-1 audit event taxonomy inconsistent (3+0+6 in scope text vs 3+1+5 in §3 table; sampling posture inconsistent across Cat C) → normalized to 11 total events (3 Cat A + 3 Cat B + 5 Cat C) with explicit sampling column for every Cat C; MED-2 CCR `tenant.ai_provider` referenced placeholder audit action → registered real Cat B `ccr.ai_provider_updated` event + updated CHECK constraint + CCR schema field)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-035 (AI Service Mode 1 Handler Spec v0.4 RATIFIED; Registry v2.21 → v2.22). Per the established post-P-029 spec-first promotion pattern, Mode 1's canonical content lands in CDM + AUDIT_EVENTS + DOMAIN_EVENTS + CCR_RUNTIME via a separate amendment cycle following SI ratification. **FIFTH instance** of the SI-spec-first promotion pattern (precedents: P-029 SI-021 → CDM v1.4→v1.5; P-032 SI-024.1 → CDM v1.5→v1.6; P-034 SI-019 → CDM v1.6→v1.7 + 4 surfaces; P-035 Mode 1 spec ratification → P-036 mechanical consolidation).
 **Owner:** AI Service Lead + Clinical Lead (Mode 1 SI co-owners) + CDM owner + AUDIT_EVENTS owner + DOMAIN_EVENTS owner + CCR_RUNTIME owner.
@@ -145,7 +145,14 @@ CREATE TABLE ai_mode1_conversation_turn_admission (
     -- Composite UNIQUE on (tenant_id, id) needed for downstream composite FKs from detector
     CONSTRAINT ai_mode1_conversation_turn_admission_tenant_id_unique UNIQUE (tenant_id, id),
     -- Composite UNIQUE including patient_id enables downstream turn_result composite FK
-    CONSTRAINT ai_mode1_conversation_turn_admission_tenant_id_patient_unique UNIQUE (tenant_id, id, patient_id)
+    CONSTRAINT ai_mode1_conversation_turn_admission_tenant_id_patient_unique UNIQUE (tenant_id, id, patient_id),
+    -- R4 HIGH-1 closure 2026-05-21: composite UNIQUE including conversation_id + patient_id
+    -- enables downstream turn_result FK enforcing conversation identity propagation from
+    -- admission row through to result row (preventing result row binding turn to a different
+    -- conversation for the same patient even when individual (tenant_id, turn_id) +
+    -- (tenant_id, conversation_id) FKs would pass).
+    CONSTRAINT ai_mode1_conversation_turn_admission_tenant_id_conv_patient_unique
+        UNIQUE (tenant_id, id, conversation_id, patient_id)
 );
 CREATE INDEX ai_mode1_conversation_turn_admission_lookup_idx
     ON ai_mode1_conversation_turn_admission(tenant_id, conversation_id, admitted_at DESC);
@@ -218,17 +225,17 @@ CREATE TABLE ai_mode1_conversation_turn_result (
     tenant_id tenant_id_t NOT NULL,
     conversation_id UUID NOT NULL,
     patient_id UUID NOT NULL,
-    -- R1 HIGH-1 closure 2026-05-21: composite tenant-scoped FK to conversation;
-    -- R2 HIGH-2 closure 2026-05-21: composite tenant+patient FK to admission enforces
-    -- turn_result.patient_id matches admission.patient_id (preventing result row claiming a
-    -- different patient than the admitted turn). Composite tenant+conversation+patient FK to
-    -- conversation enforces same patient_id propagation from conversation level.
-    CONSTRAINT ai_mode1_conversation_turn_result_admission_patient_fk
-        FOREIGN KEY (tenant_id, turn_id, patient_id)
-        REFERENCES ai_mode1_conversation_turn_admission(tenant_id, id, patient_id),
-    CONSTRAINT ai_mode1_conversation_turn_result_conversation_patient_fk
-        FOREIGN KEY (tenant_id, conversation_id, patient_id)
-        REFERENCES ai_mode1_conversation(tenant_id, id, patient_id),
+    -- R4 HIGH-1 closure 2026-05-21: replaced the two separate composite FKs with a single
+    -- 4-column composite FK to admission that ALSO enforces conversation_id propagation
+    -- (previous (tenant_id, turn_id, patient_id) FK + (tenant_id, conversation_id, patient_id)
+    -- FK could both pass while admission's conversation differed from result's conversation;
+    -- new single FK proves admission.id, admission.conversation_id, admission.patient_id all
+    -- match the result row in one constraint). Patient_id propagation conversation→admission
+    -- is enforced by admission's own FK to conversation (set at R2 HIGH-2 closure), so the
+    -- chain conversation→admission→result is now fully closed.
+    CONSTRAINT ai_mode1_conversation_turn_result_admission_full_fk
+        FOREIGN KEY (tenant_id, turn_id, conversation_id, patient_id)
+        REFERENCES ai_mode1_conversation_turn_admission(tenant_id, id, conversation_id, patient_id),
     -- R2 HIGH-1 closure 2026-05-21: composite tenant-scoped patient FK
     CONSTRAINT ai_mode1_conversation_turn_result_patient_tenant_fk
         FOREIGN KEY (tenant_id, patient_id)
@@ -484,7 +491,10 @@ VALUES
 - **R1 MED-1 closed:** Audit event count/category contract inconsistent across §1 + §3. Scope text said "9 + 1 = 10" with "3 Cat A + 0 Cat B + 6 Cat C"; §3 table actually had 9 `ai.mode1.*` events including 1 Cat B (`mode2_handoff_proposed`) + 1 `audit.*` Cat B = 10 total with 3 Cat A + 2 Cat B + 5 Cat C. Sampling posture ambiguous (5 of 6 Cat C marked sampled in §3.1 spec but uniformly listed without distinction in §3 table). Fix: normalized to **11 new action IDs total** (added `ccr.ai_provider_updated` per MED-2; now 3 Cat A + 3 Cat B + 5 Cat C) with explicit per-event Sampling column (4 Cat C high-volume sampled + 1 Cat C not-sampled-low-volume-per-failure + all Cat A/Cat B not-sampled); aligned §1 scope text + §3 tables + CHECK constraint enumeration.
 - **R1 MED-2 closed:** §5 `tenant.ai_provider` CCR key referenced `medication_interaction.engine_knowledge_base_updated` as `update_audit_action` — explicit placeholder defeats governance/audit classification for high-risk PHI-provider configuration changes. Fix: registered real `ccr.ai_provider_updated` Cat B P2 audit event in §3 (11th new action ID); added to CHECK constraint; updated §5 CCR schema field to point to the new canonical action.
 
-Authored on `spec/cdm-v1-8-audit-v5-10-ccr-v5-4-mode-1-followon-2026-05-21` branch off main at `9a1fcd2` (post-P-035 + Addendum 63). v0.2 commit `cba5266`. v0.3 commit `318c37a`. v0.4 commit pending push for R4 verification.
+Authored on `spec/cdm-v1-8-audit-v5-10-ccr-v5-4-mode-1-followon-2026-05-21` branch off main at `9a1fcd2` (post-P-035 + Addendum 63). v0.2 commit `cba5266`. v0.3 commit `318c37a`. v0.4 commit `c473030`. v0.5 commit pending push for R5 verification.
+
+**v0.5 DRAFT 2026-05-21 — R4 closure applied (1 HIGH):**
+- **R4 HIGH-1 closed:** `ai_mode1_conversation_turn_result` had two separate composite FKs `(tenant_id, turn_id, patient_id) → admission` + `(tenant_id, conversation_id, patient_id) → conversation` — but neither proved that the admission's `conversation_id` matched the result's `conversation_id`. Both FKs could pass while admission belonged to conversation A but result claimed conversation B for the same tenant+patient. Append-only terminal row would be valid + immutable + corrupt the derived-history attribution. Fix: added composite UNIQUE `(tenant_id, id, conversation_id, patient_id)` on `ai_mode1_conversation_turn_admission` + replaced result's two separate FKs with a single 4-column composite FK `(tenant_id, turn_id, conversation_id, patient_id) → admission(tenant_id, id, conversation_id, patient_id)`. Conversation_id propagation through conversation → admission → result is now fully closed; patient_id propagation enforced by admission's existing FK to conversation. Same pattern as R2 HIGH-2 closure (patient identity propagation) but on the conversation axis.
 
 **v0.4 DRAFT 2026-05-21 — R3 closure applied (1 MED):**
 - **R3 MED-1 closed:** §9 OQ1 was internally inconsistent with §3 + §5 — said `tenant.ai_provider` audit event should be registered in a SEPARATE amendment cycle while §3 already enumerated `ccr.ai_provider_updated` + §5 already pointed to it as `update_audit_action`. Risk: implementers reading §9 first could defer the PHI-provider update audit event, creating version-skew in a high-risk path. Fix: rewrote OQ1 to CLOSED-AT-R1 status with explicit "no separate amendment cycle required" + cross-reference to §3 + §5.
