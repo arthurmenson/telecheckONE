@@ -4444,3 +4444,104 @@ Every closure was within Option A scope — zero further hard-floor item 6 escal
 Cumulative: **122 findings closed inline across 7 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1) leading to ratifier-decision resolution + clean cycle resumption; 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + the SI-spec-first promotion pattern continue to scale; P-033's worked example demonstrates the hard-floor item 6 discipline catches architectural-judgment items at R1 cleanly rather than letting them propagate through closure rounds.
 
 — Claude (Opus 4.7, 1M context), SI-019 Med-Interaction v1.0 → v2.0 Option A cycle close-out 2026-05-21 via auto-proceed. Main at `ed75aa9`. Registry v2.20. P-033 appended. FIRST Phase B fan-out promotion. Track 1 anchor UNBLOCKED. Next deliverable per auto-proceed: SI-019 Phase A foundation implementation in `telecheck-app` code repo OR next critical-path SI per Master Completion Plan v1.0 (likely candidates: SI-019 CDM v1.6 → v1.7 + AUDIT_EVENTS v5.8 → v5.9 follow-on amendment cycle; Async-Consult clinician-decision loop completion SI; AI Service Mode 1 SI; Crisis Response slice SI).
+
+---
+
+## Addendum 62 — CDM v1.6 → v1.7 + AUDIT_EVENTS v5.8 → v5.9 + OpenAPI v0.2 → v0.3 + State Machines v1.1 → v1.2 + RBAC v1.1 → v1.2 SI-019 follow-on RATIFIED via auto-proceed (Codex R8 ship-it APPROVE); merge `71518f0`; Registry v2.20 → v2.21; 5 contract-surface co-bumps in single amendment (largest follow-on scope to date); 8th successive Q2 2026 auto-proceed ratification
+
+**Date:** 2026-05-21
+**Status:** LANDED + RATIFIED
+**Main HEAD:** `41ff4d0` (cockpit) / `71518f0` (amendment merge)
+**Cycle counter:** 8th successive SI/amendment ratification in Q2 2026 under codified disciplines (P-026 → P-028 → P-029 → P-030 → P-031 → P-032 → P-033 → P-034)
+
+### What landed
+
+`Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_CDM_v1_6_to_v1_7_Amendment.md` (916 lines) — canonical mechanical consolidation of SI-019 v0.8's 4 new entities + 7 SECURITY DEFINER procedures + 1 SECURITY BARRIER view + 1 SECURITY DEFINER access function + 1 optional materialized view + 6 new audit events + 5 new domain events + 8 new OpenAPI endpoints + 1 new state machine + 12 new RBAC roles into bundle file sections.
+
+### THIRD instance of post-P-029 SI-spec-first promotion pattern
+
+| Instance | Parent SI ratification | Follow-on amendment | Scope |
+|---|---|---|---|
+| 1st | P-028 SI-021 | P-029 CDM v1.4 → v1.5 | CDM + AUDIT_EVENTS + CCR_RUNTIME (3 surfaces) |
+| 2nd | P-031 SI-024.1 | P-032 CDM v1.5 → v1.6 | CDM + AUDIT_EVENTS (2 surfaces) |
+| **3rd** | **P-033 SI-019** | **P-034 CDM v1.6 → v1.7** | **CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC (5 surfaces — largest to date)** |
+
+### Convergence trajectory (8-round Codex cycle)
+
+| Round | HIGH | MED | Class of defect closed |
+|---|---|---|---|
+| R1 | 2 | 2 | Advisory-lock cast overflow + SECURITY DEFINER search_path resolution + MV access function type-mismatch + procedure count |
+| R2 | 1 | 0 | SECURITY DEFINER caller-identity via current_user (resolves to owner not invoker) |
+| R3 | 1 | 0 | R2 GUC-only pattern still trusts caller-controlled mutable state (recursive defect on R2 fix) |
+| R4 | 2 | 0 | Phase B fallback gate fail-open + plaintext override_rationale persisted alongside KMS envelope (PHI exposure) |
+| R5 | 1 | 0 | MV access surfaces use raw `app.tenant_id` GUC instead of canonical `current_tenant_id_strict()` |
+| R6 | 1 | 0 | R5 introduced MV trust-anchor entity-name dependency but seed scope only had 4 RLS-bearing tables |
+| R7 | 1 | 0 | SECURITY DEFINER write paths still use raw GUC for tenant identity (analogous to R3 actor_role on tenant axis) |
+| **R8** | **0** | **0** | **ship-it APPROVE — "no material findings"** |
+
+**Total:** 9 HIGH + 2 MED closed across 7 closure rounds. Zero hard-floor item 6 escalations across all closures.
+
+### Architectural shape of the cycle
+
+The cycle worked progressively through the defect classes that the SI-024.1 v0.8 JWT-binding canonical pattern is designed to address:
+
+1. **PostgreSQL primitive correctness (R1)** — advisory-lock overload semantics, SECURITY DEFINER search_path resolution, SQL function return-type strictness, internal count consistency.
+2. **SECURITY DEFINER caller identity (R2, R3, R7)** — three rounds progressively bound caller identity to JWT-verified claims: actor identity via `current_user` (R2 caught the SECURITY DEFINER ownership issue) → GUC-supplied actor_role (R3 caught caller-controlled mutability) → JWT-verified actor + tenant claims (R7 closed the tenant axis with same pattern). Each round demonstrated the canonical SI-024.1 pattern applied to a different identity axis.
+3. **Trust-anchor coherence (R5, R6)** — MV access surfaces had raw-GUC trust paths (R5); R5's fix introduced a new entity-name dependency that wasn't in the seed scope (R6).
+4. **Fail-closed enforcement (R4)** — Phase B fallback gate was incomplete; required strict AND-gate on both `is_jwt_required_for_entity(...)=FALSE` AND `is_raw_guc_fallback_audited_for_entity(...)=TRUE`.
+5. **PHI exposure (R4)** — plaintext clinical rationale column would have been persisted alongside the encrypted KMS envelope.
+
+**This is the cleanest worked example to date** of why the SI-024.1 v0.8 JWT-binding canonical pattern is necessary as the trust anchor for v1.7+ slices. Each round demonstrated the same pattern applied to a different surface; once tenant identity (R7) was correctly bound, the amendment converged.
+
+### Process novelties (continued)
+
+1. **Largest follow-on scope to date.** P-034 co-bumps 5 contract surfaces (CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC) — broader than P-029 (3 surfaces) or P-032 (2 surfaces). Per the post-P-029 pattern, the lockstep-bumped surfaces match the SI's content-amendment scope.
+2. **Eight-round HIGH-count consistency.** Unlike P-032 (12 rounds, HIGH cleared at R8) and P-033 (7 rounds, HIGH cleared at R5), P-034 had exactly 1-2 HIGH per round for R2-R7 before clearing at R8. Each HIGH addressed a distinct defect class on a different trust-axis. The convergence pattern shape (count steady → step to zero) varies per cycle, but the asymptotic property (eventually clears to MED-only-then-zero) holds.
+3. **Three-cycle SI-spec-first promotion pattern confirmed.** P-029 → P-032 → P-034 = three instances of the pattern with parent SI ratification → follow-on canonical landing. Pattern is now load-bearing operational regularity at the SI-amendment-cycle scale.
+4. **Eight successive auto-proceeded Q2 2026 cycles.** P-026 → P-028 → P-029 → P-030 → P-031 → P-032 → P-033 → P-034. Cumulative 133 findings closed inline; 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP for OQ7); 0 ERR escalations.
+
+### Companion landings
+
+- `Telecheck_Promotion_Ledger.md` — entry P-034 appended at top (commit `41ff4d0`)
+- `Telecheck_Artifact_Registry_v2_10.md` — header bumped v2.20 → v2.21 (commit `41ff4d0`)
+- Canonical version states post-merge: CDM v1.7 · AUDIT_EVENTS v5.9 · OpenAPI v0.3 · State Machines v1.2 · RBAC v1.2 · DOMAIN_EVENTS additive (no bump)
+
+### Production gates explicit
+
+| Gate | Status post-P-034 merge |
+|---|---|
+| SI-019 canonical content in named bundle files | **LANDED** (4 entities + 7 procedures + 1 MV + 1 view + 1 access fn + 6 audit events + 5 domain events + 8 endpoints + 1 state machine + 12 roles) |
+| `jwt_migration_entity_status` seed scope for SI-019 entities | Spec'd at 6 entity names (4 tables + 2 MV/view surfaces); apply-time seed step per SI-024.1 contract |
+| SI-019 Phase A foundation implementation in `telecheck-app` code repo | UNBLOCKED — implementers can now reference canonical CDM/AUDIT/OpenAPI/SM/RBAC bundle for row shapes + procedure contracts + endpoint contracts + state machine + role definitions |
+| Master Completion Plan v1.0 Track 1 anchor (Ghana revenue pilot critical-path) | SI ratified at P-033; canonical content landed at P-034; implementation can now begin per "spec ratification leads implementation by ≥1 sprint" rule |
+| Phase B fan-out trajectory | 2 of 5 pilot-required Ghana revenue anchor slices ratified (Med-Interaction at P-033 + P-034); 3 remaining: Async-Consult clinician-decision loop completion SI, AI Service Mode 1 SI, Crisis Response slice SI, Admin Backend basics SI |
+
+**Rollback path:** `git revert -m 1 71518f0` reverts amendment artifact; `git revert 41ff4d0` reverts cockpit. Would require new P-034a ledger entry + Registry v2.21 → v2.22 bump per lockstep rule.
+
+### Outstanding queue (post-P-034)
+
+1. **SI-019 Phase A foundation implementation** in `telecheck-app` code repo (engine module + lifecycle transition procedures + projection MV + 8 OpenAPI endpoints + 12 RBAC role assignments).
+2. **Async-Consult clinician-decision loop completion** (depends on SI-005 ratification per Track 1 Phase B fan-out item).
+3. **AI Service Mode 1 conversational scaffolding** (Track 2 Phase B fan-out; buildable now per Master Completion Plan).
+4. **Crisis Response slice** (per Master Completion Plan pilot-viable scope item 4).
+5. **Admin Backend basics** (per Master Completion Plan pilot-viable scope item 5).
+6. **Possible hygiene cycle** if downstream implementation surfaces additional schema-side defects during Phase A construction (precedent: v1.10.1 hygiene cycle 2026-05-02; no current trigger).
+
+### Discipline observation
+
+**Q2 2026 cycle pattern**, now with 8 ratifications under codified disciplines:
+
+| Ledger entry | Cycle | Findings | Rounds | Ship-it path | Hard-floor item 6 |
+|---|---|---|---|---|---|
+| P-026 | Q2 batched ratifier ceremony Phase A | 13 OQ-groups | n/a | Ratifier ceremony | 0 |
+| P-028 | SI-021 SIEM Hash-Chain Archival | 16 | 5 | §10 cadence boundary | 0 |
+| P-029 | SI-021 CDM v1.4 → v1.5 follow-on | 13 | 8 | Multi-cycle pre-merge | 0 |
+| P-030 | SI-024 v0.17 TRANSITIONAL | 35 | 17 | Pass-2 B+ synthesis | 0 |
+| P-031 | SI-024.1 v0.8 Cryptographic JWT-Binding | 19 | 8 | Codex cycle-4 APPROVE | 0 |
+| P-032 | CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 SI-024.1 follow-on | 15 | 12 | Pass-2 R12 ship-it APPROVE | 0 |
+| P-033 | SI-019 Med-Interaction v1.0 → v2.0 Option A | 11 | 7 | Codex R7 ship-it APPROVE | 1 CORRECT INVOCATION (R1 STOP for OQ7) |
+| **P-034** | **CDM v1.6 → v1.7 + 4 surfaces SI-019 follow-on** | **11** | **8** | **Codex R8 ship-it APPROVE** | **0** |
+
+Cumulative: **133 findings closed inline across 8 cycles; 1 CORRECT hard-floor item 6 invocation; 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern continue to scale. P-034's worked example demonstrates the SI-024.1 JWT-binding canonical pattern's necessity across multiple trust-axes (actor identity + tenant identity + trust-anchor coherence + fail-closed enforcement + PHI protection).
+
+— Claude (Opus 4.7, 1M context), CDM v1.7 + AUDIT v5.9 + OpenAPI v0.3 + SM v1.2 + RBAC v1.2 SI-019 follow-on cycle close-out 2026-05-21 via auto-proceed. Main at `41ff4d0`. Registry v2.21. P-034 appended. 8th successive Q2 2026 auto-proceed ratification. Phase B fan-out trajectory continuing per Master Completion Plan v1.0. Next deliverable per auto-proceed: SI-019 Phase A foundation implementation in `telecheck-app` code repo OR next critical-path SI (Async-Consult clinician-decision loop completion, AI Service Mode 1, Crisis Response, Admin Backend basics).
