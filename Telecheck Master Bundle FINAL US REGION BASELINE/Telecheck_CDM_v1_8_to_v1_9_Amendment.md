@@ -1,7 +1,7 @@
 # CDM v1.8 → v1.9 + AUDIT_EVENTS v5.10 → v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 → v0.4 + State Machines v1.2 → v1.3 + RBAC v1.2 → v1.3 Amendment (SI-020 Async-Consult follow-on)
 
-**Version:** 0.2 DRAFT
-**Status:** POST-R1 (2 HIGH + 1 MED closed inline: HIGH-1 decision-validation trigger looked up claim by id only → fix: 5-column composite identity lookup (tenant_id + claim_id + consult_id + patient_id + clinician_account_id) with RAISE on missing row; HIGH-2 lifecycle continuity not enforced at table-level → fix: added BEFORE INSERT trigger `consult_lifecycle_transition_continuity` that takes per-consult advisory lock + validates new from_state == latest to_state + rejects from-terminal transitions, regardless of caller; MED-1 RBAC count mismatch (8 vs preflight's 12) → fix: recounted to 12 roles (4 app + 6 wrapper owners + 2 view/MV owners) matching deployment preflight enumeration)
+**Version:** 0.3 DRAFT
+**Status:** POST-R2 (1 HIGH closed inline: R1 continuity trigger validated NEW.from_state == latest to_state but didn't enforce monotonic transition_at ordering — backdated row could pass from_state check while corrupting current-state derivation (ORDER BY transition_at DESC), future-dated row could dominate immediately. Fix: trigger now reads latest transition_at alongside latest to_state under lock; rejects NEW.transition_at < latest transition_at + rejects future-dated > now() + 5s clock-skew tolerance. Monotonic-ordering invariant now schema-enforced. Previously POST-R1 (2 HIGH + 1 MED closed inline: HIGH-1 decision-validation trigger looked up claim by id only → fix: 5-column composite identity lookup (tenant_id + claim_id + consult_id + patient_id + clinician_account_id) with RAISE on missing row; HIGH-2 lifecycle continuity not enforced at table-level → fix: added BEFORE INSERT trigger `consult_lifecycle_transition_continuity` that takes per-consult advisory lock + validates new from_state == latest to_state + rejects from-terminal transitions, regardless of caller; MED-1 RBAC count mismatch (8 vs preflight's 12) → fix: recounted to 12 roles (4 app + 6 wrapper owners + 2 view/MV owners) matching deployment preflight enumeration)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-037 (SI-020 Async Consult v1.0 → v2.0 implementation-readiness extension RATIFIED; Registry v2.23 → v2.24). Per the established post-P-029 spec-first promotion pattern, SI-020's canonical content lands in CDM + AUDIT + DOMAIN_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification. **SIXTH instance** of the SI-spec-first promotion pattern (P-029, P-032, P-034, P-036, P-038 — note P-035 was SI-only without follow-on; P-038 is the 5th follow-on amendment in the post-P-029 lineage).
 **Owner:** Async & Refill Review Lead + AI Service Lead + Pharmacy Portal slice owner + CDM owner + AUDIT_EVENTS owner + DOMAIN_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -416,18 +416,32 @@ GRANT INSERT ON consult_lifecycle_transition TO consult_lifecycle_transition_wri
 CREATE FUNCTION consult_lifecycle_transition_continuity() RETURNS TRIGGER AS $$
 DECLARE
     v_latest_to_state TEXT;
+    v_latest_transition_at TIMESTAMPTZ;
 BEGIN
     -- Take per-consult advisory lock to serialize concurrent transitions
     PERFORM pg_advisory_xact_lock(
         hashtextextended('consult_lifecycle_transition:' || NEW.tenant_id::text || ':' || NEW.consult_id::text, 0)
     );
 
-    -- Read latest to_state under the lock
-    SELECT to_state INTO v_latest_to_state
+    -- Read latest to_state AND latest transition_at under the lock (R2 HIGH-1 closure 2026-05-21)
+    SELECT to_state, transition_at
+        INTO v_latest_to_state, v_latest_transition_at
         FROM public.consult_lifecycle_transition
         WHERE tenant_id = NEW.tenant_id AND consult_id = NEW.consult_id
         ORDER BY transition_at DESC, id DESC
         LIMIT 1;
+
+    -- R2 HIGH-1 closure: also enforce monotonic transition_at ordering. Without this,
+    -- backdated rows could pass the from_state check but corrupt derived current-state
+    -- semantics (ORDER BY transition_at DESC determines current state); future-dated rows
+    -- could dominate current-state reads immediately. Reject NEW.transition_at earlier
+    -- than the latest transition_at AND reject future-dated rows beyond a small clock-skew
+    -- tolerance (now() + 5s) to prevent immediate dominance attacks.
+    IF NEW.transition_at > now() + INTERVAL '5 seconds' THEN
+        RAISE EXCEPTION 'consult_lifecycle_transition: transition_at=% is more than 5s in the future (clock_skew_or_future_dated); consult_id=%',
+            NEW.transition_at, NEW.consult_id
+            USING ERRCODE = 'check_violation';
+    END IF;
 
     -- Validate continuity
     IF v_latest_to_state IS NULL THEN
@@ -448,6 +462,12 @@ BEGIN
         IF v_latest_to_state IN ('completed', 'expired') THEN
             RAISE EXCEPTION 'consult_lifecycle_transition: cannot transition from terminal state %; consult_id=%',
                 v_latest_to_state, NEW.consult_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+        -- R2 HIGH-1 closure: enforce monotonic transition_at ordering
+        IF NEW.transition_at < v_latest_transition_at THEN
+            RAISE EXCEPTION 'consult_lifecycle_transition: transition_at=% is earlier than latest transition_at=% (backdated transition forbidden); consult_id=%',
+                NEW.transition_at, v_latest_transition_at, NEW.consult_id
                 USING ERRCODE = 'check_violation';
         END IF;
     END IF;
@@ -801,7 +821,10 @@ END $$;
 - **R1 HIGH-2 closed:** `consult_lifecycle_transition` row-level CHECK validated individual triples but did NOT enforce that new from_state == current latest to_state — direct table INSERTs by `consult_lifecycle_transition_writer_owner` (which has INSERT grant) could create divergent histories that still passed CHECK. Fix: added `consult_lifecycle_transition_continuity` BEFORE INSERT trigger that takes per-consult advisory lock + reads latest to_state under lock + validates continuity + rejects from-terminal transitions. Regardless of caller, lifecycle integrity is now schema-enforced (not procedure-dependent).
 - **R1 MED-1 closed:** RBAC count mismatch — §1 scope + §8 said "8 roles (4 application + 4 wrapper/owner)" but §10 deployment preflight enumerated 12 roles. Implementer following §1/§8 would under-provision. Fix: recounted to **12 roles** (4 app + 6 wrapper owners + 2 view/MV owners) matching preflight enumeration; §1 + §8 + §10 now mutually consistent.
 
-Authored on `spec/cdm-v1-9-audit-v5-11-openapi-v0-4-sm-v1-3-rbac-v1-3-si020-followon-2026-05-21` branch off main at `3129579` (post-P-037 + Addendum 65). v0.2 commit pending push for R2 verification.
+Authored on `spec/cdm-v1-9-audit-v5-11-openapi-v0-4-sm-v1-3-rbac-v1-3-si020-followon-2026-05-21` branch off main at `3129579` (post-P-037 + Addendum 65). v0.2 commit `48ca67d`. v0.3 commit pending push for R3 verification.
+
+**v0.3 DRAFT 2026-05-21 — R2 closure applied (1 HIGH):**
+- **R2 HIGH-1 closed:** R1 continuity trigger validated NEW.from_state == latest to_state but didn't enforce monotonic transition_at ordering. Backdated rows could pass from_state check (matches current latest to_state) while corrupting current-state derivation (since `ORDER BY transition_at DESC` determines current state — older row could shadow newer); future-dated rows could dominate current-state reads immediately. Append-only state-machine invariant undermined. Fix: trigger now reads latest transition_at alongside latest to_state under the same advisory lock + rejects NEW.transition_at < latest transition_at (backdated forbidden) + rejects NEW.transition_at > now() + 5s clock-skew tolerance (future-dated dominance attack). Monotonic-ordering invariant now schema-enforced.
 
 ---
 
