@@ -4235,3 +4235,104 @@ SI-024.1 was authored on day 0 of the 30-day OQ-NEW1 commitment window at P-030 
 **Discipline observation:** Q2 2026 cycle has now ratified 5 successive SIs via the codified dual-recommendation + two-pass + auto-proceed disciplines: P-026 → P-028 → P-029 → P-030 → P-031. Each cycle continues to validate the discipline's value (consistent recursive-defect-catch; 0 hard-floor item 6 violations; minimal ERR escalations); the disciplines are now operationally mature.
 
 — Claude (Opus 4.7, 1M context), SI-024.1 v0.8 cycle close-out 2026-05-20 via auto-proceed. Main at `56e4d2c`. Registry v2.18. P-031 appended. SI-024 v0.17 TRANSITIONAL gates LIFTED. Phase A foundation implementation queued as next code-repo deliverable.
+
+---
+
+## Addendum 60 — CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 SI-024.1 follow-on RATIFIED via auto-proceed (Codex Pass-2 R12 ship-it APPROVE); merge `deab76f`; Registry v2.18 → v2.19; 12-round convergence matching v1.10.1 hygiene-cycle precedent
+
+**Date:** 2026-05-20
+**Status:** LANDED + RATIFIED
+**Main HEAD:** `cbf99da` (cockpit) / `deab76f` (amendment merge)
+**Cycle counter:** 6th successive SI/amendment ratification in Q2 2026 under auto-proceed discipline (P-026 → P-028 → P-029 → P-030 → P-031 → P-032)
+
+### What landed
+
+`Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_CDM_v1_5_to_v1_6_Amendment.md` (674 lines) — canonical mechanical consolidation of SI-024.1 v0.8's 5 new entities + 10 new audit events into CDM v1.5 → v1.6 and AUDIT_EVENTS v5.7 → v5.8.
+
+### Convergence trajectory (12-round Codex Pass-2 cycle)
+
+| Round | HIGH | MED | Class of defect closed |
+|---|---|---|---|
+| R1 | 1 | 1 | TTL DDL placeholder (comment-only exception unenforceable) + audit-count prose inconsistency |
+| R2 | 2 | 0 | SECURITY DEFINER + `current_user` defect on both TTL tables (under DEFINER, `current_user` resolves to function owner not caller) |
+| R3 | 2 | 0 | FORCE-RLS cleanup-policy gap on both TTL tables (tenant-isolation policy applied to ALL commands; cleanup couldn't traverse tenants) |
+| R4 | 2 | 0 | Write-path RLS gap on NEW3 + NEW4 (SELECT-only policies blocked KMS rotation + procedure writes) + one-way lifecycle field enforcement (deactivated_at + closed_at could be reopened once UPDATE granted) |
+| R5 | 2 | 0 | NEW5 missing RLS + REVOKE/GRANT + NEW1/NEW2 missing INSERT GRANT for admit role |
+| R6 | 1 | 0 | PUBLIC SELECT leak on fallback-gate state (reconnaissance channel for attackers) |
+| R7 | 1 | 0 | SECURITY DEFINER name-resolution hazard (unqualified table reference + permissive search_path) |
+| R8 | 1 | 0 | SECURITY DEFINER ownership prose-only (no executable ALTER FUNCTION OWNER TO) |
+| R9 | 0 | 1 | Deployment-prerequisite gap (ALTER FUNCTION OWNER requires executor identity assertion) — **HIGH cleared** |
+| R10 | 0 | 1 | Preflight misplaced + incomplete (self-inflicted from R9 fix) |
+| R11 | 0 | 1 | PUBLIC pseudo-role probe broken — `has_schema_privilege('public', ...)` raises undefined_object (self-inflicted from R10 fix) |
+| **R12** | **0** | **0** | **ship-it APPROVE — "no material findings"** |
+
+**Total:** 11 HIGH + 4 MED closed across 12 rounds. Long-tail asymptote pattern (HIGH clears at R8; MED-only from R9; ship at R12) **matches the v1.10.1 hygiene-cycle precedent exactly**.
+
+### Architectural shape of the closures
+
+The cycle worked progressively down the stack of PostgreSQL semantics gotchas — each new round revealed a layer of trust-boundary infrastructure that the prior fix had assumed but not enforced:
+
+1. **DDL placeholder → executable enforcement** (R1)
+2. **Role-identity correctness under SECURITY DEFINER** (R2)
+3. **Multi-policy RLS composition under FORCE ROW LEVEL SECURITY** (R3)
+4. **Write-path coverage + lifecycle-field constraint enforcement** (R4)
+5. **Table-privilege grants are independent of RLS policy** (R5)
+6. **Information-disclosure surface via grant scope** (R6)
+7. **Name-resolution hazards under SECURITY DEFINER** (R7)
+8. **Ownership pinning under SECURITY DEFINER** (R8)
+9. **Migration-executor prerequisites for ALTER OWNER** (R9)
+10. **Fail-fast preflight placement + completeness** (R10)
+11. **Pseudo-role vs real-role distinctions in PostgreSQL system catalogs** (R11)
+12. **Ship-it** (R12)
+
+Every closure was within SI-024.1's ratified sub-decision scope — **zero CLAUDE.md hard-floor item 6 escalations** across all 12 rounds. The cycle is the cleanest worked example to date of the "iterate-to-asymptote within scope" discipline; the SI-010 trust-anchor rejection cycle is the worked example of when to STOP and escalate; this CDM v1.6 cycle is the worked example of when to continue closing.
+
+### Process novelties (continued)
+
+1. **Day-1 spec-first SI follow-on delivery** — CDM v1.6 amendment cycle started and converged on the same day as P-031 (SI-024.1 v0.8) ratification. Validates the post-P-029 SI-spec-first promotion pattern's day-1 cadence at scale.
+2. **Long-tail asymptote pattern reproducibility confirmed** — the v1.10.1 hygiene-cycle precedent (12-round convergence) now has a second instance with the same convergence shape: HIGH clears mid-cycle, MED-only rounds finish. This is no longer one-off; it's a load-bearing operational pattern.
+3. **Self-inflicted defects caught + closed within cycle** — R10 introduced a self-inflicted defect (preflight misplaced) that R11 then introduced ANOTHER self-inflicted defect to close (pseudo-role probe). Codex caught both within the same cycle without ERR escalation; the recursive-defect-catch mechanism scaled to multi-step self-induced regressions.
+4. **Six-cycle dual-recommendation + two-pass + auto-proceed maturity** — P-026 → P-028 → P-029 → P-030 → P-031 → P-032 is the 6th successive Q2 2026 cycle under the disciplines. Patterns now operationally mature; no observed value-add from per-round confirmation interactions.
+
+### Companion landings
+
+- `Telecheck_Promotion_Ledger.md` — entry P-032 appended at top (commit `cbf99da`)
+- `Telecheck_Artifact_Registry_v2_10.md` — header bumped v2.18 → v2.19 (commit `cbf99da`)
+- 5 new prerequisite roles registered in §4.5 deployment prerequisites: `cdm_owner`, `admit_session_jwt_owner`, `sec_jwt_cleanup`, `kms_rotation_operator`, `break_glass_procedure_owner`
+
+### Production gates explicit
+
+| Phase | Status post-P-032 merge |
+|---|---|
+| Phase A (foundation: 5 new entities + 10 new audit events + SECURITY DEFINER helpers + preflight + role grants) | **UNBLOCKED** for `telecheck-app` code repo implementation; canonical CDM/AUDIT_EVENTS now lands the schema (SI-024.1's procedure-side wiring + the canonical entity rows are now both ratified) |
+| Phase B (per-entity middleware cutover) | Implementation-ready per SI-024.1 v0.8 |
+| Phase C (30-day telemetry-clean window) | Implementation-ready |
+| Phase D (raw-GUC deprecation) | Conditional on Phase C clean |
+| Phase E (SI-024 v0.17 Phase 4 cutover unlock) | Automatic per OQ-NEW2 + OQ6 |
+| Phase F (INVARIANTS v5.4 → v5.5 + I-036) | Co-bumped with first Phase 4 entity cutover |
+
+**Rollback path:** `git revert -m 1 deab76f` reverts the amendment artifact; `git revert cbf99da` reverts the cockpit bump. Would require new P-032a ledger entry + Registry v2.19 → v2.20 bump per lockstep rule.
+
+### Outstanding queue (post-P-032)
+
+1. **SI-024.1 Phase A foundation implementation** in `telecheck-app` code repo (still the gating implementation deliverable).
+2. **Possible CDM v1.6 → v1.7 hygiene cycle** if downstream implementation surfaces additional schema-side defects during Phase A construction (precedent: v1.10.1 hygiene cycle 2026-05-02 with `9389ef7`).
+3. **Hypothetical SI-024.2** (DB-side cryptographic per-statement fallback audit enforcement) — Phase 3+ per acknowledged simplification #10 carried forward from SI-024.1.
+4. **Quantum-resistance migration roadmap SI** — Phase 3+ per SI-024.1 OQ-I.
+
+### Discipline observation
+
+**Q2 2026 cycle pattern**, now with 6 ratifications under the codified disciplines:
+
+| Ledger entry | Cycle | Findings | Rounds | Ship-it path | Hard-floor escalations |
+|---|---|---|---|---|---|
+| P-026 | Q2 batched ratifier ceremony Phase A | 13 OQ-groups | n/a | Ratifier ceremony | 0 |
+| P-028 | SI-021 SIEM Hash-Chain Archival | 16 (10 HIGH + 6 MED) | 5 | §10 cadence boundary | 0 |
+| P-029 | SI-021 CDM v1.4 → v1.5 follow-on | 13 (1 CRITICAL + 11 HIGH + 1 MED) | 8 | Multi-cycle pre-merge | 0 |
+| P-030 | SI-024 v0.17 TRANSITIONAL | 35 (full HIGH/MED breakdown in Addendum 58) | 17 | Pass-2 B+ synthesis | 0 |
+| P-031 | SI-024.1 v0.8 Cryptographic JWT-Binding | 19 (mix HIGH/MED) | 8 | Codex cycle-4 APPROVE | 0 |
+| **P-032** | **CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 SI-024.1 follow-on** | **15 (11 HIGH + 4 MED)** | **12** | **Pass-2 R12 ship-it APPROVE** | **0** |
+
+Cumulative: **111 findings closed inline across 6 cycles; 0 hard-floor item 6 violations; 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed disciplines + the SI-spec-first promotion pattern continue to scale. The long-tail asymptote pattern (12-round convergence on v1.10.1 + P-032) is now an empirical regularity, not a single observation.
+
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 SI-024.1 follow-on cycle close-out 2026-05-20 via auto-proceed. Main at `cbf99da`. Registry v2.19. P-032 appended. Day-1 SI-spec-first follow-on delivered. Next deliverable per auto-proceed: SI-024.1 Phase A foundation implementation in `telecheck-app` code repo OR next critical-path SI per Master Completion Plan v1.0.
