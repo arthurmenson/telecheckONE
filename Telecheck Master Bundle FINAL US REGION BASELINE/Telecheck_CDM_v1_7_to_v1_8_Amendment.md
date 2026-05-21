@@ -1,7 +1,7 @@
 # CDM v1.7 → v1.8 + AUDIT_EVENTS v5.9 → v5.10 + DOMAIN_EVENTS additive + CCR_RUNTIME v5.3 → v5.4 Amendment (Mode 1 Handler Spec follow-on)
 
-**Version:** 0.1 DRAFT
-**Status:** PRE-CODEX (awaiting R1 source-first review per CLAUDE.md two-pass discipline; mechanical consolidation cycle)
+**Version:** 0.2 DRAFT
+**Status:** POST-R1 (2 HIGH + 2 MED closed inline: HIGH-1 single-column FKs to tenant-scoped parents enabled cross-tenant referential corruption → composite tenant-scoped FKs on turn_admission + detector_result + turn_result with required composite UNIQUE constraints on parents; HIGH-2 crisis_server_signal_id had no FK to i019_enqueue_ack_log → added tenant-scoped composite FK (DEFERRABLE INITIALLY DEFERRED for ordering); MED-1 audit event taxonomy inconsistent (3+0+6 in scope text vs 3+1+5 in §3 table; sampling posture inconsistent across Cat C) → normalized to 11 total events (3 Cat A + 3 Cat B + 5 Cat C) with explicit sampling column for every Cat C; MED-2 CCR `tenant.ai_provider` referenced placeholder audit action → registered real Cat B `ccr.ai_provider_updated` event + updated CHECK constraint + CCR schema field)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-035 (AI Service Mode 1 Handler Spec v0.4 RATIFIED; Registry v2.21 → v2.22). Per the established post-P-029 spec-first promotion pattern, Mode 1's canonical content lands in CDM + AUDIT_EVENTS + DOMAIN_EVENTS + CCR_RUNTIME via a separate amendment cycle following SI ratification. **FIFTH instance** of the SI-spec-first promotion pattern (precedents: P-029 SI-021 → CDM v1.4→v1.5; P-032 SI-024.1 → CDM v1.5→v1.6; P-034 SI-019 → CDM v1.6→v1.7 + 4 surfaces; P-035 Mode 1 spec ratification → P-036 mechanical consolidation).
 **Owner:** AI Service Lead + Clinical Lead (Mode 1 SI co-owners) + CDM owner + AUDIT_EVENTS owner + DOMAIN_EVENTS owner + CCR_RUNTIME owner.
@@ -15,7 +15,7 @@
 This amendment promotes the canonical content of Mode 1 Handler Spec v0.4 RATIFIED into:
 
 - **CDM v1.7 → v1.8** (5 new entities + 1 SECURITY INVOKER derived view; all 5 entities strict append-only per I-035 + I-027)
-- **AUDIT_EVENTS v5.9 → v5.10** (9 new action IDs under `ai.mode1.*` namespace: 3 Cat A + 0 Cat B + 6 Cat C high-volume sampled; 1 cross-cutting Cat B `audit.cat_c_drop_observed` aggregate emitted by audit-pipeline subsystem)
+- **AUDIT_EVENTS v5.9 → v5.10** (R1 MED-1 closure 2026-05-21: normalized count): **11 new action IDs total** = 9 under `ai.mode1.*` namespace (**3 Cat A + 1 Cat B + 5 Cat C**) + 1 cross-cutting `audit.cat_c_drop_observed` Cat B aggregate emitted by audit-pipeline subsystem + 1 new `ccr.ai_provider_updated` Cat B (R1 MED-2 closure for CCR update event)
 - **DOMAIN_EVENTS additive** (no version bump; 0 new event types — Mode 1 audit emission is via the canonical AUDIT_EVENTS path; cross-mode handoff is a Cat B audit event NOT a domain event)
 - **CCR_RUNTIME v5.3 → v5.4** (1 new CCR key: `tenant.ai_provider` registered with allowed values + dual-control update path)
 
@@ -24,7 +24,7 @@ The amendment is **mechanical consolidation** of already-Codex-converged canonic
 **In scope:**
 
 1. CDM v1.7 → v1.8 with 5 new entities + 1 derived view (continuing CDM numbering from v1.7's 84 active entities + 4 derived views; v1.8 target: 89 active entities + 5 derived views).
-2. AUDIT_EVENTS v5.9 → v5.10 with 10 new action IDs (3 Cat A + 6 Cat C + 1 Cat B aggregate emitter at audit-pipeline subsystem) under `ai.mode1.*` and `audit.*` namespaces.
+2. AUDIT_EVENTS v5.9 → v5.10 with **11 new action IDs** (3 Cat A + 3 Cat B + 5 Cat C) under `ai.mode1.*` (9 IDs) + `audit.*` (1 ID; pipeline-emitter) + `ccr.*` (1 ID; CCR-update-emitter per R1 MED-2 closure) namespaces.
 3. DOMAIN_EVENTS additive: 0 new event types (Mode 1 events route entirely through canonical AUDIT_EVENTS path per the Sprint 9 design; no new tenant-scoped domain events introduced).
 4. CCR_RUNTIME v5.3 → v5.4 with 1 new key `tenant.ai_provider` (string enum: `anthropic` | `aws_bedrock` | `azure_openai` | `null_local_dev`) + dual-control update path per I-015.
 5. `jwt_migration_entity_status` seed population for all 5 new Mode 1 CDM v1.8 RLS-bearing entities (per SI-024.1 OQ8 mandatory seed step + the established post-P-034 R6 closure pattern).
@@ -111,7 +111,7 @@ Immutable turn admission record; 1 row per turn at admission.
 CREATE TABLE ai_mode1_conversation_turn_admission (
     id UUID PRIMARY KEY,                                      -- = turn_id (client-generated UUID; idempotency key)
     tenant_id tenant_id_t NOT NULL,
-    conversation_id UUID NOT NULL REFERENCES ai_mode1_conversation(id),
+    conversation_id UUID NOT NULL,
     patient_id UUID NOT NULL REFERENCES patient(id),
     user_message TEXT NOT NULL,                               -- KMS-encrypted at rest per I-026
     request_body_hash BYTEA NOT NULL,                         -- SHA-256 of canonicalized request body
@@ -119,7 +119,14 @@ CREATE TABLE ai_mode1_conversation_turn_admission (
     conversation_history_window INT NOT NULL CHECK (conversation_history_window > 0 AND conversation_history_window <= 50),
     client_capabilities JSONB,
     admitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT ai_mode1_conversation_turn_admission_unique UNIQUE (conversation_id, id)
+    -- R1 HIGH-1 closure 2026-05-21: composite tenant-scoped FK enforces tenant_id matches
+    -- conversation's tenant_id (preventing cross-tenant referential corruption).
+    CONSTRAINT ai_mode1_conversation_turn_admission_tenant_fk
+        FOREIGN KEY (tenant_id, conversation_id)
+        REFERENCES ai_mode1_conversation(tenant_id, id),
+    CONSTRAINT ai_mode1_conversation_turn_admission_unique UNIQUE (tenant_id, conversation_id, id),
+    -- Composite UNIQUE on (tenant_id, id) needed for downstream composite FKs from detector/result
+    CONSTRAINT ai_mode1_conversation_turn_admission_tenant_id_unique UNIQUE (tenant_id, id)
 );
 CREATE INDEX ai_mode1_conversation_turn_admission_lookup_idx
     ON ai_mode1_conversation_turn_admission(tenant_id, conversation_id, admitted_at DESC);
@@ -143,13 +150,25 @@ Immutable detector result; 1 row per turn after detector completes; the existenc
 
 ```sql
 CREATE TABLE ai_mode1_conversation_turn_detector_result (
-    turn_id UUID PRIMARY KEY REFERENCES ai_mode1_conversation_turn_admission(id),
+    turn_id UUID PRIMARY KEY,
     tenant_id tenant_id_t NOT NULL,
     detector_version TEXT NOT NULL,
     severity TEXT CHECK (severity IS NULL OR severity IN ('self_harm', 'imminent_harm', 'medical_emergency')),
-    crisis_server_signal_id UUID,                             -- Set IFF severity NOT NULL; references i019_enqueue_ack_log
+    crisis_server_signal_id UUID,                             -- Set IFF severity NOT NULL; tenant-scoped FK to i019_enqueue_ack_log per R1 HIGH-2
     detector_latency_ms INT NOT NULL CHECK (detector_latency_ms >= 0),
     completed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- R1 HIGH-1 closure 2026-05-21: composite tenant-scoped FK to admission row
+    CONSTRAINT ai_mode1_conversation_turn_detector_result_admission_fk
+        FOREIGN KEY (tenant_id, turn_id)
+        REFERENCES ai_mode1_conversation_turn_admission(tenant_id, id),
+    -- R1 HIGH-2 closure 2026-05-21: tenant-scoped FK to i019_enqueue_ack_log when severity set
+    -- (assumes i019_enqueue_ack_log has composite UNIQUE on (tenant_id, id) per existing canonical
+    -- I-019 contract; if naming differs from i019_enqueue_ack_log, ratifier confirms canonical
+    -- target table name + adjust FK accordingly).
+    CONSTRAINT ai_mode1_conversation_turn_detector_result_signal_fk
+        FOREIGN KEY (tenant_id, crisis_server_signal_id)
+        REFERENCES i019_enqueue_ack_log(tenant_id, id)
+        DEFERRABLE INITIALLY DEFERRED,
     -- crisis severity ↔ signal_id correlation invariant:
     CONSTRAINT ai_mode1_conversation_turn_detector_result_signal_iff_severity CHECK (
         (severity IS NULL AND crisis_server_signal_id IS NULL)
@@ -176,10 +195,17 @@ Immutable turn result; 1 row per turn at completion or failure; the existence of
 
 ```sql
 CREATE TABLE ai_mode1_conversation_turn_result (
-    turn_id UUID PRIMARY KEY REFERENCES ai_mode1_conversation_turn_admission(id),
+    turn_id UUID PRIMARY KEY,
     tenant_id tenant_id_t NOT NULL,
-    conversation_id UUID NOT NULL REFERENCES ai_mode1_conversation(id),
+    conversation_id UUID NOT NULL,
     patient_id UUID NOT NULL REFERENCES patient(id),
+    -- R1 HIGH-1 closure 2026-05-21: composite tenant-scoped FKs to admission + conversation
+    CONSTRAINT ai_mode1_conversation_turn_result_admission_fk
+        FOREIGN KEY (tenant_id, turn_id)
+        REFERENCES ai_mode1_conversation_turn_admission(tenant_id, id),
+    CONSTRAINT ai_mode1_conversation_turn_result_conversation_fk
+        FOREIGN KEY (tenant_id, conversation_id)
+        REFERENCES ai_mode1_conversation(tenant_id, id),
     assistant_message TEXT,                                   -- KMS-encrypted at rest per I-026; null IFF turn_outcome='failed'
     provider TEXT,                                            -- null IFF turn failed pre-LLM
     model_id TEXT,
@@ -253,27 +279,37 @@ GRANT SELECT ON ai_mode1_conversation_state TO ai_mode1_reader;
 
 ## 3. AUDIT_EVENTS v5.9 → v5.10 amendment
 
-**9 new action IDs under `ai.mode1.*` namespace** (3 Cat A + 6 Cat C; per Mode 1 spec §3.1 + §3.3 R1 HIGH-2 closure):
+**11 new action IDs total** (R1 MED-1 + MED-2 closure 2026-05-21): 9 under `ai.mode1.*` (3 Cat A + 1 Cat B + 5 Cat C) + 1 under `audit.*` + 1 under `ccr.*`. Per Mode 1 spec §3.1 + §3.3 R1 HIGH-2 closure for partition routing.
 
-| # | Action ID | Category | Partition | Source |
-|---|---|---|---|---|
-| 1 | `ai.mode1.turn_admitted` | Cat C (sampled) | P1 keyed by patient_id | Mode 1 handler on every turn admission |
-| 2 | `ai.mode1.crisis_detector_invoked` | Cat C (sampled) | P1 keyed by patient_id | Mode 1 handler on crisis detector invocation |
-| 3 | `ai.mode1.crisis_signal_emitted` | Cat A | P1 keyed by patient_id | Mode 1 handler IFF I-019 detector fires; gating Cat A audit per §3.2 |
-| 4 | `ai.mode1.llm_invoked` | Cat C (sampled) | P1 keyed by patient_id | Mode 1 handler on LLM invocation (post-detector) |
-| 5 | `ai.mode1.turn_completed` | Cat C (sampled) | P1 keyed by patient_id | Mode 1 handler on successful turn completion |
-| 6 | `ai.mode1.turn_failed` | Cat C | P1 keyed by patient_id | Mode 1 handler IFF turn fails after admission |
-| 7 | `ai.mode1.invariant_violation_detector_ordering` | Cat A | P1 keyed by patient_id | Mode 1 handler IFF llm.invoke() attempted without detector_completed row (R1 HIGH-1 runtime invariant) |
-| 8 | `ai.mode1.crisis_detector_failed` | Cat A | P1 keyed by patient_id | Mode 1 handler IFF crisis detector unavailable / timeout |
-| 9 | `ai.mode1.mode2_handoff_proposed` | Cat B | P2 keyed by tenant_id | Mode 1 handler IFF LLM proposes Mode 2 invocation (handler refuses + emits this) |
+**9 events under `ai.mode1.*` namespace:**
 
-**1 cross-cutting Cat B aggregate event** (emitter is audit-pipeline subsystem, NOT Mode 1 handler):
+| # | Action ID | Category | Sampling | Partition | Source |
+|---|---|---|---|---|---|
+| 1 | `ai.mode1.turn_admitted` | Cat C | high-volume sampled | P1 keyed by patient_id | Mode 1 handler on every turn admission |
+| 2 | `ai.mode1.crisis_detector_invoked` | Cat C | high-volume sampled | P1 keyed by patient_id | Mode 1 handler on crisis detector invocation |
+| 3 | `ai.mode1.crisis_signal_emitted` | Cat A | not sampled | P1 keyed by patient_id | Mode 1 handler IFF I-019 detector fires; gating Cat A audit per Mode 1 spec §3.2 |
+| 4 | `ai.mode1.llm_invoked` | Cat C | high-volume sampled | P1 keyed by patient_id | Mode 1 handler on LLM invocation (post-detector) |
+| 5 | `ai.mode1.turn_completed` | Cat C | high-volume sampled | P1 keyed by patient_id | Mode 1 handler on successful turn completion |
+| 6 | `ai.mode1.turn_failed` | Cat C | **not sampled** (low-volume per-failure; full retention) | P1 keyed by patient_id | Mode 1 handler IFF turn fails after admission |
+| 7 | `ai.mode1.invariant_violation_detector_ordering` | Cat A | not sampled | P1 keyed by patient_id | Mode 1 handler IFF llm.invoke() attempted without detector_completed row (R1 HIGH-1 runtime invariant) |
+| 8 | `ai.mode1.crisis_detector_failed` | Cat A | not sampled | P1 keyed by patient_id | Mode 1 handler IFF crisis detector unavailable / timeout |
+| 9 | `ai.mode1.mode2_handoff_proposed` | Cat B | not sampled | P2 keyed by tenant_id | Mode 1 handler IFF LLM proposes Mode 2 invocation (handler refuses + emits this) |
 
-| # | Action ID | Category | Partition | Source |
-|---|---|---|---|---|
-| 10 | `audit.cat_c_drop_observed` | Cat B | P2 keyed by tenant_id | Audit pipeline aggregates Cat C drops per (tenant_id, minute_bucket); emits one row per minute-bucket at rollover |
+**1 event under `audit.*` namespace** (aggregator-emitted, NOT Mode 1 handler):
 
-**Audit-CHECK constraint amendment:** `audit_events.action_id CHECK` enumerates the 10 new action IDs:
+| # | Action ID | Category | Sampling | Partition | Source |
+|---|---|---|---|---|---|
+| 10 | `audit.cat_c_drop_observed` | Cat B | not sampled (1 per tenant per minute aggregate) | P2 keyed by tenant_id | Audit pipeline aggregates Cat C drops per (tenant_id, minute_bucket); emits one row per minute-bucket at rollover |
+
+**1 event under `ccr.*` namespace** (R1 MED-2 closure: real audit action for `tenant.ai_provider` updates, replacing the placeholder reference):
+
+| # | Action ID | Category | Sampling | Partition | Source |
+|---|---|---|---|---|---|
+| 11 | `ccr.ai_provider_updated` | Cat B | not sampled | P2 keyed by tenant_id | Tenant-config admin endpoint on dual-control approval of `tenant.ai_provider` CCR key change (per I-015 dual-control + Mode 1 spec §7.1 PHI-provider enforcement) |
+
+**Counts summary:** 3 Cat A + 3 Cat B + 5 Cat C = 11 total. Cat C sampling posture: 4 high-volume sampled (turn_admitted, crisis_detector_invoked, llm_invoked, turn_completed) + 1 not-sampled (turn_failed, low-volume per-failure for full retention).
+
+**Audit-CHECK constraint amendment:** `audit_events.action_id CHECK` enumerates the 11 new action IDs:
 
 ```sql
 ALTER TABLE audit_events DROP CONSTRAINT audit_events_action_id_check;
@@ -290,7 +326,8 @@ ALTER TABLE audit_events
             'ai.mode1.invariant_violation_detector_ordering',
             'ai.mode1.crisis_detector_failed',
             'ai.mode1.mode2_handoff_proposed',
-            'audit.cat_c_drop_observed'
+            'audit.cat_c_drop_observed',
+            'ccr.ai_provider_updated'
         )
     );
 ```
@@ -328,12 +365,12 @@ tenant.ai_provider:
         null_local_dev with Cat A tenant_config.phi_provider_violation audit (per Mode 1 spec
         §7.1 + test M1.17).
   dual_control_update: true
-  update_audit_action: medication_interaction.engine_knowledge_base_updated  -- placeholder; real Mode 1 KB update event TBD at implementation
+  update_audit_action: ccr.ai_provider_updated  # R1 MED-2 closure 2026-05-21: real Cat B audit event registered in §3 (replaces placeholder reference to medication_interaction.engine_knowledge_base_updated which was a known stale reference)
 ```
 
 **Cross-references:** Mode 1 spec §7.1 + I-015 (dual-control for tenant-config keys affecting PHI handling) + ADR-029 WORKLOAD_TAXONOMY (LLM provider selection per workload class).
 
-**Note:** the `update_audit_action` field above is a placeholder; the Mode 1 spec didn't enumerate a specific Cat B audit event for `tenant.ai_provider` updates separately from the platform CCR-update audit emission. The implementation amendment cycle may need to register a new `ccr.ai_provider_updated` Cat B audit event; out of scope for this consolidation cycle, queued as OQ for the ratifier ceremony.
+**R1 MED-2 closure 2026-05-21:** the `update_audit_action` field now points to the canonical `ccr.ai_provider_updated` Cat B P2 audit event registered in §3 above. No more placeholder reference; PHI-provider configuration changes are audited under a dedicated event suitable for governance + ratifier review.
 
 ---
 
@@ -414,7 +451,13 @@ VALUES
 
 **v0.1 DRAFT 2026-05-21:** pre-Codex-review.
 
-Authored on `spec/cdm-v1-8-audit-v5-10-ccr-v5-4-mode-1-followon-2026-05-21` branch off main at `9a1fcd2` (post-P-035 + Addendum 63).
+**v0.2 DRAFT 2026-05-21 — R1 closures applied (2 HIGH + 2 MED):**
+- **R1 HIGH-1 closed:** §2.NEW3 + §2.NEW4 + §2.NEW5 used single-column FKs to tenant-scoped parents (`ai_mode1_conversation_turn_admission.conversation_id REFERENCES ai_mode1_conversation(id)`; detector + result tables similarly). Tenant-id-not-in-FK enabled cross-tenant referential corruption (child row claims tenant_id different from parent row's tenant_id). Fix: composite tenant-scoped FKs on all 3 child tables (`(tenant_id, conversation_id) REFERENCES ai_mode1_conversation(tenant_id, id)`; `(tenant_id, turn_id) REFERENCES ai_mode1_conversation_turn_admission(tenant_id, id)`) + composite UNIQUE constraints on parents required for the FK references.
+- **R1 HIGH-2 closed:** `crisis_server_signal_id` documented as referencing `i019_enqueue_ack_log` but the DDL only had CHECK nullability correlation — no FK declared. Rows could claim arbitrary UUID, breaking the I-019 forensic anchor. Fix: added `ai_mode1_conversation_turn_detector_result_signal_fk` composite tenant-scoped FK to `i019_enqueue_ack_log(tenant_id, id)`; DEFERRABLE INITIALLY DEFERRED for INSERT-ordering (signal row written first then detector_result row references it within same transaction).
+- **R1 MED-1 closed:** Audit event count/category contract inconsistent across §1 + §3. Scope text said "9 + 1 = 10" with "3 Cat A + 0 Cat B + 6 Cat C"; §3 table actually had 9 `ai.mode1.*` events including 1 Cat B (`mode2_handoff_proposed`) + 1 `audit.*` Cat B = 10 total with 3 Cat A + 2 Cat B + 5 Cat C. Sampling posture ambiguous (5 of 6 Cat C marked sampled in §3.1 spec but uniformly listed without distinction in §3 table). Fix: normalized to **11 new action IDs total** (added `ccr.ai_provider_updated` per MED-2; now 3 Cat A + 3 Cat B + 5 Cat C) with explicit per-event Sampling column (4 Cat C high-volume sampled + 1 Cat C not-sampled-low-volume-per-failure + all Cat A/Cat B not-sampled); aligned §1 scope text + §3 tables + CHECK constraint enumeration.
+- **R1 MED-2 closed:** §5 `tenant.ai_provider` CCR key referenced `medication_interaction.engine_knowledge_base_updated` as `update_audit_action` — explicit placeholder defeats governance/audit classification for high-risk PHI-provider configuration changes. Fix: registered real `ccr.ai_provider_updated` Cat B P2 audit event in §3 (11th new action ID); added to CHECK constraint; updated §5 CCR schema field to point to the new canonical action.
+
+Authored on `spec/cdm-v1-8-audit-v5-10-ccr-v5-4-mode-1-followon-2026-05-21` branch off main at `9a1fcd2` (post-P-035 + Addendum 63). v0.2 commit pending push for R2 verification.
 
 ---
 
