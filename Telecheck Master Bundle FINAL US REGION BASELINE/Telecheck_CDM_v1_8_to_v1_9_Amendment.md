@@ -1,7 +1,7 @@
 # CDM v1.8 → v1.9 + AUDIT_EVENTS v5.10 → v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 → v0.4 + State Machines v1.2 → v1.3 + RBAC v1.2 → v1.3 Amendment (SI-020 Async-Consult follow-on)
 
-**Version:** 0.1 DRAFT
-**Status:** PRE-CODEX (awaiting R1 source-first review per CLAUDE.md two-pass discipline; mechanical consolidation cycle)
+**Version:** 0.2 DRAFT
+**Status:** POST-R1 (2 HIGH + 1 MED closed inline: HIGH-1 decision-validation trigger looked up claim by id only → fix: 5-column composite identity lookup (tenant_id + claim_id + consult_id + patient_id + clinician_account_id) with RAISE on missing row; HIGH-2 lifecycle continuity not enforced at table-level → fix: added BEFORE INSERT trigger `consult_lifecycle_transition_continuity` that takes per-consult advisory lock + validates new from_state == latest to_state + rejects from-terminal transitions, regardless of caller; MED-1 RBAC count mismatch (8 vs preflight's 12) → fix: recounted to 12 roles (4 app + 6 wrapper owners + 2 view/MV owners) matching deployment preflight enumeration)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-037 (SI-020 Async Consult v1.0 → v2.0 implementation-readiness extension RATIFIED; Registry v2.23 → v2.24). Per the established post-P-029 spec-first promotion pattern, SI-020's canonical content lands in CDM + AUDIT + DOMAIN_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification. **SIXTH instance** of the SI-spec-first promotion pattern (P-029, P-032, P-034, P-036, P-038 — note P-035 was SI-only without follow-on; P-038 is the 5th follow-on amendment in the post-P-029 lineage).
 **Owner:** Async & Refill Review Lead + AI Service Lead + Pharmacy Portal slice owner + CDM owner + AUDIT_EVENTS owner + DOMAIN_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -21,7 +21,7 @@ Mechanical consolidation of SI-020 v0.11 RATIFIED (P-037) canonical content into
 3. **DOMAIN_EVENTS additive:** +7 new event types under `async_consult.*` namespace; additive enum extension (no version bump).
 4. **OpenAPI v0.3 → v0.4:** +11 new endpoints under `/v1/async-consults/*`.
 5. **State Machines v1.2 → v1.3:** +1 new state machine `consult_lifecycle` described as DERIVED from append-only `consult_lifecycle_transition` rows per Option A; CHECK constraint enumerates 22 allowed `(transition_reason, from_state, to_state)` triples.
-6. **RBAC v1.2 → v1.3:** +8 new role definitions (4 application + 4 wrapper/owner roles).
+6. **RBAC v1.2 → v1.3:** +**12 new role definitions** (R1 MED-1 closure 2026-05-21: recounted to match §10 deployment preflight; earlier draft said "8 (4 application + 4 wrapper/owner)" which compressed 6 wrapper owner roles into 4 — actual count is 4 application + 6 wrapper owners + 2 view/MV owners = 12).
 7. **`jwt_migration_entity_status` seed scope:** 8 entries (7 RLS-bearing tables + 1 derived view trust-anchor `consult_outcome_summary_view`) with `phase_4_cutover_eligible=FALSE` + `raw_guc_fallback_audited=TRUE` defaults; cdm_owner sequencing per P-036 R6 (tables first, view last).
 
 **Out of scope:**
@@ -297,16 +297,31 @@ CREATE TRIGGER consult_clinician_decision_append_only
     BEFORE UPDATE OR DELETE ON consult_clinician_decision
     FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
 
--- BEFORE INSERT trigger validates claim is non-released + non-expired at decision time
+-- BEFORE INSERT trigger validates claim is non-released + non-expired at decision time.
+-- R1 HIGH-1 closure 2026-05-21: trigger lookup uses 5-column composite identity
+-- (tenant_id, claim_id, consult_id, patient_id, clinician_account_id) — NOT just claim_id.
+-- This makes the trigger consistent with the FK invariant: any future repair / migration /
+-- test fixture that introduces mismatched claim identity fails closed at the same boundary
+-- where the decision is being inserted, rather than relying on the FK alone to catch it.
 CREATE FUNCTION consult_clinician_decision_validate_claim_active() RETURNS TRIGGER AS $$
 DECLARE
     v_claim_released_at TIMESTAMPTZ;
     v_claim_expires_at TIMESTAMPTZ;
+    v_claim_found BOOLEAN;
 BEGIN
-    SELECT released_at, claim_expires_at
-        INTO v_claim_released_at, v_claim_expires_at
+    SELECT TRUE, released_at, claim_expires_at
+        INTO v_claim_found, v_claim_released_at, v_claim_expires_at
         FROM consult_review_claim
-        WHERE id = NEW.claim_id;
+        WHERE tenant_id = NEW.tenant_id
+          AND id = NEW.claim_id
+          AND consult_id = NEW.consult_id
+          AND patient_id = NEW.patient_id
+          AND clinician_account_id = NEW.clinician_account_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'consult_clinician_decision cannot reference claim with mismatched composite identity: tenant_id=%, claim_id=%, consult_id=%, patient_id=%, clinician_account_id=%',
+            NEW.tenant_id, NEW.claim_id, NEW.consult_id, NEW.patient_id, NEW.clinician_account_id
+            USING ERRCODE = 'check_violation';
+    END IF;
     IF v_claim_released_at IS NOT NULL THEN
         RAISE EXCEPTION 'consult_clinician_decision cannot reference released claim: claim_id=%', NEW.claim_id
             USING ERRCODE = 'check_violation';
@@ -392,6 +407,57 @@ CREATE TRIGGER consult_lifecycle_transition_append_only
 -- INSERT restricted to lifecycle_transition_writer_owner role
 REVOKE INSERT ON consult_lifecycle_transition FROM PUBLIC;
 GRANT INSERT ON consult_lifecycle_transition TO consult_lifecycle_transition_writer_owner;
+
+-- R1 HIGH-2 closure 2026-05-21: lifecycle state continuity enforced via BEFORE INSERT trigger
+-- regardless of caller (defense-in-depth even if writer owner is impersonated/used directly).
+-- The row-level CHECK above validates each row's triple in isolation; this trigger additionally
+-- proves that the row's from_state equals the current latest to_state for the consult, taking
+-- the per-consult advisory lock to serialize concurrent transitions.
+CREATE FUNCTION consult_lifecycle_transition_continuity() RETURNS TRIGGER AS $$
+DECLARE
+    v_latest_to_state TEXT;
+BEGIN
+    -- Take per-consult advisory lock to serialize concurrent transitions
+    PERFORM pg_advisory_xact_lock(
+        hashtextextended('consult_lifecycle_transition:' || NEW.tenant_id::text || ':' || NEW.consult_id::text, 0)
+    );
+
+    -- Read latest to_state under the lock
+    SELECT to_state INTO v_latest_to_state
+        FROM public.consult_lifecycle_transition
+        WHERE tenant_id = NEW.tenant_id AND consult_id = NEW.consult_id
+        ORDER BY transition_at DESC, id DESC
+        LIMIT 1;
+
+    -- Validate continuity
+    IF v_latest_to_state IS NULL THEN
+        -- No prior transition; only allowed if NEW.from_state = 'none' (initial emission)
+        IF NEW.from_state <> 'none' THEN
+            RAISE EXCEPTION 'consult_lifecycle_transition: first transition must have from_state=none; got from_state=% for consult_id=%',
+                NEW.from_state, NEW.consult_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+    ELSE
+        -- Existing transitions; new from_state MUST equal current latest to_state
+        IF NEW.from_state IS DISTINCT FROM v_latest_to_state THEN
+            RAISE EXCEPTION 'consult_lifecycle_transition continuity violation: from_state=% does not match latest to_state=% for consult_id=%',
+                NEW.from_state, v_latest_to_state, NEW.consult_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+        -- Reject transitions FROM terminal states
+        IF v_latest_to_state IN ('completed', 'expired') THEN
+            RAISE EXCEPTION 'consult_lifecycle_transition: cannot transition from terminal state %; consult_id=%',
+                v_latest_to_state, NEW.consult_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER consult_lifecycle_transition_continuity
+    BEFORE INSERT ON consult_lifecycle_transition
+    FOR EACH ROW EXECUTE FUNCTION consult_lifecycle_transition_continuity();
 ```
 
 ### §4.NEW7 — `consult_follow_up_message` (CDM v1.9 new; SI-020 Sub-decision 1 entity 7)
@@ -606,7 +672,7 @@ Terminal states: `completed`, `expired`. Non-terminal but flow-aware: `prescribe
 
 ## 8. RBAC v1.2 → v1.3 amendment
 
-**8 new roles** (4 application + 4 wrapper/owner):
+**12 new roles** (R1 MED-1 closure 2026-05-21: recounted to align with §10 deployment preflight enumeration; 4 application + 6 wrapper owners [1 raw writer + 5 reason-specific wrappers] + 2 view/MV owners):
 
 ### Application roles (4)
 
@@ -730,7 +796,12 @@ END $$;
 
 **v0.1 DRAFT 2026-05-21:** pre-Codex-review.
 
-Authored on `spec/cdm-v1-9-audit-v5-11-openapi-v0-4-sm-v1-3-rbac-v1-3-si020-followon-2026-05-21` branch off main at `3129579` (post-P-037 + Addendum 65).
+**v0.2 DRAFT 2026-05-21 — R1 closures applied (2 HIGH + 1 MED):**
+- **R1 HIGH-1 closed:** `consult_clinician_decision_validate_claim_active()` BEFORE INSERT trigger looked up claim by `id` only — bypassed the composite tenant identity invariant enforced elsewhere. Fix: trigger lookup uses 5-column composite identity `(tenant_id, claim_id, consult_id, patient_id, clinician_account_id)`; RAISE on no exact-match row found BEFORE checking release/expiry; defense-in-depth boundary now equal-strength to the FK.
+- **R1 HIGH-2 closed:** `consult_lifecycle_transition` row-level CHECK validated individual triples but did NOT enforce that new from_state == current latest to_state — direct table INSERTs by `consult_lifecycle_transition_writer_owner` (which has INSERT grant) could create divergent histories that still passed CHECK. Fix: added `consult_lifecycle_transition_continuity` BEFORE INSERT trigger that takes per-consult advisory lock + reads latest to_state under lock + validates continuity + rejects from-terminal transitions. Regardless of caller, lifecycle integrity is now schema-enforced (not procedure-dependent).
+- **R1 MED-1 closed:** RBAC count mismatch — §1 scope + §8 said "8 roles (4 application + 4 wrapper/owner)" but §10 deployment preflight enumerated 12 roles. Implementer following §1/§8 would under-provision. Fix: recounted to **12 roles** (4 app + 6 wrapper owners + 2 view/MV owners) matching preflight enumeration; §1 + §8 + §10 now mutually consistent.
+
+Authored on `spec/cdm-v1-9-audit-v5-11-openapi-v0-4-sm-v1-3-rbac-v1-3-si020-followon-2026-05-21` branch off main at `3129579` (post-P-037 + Addendum 65). v0.2 commit pending push for R2 verification.
 
 ---
 
