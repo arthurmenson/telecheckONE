@@ -1,18 +1,18 @@
 # AI Service Mode 1 Handler Specification
 
-**Version:** 0.1 DRAFT
-**Status:** RATIFIER-READY-WITH-KNOWN-OQs (post-R4 Codex iterate-to-asymptote close at §10 cadence boundary, 2026-05-19); Sprint 9 of autonomous 24h-loop work plan
-**Codex iteration trajectory:** R1 (3 HIGH + 3 MED) → R2 (2 HIGH + 2 MED) → R3 (1 HIGH) → R4 (1 HIGH + 1 MED). Asymptote pattern consistent with v1.10.1 hygiene cycle precedent. All 13 findings closed inline as in-scope correctness gaps; no architectural-judgment escalations. §10 cadence boundary applied at R4 → ratifier-ready.
+**Version:** 0.4 DRAFT (R7 view-RLS closure applied 2026-05-21)
+**Status:** POST-R7 (1 HIGH closed inline: §6.1 derived view `ai_mode1_conversation_state` was created as a plain VIEW assumed to inherit base-table RLS — but PostgreSQL views by default execute with VIEW OWNER's privileges, so an owner with BYPASSRLS or table-ownership would bypass tenant isolation. Same defect class as the MV access closure at P-034 R5. Fix: explicit `CREATE VIEW ... WITH (security_invoker = true)` (PostgreSQL 15+) + ownership pinned to dedicated non-BYPASSRLS role `ai_mode1_view_owner` via `ALTER VIEW ... OWNER TO` + REVOKE PUBLIC + GRANT SELECT to specific viewer roles + deployment-prerequisite assertion that the role exists AND has `rolbypassrls=false`. Pattern matches the SI-024.1 R9 deployment-prerequisite + R8 executable-ownership closures. Previously POST-R6 (1 MED closed inline: §10 OQ1 said "2 entities to CDM v1.2 → CDM v1.3" referencing pre-R3-split-table model + pre-P-027 baseline; §10 OQ3 said "CCR_RUNTIME v5.2"; §6.1 intro said "4 entities to CDM v1.2". Fix: §10 OQ1 updated to "5 entities + post-P-034 baseline CDM v1.7 → v1.8" + explicit jwt_migration_entity_status seed scope per the established post-P-034 R6 closure pattern + SI-019-style follow-on amendment recommendation; §10 OQ3 updated to "CCR_RUNTIME v5.3 + co-bump v5.3 → v5.4 if needed"; §6.1 intro updated to "5 entities + I-035 cross-reference". Previously POST-R5 (2 HIGH + 1 MED closed inline against the post-P-031/P-032/P-033/P-034 canonical state: HIGH-1 SI-017 raw-GUC tenant binding inside SECURITY DEFINER bodies → SUPERSEDED by SI-024.1 v0.8 JWT-binding canonical trust anchor via `verify_session_jwt_and_extract_claims().tenant_id` + Phase B fallback audited gates; HIGH-2 Mode 1 RLS tables missing entity-name helper + `jwt_migration_entity_status` seed scope → added 5 RLS policy DDL with `current_tenant_id_strict(<entity_name>)` + amendment seed-scope requirement for 5 entity names with fail-closed-with-audit defaults; MED-1 Contracts Pack v5.2 / v5.1 references → updated to v5.3 (post-P-027) throughout + AUDIT_EVENTS v5.5 → v5.9 (post-P-034); §12 alignment table extended with SI-024.1 + I-035 rows). Awaiting R6 verification.
+**Codex iteration trajectory:** R1 (3 HIGH + 3 MED) → R2 (2 HIGH + 2 MED) → R3 (1 HIGH) → R4 (1 HIGH + 1 MED) → **R5 fresh-review post-P-034 (2 HIGH + 1 MED — stale references to pre-P-031 trust model + pre-P-027 Contracts Pack version)**. All 16 findings closed inline as in-scope correctness gaps; no architectural-judgment escalations. R1-R4 applied iterate-to-asymptote pattern (2026-05-19); R5 applied fresh-review-post-major-cycles pattern (2026-05-21) — the same SI-024.1 JWT-binding canonical pattern that was the cleanest worked example at P-034 R7 now applied to Mode 1.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus Track 2 deliverable)
 **Owner:** AI Service Lead + Clinical Lead (co-owners; Mode 1 spans Track 2 AI service boundary + clinical safety floor)
-**Companion documents:** AI_Service_Rollout_24h_Status_2026-05-14.md, ADR-002 (two-mode AI architecture), Contracts Pack v5.2 AI_LAYERING + AUDIT_EVENTS v5.5 + WORKLOAD_TAXONOMY, ADR-029 (AI workload taxonomy), I-019 crisis-detection-always-on platform floor, SI-017 Identity Spec v1.1 amendment (Sprint 8; canonical-middleware-GUC model), SI-016 ai_workflow_handler_registry (Sprint 3; Mode 2 sister spec), Cold-DR Runbook (Sprint 7; partition-aware ACK semantics for crisis-signal emission).
+**Companion documents:** AI_Service_Rollout_24h_Status_2026-05-14.md, ADR-002 (two-mode AI architecture), **Contracts Pack v5.3 AI_LAYERING + AUDIT_EVENTS v5.9 (post-P-034) + WORKLOAD_TAXONOMY + AUTONOMY_LEVELS**, ADR-029 (AI workload taxonomy), I-019 crisis-detection-always-on platform floor, I-035 (append-only invariant for ratification + audit-bound state machines; P-027), **SI-024.1 v0.8 RATIFIED Cryptographic JWT-Binding (P-031; canonical trust anchor for v1.7+ slices) + CDM v1.6 §4.NEW1 session_jwt_admission + §4.NEW5 jwt_migration_entity_status**, SI-017 Identity Spec v1.1 (middleware-GUC layer — SUPERSEDED for SECURITY DEFINER tenant binding by SI-024.1 v0.8; retained for the connection-pooled app-role + middleware-tenant-resolution upstream layer), SI-016 ai_workflow_handler_registry (Sprint 3; Mode 2 sister spec), Cold-DR Runbook (Sprint 7; partition-aware ACK semantics for crisis-signal emission).
 **Authority:** canonical Mode 1 handler contract for the AI Service modular monolith boundary; the HTTP-handler surface specification.
 
 ---
 
 ## 1. Purpose + scope
 
-This specification defines the **canonical HTTP handler contract for AI Service Mode 1** — the conversational-assistant workload class per ADR-002 + ADR-029 + Contracts Pack v5.2 WORKLOAD_TAXONOMY. Mode 1 handlers process patient-conversation messages (chat-style, multi-turn) under platform-floor constraints: no clinical decisions, no protocol execution, crisis detection always on (I-019), audit emission on every turn (FLOOR-020), tenant binding via SI-017 canonical-middleware-GUC.
+This specification defines the **canonical HTTP handler contract for AI Service Mode 1** — the conversational-assistant workload class per ADR-002 + ADR-029 + Contracts Pack v5.3 WORKLOAD_TAXONOMY. Mode 1 handlers process patient-conversation messages (chat-style, multi-turn) under platform-floor constraints: no clinical decisions, no protocol execution, crisis detection always on (I-019), audit emission on every turn (FLOOR-020), tenant binding via the **SI-024.1 v0.8 RATIFIED JWT-binding canonical trust anchor** (`verify_session_jwt_and_extract_claims().tenant_id` per CDM v1.6 §4.NEW1 admission-binding invariant; Phase B raw-GUC fallback permitted ONLY under `jwt_migration_entity_status` audited gates per CDM v1.6 §4.NEW5; pre-P-031 SI-017 raw-GUC tenant binding inside SECURITY DEFINER bodies is FORBIDDEN per R5 HIGH-1 closure 2026-05-21).
 
 **In scope:**
 
@@ -101,7 +101,7 @@ All error responses are tenant-blind per I-025; no error body contains tenant_id
 
 ### 2.5 Idempotency semantics
 
-Per Contracts Pack v5.1 IDEMPOTENCY: the `turn_id` is the idempotency key per turn.
+Per Contracts Pack v5.3 IDEMPOTENCY: the `turn_id` is the idempotency key per turn.
 
 - If the server has already processed `turn_id` for the same `conversation_id` with the same request body: return the cached response (200).
 - If the server has already processed `turn_id` for the same `conversation_id` with a different request body: return 409 `mode1.turn_id_conflict`.
@@ -113,7 +113,7 @@ The idempotency cache key is `(tenant_id, conversation_id, turn_id)`; tenant iso
 
 ## 3. FLOOR-020 audit-emission contract
 
-Per Contracts Pack v5.2 AUDIT_EVENTS + ADR-029 WORKLOAD_TAXONOMY, every Mode 1 turn emits the following audit events:
+Per Contracts Pack v5.3 AUDIT_EVENTS + ADR-029 WORKLOAD_TAXONOMY, every Mode 1 turn emits the following audit events:
 
 ### 3.1 Per-turn canonical event sequence
 
@@ -142,7 +142,7 @@ Per Contracts Pack v5.2 AUDIT_EVENTS + ADR-029 WORKLOAD_TAXONOMY, every Mode 1 t
 
 ### 3.2 Audit-failure handling
 
-Per Contracts Pack v5.2 AUDIT_EVENTS "Audit-emission failure handling":
+Per Contracts Pack v5.3 AUDIT_EVENTS "Audit-emission failure handling":
 
 - **Cat A events** (crisis_signal_emitted, security-critical): if audit emission fails, the Mode 1 turn MUST fail with 503 `mode1.internal_error`; the response is NOT emitted. The crisis-detection-always-on floor requires the audit trail to be durable; bare suppression is forbidden per I-027.
 - **Cat C events** (sampled high-volume): if audit emission fails, the event is dropped (sampled high-volume contract permits this); but the turn proceeds. The drop is itself counted in `audit.cat_c_drop_observed` events aggregated per tenant per minute (classification per §3.3 below; R1 HIGH-2 closure clarifies the partition routing).
@@ -249,7 +249,7 @@ Mode 1 is the **conversational-assistant** workload class per ADR-029. Mode 1 ha
 
 **Three-layer enforcement (per the SI-017 5-layer model precedent):**
 
-1. **DB write enforcement (Layer 2 RLS + Layer 3 SECURITY DEFINER STEP 0):** clinical-state tables have RLS policies that reject writes from the Mode 1 service-role identity (the Mode 1 service runs under a dedicated DB role with INSERT/UPDATE/DELETE permissions ONLY on the enumerated `ai_mode1_*` tables + `i019_enqueue_ack_log` + audit tables). The SECURITY DEFINER procedures for clinical workflows verify caller-role membership at STEP 0a (in addition to I-032's tenant-GUC check at STEP 0b).
+1. **DB write enforcement (Layer 2 RLS + Layer 3 SECURITY DEFINER STEP 0):** clinical-state tables have RLS policies that reject writes from the Mode 1 service-role identity (the Mode 1 service runs under a dedicated DB role with INSERT/UPDATE/DELETE permissions ONLY on the enumerated `ai_mode1_*` tables + `i019_enqueue_ack_log` + audit tables). The SECURITY DEFINER procedures for clinical workflows verify caller-role membership at STEP 0a + tenant identity at STEP 0b via the canonical SI-024.1 v0.8 JWT-binding pattern (R5 HIGH-1 closure 2026-05-21 — SUPERSEDED the pre-P-031 SI-017 raw-GUC tenant binding which is now FORBIDDEN inside SECURITY DEFINER bodies per P-031/P-032/P-033/P-034 canonical pattern). Tenant identity MUST derive from `verify_session_jwt_and_extract_claims().tenant_id` (cryptographically bound to current backend via session_jwt_admission per CDM v1.6 §4.NEW1 admission-binding invariant); raise `jwt_tenant_mismatch` if verified tenant_id ≠ supplied p_tenant_id; raw `app.tenant_id` GUC fallback permitted ONLY when entity's `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` per `jwt_migration_entity_status` (CDM v1.6 §4.NEW5); fallback emits `tenant_context.raw_guc_fallback_used` audit. Same pattern applies to actor identity: derive from JWT-verified claims, never trust `app.actor_role` GUC alone.
 
 2. **Outbound HTTP allow-list (canonical service-mesh policy):** the Mode 1 service's egress policy enumerates allowed outbound destinations:
    - LLM provider endpoints (per CCR-driven configuration).
@@ -284,7 +284,7 @@ This preserves the canonical separation: Mode 1 = conversational (no side effect
 
 ### 6.1 `ai_mode1_conversation` entities (proposed CDM amendment; R2 HIGH-2 closure: split-table immutable lifecycle)
 
-Per the §10 OQ section below, this spec proposes adding **four entities** to CDM v1.2 (becoming CDM v1.3 at promotion). The split-table model preserves I-027 append-only semantics for every record AND supports the multi-state lifecycle (admission → detector_completed → llm_invoked → completed/failed) per the runtime state machine in §4.2.
+Per the §10 OQ section below, this spec proposes adding **5 entities** (4 lifecycle tables + 1 archival event table) to the post-P-034 canonical baseline (CDM v1.7 → CDM v1.8 at promotion; R6 MED-1 closure 2026-05-21 — earlier draft said "4 entities to CDM v1.2 becoming CDM v1.3" which referenced pre-P-027 / pre-R3-split-table state). The split-table model preserves I-035 append-only invariant + I-027 append-only semantics for every record AND supports the multi-state lifecycle (admission → detector_completed → llm_invoked → completed/failed) per the runtime state machine in §4.2.
 
 ```sql
 -- Conversation envelope (1 row per conversation; truly immutable post-INSERT per R3 HIGH-1 closure)
@@ -416,6 +416,83 @@ CREATE INDEX ai_mode1_conversation_turn_result_history_idx
 
 All five tables (4 lifecycle + 1 archival event) enforce RLS per ADR-023 Model A + I-023 tenant isolation. The derived view is RLS-bound through its base tables. Per-tenant KMS encryption on `user_message` + `assistant_message` per I-026.
 
+**Canonical RLS policy DDL (R5 HIGH-2 closure 2026-05-21 — entity-name helper per SI-024.1 v0.8 ratified pattern; pre-P-031 raw-GUC RLS predicates SUPERSEDED):**
+
+```sql
+-- Each of the 5 Mode 1 tables enables + forces RLS + uses the canonical
+-- current_tenant_id_strict('<entity_name>') trust anchor (reads from
+-- session_jwt_admission per CDM v1.6 §4.NEW1; falls back to GUC ONLY when
+-- entity's phase_4_cutover_eligible=FALSE AND raw_guc_fallback_audited=TRUE
+-- per jwt_migration_entity_status CDM v1.6 §4.NEW5).
+
+ALTER TABLE ai_mode1_conversation ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_mode1_conversation FORCE ROW LEVEL SECURITY;
+CREATE POLICY ai_mode1_conversation_tenant_isolation ON ai_mode1_conversation
+    USING (tenant_id = current_tenant_id_strict('ai_mode1_conversation'));
+
+ALTER TABLE ai_mode1_conversation_archival_event ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_mode1_conversation_archival_event FORCE ROW LEVEL SECURITY;
+CREATE POLICY ai_mode1_conversation_archival_event_tenant_isolation
+    ON ai_mode1_conversation_archival_event
+    USING (tenant_id = current_tenant_id_strict('ai_mode1_conversation_archival_event'));
+
+ALTER TABLE ai_mode1_conversation_turn_admission ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_mode1_conversation_turn_admission FORCE ROW LEVEL SECURITY;
+CREATE POLICY ai_mode1_conversation_turn_admission_tenant_isolation
+    ON ai_mode1_conversation_turn_admission
+    USING (tenant_id = current_tenant_id_strict('ai_mode1_conversation_turn_admission'));
+
+ALTER TABLE ai_mode1_conversation_turn_detector_result ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_mode1_conversation_turn_detector_result FORCE ROW LEVEL SECURITY;
+CREATE POLICY ai_mode1_conversation_turn_detector_result_tenant_isolation
+    ON ai_mode1_conversation_turn_detector_result
+    USING (tenant_id = current_tenant_id_strict('ai_mode1_conversation_turn_detector_result'));
+
+ALTER TABLE ai_mode1_conversation_turn_result ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_mode1_conversation_turn_result FORCE ROW LEVEL SECURITY;
+CREATE POLICY ai_mode1_conversation_turn_result_tenant_isolation
+    ON ai_mode1_conversation_turn_result
+    USING (tenant_id = current_tenant_id_strict('ai_mode1_conversation_turn_result'));
+
+-- The derived view ai_mode1_conversation_state. R7 HIGH-1 closure 2026-05-21:
+-- PostgreSQL views by default execute base-table access with the VIEW OWNER's privileges,
+-- so a view owner with table ownership or BYPASSRLS would bypass RLS on the base tables.
+-- Per the SI-024.1 trust-anchor pattern (analogous to the P-034 R5 MV-access closure), the
+-- view MUST be explicitly created with security_invoker = true (PostgreSQL 15+) so RLS on
+-- base tables evaluates against the calling role, not the view owner. The view owner SHOULD
+-- additionally be a non-BYPASSRLS role for defense-in-depth.
+CREATE VIEW ai_mode1_conversation_state
+    WITH (security_invoker = true) AS
+SELECT
+    c.tenant_id,
+    c.conversation_id,
+    c.patient_id,
+    c.created_at,
+    -- last_turn_at: most-recent turn admission for the conversation
+    (SELECT MAX(ta.admitted_at)
+     FROM ai_mode1_conversation_turn_admission ta
+     WHERE ta.tenant_id = c.tenant_id
+       AND ta.conversation_id = c.conversation_id) AS last_turn_at,
+    -- is_archived: true iff any archival event exists for this (tenant, conversation)
+    EXISTS (SELECT 1 FROM ai_mode1_conversation_archival_event ae
+            WHERE ae.tenant_id = c.tenant_id
+              AND ae.conversation_id = c.conversation_id) AS is_archived,
+    -- archived_at: timestamp from the most-recent archival event, if any
+    (SELECT MAX(ae.archived_at)
+     FROM ai_mode1_conversation_archival_event ae
+     WHERE ae.tenant_id = c.tenant_id
+       AND ae.conversation_id = c.conversation_id) AS archived_at
+FROM ai_mode1_conversation c;
+
+ALTER VIEW ai_mode1_conversation_state OWNER TO ai_mode1_view_owner;  -- non-BYPASSRLS role
+REVOKE ALL ON ai_mode1_conversation_state FROM PUBLIC;
+GRANT SELECT ON ai_mode1_conversation_state TO medication_interaction_signal_viewer, ai_mode1_reader;
+```
+
+**Deployment prerequisite (R7 HIGH-1 closure):** the `ai_mode1_view_owner` role MUST be pre-existing at amendment-apply time (mirrors the SI-024.1 R9 deployment-prerequisite pattern); the role MUST NOT have BYPASSRLS attribute. A preflight assertion in the follow-on amendment cycle verifies both conditions (role exists AND `rolbypassrls=false`).
+
+**`jwt_migration_entity_status` seed scope (R5 HIGH-2 closure 2026-05-21 — required by SI-024.1 OQ8 mandatory seed step; pattern established at P-034 R6 closure):** the amendment that lands this spec MUST also seed all 5 RLS-bearing entity names (`ai_mode1_conversation`, `ai_mode1_conversation_archival_event`, `ai_mode1_conversation_turn_admission`, `ai_mode1_conversation_turn_detector_result`, `ai_mode1_conversation_turn_result`) into `jwt_migration_entity_status` with `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` defaults (Phase B fail-closed-with-audit posture). Without the seed, `current_tenant_id_strict()` would either fail-closed for unknown entities (breaking Mode 1 conversation reads) or fall back permissively (defeating tenant isolation). cdm_owner sequencing guidance: flip per-entity `phase_4_cutover_eligible=TRUE` as middleware migration to JWT-required posture completes. The `ai_mode1_conversation_state` view is RLS-derived through base tables and does not require a separate seed entry.
+
 ### 6.2 Append-only semantics (R2 HIGH-2 + R3 HIGH-1 closure: truly INSERT-only across all 5 tables)
 
 Every row in all 5 tables (`ai_mode1_conversation` + `ai_mode1_conversation_archival_event` + `ai_mode1_conversation_turn_admission` + `ai_mode1_conversation_turn_detector_result` + `ai_mode1_conversation_turn_result`) is **INSERT-only**; UPDATE forbidden post-commit; enforced by trigger per I-027. No table has any mutable column. Derived facts (`last_turn_at`, `is_archived`, `archived_at`) are computed at query time via the `ai_mode1_conversation_state` view, which sources from append-only base tables.
@@ -473,7 +550,7 @@ When the request specifies `conversation_history_window: N`, the handler:
 
 ### 7.1 CCR-driven provider selection
 
-Per Contracts Pack v5.2 CCR_RUNTIME (Sprint 8 cross-reference), the LLM provider for a tenant is determined by `tenant.ai_provider` CCR key. Allowed values:
+Per Contracts Pack v5.3 CCR_RUNTIME (Sprint 8 cross-reference), the LLM provider for a tenant is determined by `tenant.ai_provider` CCR key. Allowed values:
 - `anthropic`: Claude (Sonnet 4.6 default; Opus 4.7 escalation per per-tenant flag)
 - `azure-openai`: GPT-4.1 (Azure-hosted; HIPAA-covered)
 - `openai`: GPT-4.1 direct (non-HIPAA contract; permitted only for non-PHI tenants — guarded by static analyzer rule `TLC-AI-003`)
@@ -526,9 +603,9 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 
 ## 10. Open questions for ratifier
 
-1. **OQ1 — CDM amendment scope (`ai_mode1_conversation` + `ai_mode1_conversation_turn`).** This spec proposes adding 2 entities to CDM v1.2. Recommendation: file as SI-023 (sister-SI to Sprint 8's SI-022 `session_state` addition). Ratifier sequencing aligns the two CDM additions.
+1. **OQ1 — CDM amendment scope (5 entities; R6 MED-1 closure 2026-05-21).** This spec proposes adding **5 entities** (post-R2/R3/R4 split-table model) to the post-P-034 canonical baseline (CDM v1.7 → CDM v1.8 at promotion): `ai_mode1_conversation` (durable identity), `ai_mode1_conversation_archival_event` (append-only archival event log), `ai_mode1_conversation_turn_admission` (turn admission record), `ai_mode1_conversation_turn_detector_result` (crisis-detector outcome), `ai_mode1_conversation_turn_result` (LLM-invocation outcome). The derived view `ai_mode1_conversation_state` is RLS-bound through its base tables (no separate entity). **`jwt_migration_entity_status` seed scope: all 5 entity names** per the SI-024.1 OQ8 mandatory seed step + the post-P-034 R6 closure pattern; defaults `phase_4_cutover_eligible=FALSE` + `raw_guc_fallback_audited=TRUE` (Phase B fail-closed-with-audit posture). Recommendation: file as part of the SI-019-style follow-on amendment cycle (SI-spec-first promotion pattern per P-029 / P-032 / P-034); CDM v1.7 → v1.8 + AUDIT_EVENTS v5.9 → v5.10 + DOMAIN_EVENTS additive co-bumped; Registry v2.21 → v2.22.
 2. **OQ2 — Crisis-detector implementation primitive.** ML model fine-tuned on safety-classified conversations vs prompt-engineering against a generalist LLM vs rule-based fallback. Recommendation: file as separate SI (Track 2 Clinical Lead + Safety Lead co-owners). For v1.0 of this spec, the detector contract (§4.1) is what matters; the implementation is OQ-deferred.
-3. **OQ3 — `ai_provider` CCR key activation timing.** Per §7.1, the spec assumes the CCR key exists. Sprint 3 SI-016 + CCR_RUNTIME v5.2 amendments are the closest precedent. Recommendation: confirm CCR key registration sequence.
+3. **OQ3 — `ai_provider` CCR key activation timing.** Per §7.1, the spec assumes the CCR key exists. Sprint 3 SI-016 + **CCR_RUNTIME v5.3 (post-P-027)** is the canonical precedent (R6 MED-1 closure 2026-05-21 — earlier draft said v5.2). Recommendation: confirm CCR key registration sequence; if not already registered in v5.3, co-bump CCR_RUNTIME v5.3 → v5.4 as part of the same SI-019-style follow-on amendment cycle.
 4. **OQ4 — Per-tenant token-budget enforcement mechanism.** Real-time enforcement (every turn checks budget) vs eventual enforcement (background reconciler enforces 100% cap after N-minute lag). Recommendation: real-time per-turn; eventual model leaks budget overage.
 5. **OQ5 — Cross-region rate-limit counter sync.** Per §8, per-tenant daily quota counters need cross-region sync. Recommendation: route via the same multi-region ACK channel topology as crisis signals (Cold-DR OQ7-deferred implementation primitive); the rate-limit counter is a much lower volume than crisis signals, so the same primitive suffices.
 6. **OQ6 — Codex pre-ratification target.** Recommendation: 2-3 rounds (Engineering Spec; cross-references Sprint 3/7/8 + canonical multi-region topology).
@@ -574,12 +651,14 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 | Cross-SI surface | Mode 1 Handler Spec surface | Relationship |
 |---|---|---|
 | SI-016 ai_workflow_handler_registry (Sprint 3) | §5.2 Mode 1 → Mode 2 handoff | Mode 1 NEVER invokes Mode 2 handlers directly; handoff is via API surface only |
-| SI-017 Identity Spec v1.1 (Sprint 8) | §2.4 401 tenant-blind; §6.1 RLS tenant binding | Mode 1 handler is downstream of canonical middleware-GUC; RLS enforces tenant isolation |
+| SI-017 Identity Spec v1.1 (Sprint 8) | §2.4 401 tenant-blind; upstream middleware-tenant-resolution + connection-pooled app-role | SI-017 IS the upstream middleware layer that resolves tenant identity + sets `app.tenant_id` GUC; that GUC is consumed only by RLS policies on entities flagged as Phase B fallback per `jwt_migration_entity_status`. For SECURITY DEFINER procedure bodies (clinical workflows, archival writes, etc.) tenant binding is SUPERSEDED by SI-024.1 — see next row. |
+| **SI-024.1 v0.8 RATIFIED JWT-binding (P-031) + CDM v1.6 §4.NEW1/§4.NEW5 (P-032)** | **§5.1 Three-layer enforcement Layer 1 (R5 HIGH-1 closure); §6.1 RLS DDL with `current_tenant_id_strict(<entity_name>)` (R5 HIGH-2 closure); §6.1 jwt_migration_entity_status seed scope (5 entities)** | Canonical tenant trust anchor for v1.7+ slices. `verify_session_jwt_and_extract_claims().tenant_id` is the JWT-verified tenant identity; Phase B raw-GUC fallback ONLY when entity's `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE`. Same pattern for actor identity (forbidden to trust `app.actor_role` GUC alone). |
+| **I-035 append-only invariant (P-027 Contracts Pack v5.2 → v5.3)** | §6 conversation-state durability; all 5 Mode 1 tables are strictly append-only per R4 HIGH-1 closure | The 5-table split-INSERT-only model + `enforce_append_only()` trigger + derived `ai_mode1_conversation_state` view aligns with I-035: state-machine lifecycle expressed as existence of progressively more rows in append-only tables, NOT mutation on single row. |
 | SI-018 two-tier hybrid audit-chain partition | §3.3 partition key routing | Per the canonical per-event partition table in §3.3 (R1 HIGH-2 closure): Mode 1 emits BOTH P1 patient-bound events (turn lifecycle + crisis-detection per-turn forensics) AND P2 tenant-bound governance/observability events (`mode2_handoff_proposed` + `audit.cat_c_drop_observed` aggregates). §3.3 is the canonical source; do NOT assume "all Mode 1 events route to P1" |
 | Cold-DR Runbook (Sprint 7) | §4.4 multi-region ACK channel + crisis-signal emission | Crisis signals use the partition-aware multi-region ACK channel; three-state per-device obligation model applies during DR |
 | ADR-029 AI workload taxonomy | §1 + §5 Mode 1 = conversational-assistant workload class | Mode 1 + Mode 2 distinction is the canonical ADR-029 split |
 | I-019 crisis-detection-always-on | §4 detector contract + fail-closed | The canonical Mode 1 implementation of I-019 platform floor |
-| Contracts Pack v5.2 AI_LAYERING + WORKLOAD_TAXONOMY + AUTONOMY_LEVELS | §1 + §3 + §5 boundary | Mode 1 is autonomy level L1 (conversational; no clinical decisions); Mode 2 is L2-L4 |
+| Contracts Pack v5.3 AI_LAYERING + WORKLOAD_TAXONOMY + AUTONOMY_LEVELS | §1 + §3 + §5 boundary | Mode 1 is autonomy level L1 (conversational; no clinical decisions); Mode 2 is L2-L4 |
 
 ---
 
@@ -595,7 +674,19 @@ If p99 exceeds 2.5s for >5 minutes, an SRE alert fires (PagerDuty integration pe
 
 **v0.1 R4 closure 2026-05-19:** 1 HIGH + 1 MED closed inline. R4 HIGH: I-027 append-only enforcement was asserted in prose but missing concrete DDL — added canonical `enforce_append_only()` PL/pgSQL trigger function (ERRCODE `TLC27`) + 5 explicit `CREATE TRIGGER` bindings (one per append-only table). R4 MED: archival event tenant integrity was FK-bound to conversation_id only, not the composite (tenant_id, conversation_id); added composite UNIQUE on conversation + composite FK on archival_event + tenant-bound subqueries in the `ai_mode1_conversation_state` view. Tests M1.21 + M1.22 added to verify both closures.
 
-**Status at R4 close (per §10 cadence boundary):** RATIFIER-READY-WITH-KNOWN-OQs. The asymptote pattern (R1 6 findings → R2 4 findings → R3 1 finding → R4 2 findings) is consistent with the v1.10.1 hygiene cycle; each round closed in-scope correctness gaps with no architectural-judgment escalations. Sprint 9 closes at R4 with ratifier-ready status; the 6 known OQs (§10) remain ratifier-targetable. Workstream proceeds to Sprint 10.
+**Status at R4 close (per §10 cadence boundary, 2026-05-19):** RATIFIER-READY-WITH-KNOWN-OQs. The asymptote pattern (R1 6 findings → R2 4 findings → R3 1 finding → R4 2 findings) is consistent with the v1.10.1 hygiene cycle; each round closed in-scope correctness gaps with no architectural-judgment escalations. Sprint 9 closed at R4 with ratifier-ready status.
+
+**v0.2 DRAFT 2026-05-21 — R5 fresh-review-post-P-031/P-032/P-033/P-034 closure (2 HIGH + 1 MED):**
+
+The spec sat at RATIFIER-READY through the major v1.6 / v1.7 canonical landings (P-031 SI-024.1, P-032 CDM v1.6, P-033 SI-019, P-034 CDM v1.7). When promoted to canonical bundle path for ratification 2026-05-21, a fresh Codex review surfaced staleness against the post-P-034 canonical state:
+
+- **R5 HIGH-1 closed:** §5.1 Three-layer enforcement Layer 1 + §6.1 RLS predicates relied on SI-017 raw-GUC tenant binding (`app.tenant_id` GUC consumed inside SECURITY DEFINER procedure bodies). Post-P-031 (SI-024.1 v0.8 RATIFIED) + P-034 (CDM v1.7 follow-on, cleanest worked example of the SI-024.1 pattern across multiple trust-axes), the raw-GUC trust model is FORBIDDEN inside SECURITY DEFINER procedure bodies. Fix: tenant identity MUST derive from `verify_session_jwt_and_extract_claims().tenant_id` (cryptographically bound to current backend via `session_jwt_admission` per CDM v1.6 §4.NEW1 admission-binding invariant); raise `jwt_tenant_mismatch` if verified tenant_id ≠ supplied parameter; raw `app.tenant_id` fallback ONLY when entity's `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` per `jwt_migration_entity_status` (CDM v1.6 §4.NEW5); fallback emits `tenant_context.raw_guc_fallback_used` audit. Same pattern applies to actor identity: derive from JWT-verified claims, never trust `app.actor_role` GUC alone. Pattern matches P-031 → P-034 canonical established discipline.
+- **R5 HIGH-2 closed:** §6.1 declared 5 RLS-bearing Mode 1 tables but did not provide concrete RLS policy DDL with `current_tenant_id_strict(<entity_name>)` helper + did not specify the `jwt_migration_entity_status` seed-scope requirement. Per the established post-P-034 pattern (R6 closure on CDM v1.7 amendment), every new RLS-bearing entity + every trust-anchor read surface MUST be seeded. Without it, `current_tenant_id_strict()` either fails-closed for unknown entities (breaking Mode 1 conversation reads) or falls back permissively (defeating tenant isolation). Fix: added concrete RLS policy DDL for all 5 Mode 1 tables with `current_tenant_id_strict('<entity_name>')` predicates + amendment seed-scope requirement for the 5 entity names (`ai_mode1_conversation`, `ai_mode1_conversation_archival_event`, `ai_mode1_conversation_turn_admission`, `ai_mode1_conversation_turn_detector_result`, `ai_mode1_conversation_turn_result`) with `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` defaults (Phase B fail-closed-with-audit posture); cdm_owner sequencing guidance.
+- **R5 MED-1 closed:** Contracts Pack version references throughout the spec were v5.2 (some v5.1 for IDEMPOTENCY) — post-P-027 batched promotion (2026-05-20) the canonical version is v5.3. Fix: updated all normative contract references to v5.3 (§1, §2.5, §3, §7.1, §10, §12); updated AUDIT_EVENTS reference from v5.5 (Sprint 9 baseline) to v5.9 (post-P-034 baseline). §12 alignment table extended with explicit rows for SI-024.1 + I-035 cross-references reflecting the post-P-034 canonical state.
+
+All 3 R5 closures within ratified scope (no hard-floor item 6 escalation). The Mode 1 spec is now aligned with the post-P-034 canonical baseline (Master PRD v1.10 · CDM v1.7 · AUDIT_EVENTS v5.9 · OpenAPI v0.3 · State Machines v1.2 · RBAC v1.2 · Contracts Pack v5.3 · Artifact Registry v2.21).
+
+Workstream proceeds to R6 verification.
 
 **Full Codex trajectory:**
 
