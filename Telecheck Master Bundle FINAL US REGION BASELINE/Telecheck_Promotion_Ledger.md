@@ -37,6 +37,57 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-032 — 2026-05-20 — CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 SI-024.1 follow-on amendment RATIFIED; 5 new CDM entities (P2 governance-partition) + 10 new audit events (9 Cat A under `tenant_context.*` + 1 Cat B under `cdm.*`) + 2 new SECURITY DEFINER fallback-gate helpers + 5 prerequisite-role grant chains + 3-layer enforcement (privilege + RLS + trigger) on every entity + one-way lifecycle triggers on deactivated_at + closed_at; Artifact Registry v2.18 → v2.19
+
+**Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" block at commit `f483535`):** auto-proceed enabled when Claude + Pass-2 (Codex) agree on next steps. SI-024.1 v0.8 RATIFIED at P-031 spawned this CDM/AUDIT_EVENTS follow-on amendment cycle per the established post-P-029 SI-spec-first promotion pattern (parent SI ratified first; canonical CDM/AUDIT_EVENTS landing follows in a separate amendment cycle to keep ratification scope crisp).
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). CDM v1.6 + AUDIT_EVENTS v5.8 amendment promotion via auto-proceed convergence (Codex Pass-2 R12 APPROVE / ship-it + Claude READY-TO-MERGE).
+
+**Type:** Content-change promotion + Registry v2.18 → v2.19 per operating rule 4.
+
+**Prerequisite:** P-031 (SI-024.1 v0.8 Cryptographic JWT-Binding RATIFIED; 5 entities + 10 audit events authored canonical-content there, mechanically consolidated into CDM/AUDIT_EVENTS here).
+
+**Cycle convergence trajectory** (R = Codex Pass-2 round; HIGH count → MED count):
+| Round | HIGH | MED | Defect class |
+|---|---|---|---|
+| R1 | 1 | 1 | TTL-DDL placeholder + audit-count prose |
+| R2 | 2 | 0 | SECURITY DEFINER + current_user defect (both TTL tables) |
+| R3 | 2 | 0 | FORCE-RLS cleanup-policy gap (both TTL tables) |
+| R4 | 2 | 0 | write-path RLS on NEW3+NEW4 + one-way lifecycle enforcement |
+| R5 | 2 | 0 | NEW5 RLS/GRANT gap + NEW1/NEW2 admit-path INSERT gap |
+| R6 | 1 | 0 | PUBLIC SELECT leak on fallback-gate |
+| R7 | 1 | 0 | SECURITY DEFINER name-resolution hazard (unqualified table reference) |
+| R8 | 1 | 0 | SECURITY DEFINER ownership prose-only (no ALTER FUNCTION OWNER) |
+| R9 | 0 | 1 | deployment-prerequisite gap — **HIGH cleared** |
+| R10 | 0 | 1 | preflight misplaced + incomplete (self-inflicted from R9 fix) |
+| R11 | 0 | 1 | PUBLIC pseudo-role probe broken (self-inflicted from R10 fix) |
+| R12 | 0 | 0 | **ship-it APPROVE** — no material findings |
+
+**Total:** 11 HIGH + 4 MED closed across 12 rounds. Pattern matches v1.10.1 hygiene-cycle precedent exactly (12 rounds to convergence; long-tail asymptote where HIGH count clears mid-cycle and MED-only rounds finish). All closures within SI-024.1 sub-decision scope — no CLAUDE.md hard-floor item 6 escalation triggered.
+
+**Artifact landed:** `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_CDM_v1_5_to_v1_6_Amendment.md` (674 lines; merge commit `deab76f`; branch `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` at convergence commit `6474d6b`).
+
+**Canonical landings:**
+- **CDM v1.5 → v1.6:** 5 new entities (P2 governance-partition):
+  - `session_jwt_admission` (admission-binding record; composite PK = backend_pid + backend_start_at + jwt_id; pure-STABLE verifier proof)
+  - `session_jwt_replay_set` (anti-replay jti tracking; INSERT by admit_session_jwt; conflict-detection distinguishes same-backend idempotent retry from cross-backend replay)
+  - `jwt_signing_key_public` (KMS-backed signing-key registry; two-key model: `platform_tenant_jwt` with `tenant_id IS NULL` vs `tenant_break_glass_jwt` with specific `tenant_id`; deactivated_at one-way lifecycle)
+  - `break_glass_active_session` (per-access break-glass session tracking; bound_jwt_id binds session to specific JWT; closed_at one-way lifecycle)
+  - `jwt_migration_entity_status` (Phase B fallback-gate control table; 5 mutable fields gated by cdm_owner; behind SECURITY DEFINER helpers `is_jwt_required_for_entity()` + `is_raw_guc_fallback_audited_for_entity()` — table itself opaque to non-owner roles)
+- **AUDIT_EVENTS v5.7 → v5.8:** 10 new events (9 Cat A under `tenant_context.*` namespace + 1 Cat B `cdm.entity_jwt_migration_status_added` under `cdm.*` namespace).
+- **§4.NEW0 migration prerequisites preflight:** fail-fast DO block at top of migration DDL; asserts all 5 required pre-existing roles (cdm_owner, admit_session_jwt_owner, sec_jwt_cleanup, kms_rotation_operator, break_glass_procedure_owner) + executor identity (superuser OR cdm_owner member).
+- **§4.5 deployment prerequisites documentation:** roles + schema posture + executor identity + out-of-band ACL-inspection runbook check for `REVOKE CREATE ON SCHEMA public FROM PUBLIC`.
+- **Three-layer enforcement on every entity:** PostgreSQL privilege grant (REVOKE PUBLIC + GRANT specific role) + RLS policy (FOR INSERT/UPDATE/DELETE TO specific role) + trigger predicate (append-only + one-way lifecycle).
+- **SECURITY DEFINER helper hardening:** schema-qualified FROM `public.jwt_migration_entity_status` + locked `search_path = pg_catalog, pg_temp` + executable `ALTER FUNCTION ... OWNER TO cdm_owner` (per R7+R8+R9 closures: defense against name-resolution shadowing + ownership pinning).
+
+**Companion entries queued (this commit cluster):**
+- Artifact Registry v2.18 → v2.19 bump (next commit)
+- AI_Service_Rollout_24h_Status Addendum 60 + progress.json revision bump (next commit)
+
+**Cross-references:** SI-024.1 v0.8 RATIFIED (P-031); SI-024 v0.17 TRANSITIONAL (P-030); previous CDM amendment pattern (P-029, CDM v1.4 → v1.5); v1.10.1 hygiene-cycle precedent (P-009).
+
+---
+
 ### Entry P-031 — 2026-05-20 — SI-024.1 v0.8 Cryptographic JWT-Binding for Hardened Tenant/Platform RLS Helper Pattern RATIFIED + LIFTS SI-024 v0.17 TRANSITIONAL gates (Phase 4 cutover + INVARIANTS I-036 + production target-tenant break-glass UNBLOCKED post-Phase D telemetry-clean window); 5 new entities + 10 new Cat A audit events + 3 new helper functions + 1 transitional zero-arg wrapper + 2 dual-control procedures + 1 fallback-audit emitter; Artifact Registry v2.17 → v2.18
 
 **Evans's verbatim instruction (2026-05-20 chat-message, applied via auto-proceed rule at CLAUDE.md commit `f483535`):** *"For my move I need a recommendation from both of you. If you both agree on next steps then automatically do it without waiting for me."* — standing-authorization directive applied to the OQ-NEW1/2 commitment at P-030 (SI-024.1 v0.1 DRAFT target 2026-06-19; ratifier ceremony target 2026-08-18). SI-024.1 v0.8 delivered + converged on day 0 of the OQ-NEW1 30-day window under autonomous-work continuation per CLAUDE.md auto-proceed rule.
