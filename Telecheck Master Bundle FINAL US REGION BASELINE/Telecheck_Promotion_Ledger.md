@@ -37,6 +37,62 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-033 — 2026-05-21 — SI-019 Medication Interaction & Validation Engine Slice PRD v1.0 → v2.0 RATIFIED via Option A canonical Phase B append-only-only lifecycle persistence; 4 new entities + 6 new audit events + 5 new domain events + 6 SECURITY DEFINER procedures (1 raw + 5 reason-specific wrappers) + 1 override wrapper + 1 SECURITY BARRIER view + 1 SECURITY DEFINER access function + 1 optional materialized view + 8 new OpenAPI endpoints + 1 new state machine + 4 new RBAC roles; Artifact Registry v2.19 → v2.20; FIRST P-NUM in Phase B fan-out per Master Completion Plan v1.0; Track 1 anchor (Ghana revenue pilot critical-path slice) UNBLOCKED
+
+**Evans's OQ7 ratification (2026-05-20 chat-message):** *"A"* — Option A (immutable `interaction_signal` + append-only `interaction_signal_lifecycle_transition` rows + optional rebuildable projection for read-path). Architectural-judgment ratification on the canonical CDM persistence pattern for safety-critical interaction signals; resolved the R1 STOP-condition that Codex invoked CLAUDE.md hard-floor item 6 on.
+
+**Three-way recommendation convergence (CLAUDE.md dual-recommendation + two-pass discipline):**
+
+- **Claude draft (pre-evidence):** Option B citing P-021 two-tier append-only precedent + read-path simplicity + migration story.
+- **Codex Pass-1 (source-first independent 2026-05-20, thread `019e48d3-c38b-79a1-9275-104820205838`):** Option A variant + rebuildable projection; identified **I-035** as decisive (*"state-machine lifecycle expressed as existence of progressively more rows in append-only tables, NOT mutation on single row; `enforce_append_only()` trigger is the canonical implementation"*); called Option B deal-breaker disqualified unless explicit I-035 amendment recorded.
+- **Codex Pass-2 (contrast-and-synthesize 2026-05-20, thread `019e48d6-211c-7c30-ab79-83abab975f37`):** Option A canonical + optional rebuildable projection; NEW consideration — Option B's mutable state + audit log creates two-authority divergence risk under retry/partial-failure/repair; Option A model has single source of truth.
+- **Claude post-evidence (shifted):** Option A canonical + rebuildable projection. I-035 ratification 2026-05-20 (P-027) post-dates P-021 (2026-05-17), so P-021's two-tier pattern is grandfathered for SI-005's specific entity (consults), not governing precedent for new SIs.
+- **Convergence:** all three on Option A canonical + rebuildable projection.
+- **Hard-floor item 6:** held correctly — auto-proceed correctly disallowed regardless of reviewer agreement; Evans's chat-message ratification was required + delivered.
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). SI-019 v0.8 promotion via auto-proceed convergence (Codex R7 APPROVE + Claude READY-TO-MERGE) after OQ7 architectural-judgment ratification.
+
+**Type:** Content-change promotion + Registry v2.19 → v2.20 per operating rule 4.
+
+**Prerequisite:** P-027 (I-035 introduction via Contracts Pack v5.2 → v5.3 + CDM v1.2 → v1.3 Phase B batched promotion); Master Completion Plan v1.0 Track 1 anchor "new critical path" designation.
+
+**Cycle convergence trajectory:**
+
+| Round | HIGH | MED | Class of defect closed |
+|---|---|---|---|
+| R1 | 1 STOP | — | Architectural contradiction (Sub-decision 1 strict append-only vs Sub-decision 5 state-machine UPDATE) — escalated to ratifier; resolved via OQ7 Option A ratification |
+| R2 | 2 | 1 | Initial transition NULL/enum unimplementable + MV RLS not natively supported + stale MV gating |
+| R3 | 1 | 2 | State-continuity invariant unenforceable at row-level CHECK alone + RETURNS RECORD anonymous + DOMAIN_EVENTS count understated |
+| R4 | 2 | 1 | Override atomicity ordering (terminal transition before override row) + raw transition writer too-broadly granted + tenant-GUC missing_ok=false |
+| R5 | 1 | 0 | Activation race against override evidence INSERT — **HIGH cleared mid-cycle** |
+| R6 | 0 | 1 | Derived-state SQL dropped tenant_id scope |
+| R7 | 0 | 0 | **ship-it APPROVE — "no material R7 blocker found"** |
+
+**Total:** 6 HIGH + 5 MED closed inline across 6 closure rounds (R1 was STOP-and-ratifier-escalate, not a closure round). Long-tail asymptote pattern confirmed for the THIRD time in Q2 2026 (P-029 8 rounds, P-032 12 rounds, P-033 7 rounds total). Faster convergence than P-032 because architectural-judgment item was surfaced early via R1 STOP rather than discovered mid-cycle as in P-032. All R2-R7 closures within Option A scope — zero further hard-floor item 6 escalations after OQ7.
+
+**Artifact landed:** `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Medication_Interaction_Engine_Slice_PRD_v2_0.md` (merge commit `08a41b8`; spec branch `spec/si-019-med-interaction-v2-0-option-a-2026-05-20` at convergence commit `b2b543d`).
+
+**Canonical landings:**
+
+- **CDM v1.6 → v1.7:** 4 new entities + 6 new procedures + 1 optional MV + 1 SECURITY BARRIER view + 1 SECURITY DEFINER access function. Persistence pattern: Option A append-only-only per I-035; `interaction_signal` strict append-only with NO state column; current state DERIVED from `interaction_signal_lifecycle_transition` rows; raw transition writer is the single canonical write path (owner-only EXECUTE); 5 reason-specific SECURITY DEFINER wrappers carry reason-specific evidence checks; override wrapper inserts evidence row first then transition row second under serialized advisory lock.
+- **AUDIT_EVENTS v5.8 → v5.9:** 6 new action IDs (4 Cat A + 2 Cat B; `interaction_signal_override` preserved from v5.5 catalog).
+- **DOMAIN_EVENTS additive (no version bump):** 5 new event types under `medication_interaction.*` namespace.
+- **OpenAPI v0.2 → v0.3:** 8 new endpoints.
+- **State Machines v1.1 → v1.2:** 1 new state machine `interaction_signal_lifecycle` (described as DERIVED from append-only transition log; CHECK constraint + 6 wrappers enforce allowed transitions).
+- **RBAC v1.1 → v1.2:** 4 new role definitions + 6 SECURITY DEFINER wrapper owner roles + 1 `lifecycle_transition_writer_owner` + 1 `mv_refresh_owner`.
+- **Slice PRD v1.0 → v2.0:** the implementation-readiness extension; 9 sub-decisions ratified.
+
+**Companion entries queued (this commit cluster):**
+
+- Artifact Registry v2.19 → v2.20 bump (next commit; reflects new canonical-content count + Phase B fan-out FIRST entry status)
+- AI_Service_Rollout_24h_Status Addendum 61 + progress.json revision bump
+
+**Cross-references:** P-027 (I-035 introduction); P-021 (SI-005 SC3 grandfathered precedent for consult entity two-tier append-only); P-031 + P-032 (SI-024.1 + CDM v1.6 amendment Q2 2026 cycles establishing dual-recommendation + two-pass + auto-proceed maturity); Master Completion Plan v1.0 Track 1 anchor designation ("new critical path" for Ghana revenue pilot).
+
+**Master Completion Plan progression:** Med-Interaction was item #1 of 5 pilot-required slices (Ghana revenue anchor) + the ONLY skeleton. Ratification clears the critical-path block. Implementation in `telecheck-app` code repo is UNBLOCKED post-merge per "spec ratification leads implementation by ≥1 sprint" rule. **FIRST P-NUM in Phase B fan-out** (Phase A engineering items 1+2+3 closed 2026-05-15; ratification ceremonies P-026..P-032 cleared Phase A spec backlog; P-033 begins Phase B per-slice ratification trajectory).
+
+---
+
 ### Entry P-032 — 2026-05-20 — CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 SI-024.1 follow-on amendment RATIFIED; 5 new CDM entities (P2 governance-partition) + 10 new audit events (9 Cat A under `tenant_context.*` + 1 Cat B under `cdm.*`) + 2 new SECURITY DEFINER fallback-gate helpers + 5 prerequisite-role grant chains + 3-layer enforcement (privilege + RLS + trigger) on every entity + one-way lifecycle triggers on deactivated_at + closed_at; Artifact Registry v2.18 → v2.19
 
 **Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" block at commit `f483535`):** auto-proceed enabled when Claude + Pass-2 (Codex) agree on next steps. SI-024.1 v0.8 RATIFIED at P-031 spawned this CDM/AUDIT_EVENTS follow-on amendment cycle per the established post-P-029 SI-spec-first promotion pattern (parent SI ratified first; canonical CDM/AUDIT_EVENTS landing follows in a separate amendment cycle to keep ratification scope crisp).
