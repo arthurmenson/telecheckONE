@@ -1,7 +1,7 @@
 # CDM v1.6 → v1.7 + AUDIT_EVENTS v5.8 → v5.9 + OpenAPI v0.2 → v0.3 + State Machines v1.1 → v1.2 + RBAC v1.1 → v1.2 Amendment (SI-019 follow-on)
 
-**Version:** 0.5 DRAFT
-**Status:** POST-R4 (2 HIGH closed inline: HIGH-1 Phase B fallback gate fail-open — R3 closure pattern made the audit-emission step optional rather than a hard gate, so callers could fallback to GUC-only without raw_guc_fallback_audited being TRUE; fix: gate is now fail-closed on both conditions (`phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE`); rejection codes `jwt_required_no_admission_record` + `raw_guc_fallback_not_audited` added; audit emission happens BEFORE role membership check. HIGH-2 plaintext override_rationale column persisted alongside KMS envelope — defeats encryption pattern, PHI exposure in ordinary table reads/backups/replication/incident scope; fix: REMOVED `override_rationale TEXT NOT NULL` column from interaction_signal_override DDL; plaintext lives only as procedure input + application-boundary buffer per canonical SI-005 KMS envelope pattern. Override wrapper total rejection codes = 12. Previously: POST-R3.) (1 HIGH closed inline: recursive defect on R2 closure. R2's GUC-supplied actor_role pattern still trusted caller-controlled mutable state — a compromised/buggy caller with EXECUTE could SET `app.actor_role` to any target role and pass `pg_has_role(actor_role, '<required>', 'MEMBER')`. Fix: SUPERSEDED the GUC-only pattern with SI-024.1 v0.8 RATIFIED JWT-binding model (P-031) as canonical trust anchor. Wrapper STEP 4 reads actor_role from JWT-verified claims via `verify_session_jwt_and_extract_claims()` (SI-024.1 helper that performs EXISTS check against `session_jwt_admission` bound to current backend via admission-binding invariant). Phase B fallback to GUC pattern permitted IF AND ONLY IF entity's `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` (per jwt_migration_entity_status); fallback emits `tenant_context.raw_guc_fallback_used` audit per SI-024.1 contract. Cryptographic trust chain: JWT signature + admission-binding invariant → actor identity cannot be self-asserted by EXECUTE-only caller (forging requires JWT signature + admission to current backend). Rule applies to all 7 procedure bodies — wrappers are trust boundary; raw writer relies on wrapper enforcement.)
+**Version:** 0.6 DRAFT
+**Status:** POST-R5 (1 HIGH closed inline: MV access surfaces — both SECURITY BARRIER view + SECURITY DEFINER access function — used raw `current_setting('app.tenant_id')::tenant_id_t` instead of canonical `current_tenant_id_strict()` trust anchor. Caller-controlled GUC trust = same defect class as R3 actor_role spoofing. Fix: replaced both surfaces with `current_tenant_id_strict('interaction_signal_current_state_mv')` per SI-024.1 v0.8 ratified pattern (JWT-verified via admission-binding invariant; falls back to GUC ONLY when entity's `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` with audit emission). Previously POST-R4: 2 HIGH closed inline: HIGH-1 Phase B fallback gate fail-open — R3 closure pattern made the audit-emission step optional rather than a hard gate, so callers could fallback to GUC-only without raw_guc_fallback_audited being TRUE; fix: gate is now fail-closed on both conditions (`phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE`); rejection codes `jwt_required_no_admission_record` + `raw_guc_fallback_not_audited` added; audit emission happens BEFORE role membership check. HIGH-2 plaintext override_rationale column persisted alongside KMS envelope — defeats encryption pattern, PHI exposure in ordinary table reads/backups/replication/incident scope; fix: REMOVED `override_rationale TEXT NOT NULL` column from interaction_signal_override DDL; plaintext lives only as procedure input + application-boundary buffer per canonical SI-005 KMS envelope pattern. Override wrapper total rejection codes = 12. Previously: POST-R3.) (1 HIGH closed inline: recursive defect on R2 closure. R2's GUC-supplied actor_role pattern still trusted caller-controlled mutable state — a compromised/buggy caller with EXECUTE could SET `app.actor_role` to any target role and pass `pg_has_role(actor_role, '<required>', 'MEMBER')`. Fix: SUPERSEDED the GUC-only pattern with SI-024.1 v0.8 RATIFIED JWT-binding model (P-031) as canonical trust anchor. Wrapper STEP 4 reads actor_role from JWT-verified claims via `verify_session_jwt_and_extract_claims()` (SI-024.1 helper that performs EXISTS check against `session_jwt_admission` bound to current backend via admission-binding invariant). Phase B fallback to GUC pattern permitted IF AND ONLY IF entity's `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` (per jwt_migration_entity_status); fallback emits `tenant_context.raw_guc_fallback_used` audit per SI-024.1 contract. Cryptographic trust chain: JWT signature + admission-binding invariant → actor identity cannot be self-asserted by EXECUTE-only caller (forging requires JWT signature + admission to current backend). Rule applies to all 7 procedure bodies — wrappers are trust boundary; raw writer relies on wrapper enforcement.)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-033 (SI-019 Medication Interaction & Validation Engine Slice PRD v1.0 → v2.0 RATIFIED via Option A canonical Phase B append-only-only lifecycle persistence; Registry v2.19 → v2.20). Per the established post-P-029 spec-first promotion pattern, SI-019's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified; mirrors P-032's pattern of CDM amendment AFTER SI-024.1 ratified).
 **Owner:** Clinical Governance Lead (SI-019 v1.0 owner) + Async Consult slice owner (cross-cutting consumer) + CDM owner + AUDIT_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -312,12 +312,19 @@ CREATE UNIQUE INDEX interaction_signal_current_state_mv_pk
 REVOKE ALL ON interaction_signal_current_state_mv FROM PUBLIC;
 GRANT SELECT ON interaction_signal_current_state_mv TO mv_refresh_owner;
 
--- SECURITY BARRIER view: app roles read this view (tenant predicate enforced at view level per I-023 layer 2)
+-- SECURITY BARRIER view: app roles read this view (tenant predicate enforced at view level per I-023 layer 2).
+-- R5 HIGH-1 closure 2026-05-21: use the canonical current_tenant_id_strict() trust anchor instead of
+-- raw current_setting('app.tenant_id'). Per the SI-024.1 v0.8 ratified pattern (P-031),
+-- current_tenant_id_strict() reads from the JWT admission record (session_jwt_admission, CDM v1.6
+-- §4.NEW1) cryptographically bound to the current backend, OR falls back to GUC ONLY IF the entity's
+-- phase_4_cutover_eligible=FALSE per jwt_migration_entity_status. Filtering the MV with raw GUC
+-- alone would let any caller that can influence app.tenant_id query another tenant's signal state
+-- (same defect class as R3 actor_role spoofing).
 CREATE VIEW interaction_signal_current_state_v
     WITH (security_barrier = true) AS
 SELECT tenant_id, signal_id, current_state, as_of, transition_reason
 FROM interaction_signal_current_state_mv
-WHERE tenant_id = current_setting('app.tenant_id', false)::tenant_id_t;
+WHERE tenant_id = current_tenant_id_strict('interaction_signal_current_state_mv');
 
 REVOKE ALL ON interaction_signal_current_state_v FROM PUBLIC;
 GRANT SELECT ON interaction_signal_current_state_v TO medication_interaction_signal_viewer;
@@ -339,13 +346,17 @@ RETURNS TABLE(
     as_of TIMESTAMPTZ,
     transition_reason interaction_signal_transition_reason_t
 ) AS $$
+    -- R5 HIGH-1 closure 2026-05-21: use the canonical current_tenant_id_strict() trust anchor
+    -- (JWT-verified per SI-024.1 v0.8 admission-binding invariant; falls back to GUC ONLY when
+    -- entity's phase_4_cutover_eligible=FALSE AND raw_guc_fallback_audited=TRUE, with audit
+    -- emission). Raw current_setting('app.tenant_id') would let caller spoof tenant context.
     SELECT
         mv.signal_id,
         mv.current_state::interaction_signal_state_t,
         mv.as_of,
         mv.transition_reason::interaction_signal_transition_reason_t
     FROM public.interaction_signal_current_state_mv mv
-    WHERE mv.tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
+    WHERE mv.tenant_id = public.current_tenant_id_strict('interaction_signal_current_state_mv')
       AND mv.signal_id = p_signal_id;
 $$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = pg_catalog, pg_temp;
 
@@ -841,7 +852,10 @@ These are NOT granted to humans; they OWN the wrapper procedures and are the onl
 - **R1 MED-1 closed:** SECURITY DEFINER access function `get_interaction_signal_current_state()` declared return types `interaction_signal_state_t` + `interaction_signal_transition_reason_t` but MV columns inherit as TEXT from the transition table's TEXT+CHECK column types. Fix: explicit casts `mv.current_state::interaction_signal_state_t` + `mv.transition_reason::interaction_signal_transition_reason_t` in the return query. Future TYPES amendment cycle should formalize these as DOMAIN types backed by equivalent CHECK constraints and migrate the columns from TEXT to the domain types — at which point the casts become no-ops; for this amendment cycle the casts are the spec-compliant closure.
 - **R1 MED-2 closed:** Procedure count inconsistency — §1 scope said 6 procedures but section §3 defined 7 (1 raw + 5 lifecycle wrappers + 1 override wrapper). RBAC §8 already correctly listed 6 wrapper owner roles + 1 service-level role + 1 raw writer owner = 8 owner roles. Fix: normalized scope + §1 in-scope item 1 + §3 heading to "7 SECURITY DEFINER procedures (1 raw transition writer + 5 reason-specific lifecycle wrappers + 1 override wrapper)" — matches §3 body + §8 RBAC roles.
 
-Authored on `spec/cdm-v1-7-audit-v5-9-openapi-v0-3-sm-v1-2-rbac-v1-2-si019-followon-2026-05-21` branch off main at `af66412` (post-P-033 + Addendum 61). v0.2 commit `dc54ce1`. v0.3 commit `0c1177b`. v0.4 commit `b669b02`. v0.5 commit pending push for R5 verification.
+Authored on `spec/cdm-v1-7-audit-v5-9-openapi-v0-3-sm-v1-2-rbac-v1-2-si019-followon-2026-05-21` branch off main at `af66412` (post-P-033 + Addendum 61). v0.2 commit `dc54ce1`. v0.3 commit `0c1177b`. v0.4 commit `b669b02`. v0.5 commit `b297d39`. v0.6 commit pending push for R6 verification.
+
+**v0.6 DRAFT 2026-05-21 — R5 closure applied (1 HIGH):**
+- **R5 HIGH-1 closed:** MV access surfaces (SECURITY BARRIER view `interaction_signal_current_state_v` + SECURITY DEFINER access function `get_interaction_signal_current_state`) used raw `current_setting('app.tenant_id', false)::tenant_id_t` for tenant filtering. The MV itself is non-RLS-enforced (PostgreSQL materialized views don't natively enforce RLS per R2 HIGH-2 closure rationale), so the view + function were the trust boundary — but they trusted a mutable, caller-set GUC. Any caller that can influence `app.tenant_id` could query another tenant's signal lifecycle state from the MV. Same trust-class defect as R3 actor_role spoofing. Fix: replaced both surfaces with `current_tenant_id_strict('interaction_signal_current_state_mv')` per SI-024.1 v0.8 ratified canonical pattern — the helper reads from the JWT admission record (cryptographically bound to current backend via admission-binding invariant) or, when entity's `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE`, falls back to GUC with audit emission. No more raw-GUC trust paths on MV reads. Cross-reference: SI-024.1 v0.8 §Sub-decision 1 + CDM v1.6 §4.NEW5 jwt_migration_entity_status fallback gate.
 
 **v0.5 DRAFT 2026-05-21 — R4 closures applied (2 HIGH):**
 - **R4 HIGH-1 closed:** Phase B fallback gate fail-open. R3 closure pattern checked `NOT is_jwt_required_for_entity()` before accepting `app.actor_role`, but only conditionally emitted `emit_raw_guc_fallback_audit()` and continued whether or not audit was enabled. Meant the audit gate was optional rather than a hard requirement — re-opened R3 trust-boundary defect for any entity not yet cut over to JWT. Fix: gate is now fail-closed on BOTH conditions — `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE`. If either fails, raise structured rejection (`jwt_required_no_admission_record` or `raw_guc_fallback_not_audited`). Audit emission happens BEFORE the role membership check so audit evidence is recorded regardless of whether membership check subsequently rejects.
