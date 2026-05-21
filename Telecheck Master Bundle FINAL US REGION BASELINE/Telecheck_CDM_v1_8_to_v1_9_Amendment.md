@@ -1,7 +1,7 @@
 # CDM v1.8 → v1.9 + AUDIT_EVENTS v5.10 → v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 → v0.4 + State Machines v1.2 → v1.3 + RBAC v1.2 → v1.3 Amendment (SI-020 Async-Consult follow-on)
 
-**Version:** 0.5 DRAFT
-**Status:** POST-R4 (1 HIGH closed inline: trigger functions performing invariant checks (consult_clinician_decision_validate_claim_active, consult_lifecycle_transition_continuity, consult_review_claim_one_way_released_at) lacked schema-qualified table references + locked search_path — caller-controlled temp relation shadowing could redirect invariant checks to attacker-controlled rows, bypassing release/expiry/continuity invariants while real FKs still passed. Fix: all 3 invariant-enforcing trigger functions now have `SET search_path = pg_catalog, public` per canonical P-034 R7 SECURITY DEFINER hardening pattern + all SELECT statements use `public.<table>` schema-qualified references. Previously POST-R3 (2 HIGH + 1 MED closed inline: HIGH-1 decision validation could race claim release/reassignment under READ COMMITTED → fix: BEFORE INSERT trigger now takes same per-consult advisory lock as claim/reassign procedures + SELECT...FOR UPDATE on claim row; HIGH-2 equal transition_at values could corrupt current-state derivation via UUID tie-break ambiguity → fix: strict > monotonic ordering on transition_at, no equality permitted for non-initial transitions; MED-1 clinician_account_id FK not tenant-scoped → fix: composite tenant-scoped FK `(tenant_id, clinician_account_id) → tenant_account_membership(tenant_id, account_id)` per assumed Identity slice canonical entity + new OQ3 for ratifier to confirm canonical name)
+**Version:** 0.6 DRAFT
+**Status:** POST-R5 (1 HIGH closed inline: single tenant-wide `consult_outcome_summary_view` + single `async_consult_reader` role granted to patient/delegate role would have leaked OTHER patients' consult metadata (consult_id, consult_type, current_state, decision_type, prescribing_count, last_transition_at) to patient-app callers within the same tenant — only base-table ciphertext columns were hidden; metadata was tenant-wide. Fix: view + reader role SPLIT into two caller-class-specific pairs. (1) `async_consult_patient_summary_v` adds predicate `AND c.patient_id = current_jwt_verified_patient_id('async_consult_patient_summary_v')` restricting patient/delegate principals to ONLY their own consults; granted to new `async_consult_patient_reader` role (held by patient + delegate IFF book-consults scope). (2) `async_consult_staff_summary_v` retains tenant-wide visibility for clinician/admin/pharmacy queue triage; granted to new `async_consult_staff_reader` role (held by clinician + admin + pharmacy portal roles; NOT patient/delegate). New SI-024.1 helper `current_jwt_verified_patient_id(<entity>)` analogous to `current_tenant_id_strict`; returns JWT-verified patient_id from admission record OR delegate's authorized patient_id IFF book-consults scope per Consent slice; raises `patient_jwt_missing` if no admission record exists. New OQ4 added for Identity-slice + Consent-slice owners to confirm helper name + delegate-scope predicate semantics. RBAC count 12 → 13 roles (5 app + 6 wrapper owners + 2 view/MV owners). Previously POST-R4 (1 HIGH closed inline: trigger functions performing invariant checks (consult_clinician_decision_validate_claim_active, consult_lifecycle_transition_continuity, consult_review_claim_one_way_released_at) lacked schema-qualified table references + locked search_path — caller-controlled temp relation shadowing could redirect invariant checks to attacker-controlled rows, bypassing release/expiry/continuity invariants while real FKs still passed. Fix: all 3 invariant-enforcing trigger functions now have `SET search_path = pg_catalog, public` per canonical P-034 R7 SECURITY DEFINER hardening pattern + all SELECT statements use `public.<table>` schema-qualified references. Previously POST-R3 (2 HIGH + 1 MED closed inline: HIGH-1 decision validation could race claim release/reassignment under READ COMMITTED → fix: BEFORE INSERT trigger now takes same per-consult advisory lock as claim/reassign procedures + SELECT...FOR UPDATE on claim row; HIGH-2 equal transition_at values could corrupt current-state derivation via UUID tie-break ambiguity → fix: strict > monotonic ordering on transition_at, no equality permitted for non-initial transitions; MED-1 clinician_account_id FK not tenant-scoped → fix: composite tenant-scoped FK `(tenant_id, clinician_account_id) → tenant_account_membership(tenant_id, account_id)` per assumed Identity slice canonical entity + new OQ3 for ratifier to confirm canonical name)
 **Authoring date:** 2026-05-21 (1 HIGH closed inline: R1 continuity trigger validated NEW.from_state == latest to_state but didn't enforce monotonic transition_at ordering — backdated row could pass from_state check while corrupting current-state derivation (ORDER BY transition_at DESC), future-dated row could dominate immediately. Fix: trigger now reads latest transition_at alongside latest to_state under lock; rejects NEW.transition_at < latest transition_at + rejects future-dated > now() + 5s clock-skew tolerance. Monotonic-ordering invariant now schema-enforced. Previously POST-R1 (2 HIGH + 1 MED closed inline: HIGH-1 decision-validation trigger looked up claim by id only → fix: 5-column composite identity lookup (tenant_id + claim_id + consult_id + patient_id + clinician_account_id) with RAISE on missing row; HIGH-2 lifecycle continuity not enforced at table-level → fix: added BEFORE INSERT trigger `consult_lifecycle_transition_continuity` that takes per-consult advisory lock + validates new from_state == latest to_state + rejects from-terminal transitions, regardless of caller; MED-1 RBAC count mismatch (8 vs preflight's 12) → fix: recounted to 12 roles (4 app + 6 wrapper owners + 2 view/MV owners) matching deployment preflight enumeration)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-037 (SI-020 Async Consult v1.0 → v2.0 implementation-readiness extension RATIFIED; Registry v2.23 → v2.24). Per the established post-P-029 spec-first promotion pattern, SI-020's canonical content lands in CDM + AUDIT + DOMAIN_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification. **SIXTH instance** of the SI-spec-first promotion pattern (P-029, P-032, P-034, P-036, P-038 — note P-035 was SI-only without follow-on; P-038 is the 5th follow-on amendment in the post-P-029 lineage).
@@ -17,13 +17,13 @@ Mechanical consolidation of SI-020 v0.11 RATIFIED (P-037) canonical content into
 
 **In scope:**
 
-1. **CDM v1.8 → v1.9:** +7 new entities + 1 plain data-minimization view + 1 OPTIONAL rebuildable MV + 7 SECURITY DEFINER procedures (raw `record_consult_lifecycle_transition` + 5 reason-specific wrappers + `record_consult_clinician_decision` wrapper + `claim_consult_for_review` + `reassign_consult_claim`). Continuing CDM numbering from v1.8's 89 active entities + 5 derived views; v1.9 target: 96 active entities + 6 derived views + 1 optional MV.
+1. **CDM v1.8 → v1.9:** +7 new entities + 2 plain data-minimization views (caller-class split per R5 HIGH-1) + 1 OPTIONAL rebuildable MV + 7 SECURITY DEFINER procedures (raw `record_consult_lifecycle_transition` + 5 reason-specific wrappers + `record_consult_clinician_decision` wrapper + `claim_consult_for_review` + `reassign_consult_claim`). Continuing CDM numbering from v1.8's 89 active entities + 5 derived views; v1.9 target: 96 active entities + 7 derived views + 1 optional MV.
 2. **AUDIT_EVENTS v5.10 → v5.11:** +17 new action IDs under `async_consult.*` namespace (4 Cat A + 3 Cat B + 10 Cat C per SI-020 R7 closure).
 3. **DOMAIN_EVENTS additive:** +7 new event types under `async_consult.*` namespace; additive enum extension (no version bump).
 4. **OpenAPI v0.3 → v0.4:** +11 new endpoints under `/v1/async-consults/*`.
 5. **State Machines v1.2 → v1.3:** +1 new state machine `consult_lifecycle` described as DERIVED from append-only `consult_lifecycle_transition` rows per Option A; CHECK constraint enumerates 22 allowed `(transition_reason, from_state, to_state)` triples.
-6. **RBAC v1.2 → v1.3:** +**12 new role definitions** (R1 MED-1 closure 2026-05-21: recounted to match §10 deployment preflight; earlier draft said "8 (4 application + 4 wrapper/owner)" which compressed 6 wrapper owner roles into 4 — actual count is 4 application + 6 wrapper owners + 2 view/MV owners = 12).
-7. **`jwt_migration_entity_status` seed scope:** 8 entries (7 RLS-bearing tables + 1 derived view trust-anchor `consult_outcome_summary_view`) with `phase_4_cutover_eligible=FALSE` + `raw_guc_fallback_audited=TRUE` defaults; cdm_owner sequencing per P-036 R6 (tables first, view last).
+6. **RBAC v1.2 → v1.3:** +**13 new role definitions** (R5 HIGH-1 closure 2026-05-21: split single `async_consult_reader` into `async_consult_patient_reader` + `async_consult_staff_reader` to enforce JWT-verified patient_id predicate on patient/delegate read path; previously POST-R1 MED-1 closure: recounted to match §10 deployment preflight — earlier draft said "8 (4 application + 4 wrapper/owner)" which compressed 6 wrapper owner roles into 4. Actual final count: 5 application + 6 wrapper owners + 2 view/MV owners = 13).
+7. **`jwt_migration_entity_status` seed scope:** 9 entries (7 RLS-bearing tables + 2 derived view trust-anchors `async_consult_patient_summary_v` + `async_consult_staff_summary_v`) with `phase_4_cutover_eligible=FALSE` + `raw_guc_fallback_audited=TRUE` defaults; cdm_owner sequencing per P-036 R6 (tables first, views last).
 
 **Out of scope:**
 
@@ -35,7 +35,7 @@ Mechanical consolidation of SI-020 v0.11 RATIFIED (P-037) canonical content into
 
 ---
 
-## 2. New CDM entities (7 active + 1 plain view + 1 OPTIONAL MV)
+## 2. New CDM entities (7 active + 2 plain views + 1 OPTIONAL MV)
 
 All 7 active entities are **P1 patient-bound** (per SI-018 partition rule). Tenant-threading per SI-024.1 v0.8 JWT-binding canonical pattern; all RLS via `current_tenant_id_strict('<entity_name>')`. Hybrid-persistence-with-one-way-release pattern applied to `consult_review_claim` per the new operational pattern documented at P-037 R4 closure.
 
@@ -551,44 +551,84 @@ CREATE TRIGGER consult_follow_up_message_append_only
 -- Per P-036 R7 closure data-minimization pattern: plain view + owner-only base-table grants
 -- + explicit current_tenant_id_strict() in view body. Reader role gets view-only access;
 -- cannot enumerate base tables; cannot read message ciphertext columns.
-CREATE VIEW consult_outcome_summary_view AS
+-- R5 HIGH-1 closure 2026-05-21: split into TWO views with caller-class-specific predicates so
+-- patient/delegate principals see only THEIR consults (filtered by JWT-verified patient_id) while
+-- clinician/admin/pharmacy see the broader tenant-scoped queue. Earlier single-view + single
+-- async_consult_reader role granted to patient role would have leaked other patients' consults
+-- to patient-app callers (only base-table ciphertext was hidden; metadata was tenant-wide).
+--
+-- View 1: async_consult_patient_summary_v — restricted to JWT-verified patient_id
+CREATE VIEW async_consult_patient_summary_v AS
 SELECT
     c.id AS consult_id,
     c.tenant_id,
     c.patient_id,
     c.consult_type,
     c.created_at,
-    -- Derived current_state from most-recent transition row
-    (SELECT to_state FROM consult_lifecycle_transition lt
+    (SELECT to_state FROM public.consult_lifecycle_transition lt
      WHERE lt.tenant_id = c.tenant_id AND lt.consult_id = c.id
      ORDER BY lt.transition_at DESC, lt.id DESC LIMIT 1) AS current_state,
-    -- Most-recent decision (if any)
-    (SELECT decision_type FROM consult_clinician_decision d
+    (SELECT decision_type FROM public.consult_clinician_decision d
      WHERE d.tenant_id = c.tenant_id AND d.consult_id = c.id
      ORDER BY d.decided_at DESC LIMIT 1) AS decision_type,
-    -- Prescribing count (if any)
-    (SELECT COUNT(*) FROM consult_clinician_decision d
+    (SELECT COUNT(*) FROM public.consult_clinician_decision d
      WHERE d.tenant_id = c.tenant_id AND d.consult_id = c.id AND d.decision_type = 'prescribe') AS prescribing_count,
-    -- Follow-up message count
-    (SELECT COUNT(*) FROM consult_follow_up_message m
+    (SELECT COUNT(*) FROM public.consult_follow_up_message m
      WHERE m.tenant_id = c.tenant_id AND m.consult_id = c.id) AS follow_up_message_count,
-    -- Most-recent transition timestamp
-    (SELECT MAX(transition_at) FROM consult_lifecycle_transition lt
+    (SELECT MAX(transition_at) FROM public.consult_lifecycle_transition lt
      WHERE lt.tenant_id = c.tenant_id AND lt.consult_id = c.id) AS last_transition_at
-FROM consult c
-WHERE c.tenant_id = current_tenant_id_strict('consult_outcome_summary_view');
+FROM public.consult c
+WHERE c.tenant_id = current_tenant_id_strict('async_consult_patient_summary_v')
+  -- R5 HIGH-1: patient/delegate principals see ONLY their own consults
+  AND c.patient_id = current_jwt_verified_patient_id('async_consult_patient_summary_v');
+  -- current_jwt_verified_patient_id() = SI-024.1 helper analogous to current_tenant_id_strict;
+  -- returns the patient_id from JWT-verified claims (admission-bound) OR the delegate's
+  -- authorized patient_id IFF delegate has book-consults scope per Consent slice; raises
+  -- patient_jwt_missing if no admission record exists.
 
-ALTER VIEW consult_outcome_summary_view OWNER TO async_consult_view_owner;  -- non-BYPASSRLS
-REVOKE ALL ON consult_outcome_summary_view FROM PUBLIC;
-GRANT SELECT ON consult_outcome_summary_view TO async_consult_reader;
+ALTER VIEW async_consult_patient_summary_v OWNER TO async_consult_view_owner;
+REVOKE ALL ON async_consult_patient_summary_v FROM PUBLIC;
+GRANT SELECT ON async_consult_patient_summary_v TO async_consult_patient_reader;
+-- async_consult_patient_reader is granted to patient role + delegate role IFF book-consults scope
+-- (separate from clinician/admin/pharmacy reader role below)
+
+-- View 2: async_consult_staff_summary_v — tenant-wide (clinician/admin/pharmacy reads)
+CREATE VIEW async_consult_staff_summary_v AS
+SELECT
+    c.id AS consult_id,
+    c.tenant_id,
+    c.patient_id,
+    c.consult_type,
+    c.created_at,
+    (SELECT to_state FROM public.consult_lifecycle_transition lt
+     WHERE lt.tenant_id = c.tenant_id AND lt.consult_id = c.id
+     ORDER BY lt.transition_at DESC, lt.id DESC LIMIT 1) AS current_state,
+    (SELECT decision_type FROM public.consult_clinician_decision d
+     WHERE d.tenant_id = c.tenant_id AND d.consult_id = c.id
+     ORDER BY d.decided_at DESC LIMIT 1) AS decision_type,
+    (SELECT COUNT(*) FROM public.consult_clinician_decision d
+     WHERE d.tenant_id = c.tenant_id AND d.consult_id = c.id AND d.decision_type = 'prescribe') AS prescribing_count,
+    (SELECT COUNT(*) FROM public.consult_follow_up_message m
+     WHERE m.tenant_id = c.tenant_id AND m.consult_id = c.id) AS follow_up_message_count,
+    (SELECT MAX(transition_at) FROM public.consult_lifecycle_transition lt
+     WHERE lt.tenant_id = c.tenant_id AND lt.consult_id = c.id) AS last_transition_at
+FROM public.consult c
+WHERE c.tenant_id = current_tenant_id_strict('async_consult_staff_summary_v');
+
+ALTER VIEW async_consult_staff_summary_v OWNER TO async_consult_view_owner;
+REVOKE ALL ON async_consult_staff_summary_v FROM PUBLIC;
+GRANT SELECT ON async_consult_staff_summary_v TO async_consult_staff_reader;
+-- async_consult_staff_reader is granted to clinician + admin + pharmacy portal roles
+-- (NOT patient/delegate roles; those use async_consult_patient_summary_v above)
 
 -- Owner-only base-table column grants (per P-036 R7 closure data-minimization)
 GRANT SELECT (id, tenant_id, patient_id, consult_type, created_at) ON consult TO async_consult_view_owner;
 GRANT SELECT (tenant_id, consult_id, to_state, transition_at, id) ON consult_lifecycle_transition TO async_consult_view_owner;
 GRANT SELECT (tenant_id, consult_id, decision_type, decided_at) ON consult_clinician_decision TO async_consult_view_owner;
 GRANT SELECT (tenant_id, consult_id) ON consult_follow_up_message TO async_consult_view_owner;
--- async_consult_reader has NO direct base-table access; reads only via the view.
--- Reader CANNOT see intake/summary/decision/message ciphertext columns even indirectly.
+-- Neither async_consult_patient_reader nor async_consult_staff_reader has direct base-table
+-- access; both read only via their respective views (patient_summary_v / staff_summary_v).
+-- Readers CANNOT see intake/summary/decision/message ciphertext columns even indirectly.
 ```
 
 ### §4.NEW9 — `consult_current_state_mv` (CDM v1.9 new OPTIONAL materialized view; SI-020 Sub-decision 9)
@@ -723,16 +763,17 @@ Terminal states: `completed`, `expired`. Non-terminal but flow-aware: `prescribe
 
 ## 8. RBAC v1.2 → v1.3 amendment
 
-**12 new roles** (R1 MED-1 closure 2026-05-21: recounted to align with §10 deployment preflight enumeration; 4 application + 6 wrapper owners [1 raw writer + 5 reason-specific wrappers] + 2 view/MV owners):
+**13 new roles** (R5 HIGH-1 closure 2026-05-21: split prior single `async_consult_reader` role into two caller-class-specific readers to enforce JWT-verified patient_id predicate on patient/delegate read path while preserving tenant-wide queue visibility for clinician/admin/pharmacy; previously POST-R1 MED-1 closure 2026-05-21: recounted to align with §10 deployment preflight enumeration; 5 application + 6 wrapper owners [1 raw writer + 5 reason-specific wrappers] + 2 view/MV owners):
 
-### Application roles (4)
+### Application roles (5)
 
 | Role | Granted to (via Admin Backend role-assignment) |
 |---|---|
 | `async_consult_patient_initiator` | patient role |
 | `async_consult_delegate_initiator` | delegate role IFF `book-consults` scope per Consent slice |
 | `async_consult_clinician_reviewer` | clinician role |
-| `async_consult_reader` | clinician + patient app + pharmacy portal + admin (view-only access per data-minimization pattern) |
+| `async_consult_patient_reader` | patient role + delegate role IFF `book-consults` scope (reads `async_consult_patient_summary_v` ONLY; predicate enforces caller sees only consults where `c.patient_id = current_jwt_verified_patient_id(...)`) |
+| `async_consult_staff_reader` | clinician + pharmacy portal + admin (reads `async_consult_staff_summary_v` ONLY; tenant-wide queue visibility for review/triage; NOT granted to patient/delegate) |
 
 ### Wrapper/Service-level owner roles (4)
 
@@ -740,14 +781,14 @@ Terminal states: `completed`, `expired`. Non-terminal but flow-aware: `prescribe
 |---|---|
 | `consult_lifecycle_transition_writer_owner` | `record_consult_lifecycle_transition()` (raw); INSERT on `consult_lifecycle_transition` table |
 | `consult_initiation_wrapper_owner` / `consult_intake_wrapper_owner` / `consult_ai_preparation_wrapper_owner` / `consult_claim_wrapper_owner` / `record_consult_decision_wrapper_owner` | Their respective wrapper procedures (5 wrappers total) |
-| `async_consult_view_owner` | `consult_outcome_summary_view` (non-BYPASSRLS); owner-only base-table SELECT grants |
+| `async_consult_view_owner` | `async_consult_patient_summary_v` + `async_consult_staff_summary_v` (both non-BYPASSRLS); owner-only base-table SELECT grants |
 | `async_consult_mv_refresh_owner` | `consult_current_state_mv` (optional MV); only role with direct MV SELECT |
 
 ---
 
 ## 9. `jwt_migration_entity_status` seed scope (P-036 R6 closure pattern)
 
-**Seed 8 entity names** at amendment-apply time with `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` defaults (Phase B fail-closed-with-audit posture):
+**Seed 9 entity names** at amendment-apply time with `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` defaults (Phase B fail-closed-with-audit posture):
 
 ```sql
 INSERT INTO jwt_migration_entity_status (entity_name, phase_4_cutover_eligible, raw_guc_fallback_audited)
@@ -759,10 +800,11 @@ VALUES
     ('consult_clinician_decision',                   FALSE, TRUE),
     ('consult_lifecycle_transition',                 FALSE, TRUE),
     ('consult_follow_up_message',                    FALSE, TRUE),
-    ('consult_outcome_summary_view',                 FALSE, TRUE);
+    ('async_consult_patient_summary_v',              FALSE, TRUE),
+    ('async_consult_staff_summary_v',                FALSE, TRUE);
 ```
 
-**cdm_owner sequencing guidance (per P-036 R6 closure precedent):** flip per-table `phase_4_cutover_eligible=TRUE` first (the 7 tables), then the derived view's trust-anchor last so all upstream writers are JWT-cutover before downstream readers.
+**cdm_owner sequencing guidance (per P-036 R6 closure precedent):** flip per-table `phase_4_cutover_eligible=TRUE` first (the 7 tables), then the two derived views' trust-anchors last so all upstream writers are JWT-cutover before downstream readers. The patient view requires both the canonical tenant-strict helper AND the new SI-024.1 `current_jwt_verified_patient_id()` helper to be JWT-cutover before flipping.
 
 ---
 
@@ -780,7 +822,7 @@ Required pre-existing roles (CREATE ROLE happens in a prior baseline DDL):
 | `record_consult_decision_wrapper_owner` | Decision wrapper owner (extends SI-005 P-021) |
 | `async_consult_view_owner` | Non-BYPASSRLS view owner (preflight asserts `rolbypassrls=false`) |
 | `async_consult_mv_refresh_owner` | MV refresh owner |
-| `async_consult_patient_initiator` / `async_consult_delegate_initiator` / `async_consult_clinician_reviewer` / `async_consult_reader` | App roles |
+| `async_consult_patient_initiator` / `async_consult_delegate_initiator` / `async_consult_clinician_reviewer` / `async_consult_patient_reader` / `async_consult_staff_reader` | App roles (5; R5 HIGH-1 split `async_consult_reader` into patient + staff reader pair) |
 
 ```sql
 DO $$
@@ -798,7 +840,8 @@ DECLARE
         'async_consult_patient_initiator',
         'async_consult_delegate_initiator',
         'async_consult_clinician_reviewer',
-        'async_consult_reader'
+        'async_consult_patient_reader',
+        'async_consult_staff_reader'
     ];
     v_role TEXT;
 BEGIN
@@ -843,6 +886,8 @@ END $$;
 
 3. **OQ3 — Canonical tenant-scoped account membership table** (R3 MED-1 closure 2026-05-21). `consult_review_claim.clinician_account_id` FK is composite tenant-scoped per the R3 closure pattern, referencing `tenant_account_membership(tenant_id, account_id)`. The exact canonical entity name + columns for tenant-scoped account membership is owned by Identity slice (SI-017). Ratifier confirms: (a) Identity slice canonical entity name (assumed `tenant_account_membership`; may differ as `account_tenant_link`, `tenant_user`, etc.); (b) composite UNIQUE on `(tenant_id, account_id)` exists; (c) FK columns match. If the canonical entity doesn't yet exist, the implementation amendment adds it as a baseline prerequisite per Identity slice scope OR defers this FK with explicit cross-reference TODO until Identity slice formalizes the membership entity.
 
+4. **OQ4 — Canonical JWT-verified patient_id helper** (R5 HIGH-1 closure 2026-05-21). The split `async_consult_patient_summary_v` references `current_jwt_verified_patient_id('<entity_name>')` in its predicate to restrict patient/delegate principals to ONLY their own consults. The exact canonical helper name + delegate-scope predicate semantics are owned by SI-024.1 (JWT-binding canonical trust anchor) + Consent slice (delegate scopes). Ratifier confirms: (a) SI-024.1 helper canonical name (assumed `current_jwt_verified_patient_id`; may differ as `current_session_patient_id`, `verified_patient_from_jwt`, etc.); (b) the helper raises `patient_jwt_missing` (or canonical-equivalent SQLSTATE) when no admission record exists; (c) the helper auto-resolves delegate principals to their authorized patient_id IFF delegate has `book-consults` scope per Consent slice, raising `delegate_scope_missing` otherwise; (d) helper signature matches the SI-024.1 canonical pattern of taking `<entity_name>` argument for audit-event attribution. If the canonical helper doesn't yet exist, ratifier authorizes adding it to SI-024.1 baseline as a P-038 prerequisite OR splitting the predicate into explicit `session_jwt_admission` JOIN + Consent-table lookup until SI-024.1 formalizes the helper.
+
 ---
 
 ## 13. Codex pre-ratification status
@@ -854,7 +899,10 @@ END $$;
 - **R1 HIGH-2 closed:** `consult_lifecycle_transition` row-level CHECK validated individual triples but did NOT enforce that new from_state == current latest to_state — direct table INSERTs by `consult_lifecycle_transition_writer_owner` (which has INSERT grant) could create divergent histories that still passed CHECK. Fix: added `consult_lifecycle_transition_continuity` BEFORE INSERT trigger that takes per-consult advisory lock + reads latest to_state under lock + validates continuity + rejects from-terminal transitions. Regardless of caller, lifecycle integrity is now schema-enforced (not procedure-dependent).
 - **R1 MED-1 closed:** RBAC count mismatch — §1 scope + §8 said "8 roles (4 application + 4 wrapper/owner)" but §10 deployment preflight enumerated 12 roles. Implementer following §1/§8 would under-provision. Fix: recounted to **12 roles** (4 app + 6 wrapper owners + 2 view/MV owners) matching preflight enumeration; §1 + §8 + §10 now mutually consistent.
 
-Authored on `spec/cdm-v1-9-audit-v5-11-openapi-v0-4-sm-v1-3-rbac-v1-3-si020-followon-2026-05-21` branch off main at `3129579` (post-P-037 + Addendum 65). v0.2 commit `48ca67d`. v0.3 commit `6522879`. v0.4 commit `bcf774d`. v0.5 commit pending push for R5 verification.
+Authored on `spec/cdm-v1-9-audit-v5-11-openapi-v0-4-sm-v1-3-rbac-v1-3-si020-followon-2026-05-21` branch off main at `3129579` (post-P-037 + Addendum 65). v0.2 commit `48ca67d`. v0.3 commit `6522879`. v0.4 commit `bcf774d`. v0.5 commit `dfff011`. v0.6 commit pending push for R6 verification.
+
+**v0.6 DRAFT 2026-05-21 — R5 closure applied (1 HIGH):**
+- **R5 HIGH-1 closed:** single tenant-wide `consult_outcome_summary_view` + single `async_consult_reader` role granted to patient/delegate role would have leaked OTHER patients' consult metadata (consult_id, consult_type, current_state, decision_type, prescribing_count, last_transition_at) to patient-app callers within the same tenant — only base-table ciphertext columns were hidden by data-minimization pattern; metadata was tenant-wide. Fix: view + reader role SPLIT into two caller-class-specific pairs. (1) `async_consult_patient_summary_v` adds predicate `AND c.patient_id = current_jwt_verified_patient_id('async_consult_patient_summary_v')` restricting patient/delegate principals to ONLY their own consults; granted to new `async_consult_patient_reader` role (held by patient + delegate IFF book-consults scope). (2) `async_consult_staff_summary_v` retains tenant-wide visibility for clinician/admin/pharmacy queue triage; granted to new `async_consult_staff_reader` role. New SI-024.1 helper `current_jwt_verified_patient_id(<entity>)` analogous to `current_tenant_id_strict`; raises `patient_jwt_missing` if no admission record. RBAC count 12 → 13 roles (5 app + 6 wrapper owners + 2 view/MV owners); §10 preflight enumeration updated; §9 seed scope adds both view names (now 9 entities, replacing single view entry). New OQ4 added for Identity-slice + Consent-slice owners to confirm canonical helper name + delegate-scope predicate semantics. Per-tenant patient-summary data leak now schema-enforced.
 
 **v0.5 DRAFT 2026-05-21 — R4 closure applied (1 HIGH):**
 - **R4 HIGH-1 closed:** invariant-enforcing trigger functions used unqualified table references + lacked locked search_path → caller-controlled temp relation shadowing could redirect invariant checks to attacker-controlled rows (validation passes, but real FK still references actual released claim → append-only decision inserted against released claim, reopening exact race R3 was meant to close). Fix: applied canonical P-034 R7 SECURITY DEFINER hardening pattern to all 3 invariant-enforcing trigger functions: (a) `consult_clinician_decision_validate_claim_active` — `SET search_path = pg_catalog, public` + `FROM public.consult_review_claim`; (b) `consult_lifecycle_transition_continuity` — same; (c) `consult_review_claim_one_way_released_at` — same (no SELECT in body but locked search_path for consistency). Trust-boundary now fully hardened.
