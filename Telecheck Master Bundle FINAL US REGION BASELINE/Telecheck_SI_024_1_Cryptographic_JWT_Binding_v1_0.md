@@ -1,7 +1,7 @@
 # SI-024.1 — Cryptographic JWT-Binding for Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.4 DRAFT
-**Status:** R3 closed inline (2 HIGH + 1 MED): session_jwt_replay_set schema extended with backend_pid + backend_start_at columns enabling cross-backend-vs-same-backend distinction (closes HIGH-1); partial-index `WHERE expires_at > now()` replaced with normal btree index covering expires_at (closes HIGH-2 — `now()` is STABLE not IMMUTABLE, partial-index predicates require IMMUTABLE); current_backend_start_at() canonical helper added reading from pg_stat_activity (closes MED — PostgreSQL has no zero-arg pg_backend_start() built-in). R4 verification queued.
+**Version:** 1.0 v0.5 DRAFT — RATIFIER-READY at §10-cadence boundary (R4 boundary close per OQ7 4-5 round target)
+**Status:** R4 closed inline (1 HIGH): Sub-decision 8 dual-control procedures expanded from comment-stubs to deployable PL/pgSQL bodies — propose_break_glass_approval (caller role+time-bound+target-role validation, INSERT pending with caller's authorizer field, audit emission) + co_authorize_break_glass_approval (lock-for-update, distinct-role + distinct-human enforcement, atomic state transition to 'active', audit emission). 11 findings closed cumulative across R1-R4 + 2-pass synthesis. §10-cadence boundary reached per OQ7. Pre-merge two-pass consult queued.
 **Authoring date:** 2026-05-20
 **Trigger:** SI-024 v0.17 TRANSITIONAL ratification at Promotion Ledger P-030 (committed via auto-proceed merge `3fcbef8` on main). SI-024.1 closes the cryptographic-binding gap deferred from SI-024 v1.0 — specifically the compromised-middleware-credential threat class that the role-constrained-GUC pattern explicitly does NOT close. Per OQ-NEW1/2 commitments at P-030: SI-024.1 v0.1 DRAFT target 2026-06-19 (30 days from P-030); ratifier ceremony target 2026-08-18 (90 days from P-030). SI-024.1 IS the gate that lifts the "production target-tenant break-glass BLOCKED" + "Phase 4 cutover BLOCKED" + "INVARIANTS I-036 BLOCKED" constraints carried in SI-024 v1.0 TRANSITIONAL.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024).
@@ -460,23 +460,173 @@ ALTER TABLE break_glass_approval
     ADD COLUMN state TEXT NOT NULL DEFAULT 'pending_co_auth'
         CHECK (state IN ('pending_co_auth', 'active', 'rejected'));
 
--- Procedures:
-CREATE PROCEDURE propose_break_glass_approval(
-    target_tenant_id tenant_id_t,
-    operator_user_id UUID,
-    operator_role TEXT,
-    approval_reason TEXT,
-    expires_at TIMESTAMPTZ
-) AS $$
--- Caller must be compliance_officer OR cto_role (verified via JWT claims, not role-membership).
--- INSERTs row with state='pending_co_auth' + the caller's own authorizer field populated.
-$$;
+-- Procedures (R4 HIGH closure 2026-05-20: deployable PL/pgSQL bodies with verified-claims checks +
+-- atomic state transitions + audit emission. SECURITY DEFINER + search_path hardened per SI-024 pattern.)
 
-CREATE PROCEDURE co_authorize_break_glass_approval(approval_id UUID) AS $$
--- Caller must be the OTHER dual-control role (compliance_officer if proposer was cto_role, and vice versa).
--- UPDATEs row: populates other authorizer field + sets state='active'.
--- Verifies distinct human_id (no self-co-authorization).
-$$;
+-- propose_break_glass_approval: phase 1 of dual-control workflow.
+-- Caller must hold either compliance_officer OR cto_role (verified via JWT claims, NOT role-membership).
+-- INSERTs row with state='pending_co_auth' + the caller's OWN authorizer field populated.
+-- The OTHER authorizer field is left NULL pending co-authorization.
+CREATE PROCEDURE propose_break_glass_approval(
+    p_target_tenant_id tenant_id_t,
+    p_operator_user_id UUID,
+    p_operator_role TEXT,
+    p_approval_reason TEXT,
+    p_expires_at TIMESTAMPTZ
+) AS $$
+DECLARE
+    claims verified_jwt_claims_t;
+    new_approval_id UUID := gen_random_uuid();
+BEGIN
+    claims := verify_session_jwt_and_extract_claims();  -- raises on invalid/missing-admission
+    -- Caller role verification: must be a dual-control authorizer role.
+    IF claims.actor_role NOT IN ('compliance_officer', 'cto_role') THEN
+        RAISE EXCEPTION 'caller role (%) not in dual-control authorizer set; propose_break_glass_approval denied',
+            claims.actor_role
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    -- Time-bound check: expires_at must be in the future + within canonical 4-hour cap per SI-024 Sub-decision 5a.
+    IF p_expires_at <= now() OR p_expires_at > now() + INTERVAL '4 hours' THEN
+        RAISE EXCEPTION 'expires_at (%) must be within (now(), now()+4 hours]', p_expires_at
+            USING ERRCODE = 'invalid_parameter_value';
+    END IF;
+    -- Target operator role validation.
+    IF p_operator_role NOT IN (
+        'platform_operator_break_glass',
+        'platform_operator_dr_recovery',
+        'platform_operator_compliance_audit'
+    ) THEN
+        RAISE EXCEPTION 'p_operator_role (%) not in platform-operator set', p_operator_role
+            USING ERRCODE = 'invalid_parameter_value';
+    END IF;
+    -- INSERT pending approval with caller's authorizer field populated.
+    INSERT INTO public.break_glass_approval (
+        id, target_tenant_id, operator_user_id, operator_role,
+        approval_reason, expires_at, state,
+        authorized_by_compliance_officer_user_id,
+        authorized_by_cto_user_id,
+        approved_at
+    )
+    VALUES (
+        new_approval_id, p_target_tenant_id, p_operator_user_id, p_operator_role,
+        p_approval_reason, p_expires_at, 'pending_co_auth',
+        CASE WHEN claims.actor_role = 'compliance_officer' THEN claims.actor_human_id ELSE NULL END,
+        CASE WHEN claims.actor_role = 'cto_role' THEN claims.actor_human_id ELSE NULL END,
+        NULL  -- approved_at set at co-authorization, not at proposal
+    );
+    -- Emit Cat A audit event: break_glass_approval_proposed.
+    INSERT INTO public.audit_events (
+        action_id, partition, partition_key,
+        actor_role, actor_user_id,
+        subject_tenant_id, subject_entity_type, subject_entity_id,
+        event_metadata, occurred_at
+    )
+    VALUES (
+        'tenant_context.break_glass_approval_proposed', 'P2', 'platform',
+        claims.actor_role, claims.actor_human_id,
+        p_target_tenant_id, 'break_glass_approval', new_approval_id,
+        jsonb_build_object(
+            'operator_user_id', p_operator_user_id,
+            'operator_role', p_operator_role,
+            'approval_reason', p_approval_reason,
+            'expires_at', p_expires_at,
+            'proposer_role', claims.actor_role
+        ),
+        now()
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;
+
+-- co_authorize_break_glass_approval: phase 2 of dual-control workflow.
+-- Caller must hold the OTHER role (compliance_officer if proposer was cto_role, and vice versa).
+-- Must be a distinct human_id from the proposer (no self-co-authorization).
+-- Atomically UPDATEs row: populates other authorizer field + sets state='active' + approved_at = now().
+CREATE PROCEDURE co_authorize_break_glass_approval(p_approval_id UUID) AS $$
+DECLARE
+    claims verified_jwt_claims_t;
+    existing_approval RECORD;
+BEGIN
+    claims := verify_session_jwt_and_extract_claims();
+    -- Caller role verification.
+    IF claims.actor_role NOT IN ('compliance_officer', 'cto_role') THEN
+        RAISE EXCEPTION 'caller role (%) not in dual-control authorizer set', claims.actor_role
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    -- Lock the pending approval row for atomic state transition (prevents concurrent co-auth race).
+    SELECT
+        id, state,
+        authorized_by_compliance_officer_user_id,
+        authorized_by_cto_user_id,
+        target_tenant_id, operator_user_id, operator_role,
+        expires_at
+    INTO existing_approval
+    FROM public.break_glass_approval
+    WHERE id = p_approval_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'break_glass_approval id=% not found', p_approval_id
+            USING ERRCODE = 'no_data_found';
+    END IF;
+    IF existing_approval.state <> 'pending_co_auth' THEN
+        RAISE EXCEPTION 'break_glass_approval id=% is in state=%; can only co-authorize from pending_co_auth',
+            p_approval_id, existing_approval.state
+            USING ERRCODE = 'invalid_transaction_state';
+    END IF;
+    IF existing_approval.expires_at <= now() THEN
+        RAISE EXCEPTION 'break_glass_approval id=% has expired; cannot co-authorize', p_approval_id
+            USING ERRCODE = 'invalid_transaction_state';
+    END IF;
+    -- Caller must be the OTHER dual-control role + distinct human_id from proposer.
+    IF claims.actor_role = 'compliance_officer' THEN
+        IF existing_approval.authorized_by_compliance_officer_user_id IS NOT NULL THEN
+            RAISE EXCEPTION 'proposer was already compliance_officer; co-authorizer must be cto_role'
+                USING ERRCODE = 'insufficient_privilege';
+        END IF;
+        IF existing_approval.authorized_by_cto_user_id = claims.actor_human_id THEN
+            RAISE EXCEPTION 'co-authorizer human_id (%) must be distinct from proposer human_id', claims.actor_human_id
+                USING ERRCODE = 'insufficient_privilege';
+        END IF;
+        UPDATE public.break_glass_approval
+            SET authorized_by_compliance_officer_user_id = claims.actor_human_id,
+                state = 'active',
+                approved_at = now()
+            WHERE id = p_approval_id;
+    ELSIF claims.actor_role = 'cto_role' THEN
+        IF existing_approval.authorized_by_cto_user_id IS NOT NULL THEN
+            RAISE EXCEPTION 'proposer was already cto_role; co-authorizer must be compliance_officer'
+                USING ERRCODE = 'insufficient_privilege';
+        END IF;
+        IF existing_approval.authorized_by_compliance_officer_user_id = claims.actor_human_id THEN
+            RAISE EXCEPTION 'co-authorizer human_id (%) must be distinct from proposer human_id', claims.actor_human_id
+                USING ERRCODE = 'insufficient_privilege';
+        END IF;
+        UPDATE public.break_glass_approval
+            SET authorized_by_cto_user_id = claims.actor_human_id,
+                state = 'active',
+                approved_at = now()
+            WHERE id = p_approval_id;
+    END IF;
+    -- Emit Cat A audit event: break_glass_approval_co_authorized.
+    INSERT INTO public.audit_events (
+        action_id, partition, partition_key,
+        actor_role, actor_user_id,
+        subject_tenant_id, subject_entity_type, subject_entity_id,
+        event_metadata, occurred_at
+    )
+    VALUES (
+        'tenant_context.break_glass_approval_co_authorized', 'P2', 'platform',
+        claims.actor_role, claims.actor_human_id,
+        existing_approval.target_tenant_id, 'break_glass_approval', p_approval_id,
+        jsonb_build_object(
+            'operator_user_id', existing_approval.operator_user_id,
+            'operator_role', existing_approval.operator_role,
+            'co_authorizer_role', claims.actor_role,
+            'state_transition', 'pending_co_auth → active'
+        ),
+        now()
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;
 ```
 
 This closes SI-024 v0.17 simplification #9 — no longer requires out-of-band trust + self-attestation.
