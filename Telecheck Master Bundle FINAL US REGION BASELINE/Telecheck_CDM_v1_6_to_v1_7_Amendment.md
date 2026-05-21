@@ -1,7 +1,7 @@
 # CDM v1.6 → v1.7 + AUDIT_EVENTS v5.8 → v5.9 + OpenAPI v0.2 → v0.3 + State Machines v1.1 → v1.2 + RBAC v1.1 → v1.2 Amendment (SI-019 follow-on)
 
-**Version:** 0.1 DRAFT
-**Status:** PRE-CODEX (awaiting R1 source-first review per CLAUDE.md two-pass discipline; mechanical consolidation cycle)
+**Version:** 0.2 DRAFT
+**Status:** POST-R1 (2 HIGH + 2 MED closed inline: advisory-lock cast overflow → BIGINT single-arg overload with namespace-prefixed key; SECURITY DEFINER search_path resolution → schema-qualified `public.gen_ulid()`; MV access function type-mismatch → explicit `::interaction_signal_state_t` / `::interaction_signal_transition_reason_t` casts + future TYPES amendment note; procedure count normalized from 6 to 7 throughout scope + heading)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-033 (SI-019 Medication Interaction & Validation Engine Slice PRD v1.0 → v2.0 RATIFIED via Option A canonical Phase B append-only-only lifecycle persistence; Registry v2.19 → v2.20). Per the established post-P-029 spec-first promotion pattern, SI-019's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified; mirrors P-032's pattern of CDM amendment AFTER SI-024.1 ratified).
 **Owner:** Clinical Governance Lead (SI-019 v1.0 owner) + Async Consult slice owner (cross-cutting consumer) + CDM owner + AUDIT_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -13,7 +13,7 @@
 ## 1. Purpose + scope
 
 This amendment promotes the canonical content of SI-019 v0.8 RATIFIED into:
-- CDM v1.6 → v1.7 (4 new entities + 6 new SECURITY DEFINER procedures + 1 SECURITY BARRIER view + 1 SECURITY DEFINER access function + 1 optional materialized view)
+- CDM v1.6 → v1.7 (4 new entities + **7 new SECURITY DEFINER procedures** [1 raw transition writer + 5 reason-specific lifecycle wrappers + 1 override wrapper] + 1 SECURITY BARRIER view + 1 SECURITY DEFINER access function + 1 optional materialized view)
 - AUDIT_EVENTS v5.8 → v5.9 (6 new action IDs under `medication_interaction.*` namespace)
 - DOMAIN_EVENTS additive (no version bump; 5 new event types under `medication_interaction.*` namespace)
 - OpenAPI v0.2 → v0.3 (8 new endpoints under `/v1/medication-interaction/*`)
@@ -24,7 +24,7 @@ The amendment is **mechanical consolidation** of already-Codex-converged canonic
 
 **In scope:**
 
-1. CDM v1.6 → v1.7 with 4 new entities (continuing CDM numbering from v1.6's 80 active entities + 3 derived views; v1.7 target: 84 active entities + 4 derived views).
+1. CDM v1.6 → v1.7 with 4 new entities + **7 SECURITY DEFINER procedures (1 raw transition writer + 5 reason-specific lifecycle wrappers + 1 override wrapper)** + 1 SECURITY BARRIER view + 1 SECURITY DEFINER access function + 1 optional materialized view (R1 MED-2 closure 2026-05-21: procedure count normalized to 7 throughout — earlier "6 procedures" mention conflated the lifecycle wrapper count with the total procedure count). Continuing CDM numbering from v1.6's 80 active entities + 3 derived views; v1.7 target: 84 active entities + 4 derived views.
 2. AUDIT_EVENTS v5.8 → v5.9 with 6 new action IDs (4 Cat A + 2 Cat B) under `medication_interaction.*` namespace.
 3. DOMAIN_EVENTS additive: 5 new event types under `medication_interaction.*` namespace.
 4. OpenAPI v0.2 → v0.3 with 8 new endpoints under `/v1/medication-interaction/*`.
@@ -316,7 +316,16 @@ WHERE tenant_id = current_setting('app.tenant_id', false)::tenant_id_t;
 REVOKE ALL ON interaction_signal_current_state_v FROM PUBLIC;
 GRANT SELECT ON interaction_signal_current_state_v TO medication_interaction_signal_viewer;
 
--- SECURITY DEFINER access function: alternate pattern for singleton lookups
+-- SECURITY DEFINER access function: alternate pattern for singleton lookups.
+-- R1 MED-1 closure 2026-05-21: explicit casts on text-typed MV columns to the declared
+-- return-type domains. The CHECK-constrained text columns (to_state, transition_reason) in the
+-- underlying transition table propagate through the MV as text; the access function declares
+-- canonical domains (interaction_signal_state_t, interaction_signal_transition_reason_t) for the
+-- app-facing contract. Without explicit casts, SQL functions enforce strict type-match between
+-- declared return types and SELECT-list types — would fail at CREATE FUNCTION time.
+-- A separate (future) TYPES amendment cycle should formalize these as DOMAIN types backed by
+-- equivalent CHECK constraints and migrate the columns from TEXT to the domain types so the casts
+-- become no-ops; for this amendment cycle, the casts are the spec-compliant closure.
 CREATE FUNCTION get_interaction_signal_current_state(p_signal_id ulid_t)
 RETURNS TABLE(
     signal_id ulid_t,
@@ -324,7 +333,11 @@ RETURNS TABLE(
     as_of TIMESTAMPTZ,
     transition_reason interaction_signal_transition_reason_t
 ) AS $$
-    SELECT mv.signal_id, mv.current_state, mv.as_of, mv.transition_reason
+    SELECT
+        mv.signal_id,
+        mv.current_state::interaction_signal_state_t,
+        mv.as_of,
+        mv.transition_reason::interaction_signal_transition_reason_t
     FROM public.interaction_signal_current_state_mv mv
     WHERE mv.tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
       AND mv.signal_id = p_signal_id;
@@ -352,7 +365,7 @@ GRANT EXECUTE ON FUNCTION public.get_interaction_signal_current_state(ulid_t) TO
 
 ---
 
-## 3. New SECURITY DEFINER procedures (6 total: 1 raw + 5 reason-specific wrappers + 1 override wrapper)
+## 3. New SECURITY DEFINER procedures (7 total: 1 raw transition writer + 5 reason-specific lifecycle wrappers + 1 override wrapper)
 
 ### §6.NEW1 — `record_interaction_signal_lifecycle_transition()` (raw canonical transition writer)
 
@@ -384,10 +397,17 @@ BEGIN
             USING ERRCODE = 'insufficient_privilege';
     END IF;
 
-    -- STEP 1: advisory-lock on (tenant_id, signal_id); re-entrant within same xact
+    -- STEP 1: advisory-lock on (tenant_id, signal_id); re-entrant within same xact.
+    -- R1 HIGH-1 closure 2026-05-21: use the BIGINT single-argument overload with a stable 64-bit
+    -- hash key (hashtextextended returns bigint; casting to int4 can overflow). Lock key is
+    -- derived from a stable canonical-namespace + composite-id text so different lifecycle
+    -- subsystems on the same tenant/signal pair would not collide (the namespace prefix
+    -- discriminates).
     v_lock_acquired := pg_try_advisory_xact_lock(
-        hashtextextended(p_tenant_id::text || ':' || p_signal_id::text, 0)::int,
-        hashtextextended('interaction_signal_lifecycle_transition', 0)::int
+        hashtextextended(
+            'interaction_signal_lifecycle_transition:' || p_tenant_id::text || ':' || p_signal_id::text,
+            0
+        )
     );
     IF NOT v_lock_acquired THEN
         RAISE EXCEPTION 'advisory_lock_unavailable'
@@ -424,14 +444,17 @@ BEGIN
         END IF;
     END IF;
 
-    -- STEP 4: INSERT the new transition row; row-level CHECK validates the triple
+    -- STEP 4: INSERT the new transition row; row-level CHECK validates the triple.
+    -- R1 HIGH-2 closure 2026-05-21: schema-qualify public.gen_ulid() — SECURITY DEFINER
+    -- search_path is intentionally restricted to (pg_catalog, pg_temp) so non-pg_catalog helpers
+    -- MUST be schema-qualified to resolve.
     INSERT INTO public.interaction_signal_lifecycle_transition (
         id, tenant_id, signal_id,
         from_state, to_state, transition_reason,
         transition_at, transition_by_actor_id, transition_by_actor_role,
         metadata
     ) VALUES (
-        gen_ulid(), p_tenant_id, p_signal_id,
+        public.gen_ulid(), p_tenant_id, p_signal_id,
         COALESCE(v_latest_to_state, 'none'), p_to_state, p_transition_reason,
         now(), p_actor_id, p_actor_role,
         p_metadata
@@ -692,7 +715,13 @@ These are NOT granted to humans; they OWN the wrapper procedures and are the onl
 
 **v0.1 DRAFT 2026-05-21:** pre-Codex-review.
 
-Authored on `spec/cdm-v1-7-audit-v5-9-openapi-v0-3-sm-v1-2-rbac-v1-2-si019-followon-2026-05-21` branch off main at `af66412` (post-P-033 + Addendum 61).
+**v0.2 DRAFT 2026-05-21 — R1 closures applied (2 HIGH + 2 MED):**
+- **R1 HIGH-1 closed:** Advisory-lock key derivation used `hashtextextended()::int` which can overflow casting 64-bit hash to int4 → nondeterministic failure before continuity checks. Fix: switched to `pg_try_advisory_xact_lock(BIGINT)` single-argument overload with namespace-prefixed stable 64-bit hash key (`'interaction_signal_lifecycle_transition:' || tenant_id || ':' || signal_id`); namespace prefix discriminates from other lifecycle subsystems on the same tenant/signal pair.
+- **R1 HIGH-2 closed:** SECURITY DEFINER bodies set `search_path = pg_catalog, pg_temp` but called `gen_ulid()` unqualified — would fail to resolve at execution since `gen_ulid()` lives in `public` (or extension) schema. Fix: schema-qualified as `public.gen_ulid()`.
+- **R1 MED-1 closed:** SECURITY DEFINER access function `get_interaction_signal_current_state()` declared return types `interaction_signal_state_t` + `interaction_signal_transition_reason_t` but MV columns inherit as TEXT from the transition table's TEXT+CHECK column types. Fix: explicit casts `mv.current_state::interaction_signal_state_t` + `mv.transition_reason::interaction_signal_transition_reason_t` in the return query. Future TYPES amendment cycle should formalize these as DOMAIN types backed by equivalent CHECK constraints and migrate the columns from TEXT to the domain types — at which point the casts become no-ops; for this amendment cycle the casts are the spec-compliant closure.
+- **R1 MED-2 closed:** Procedure count inconsistency — §1 scope said 6 procedures but section §3 defined 7 (1 raw + 5 lifecycle wrappers + 1 override wrapper). RBAC §8 already correctly listed 6 wrapper owner roles + 1 service-level role + 1 raw writer owner = 8 owner roles. Fix: normalized scope + §1 in-scope item 1 + §3 heading to "7 SECURITY DEFINER procedures (1 raw transition writer + 5 reason-specific lifecycle wrappers + 1 override wrapper)" — matches §3 body + §8 RBAC roles.
+
+Authored on `spec/cdm-v1-7-audit-v5-9-openapi-v0-3-sm-v1-2-rbac-v1-2-si019-followon-2026-05-21` branch off main at `af66412` (post-P-033 + Addendum 61). v0.2 commit pending push for R2 verification.
 
 ---
 
