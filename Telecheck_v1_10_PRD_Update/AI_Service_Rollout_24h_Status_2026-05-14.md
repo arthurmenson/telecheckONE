@@ -4150,3 +4150,88 @@ Pass-2 + Claude agreed on B+ → auto-proceed merge executed.
 The Q2 2026 cycle has now ratified 4 successive SIs via the codified dual-recommendation + two-pass + auto-proceed disciplines: P-026 (Q2 batched ratifier ceremony), P-028 (SI-021 SIEM Hash-Chain Archival), P-029 (CDM v1.5 SI-021 follow-on), P-030 (SI-024 v0.17 TRANSITIONAL). Each cycle has produced novel process insights codified back into CLAUDE.md (`f3a6469` → `4f42a00` → `16d7244` → `f483535`). SI-024 specifically demonstrated the discipline's value at scale: 17 cycles iteratively converging on a substantively correct v1.0 floor despite the extreme difficulty of the PostgreSQL trust-anchor surface area. 0 hard-floor item 6 violations across all cycles validates the STOP-and-escalate discipline; the strategic Pass-2 synthesis (B+ Option) demonstrated the dual-recommendation's value at the merge-gate (catching framing defects neither reviewer alone would surface).
 
 — Claude (Opus 4.7, 1M context), SI-024 v0.17 TRANSITIONAL cycle close-out 2026-05-20 via auto-proceed. Main at `3fcbef8`. Registry v2.17. P-030 appended. SI-024.1 queued as next autonomous-work deliverable per OQ-NEW1/2 commitments.
+
+---
+
+## Addendum 59 — SI-024.1 v0.8 Cryptographic JWT-Binding LANDED via auto-proceed (Codex cycle-4 APPROVE); merge `56e4d2c`; Registry v2.17 → v2.18; SI-024 v0.17 TRANSITIONAL gates LIFTED post-Phase-D telemetry-clean window; 19 findings across 8 cycles; day-0 OQ-NEW1 delivery
+
+**Date:** 2026-05-20
+**Trigger:** Auto-proceed execution at Codex cycle-4 APPROVE + Claude READY-TO-MERGE convergence per CLAUDE.md commit `f483535`.
+
+**Cycle convergence narrative:**
+
+SI-024.1 was authored on day 0 of the 30-day OQ-NEW1 commitment window at P-030 (target was 2026-06-19; delivered 2026-05-20). 19 findings closed across 8 Codex cycles (4 adversarial-review R1-R4 + 4 pre-merge consult cycles + 2 two-pass synthesis cycles). First APPROVE verdict at cycle-4 — convergence achieved without ERR escalation.
+
+**Cycle metrics:**
+
+| Phase | Findings closed |
+|---|---|
+| R1 Pass-1 + Claude inline | 4 (1 CRIT + 2 HIGH + 1 MED) |
+| R2 Pass-2 inline | 3 (1 CRIT + 1 HIGH + 1 MED) |
+| R3 single-invocation | 3 (2 HIGH + 1 MED) |
+| R4 single-invocation | 1 (1 HIGH) |
+| Pre-merge Pass-1 | 3 (2 HIGH + 1 MED) |
+| Pre-merge Pass-2 | 3 (2 HIGH + 1 MED) |
+| Pre-merge cycle-3 | 2 (1 HIGH + 1 MED) |
+| Pre-merge cycle-4 | **APPROVE** (no material findings) |
+| **Total** | **19 findings** (2 CRITICAL + 11 HIGH + 6 MED); **0 hard-floor item 6 violations**; **0 ERR escalations** |
+
+**SI-024 v0.17 TRANSITIONAL gates LIFTED post-Phase-D telemetry-clean window:**
+
+| Gate | Status post-SI-024.1 merge |
+|---|---|
+| Phase 4 cutover (drop raw-GUC permissive RLS policies; hardened helper sole canonical enforcement) | **UNBLOCKED** post-SI-024.1 Phase A foundation deploy + 30-day Phase B+C telemetry-clean window |
+| INVARIANTS I-036 platform-floor invariant | Lands at INVARIANTS v5.5 co-bumped with first Phase 4 entity cutover (per SI-024 OQ5) |
+| Production target-tenant break-glass operations | **UNBLOCKED** post-Phase A foundation deploy — production paths use `begin_target_tenant_break_glass_session()` + per-access audit + cryptographic JWT-verified operator claims |
+
+**SI-024 v0.17 9 acknowledged simplifications — 8 CLOSED by SI-024.1 v0.8:**
+
+| # | v0.17 simplification | SI-024.1 closure |
+|---|---|---|
+| 1 | Compromised middleware-credential spoofing NOT closed | ✅ Cryptographic JWT-binding via verified claims |
+| 2 | Approval matching by human_id only, not specific operator_role | ✅ JWT claims include verified operator_role; helper matches both |
+| 3 | Middleware-writer membership disjointness audit | Carried (deployment-discipline requirement; unchanged) |
+| 4 | app.actor_human_id session GUC middleware-trusted | ✅ Now cryptographically bound via JWT signature |
+| 5 | SET ROLE convention | Carried (unchanged) |
+| 6 | break_glass_approval WORM mutation discipline | Carried (unchanged) |
+| 7 | Phase 4 cutover gated on SI-024.1 readiness | ✅ Now lifted post-Phase-D telemetry-clean |
+| 8 | Per-invocation audit emission deferred | ✅ `begin_target_tenant_break_glass_session()` emits per-access Cat A audit |
+| 9 | Dual-control via self-attestation + out-of-band | ✅ Two-phase workflow (propose + co-authorize) with distinct-role + distinct-human enforcement |
+| **#10 (NEW from SI-024.1)** | **DB-side cryptographic per-statement enforcement of fallback audit** | Documented + deferred to hypothetical future SI-024.2 (Phase D telemetry-clean gate is the enforcement mechanism for v1.0) |
+
+**Process novelties continued:**
+
+1. **Day-0 OQ-NEW1 commitment delivery** — SI-024.1 v0.8 delivered on day 0 of the 30-day window committed at P-030. Validates the autonomous-work continuation discipline at scale.
+2. **First APPROVE verdict at pre-merge cycle-4** — Codex explicitly noted: "The remaining fallback-audit limitation is explicitly acknowledged as simplification #10 with a Phase D gate/manual-investigation control, so it is not an unclosed contradiction in this change." Convergence without ERR escalation.
+3. **Same-class defect catch in pre-merge Pass-2** — Pass-2 caught the same STABLE+INSERT defect class that R1 CRITICAL closed, re-introduced in v0.6 closures for HIGH-2. Validates that the recursive-defect-catch mechanism catches the same defect class consistently across different sites.
+4. **Trajectory comparison:** SI-024 v0.17 cycle = 27 findings / 17 cycles. SI-024.1 v0.8 cycle = 19 findings / 8 cycles. SI-024.1 converged faster because (a) two-pass + auto-proceed disciplines now mature, (b) SI-024.1 scope is tighter (extension of canonical pattern vs building from scratch), (c) lessons-learned + acknowledged simplifications from SI-024 cycle pre-loaded SI-024.1's scope-narrowing decisions.
+
+**Content landed:**
+- SI-024.1 v0.8: Cryptographic JWT-Binding (836 lines; 10 sub-decisions + 9 OQs)
+- Promotion Ledger P-031: ratification entry
+- Artifact Registry v2.17 → v2.18
+
+**Production gates explicit:**
+
+| Phase | Status post-P-031 merge |
+|---|---|
+| Phase A (foundation: 5 new entities + 3 new helpers + 1 transitional wrapper + 2 dual-control procedures + 1 fallback-audit emitter + 10 new Cat A events) | **UNBLOCKED** for `telecheck-app` code repo implementation |
+| Phase B (middleware cutover; coexistence; per-entity fallback gate) | Implementation-ready |
+| Phase C (30-day telemetry-clean window) | Implementation-ready |
+| Phase D (raw-GUC deprecation) | Conditional on Phase C clean |
+| Phase E (SI-024 v0.17 Phase 4 cutover unlock) | Automatic per OQ-NEW2 + OQ6 |
+| Phase F (INVARIANTS v5.4 → v5.5 + I-036) | Co-bumped with first Phase 4 entity cutover |
+
+**Rollback path:** `git revert -m 1 56e4d2c` reverts; would require new P-031a ledger entry + Registry v2.18 → v2.19 bump per lockstep rule.
+
+**Outstanding queue (post-P-031):**
+
+1. **SI-024.1 Phase A foundation implementation** in `telecheck-app` code repo — UNBLOCKED post-merge.
+2. **CDM v1.5 → v1.6 amendment cycle** to add the 5 new SI-024.1 entities (`session_jwt_admission` + `session_jwt_replay_set` + `jwt_signing_key_public` + `break_glass_active_session` + `jwt_migration_entity_status`) as canonical CDM entries per the established post-P-029 SI-spec-first pattern.
+3. **AUDIT_EVENTS v5.7 → v5.8 amendment cycle** to add the 10 new Cat A events.
+4. **Hypothetical future SI-024.2** for DB-side cryptographic per-statement enforcement of fallback audit (per acknowledged simplification #10) — Phase 3+.
+5. **Quantum-resistance migration roadmap SI** — Phase 3+ per OQ-I.
+
+**Discipline observation:** Q2 2026 cycle has now ratified 5 successive SIs via the codified dual-recommendation + two-pass + auto-proceed disciplines: P-026 → P-028 → P-029 → P-030 → P-031. Each cycle continues to validate the discipline's value (consistent recursive-defect-catch; 0 hard-floor item 6 violations; minimal ERR escalations); the disciplines are now operationally mature.
+
+— Claude (Opus 4.7, 1M context), SI-024.1 v0.8 cycle close-out 2026-05-20 via auto-proceed. Main at `56e4d2c`. Registry v2.18. P-031 appended. SI-024 v0.17 TRANSITIONAL gates LIFTED. Phase A foundation implementation queued as next code-repo deliverable.
