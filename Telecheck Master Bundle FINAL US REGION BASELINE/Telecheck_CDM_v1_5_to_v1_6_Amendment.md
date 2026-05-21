@@ -1,9 +1,9 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.1 DRAFT
-**Status:** PRE-CODEX (awaiting Pass-1 source-first independent review per CLAUDE.md two-pass discipline)
+**Version:** 0.2 DRAFT
+**Status:** POST-PASS-1 (R1 closed: 1 HIGH + 1 MED applied 2026-05-20; awaiting Pass-2 contrast-and-synthesize per CLAUDE.md two-pass discipline)
 **Authoring date:** 2026-05-20
-**Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new Cat A audit events land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
+**Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
 **Parent SI:** SI-024.1 v0.8 RATIFIED (`Telecheck_SI_024_1_Cryptographic_JWT_Binding_v1_0.md`); P-031 is the ratification authority for this amendment.
 **Companion documents:** SI-024 v0.17 TRANSITIONAL (parent of SI-024.1; CDM v1.5 baseline) + P-030 + P-031 + previous CDM amendment pattern (`Telecheck_CDM_v1_4_to_v1_5_Amendment.md` from SI-021 cycle).
@@ -19,7 +19,7 @@ The amendment is mechanical consolidation of already-Codex-converged canonical c
 **In scope:**
 
 1. CDM v1.5 → v1.6 with 5 new entities (continuing CDM numbering from v1.5's 75 active entities + 3 derived views; v1.6 target: 80 active entities + 3 derived views).
-2. AUDIT_EVENTS v5.7 → v5.8 with 10 new Cat A events under `tenant_context.*` namespace + Cat B `cdm.entity_jwt_migration_status_added` event.
+2. AUDIT_EVENTS v5.7 → v5.8 with 10 new audit events (9 Cat A under `tenant_context.*` namespace + 1 Cat B `cdm.entity_jwt_migration_status_added` under `cdm.*` namespace).
 3. Forward-reference FK constraints (`break_glass_active_session.approval_id` → `break_glass_approval.id` per SI-024.1 Sub-decision 7).
 4. RLS policy + audit-bound trigger application per the convergent canonical pattern (every PHI-bearing CDM entity carries `tenant_id` + RLS per I-023; append-only entities carry `enforce_append_only()` per I-027).
 5. Cross-reference into SI-024.1 v0.8 + SI-024 v0.17 TRANSITIONAL + Sprint 13 KMS Architecture + INVARIANTS v5.4 §I-023/I-024/I-025/I-027.
@@ -66,11 +66,31 @@ ALTER TABLE session_jwt_admission FORCE ROW LEVEL SECURITY;
 CREATE POLICY session_jwt_admission_tenant_isolation ON session_jwt_admission
     USING (tenant_id = current_tenant_id_strict('session_jwt_admission'));
 
--- Append-only enforcement (admission record is immutable post-INSERT; cleanup via TTL job)
-CREATE TRIGGER session_jwt_admission_append_only
+-- Append-only enforcement with TTL-cleanup carve-out (R1 HIGH closure 2026-05-20: comment-only exception
+-- replaced with executable DDL — UPDATE always rejected; DELETE permitted ONLY for sec_jwt_cleanup role on
+-- expired rows past the retention slack window).
+CREATE FUNCTION session_jwt_admission_append_only_with_ttl_cleanup() RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        RAISE EXCEPTION 'session_jwt_admission is append-only; UPDATE forbidden'
+            USING ERRCODE = 'invalid_column_reference';
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        -- Permit DELETE only for the dedicated cleanup role on rows past their TTL+slack window.
+        IF current_user = 'sec_jwt_cleanup' AND OLD.expires_at < now() - INTERVAL '1 hour' THEN
+            RETURN OLD;
+        END IF;
+        RAISE EXCEPTION 'session_jwt_admission DELETE only permitted for sec_jwt_cleanup role on expired rows (expires_at < now() - 1 hour); attempted by role=% on row expires_at=%',
+            current_user, OLD.expires_at
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;
+
+CREATE TRIGGER session_jwt_admission_append_only_with_ttl
     BEFORE UPDATE OR DELETE ON session_jwt_admission
-    FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
--- Exception for cleanup job: DELETE permitted where expires_at < now() - INTERVAL '1 hour' via dedicated cleanup role.
+    FOR EACH ROW EXECUTE FUNCTION session_jwt_admission_append_only_with_ttl_cleanup();
 ```
 
 **Cross-references:** SI-024.1 §Sub-decision 1 (split verifier + admission-binding invariant); INVARIANTS v5.4 §I-023/I-027 (three-layer tenant isolation + append-only platform floor).
@@ -95,10 +115,31 @@ ALTER TABLE session_jwt_replay_set FORCE ROW LEVEL SECURITY;
 CREATE POLICY session_jwt_replay_set_tenant_isolation ON session_jwt_replay_set
     USING (tenant_id = current_tenant_id_strict('session_jwt_replay_set'));
 
--- Append-only (same cleanup-job exception pattern as §4.NEW1)
-CREATE TRIGGER session_jwt_replay_set_append_only
+-- Append-only enforcement with TTL-cleanup carve-out (R1 HIGH closure 2026-05-20: matching the §4.NEW1
+-- pattern — comment-only exception replaced with executable DDL; UPDATE always rejected; DELETE permitted
+-- ONLY for sec_jwt_cleanup role on expired rows past the retention slack window).
+CREATE FUNCTION session_jwt_replay_set_append_only_with_ttl_cleanup() RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        RAISE EXCEPTION 'session_jwt_replay_set is append-only; UPDATE forbidden'
+            USING ERRCODE = 'invalid_column_reference';
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        -- Permit DELETE only for the dedicated cleanup role on rows past their TTL+slack window.
+        IF current_user = 'sec_jwt_cleanup' AND OLD.expires_at < now() - INTERVAL '1 hour' THEN
+            RETURN OLD;
+        END IF;
+        RAISE EXCEPTION 'session_jwt_replay_set DELETE only permitted for sec_jwt_cleanup role on expired rows (expires_at < now() - 1 hour); attempted by role=% on row expires_at=%',
+            current_user, OLD.expires_at
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;
+
+CREATE TRIGGER session_jwt_replay_set_append_only_with_ttl
     BEFORE UPDATE OR DELETE ON session_jwt_replay_set
-    FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
+    FOR EACH ROW EXECUTE FUNCTION session_jwt_replay_set_append_only_with_ttl_cleanup();
 ```
 
 **Cross-references:** SI-024.1 §Sub-decision 5; INVARIANTS v5.4 §I-023/I-027.
@@ -222,7 +263,7 @@ CREATE TRIGGER jwt_migration_entity_status_append_only
 
 ## 3. AUDIT_EVENTS v5.7 → v5.8 amendment
 
-**10 new Cat A events** under `tenant_context.*` namespace:
+**10 new audit events** (9 Cat A under `tenant_context.*` namespace + 1 Cat B under `cdm.*` namespace):
 
 | # | Event | Source |
 |---|---|---|
@@ -288,8 +329,12 @@ ALTER TABLE audit_events
 
 **v0.1 DRAFT 2026-05-20:** pre-Codex-review.
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59).
+**v0.2 DRAFT 2026-05-20 — Pass-1 R1 closure:**
+- **HIGH-1 closed** — both `session_jwt_admission` (§4.NEW1) and `session_jwt_replay_set` (§4.NEW2) replaced the comment-only TTL exception with executable DDL: SECURITY DEFINER `*_append_only_with_ttl_cleanup()` functions that reject UPDATE always and permit DELETE only for `sec_jwt_cleanup` role on rows past `expires_at + INTERVAL '1 hour'` slack. Pass-1 verbatim recommendation applied to both tables ("both admission and replay tables, not just one of them").
+- **MED-1 closed** — audit event taxonomy prose swept from "10 new Cat A events" to "9 new Cat A + 1 new Cat B" throughout §1, §2 (in-scope item 2), and §3 header to reflect the actual mix (`cdm.entity_jwt_migration_status_added` is Cat B as already correctly labeled in the §3 table).
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit pending push for Pass-2 contrast-and-synthesize.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.1 DRAFT authored 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern. SI-024.1 follow-on amendment cycle queued as next autonomous-work deliverable per CLAUDE.md auto-proceed rule. Pass-1 source-first independent review queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.2 DRAFT (Pass-1 R1 closure applied) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 contrast-and-synthesize queued.
