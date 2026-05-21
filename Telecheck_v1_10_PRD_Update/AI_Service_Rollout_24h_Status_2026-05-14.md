@@ -4644,3 +4644,109 @@ Three rounds, three distinct trust-axes (tenant identity at SECURITY DEFINER lay
 Cumulative: **149 findings closed inline across 9 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP for OQ7); 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern + the new fresh-review-post-major-cycles pattern continue to scale.
 
 — Claude (Opus 4.7, 1M context), AI Service Mode 1 Handler Spec v0.4 ratification cycle close-out 2026-05-21 via auto-proceed. Main at `2a3d799`. Registry v2.22. P-035 appended. 9th successive Q2 2026 auto-proceed ratification. 3 of 5 pilot-required slices ratified. Next deliverable per auto-proceed: Mode 1 CDM follow-on amendment cycle (FIFTH instance of SI-spec-first promotion pattern) OR Async-Consult clinician-decision loop completion SI OR Crisis Response slice SI OR Admin Backend basics SI OR code-repo Phase A foundation implementation.
+
+---
+
+## Addendum 64 — CDM v1.7 → v1.8 + AUDIT_EVENTS v5.9 → v5.10 + DOMAIN_EVENTS additive + CCR_RUNTIME v5.3 → v5.4 Mode 1 follow-on RATIFIED via auto-proceed (Codex R8 ship-it APPROVE); merge `2686751`; Registry v2.22 → v2.23; FIFTH instance of SI-spec-first promotion pattern; 3 of 5 pilot-required slices NOW FULLY RATIFIED; 10th successive Q2 2026 auto-proceed ratification
+
+**Date:** 2026-05-21
+**Status:** LANDED + RATIFIED
+**Main HEAD:** `e8e1ff6` (cockpit) / `2686751` (amendment merge)
+**Cycle counter:** 10th successive SI/amendment ratification in Q2 2026 (P-026 → P-028 → P-029 → P-030 → P-031 → P-032 → P-033 → P-034 → P-035 → P-036)
+
+### What landed
+
+`Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_CDM_v1_7_to_v1_8_Amendment.md` (544 lines after R7 closure) — canonical mechanical consolidation of Mode 1 Handler Spec v0.4 (P-035) content into CDM + AUDIT_EVENTS + DOMAIN_EVENTS + CCR_RUNTIME + RBAC bundle file sections.
+
+### FIFTH instance of post-P-029 SI-spec-first promotion pattern
+
+| Instance | Parent SI ratification | Follow-on amendment | Scope |
+|---|---|---|---|
+| 1st | P-028 SI-021 | P-029 CDM v1.4 → v1.5 | CDM + AUDIT_EVENTS + CCR_RUNTIME (3 surfaces) |
+| 2nd | P-031 SI-024.1 | P-032 CDM v1.5 → v1.6 | CDM + AUDIT_EVENTS (2 surfaces) |
+| 3rd | P-033 SI-019 | P-034 CDM v1.6 → v1.7 | CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC (5 surfaces) |
+| 4th | (none; SI-019 + CDM v1.7 already covered SI-019 scope) | — | — |
+| **5th** | **P-035 Mode 1 spec** | **P-036 CDM v1.7 → v1.8** | **CDM + AUDIT_EVENTS + DOMAIN_EVENTS additive + CCR_RUNTIME + RBAC (4 surfaces)** |
+
+### Convergence trajectory (8-round Codex cycle)
+
+| Round | HIGH | MED | Class of defect closed |
+|---|---|---|---|
+| R1 | 2 | 2 | Single-column FKs on 3 child tables + crisis_server_signal_id no FK + audit taxonomy inconsistent + CCR placeholder audit action |
+| R2 | 2 | 0 | Patient FK not tenant-scoped + patient identity propagation gap conversation→admission→result |
+| R3 | 0 | 1 | §9 OQ1 stale relative to R1 closure |
+| R4 | 1 | 0 | Conversation_id propagation gap in turn_result |
+| R5 | 0 | 1 | SECURITY INVOKER view base-table privilege gap |
+| R6 | 1 | 0 | R5 broad base-table grants overexposed raw conversation content (user_message + assistant_message) |
+| R7 | 1 | 0 | R6 column-level grants still bypassed view's data-minimization boundary (per-turn enumeration) |
+| **R8** | **0** | **0** | **ship-it APPROVE — "no material findings"** |
+
+**Total:** 7 HIGH + 4 MED closed inline across 7 closure rounds. Zero hard-floor item 6 escalations.
+
+### Architectural shape — two-phase tightening
+
+The 7 closure rounds split cleanly into two phases:
+
+**Phase 1 (R1-R4): Referential corruption closures** — FK composition discipline applied progressively
+- R1: composite tenant-scoped FKs on conversation FK chain
+- R2: composite tenant-scoped patient FKs + (tenant_id, id, patient_id) UNIQUE → patient identity propagation
+- R3: OQ alignment with already-applied R1 closure
+- R4: (tenant_id, id, conversation_id, patient_id) UNIQUE + 4-column composite FK → conversation_id propagation
+
+**Phase 2 (R5-R7): Information-disclosure closures** — grant chain progressively tightened
+- R5: broad table-level SELECT to ai_mode1_reader (initial closure of SECURITY INVOKER view privilege gap)
+- R6: column-level grants matching view's SELECT list (preventing message-content exposure)
+- R7: plain view + owner-only base-table grants + explicit tenant predicate (preventing per-turn enumeration; final data-minimization closure)
+
+The R5 → R6 → R7 trajectory adds a new operational pattern for v1.8+ slices: when a derived view's purpose is data-minimization (aggregate-only access), the privilege chain should be view-only-to-reader + base-tables-only-to-non-BYPASSRLS-owner + explicit tenant predicate in view body — NOT SECURITY INVOKER + reader base-table grants. This is the third worked example of why the SI-024.1 JWT-binding model (and its trust-anchor extensions) are necessary; adds derived-view data-minimization to the catalog.
+
+### Process novelties (continued)
+
+1. **Three Phase B fan-out instances complete** (P-033/P-034 Med-Interaction + P-035/P-036 Mode 1). Pattern of SI ratification → CDM follow-on ratification on the same day operationalized.
+2. **R5-R7 data-minimization pattern documented for future v1.8+ slices.** When derived views serve aggregate-only access purposes, use plain view + owner-only base-table grants + explicit tenant predicate.
+3. **Ten successive Q2 2026 auto-proceed cycles.** Cumulative: 160 findings closed inline across 10 cycles; 1 CORRECT hard-floor item 6 invocation; 0 ERR escalations.
+
+### Companion landings
+
+- `Telecheck_Promotion_Ledger.md` — entry P-036 appended at top (commit `e8e1ff6`)
+- `Telecheck_Artifact_Registry_v2_10.md` — header bumped v2.22 → v2.23 (commit `e8e1ff6`)
+- Canonical version states: Master PRD v1.10 · CDM **v1.8** · AUDIT_EVENTS **v5.10** · OpenAPI v0.3 · State Machines v1.2 · RBAC v1.2 · DOMAIN_EVENTS additive (no bump) · Contracts Pack v5.3 · **CCR_RUNTIME v5.4** · AI Service Mode 1 Handler Spec v0.4 · Artifact Registry **v2.23**
+
+### Production gates explicit
+
+| Gate | Status post-P-036 merge |
+|---|---|
+| Mode 1 canonical CDM/AUDIT/CCR/RBAC content in named bundle files | **LANDED** |
+| Mode 1 implementation in `telecheck-app` code repo | **UNBLOCKED** for canonical row shapes + procedure contracts + audit event emission + CCR provider routing |
+| Master Completion Plan v1.0 Track 2 (AI Service Mode 1) | Both SI (P-035) + CDM (P-036) ratified → fully ready for implementation |
+| Pilot-viable scope progression | **3 of 5 critical-path slices NOW FULLY RATIFIED** (Med-Interaction P-033+P-034; AI Service Mode 1 P-035+P-036) |
+
+**Rollback path:** `git revert -m 1 2686751` reverts amendment artifact; `git revert e8e1ff6` reverts cockpit. Would require new P-036a ledger entry + Registry v2.23 → v2.24 bump per lockstep rule.
+
+### Outstanding queue (post-P-036)
+
+1. **Async-Consult clinician-decision loop completion SI** — Track 1 Phase B fan-out item; depends on SI-005 ratification (P-021).
+2. **Crisis Response slice SI** — Master Completion Plan pilot-viable scope item 4; resource lookup + escalation routing; I-019 already wired at foundation.
+3. **Admin Backend basics SI** — Master Completion Plan pilot-viable scope item 5; operator monitoring + manual template review.
+4. **Mode 1 + Med-Interaction Phase A foundation implementation** in `telecheck-app` code repo.
+
+### Discipline observation
+
+**Q2 2026 cycle pattern**, now with 10 ratifications under codified disciplines:
+
+| Ledger entry | Cycle | Findings | Rounds | Ship-it path | Hard-floor item 6 |
+|---|---|---|---|---|---|
+| P-026 | Q2 batched ratifier ceremony Phase A | 13 OQ-groups | n/a | Ratifier ceremony | 0 |
+| P-028 | SI-021 SIEM Hash-Chain Archival | 16 | 5 | §10 cadence boundary | 0 |
+| P-029 | SI-021 CDM v1.4 → v1.5 follow-on | 13 | 8 | Multi-cycle pre-merge | 0 |
+| P-030 | SI-024 v0.17 TRANSITIONAL | 35 | 17 | Pass-2 B+ synthesis | 0 |
+| P-031 | SI-024.1 v0.8 Cryptographic JWT-Binding | 19 | 8 | Codex cycle-4 APPROVE | 0 |
+| P-032 | CDM v1.5 → v1.6 SI-024.1 follow-on | 15 | 12 | Pass-2 R12 ship-it APPROVE | 0 |
+| P-033 | SI-019 Med-Interaction v1.0 → v2.0 Option A | 11 | 7 | Codex R7 ship-it APPROVE | 1 CORRECT INVOCATION (R1 STOP for OQ7) |
+| P-034 | CDM v1.6 → v1.7 + 4 surfaces SI-019 follow-on | 11 | 8 | Codex R8 ship-it APPROVE | 0 |
+| P-035 | AI Service Mode 1 Handler Spec v0.4 | 16 | 8 | Codex R8 ship-it APPROVE | 0 |
+| **P-036** | **CDM v1.7 → v1.8 + 4 surfaces Mode 1 follow-on** | **11** | **8** | **Codex R8 ship-it APPROVE** | **0** |
+
+Cumulative: **160 findings closed inline across 10 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP for OQ7); 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern + the new fresh-review-post-major-cycles pattern + the new derived-view-data-minimization pattern continue to scale.
+
+— Claude (Opus 4.7, 1M context), CDM v1.7 → v1.8 + AUDIT_EVENTS v5.9 → v5.10 + DOMAIN_EVENTS additive + CCR_RUNTIME v5.3 → v5.4 Mode 1 follow-on amendment cycle close-out 2026-05-21 via auto-proceed. Main at `e8e1ff6`. Registry v2.23. P-036 appended. **10th successive Q2 2026 auto-proceed ratification.** 3 of 5 pilot-required slices NOW FULLY RATIFIED. Next deliverable per auto-proceed: Async-Consult clinician-decision loop completion SI OR Crisis Response slice SI OR Admin Backend basics SI OR code-repo Phase A foundation implementation.
