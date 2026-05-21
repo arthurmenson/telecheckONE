@@ -1,7 +1,7 @@
 # CDM v1.8 → v1.9 + AUDIT_EVENTS v5.10 → v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 → v0.4 + State Machines v1.2 → v1.3 + RBAC v1.2 → v1.3 Amendment (SI-020 Async-Consult follow-on)
 
-**Version:** 0.4 DRAFT
-**Status:** POST-R3 (2 HIGH + 1 MED closed inline: HIGH-1 decision validation could race claim release/reassignment under READ COMMITTED → fix: BEFORE INSERT trigger now takes same per-consult advisory lock as claim/reassign procedures + SELECT...FOR UPDATE on claim row; HIGH-2 equal transition_at values could corrupt current-state derivation via UUID tie-break ambiguity → fix: strict > monotonic ordering on transition_at, no equality permitted for non-initial transitions; MED-1 clinician_account_id FK not tenant-scoped → fix: composite tenant-scoped FK `(tenant_id, clinician_account_id) → tenant_account_membership(tenant_id, account_id)` per assumed Identity slice canonical entity + new OQ3 for ratifier to confirm canonical name)
+**Version:** 0.5 DRAFT
+**Status:** POST-R4 (1 HIGH closed inline: trigger functions performing invariant checks (consult_clinician_decision_validate_claim_active, consult_lifecycle_transition_continuity, consult_review_claim_one_way_released_at) lacked schema-qualified table references + locked search_path — caller-controlled temp relation shadowing could redirect invariant checks to attacker-controlled rows, bypassing release/expiry/continuity invariants while real FKs still passed. Fix: all 3 invariant-enforcing trigger functions now have `SET search_path = pg_catalog, public` per canonical P-034 R7 SECURITY DEFINER hardening pattern + all SELECT statements use `public.<table>` schema-qualified references. Previously POST-R3 (2 HIGH + 1 MED closed inline: HIGH-1 decision validation could race claim release/reassignment under READ COMMITTED → fix: BEFORE INSERT trigger now takes same per-consult advisory lock as claim/reassign procedures + SELECT...FOR UPDATE on claim row; HIGH-2 equal transition_at values could corrupt current-state derivation via UUID tie-break ambiguity → fix: strict > monotonic ordering on transition_at, no equality permitted for non-initial transitions; MED-1 clinician_account_id FK not tenant-scoped → fix: composite tenant-scoped FK `(tenant_id, clinician_account_id) → tenant_account_membership(tenant_id, account_id)` per assumed Identity slice canonical entity + new OQ3 for ratifier to confirm canonical name)
 **Authoring date:** 2026-05-21 (1 HIGH closed inline: R1 continuity trigger validated NEW.from_state == latest to_state but didn't enforce monotonic transition_at ordering — backdated row could pass from_state check while corrupting current-state derivation (ORDER BY transition_at DESC), future-dated row could dominate immediately. Fix: trigger now reads latest transition_at alongside latest to_state under lock; rejects NEW.transition_at < latest transition_at + rejects future-dated > now() + 5s clock-skew tolerance. Monotonic-ordering invariant now schema-enforced. Previously POST-R1 (2 HIGH + 1 MED closed inline: HIGH-1 decision-validation trigger looked up claim by id only → fix: 5-column composite identity lookup (tenant_id + claim_id + consult_id + patient_id + clinician_account_id) with RAISE on missing row; HIGH-2 lifecycle continuity not enforced at table-level → fix: added BEFORE INSERT trigger `consult_lifecycle_transition_continuity` that takes per-consult advisory lock + validates new from_state == latest to_state + rejects from-terminal transitions, regardless of caller; MED-1 RBAC count mismatch (8 vs preflight's 12) → fix: recounted to 12 roles (4 app + 6 wrapper owners + 2 view/MV owners) matching deployment preflight enumeration)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-037 (SI-020 Async Consult v1.0 → v2.0 implementation-readiness extension RATIFIED; Registry v2.23 → v2.24). Per the established post-P-029 spec-first promotion pattern, SI-020's canonical content lands in CDM + AUDIT + DOMAIN_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification. **SIXTH instance** of the SI-spec-first promotion pattern (P-029, P-032, P-034, P-036, P-038 — note P-035 was SI-only without follow-on; P-038 is the 5th follow-on amendment in the post-P-029 lineage).
@@ -243,7 +243,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = pg_catalog, public;  -- R4 HIGH-1 closure: locked search_path
 CREATE TRIGGER consult_review_claim_one_way_released_at
     BEFORE UPDATE ON consult_review_claim
     FOR EACH ROW EXECUTE FUNCTION consult_review_claim_one_way_released_at();
@@ -325,10 +325,15 @@ BEGIN
         hashtextextended('consult_review_claim:' || NEW.tenant_id::text || ':' || NEW.consult_id::text, 0)
     );
 
-    -- SELECT ... FOR UPDATE on the claim row pins the snapshot we'll validate against
+    -- SELECT ... FOR UPDATE on the claim row pins the snapshot we'll validate against.
+    -- R4 HIGH-1 closure 2026-05-21: schema-qualified table reference (public.consult_review_claim)
+    -- + locked search_path on the function (see ... LANGUAGE plpgsql ... SET search_path = ...
+    -- below) per the canonical P-034 R7 SECURITY DEFINER name-resolution hardening pattern.
+    -- Without these, a caller able to create a temp relation named consult_review_claim could
+    -- plausibly redirect this trigger's invariant check to attacker-controlled rows.
     SELECT released_at, claim_expires_at
         INTO v_claim_released_at, v_claim_expires_at
-        FROM consult_review_claim
+        FROM public.consult_review_claim
         WHERE tenant_id = NEW.tenant_id
           AND id = NEW.claim_id
           AND consult_id = NEW.consult_id
@@ -351,7 +356,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = pg_catalog, public;  -- R4 HIGH-1 closure: locked search_path
 CREATE TRIGGER consult_clinician_decision_validate_claim_active
     BEFORE INSERT ON consult_clinician_decision
     FOR EACH ROW EXECUTE FUNCTION consult_clinician_decision_validate_claim_active();
@@ -441,7 +446,9 @@ BEGIN
         hashtextextended('consult_lifecycle_transition:' || NEW.tenant_id::text || ':' || NEW.consult_id::text, 0)
     );
 
-    -- Read latest to_state AND latest transition_at under the lock (R2 HIGH-1 closure 2026-05-21)
+    -- Read latest to_state AND latest transition_at under the lock (R2 HIGH-1 closure 2026-05-21).
+    -- Schema-qualified public.<table> reference + function-level locked search_path (R4 HIGH-1
+    -- closure) prevent caller-controlled temp-relation shadowing of this invariant check.
     SELECT to_state, transition_at
         INTO v_latest_to_state, v_latest_transition_at
         FROM public.consult_lifecycle_transition
@@ -497,7 +504,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = pg_catalog, public;  -- R4 HIGH-1 closure: locked search_path
 
 CREATE TRIGGER consult_lifecycle_transition_continuity
     BEFORE INSERT ON consult_lifecycle_transition
@@ -847,7 +854,10 @@ END $$;
 - **R1 HIGH-2 closed:** `consult_lifecycle_transition` row-level CHECK validated individual triples but did NOT enforce that new from_state == current latest to_state — direct table INSERTs by `consult_lifecycle_transition_writer_owner` (which has INSERT grant) could create divergent histories that still passed CHECK. Fix: added `consult_lifecycle_transition_continuity` BEFORE INSERT trigger that takes per-consult advisory lock + reads latest to_state under lock + validates continuity + rejects from-terminal transitions. Regardless of caller, lifecycle integrity is now schema-enforced (not procedure-dependent).
 - **R1 MED-1 closed:** RBAC count mismatch — §1 scope + §8 said "8 roles (4 application + 4 wrapper/owner)" but §10 deployment preflight enumerated 12 roles. Implementer following §1/§8 would under-provision. Fix: recounted to **12 roles** (4 app + 6 wrapper owners + 2 view/MV owners) matching preflight enumeration; §1 + §8 + §10 now mutually consistent.
 
-Authored on `spec/cdm-v1-9-audit-v5-11-openapi-v0-4-sm-v1-3-rbac-v1-3-si020-followon-2026-05-21` branch off main at `3129579` (post-P-037 + Addendum 65). v0.2 commit `48ca67d`. v0.3 commit `6522879`. v0.4 commit pending push for R4 verification.
+Authored on `spec/cdm-v1-9-audit-v5-11-openapi-v0-4-sm-v1-3-rbac-v1-3-si020-followon-2026-05-21` branch off main at `3129579` (post-P-037 + Addendum 65). v0.2 commit `48ca67d`. v0.3 commit `6522879`. v0.4 commit `bcf774d`. v0.5 commit pending push for R5 verification.
+
+**v0.5 DRAFT 2026-05-21 — R4 closure applied (1 HIGH):**
+- **R4 HIGH-1 closed:** invariant-enforcing trigger functions used unqualified table references + lacked locked search_path → caller-controlled temp relation shadowing could redirect invariant checks to attacker-controlled rows (validation passes, but real FK still references actual released claim → append-only decision inserted against released claim, reopening exact race R3 was meant to close). Fix: applied canonical P-034 R7 SECURITY DEFINER hardening pattern to all 3 invariant-enforcing trigger functions: (a) `consult_clinician_decision_validate_claim_active` — `SET search_path = pg_catalog, public` + `FROM public.consult_review_claim`; (b) `consult_lifecycle_transition_continuity` — same; (c) `consult_review_claim_one_way_released_at` — same (no SELECT in body but locked search_path for consistency). Trust-boundary now fully hardened.
 
 **v0.4 DRAFT 2026-05-21 — R3 closures applied (2 HIGH + 1 MED):**
 - **R3 HIGH-1 closed:** decision validation trigger could race claim release/reassignment under READ COMMITTED (validate active claim while concurrent UPDATE-s released_at, leaving append-only decision referencing released claim). Fix: trigger now acquires same per-consult advisory lock as `claim_consult_for_review()` + `reassign_consult_claim()`; uses SELECT...FOR UPDATE on claim row to pin the snapshot; all release/reassign procedures must use same lock order (already do per SI-020 v0.11).
