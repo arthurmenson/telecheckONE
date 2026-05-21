@@ -1,7 +1,7 @@
 # AI Service Mode 1 Handler Specification
 
-**Version:** 0.3 DRAFT (R6 OQ-scope alignment closures applied 2026-05-21)
-**Status:** POST-R6 (1 MED closed inline: §10 OQ1 said "2 entities to CDM v1.2 → CDM v1.3" referencing pre-R3-split-table model + pre-P-027 baseline; §10 OQ3 said "CCR_RUNTIME v5.2"; §6.1 intro said "4 entities to CDM v1.2". Fix: §10 OQ1 updated to "5 entities + post-P-034 baseline CDM v1.7 → v1.8" + explicit jwt_migration_entity_status seed scope per the established post-P-034 R6 closure pattern + SI-019-style follow-on amendment recommendation; §10 OQ3 updated to "CCR_RUNTIME v5.3 + co-bump v5.3 → v5.4 if needed"; §6.1 intro updated to "5 entities + I-035 cross-reference". Previously POST-R5 (2 HIGH + 1 MED closed inline against the post-P-031/P-032/P-033/P-034 canonical state: HIGH-1 SI-017 raw-GUC tenant binding inside SECURITY DEFINER bodies → SUPERSEDED by SI-024.1 v0.8 JWT-binding canonical trust anchor via `verify_session_jwt_and_extract_claims().tenant_id` + Phase B fallback audited gates; HIGH-2 Mode 1 RLS tables missing entity-name helper + `jwt_migration_entity_status` seed scope → added 5 RLS policy DDL with `current_tenant_id_strict(<entity_name>)` + amendment seed-scope requirement for 5 entity names with fail-closed-with-audit defaults; MED-1 Contracts Pack v5.2 / v5.1 references → updated to v5.3 (post-P-027) throughout + AUDIT_EVENTS v5.5 → v5.9 (post-P-034); §12 alignment table extended with SI-024.1 + I-035 rows). Awaiting R6 verification.
+**Version:** 0.4 DRAFT (R7 view-RLS closure applied 2026-05-21)
+**Status:** POST-R7 (1 HIGH closed inline: §6.1 derived view `ai_mode1_conversation_state` was created as a plain VIEW assumed to inherit base-table RLS — but PostgreSQL views by default execute with VIEW OWNER's privileges, so an owner with BYPASSRLS or table-ownership would bypass tenant isolation. Same defect class as the MV access closure at P-034 R5. Fix: explicit `CREATE VIEW ... WITH (security_invoker = true)` (PostgreSQL 15+) + ownership pinned to dedicated non-BYPASSRLS role `ai_mode1_view_owner` via `ALTER VIEW ... OWNER TO` + REVOKE PUBLIC + GRANT SELECT to specific viewer roles + deployment-prerequisite assertion that the role exists AND has `rolbypassrls=false`. Pattern matches the SI-024.1 R9 deployment-prerequisite + R8 executable-ownership closures. Previously POST-R6 (1 MED closed inline: §10 OQ1 said "2 entities to CDM v1.2 → CDM v1.3" referencing pre-R3-split-table model + pre-P-027 baseline; §10 OQ3 said "CCR_RUNTIME v5.2"; §6.1 intro said "4 entities to CDM v1.2". Fix: §10 OQ1 updated to "5 entities + post-P-034 baseline CDM v1.7 → v1.8" + explicit jwt_migration_entity_status seed scope per the established post-P-034 R6 closure pattern + SI-019-style follow-on amendment recommendation; §10 OQ3 updated to "CCR_RUNTIME v5.3 + co-bump v5.3 → v5.4 if needed"; §6.1 intro updated to "5 entities + I-035 cross-reference". Previously POST-R5 (2 HIGH + 1 MED closed inline against the post-P-031/P-032/P-033/P-034 canonical state: HIGH-1 SI-017 raw-GUC tenant binding inside SECURITY DEFINER bodies → SUPERSEDED by SI-024.1 v0.8 JWT-binding canonical trust anchor via `verify_session_jwt_and_extract_claims().tenant_id` + Phase B fallback audited gates; HIGH-2 Mode 1 RLS tables missing entity-name helper + `jwt_migration_entity_status` seed scope → added 5 RLS policy DDL with `current_tenant_id_strict(<entity_name>)` + amendment seed-scope requirement for 5 entity names with fail-closed-with-audit defaults; MED-1 Contracts Pack v5.2 / v5.1 references → updated to v5.3 (post-P-027) throughout + AUDIT_EVENTS v5.5 → v5.9 (post-P-034); §12 alignment table extended with SI-024.1 + I-035 rows). Awaiting R6 verification.
 **Codex iteration trajectory:** R1 (3 HIGH + 3 MED) → R2 (2 HIGH + 2 MED) → R3 (1 HIGH) → R4 (1 HIGH + 1 MED) → **R5 fresh-review post-P-034 (2 HIGH + 1 MED — stale references to pre-P-031 trust model + pre-P-027 Contracts Pack version)**. All 16 findings closed inline as in-scope correctness gaps; no architectural-judgment escalations. R1-R4 applied iterate-to-asymptote pattern (2026-05-19); R5 applied fresh-review-post-major-cycles pattern (2026-05-21) — the same SI-024.1 JWT-binding canonical pattern that was the cleanest worked example at P-034 R7 now applied to Mode 1.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; spec-corpus Track 2 deliverable)
 **Owner:** AI Service Lead + Clinical Lead (co-owners; Mode 1 spans Track 2 AI service boundary + clinical safety floor)
@@ -454,11 +454,42 @@ CREATE POLICY ai_mode1_conversation_turn_result_tenant_isolation
     ON ai_mode1_conversation_turn_result
     USING (tenant_id = current_tenant_id_strict('ai_mode1_conversation_turn_result'));
 
--- The derived view ai_mode1_conversation_state inherits RLS through its base tables;
--- no separate RLS policy needed on the view itself. (PostgreSQL views' tenant isolation
--- derives from the underlying table's policies when the view is non-security-barrier OR
--- the view is security-barrier with the same predicate semantics.)
+-- The derived view ai_mode1_conversation_state. R7 HIGH-1 closure 2026-05-21:
+-- PostgreSQL views by default execute base-table access with the VIEW OWNER's privileges,
+-- so a view owner with table ownership or BYPASSRLS would bypass RLS on the base tables.
+-- Per the SI-024.1 trust-anchor pattern (analogous to the P-034 R5 MV-access closure), the
+-- view MUST be explicitly created with security_invoker = true (PostgreSQL 15+) so RLS on
+-- base tables evaluates against the calling role, not the view owner. The view owner SHOULD
+-- additionally be a non-BYPASSRLS role for defense-in-depth.
+CREATE VIEW ai_mode1_conversation_state
+    WITH (security_invoker = true) AS
+SELECT
+    c.tenant_id,
+    c.conversation_id,
+    c.patient_id,
+    c.created_at,
+    -- last_turn_at: most-recent turn admission for the conversation
+    (SELECT MAX(ta.admitted_at)
+     FROM ai_mode1_conversation_turn_admission ta
+     WHERE ta.tenant_id = c.tenant_id
+       AND ta.conversation_id = c.conversation_id) AS last_turn_at,
+    -- is_archived: true iff any archival event exists for this (tenant, conversation)
+    EXISTS (SELECT 1 FROM ai_mode1_conversation_archival_event ae
+            WHERE ae.tenant_id = c.tenant_id
+              AND ae.conversation_id = c.conversation_id) AS is_archived,
+    -- archived_at: timestamp from the most-recent archival event, if any
+    (SELECT MAX(ae.archived_at)
+     FROM ai_mode1_conversation_archival_event ae
+     WHERE ae.tenant_id = c.tenant_id
+       AND ae.conversation_id = c.conversation_id) AS archived_at
+FROM ai_mode1_conversation c;
+
+ALTER VIEW ai_mode1_conversation_state OWNER TO ai_mode1_view_owner;  -- non-BYPASSRLS role
+REVOKE ALL ON ai_mode1_conversation_state FROM PUBLIC;
+GRANT SELECT ON ai_mode1_conversation_state TO medication_interaction_signal_viewer, ai_mode1_reader;
 ```
+
+**Deployment prerequisite (R7 HIGH-1 closure):** the `ai_mode1_view_owner` role MUST be pre-existing at amendment-apply time (mirrors the SI-024.1 R9 deployment-prerequisite pattern); the role MUST NOT have BYPASSRLS attribute. A preflight assertion in the follow-on amendment cycle verifies both conditions (role exists AND `rolbypassrls=false`).
 
 **`jwt_migration_entity_status` seed scope (R5 HIGH-2 closure 2026-05-21 — required by SI-024.1 OQ8 mandatory seed step; pattern established at P-034 R6 closure):** the amendment that lands this spec MUST also seed all 5 RLS-bearing entity names (`ai_mode1_conversation`, `ai_mode1_conversation_archival_event`, `ai_mode1_conversation_turn_admission`, `ai_mode1_conversation_turn_detector_result`, `ai_mode1_conversation_turn_result`) into `jwt_migration_entity_status` with `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` defaults (Phase B fail-closed-with-audit posture). Without the seed, `current_tenant_id_strict()` would either fail-closed for unknown entities (breaking Mode 1 conversation reads) or fall back permissively (defeating tenant isolation). cdm_owner sequencing guidance: flip per-entity `phase_4_cutover_eligible=TRUE` as middleware migration to JWT-required posture completes. The `ai_mode1_conversation_state` view is RLS-derived through base tables and does not require a separate seed entry.
 
