@@ -1,7 +1,7 @@
 # CDM v1.6 → v1.7 + AUDIT_EVENTS v5.8 → v5.9 + OpenAPI v0.2 → v0.3 + State Machines v1.1 → v1.2 + RBAC v1.1 → v1.2 Amendment (SI-019 follow-on)
 
-**Version:** 0.3 DRAFT
-**Status:** POST-R2 (1 HIGH closed inline: SECURITY DEFINER caller-identity check — override wrapper STEP 4 cannot use `current_user` because SECURITY DEFINER procedures execute as procedure OWNER not invoker; would bypass clinician-role gate for any role holding EXECUTE on the procedure. Fix: spec mandates GUC-supplied `app.actor_role` validation via `pg_has_role(actor_role::regrole, 'medication_interaction.override_recorder', 'MEMBER')` pattern; FORBIDS `current_user` for caller authorization inside SECURITY DEFINER bodies; rule extends to all 7 procedure bodies (raw writer skips role check by design since wrappers enforce; 6 wrappers all use the canonical pattern with reason-specific role name). Added rejection codes `actor_role_missing` (Mode 1) + `unauthorized_role` (Mode 2 — previously listed but now formally specified). Override wrapper total rejection codes = 10.)
+**Version:** 0.4 DRAFT
+**Status:** POST-R3 (1 HIGH closed inline: recursive defect on R2 closure. R2's GUC-supplied actor_role pattern still trusted caller-controlled mutable state — a compromised/buggy caller with EXECUTE could SET `app.actor_role` to any target role and pass `pg_has_role(actor_role, '<required>', 'MEMBER')`. Fix: SUPERSEDED the GUC-only pattern with SI-024.1 v0.8 RATIFIED JWT-binding model (P-031) as canonical trust anchor. Wrapper STEP 4 reads actor_role from JWT-verified claims via `verify_session_jwt_and_extract_claims()` (SI-024.1 helper that performs EXISTS check against `session_jwt_admission` bound to current backend via admission-binding invariant). Phase B fallback to GUC pattern permitted IF AND ONLY IF entity's `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` (per jwt_migration_entity_status); fallback emits `tenant_context.raw_guc_fallback_used` audit per SI-024.1 contract. Cryptographic trust chain: JWT signature + admission-binding invariant → actor identity cannot be self-asserted by EXECUTE-only caller (forging requires JWT signature + admission to current backend). Rule applies to all 7 procedure bodies — wrappers are trust boundary; raw writer relies on wrapper enforcement.)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-033 (SI-019 Medication Interaction & Validation Engine Slice PRD v1.0 → v2.0 RATIFIED via Option A canonical Phase B append-only-only lifecycle persistence; Registry v2.19 → v2.20). Per the established post-P-029 spec-first promotion pattern, SI-019's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified; mirrors P-032's pattern of CDM amendment AFTER SI-024.1 ratified).
 **Owner:** Clinical Governance Lead (SI-019 v1.0 owner) + Async Consult slice owner (cross-cutting consumer) + CDM owner + AUDIT_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -521,39 +521,76 @@ SECURITY DEFINER wrapper that atomically INSERTs override row FIRST (Step 5) the
 -- STEP 7: unique_violation safety net on both INSERTs
 -- STEP 8: COMMIT (caller-managed); rejection emission via application-layer outbox
 
--- R2 HIGH-1 closure 2026-05-21: SECURITY DEFINER caller-identity check.
+-- R2 HIGH-1 closure 2026-05-21 + R3 HIGH-1 closure 2026-05-21: SECURITY DEFINER caller-identity check.
 --
--- Problem: SECURITY DEFINER procedures execute as the procedure OWNER (override_wrapper_owner),
+-- R2 Problem: SECURITY DEFINER procedures execute as the procedure OWNER (override_wrapper_owner),
 -- not the calling app role. PostgreSQL `current_user` inside the procedure body resolves to the
 -- owner, NOT the original caller. A clinician-role check written as
 -- `pg_has_role(current_user, 'medication_interaction.override_recorder', 'MEMBER')` would always
 -- pass (the owner is whatever the migration created it as), defeating the gate.
 --
--- Resolution: the canonical pattern for caller-identity validation under Telecheck's
--- middleware-GUC architecture (per the just-ratified SI-024.1 JWT-binding model) is to read the
--- caller's application-supplied actor role from a session GUC (e.g., `app.actor_role`), then
--- validate via `pg_has_role(app_actor_role, 'medication_interaction.override_recorder', 'MEMBER')`.
--- The application middleware that issues the procedure call is responsible for setting
--- `app.actor_role` to the JWT-verified user's role BEFORE calling the procedure; cryptographic
--- integrity of the actor identity is delegated to the SI-024.1 admission/replay infrastructure
--- (per CDM v1.6 §4.NEW1-NEW5 + ADR-029 AI Workload Taxonomy actor-attribution scaffolding).
+-- R3 Problem (recursive defect on R2's fix): reading `current_setting('app.actor_role')` and
+-- validating via `pg_has_role(actor_role::regrole, '<required>', 'MEMBER')` proves the NAMED
+-- role is a member of the required role, but does NOT prove the caller is entitled to claim that
+-- role. A compromised/buggy caller with EXECUTE on the procedure can SET `app.actor_role` to any
+-- target role name they want and pass the check. The GUC is caller-controlled mutable state, not
+-- a verified trust anchor.
+--
+-- Canonical resolution per SI-024.1 v0.8 RATIFIED JWT-binding model (P-031):
+--
+-- The trust anchor for caller identity in Telecheck v1.7+ is the JWT admission record
+-- (`session_jwt_admission` per CDM v1.6 §4.NEW1) cryptographically bound to the PostgreSQL
+-- backend via (backend_pid, backend_start_at, jwt_id) admission-binding invariant. Verified
+-- claims (actor_human_id, actor_role, tenant_id) are extracted via the SI-024.1 helper
+-- `verify_session_jwt_and_extract_claims()` which performs a read-only EXISTS check against
+-- the admission table — guaranteeing the claims originate from a JWT that was admitted to the
+-- current backend.
+--
+-- Spec normatively requires: wrapper STEP 4 reads actor_role from JWT-verified claims (via
+-- verify_session_jwt_and_extract_claims), NOT from `app.actor_role` GUC. The GUC pattern in
+-- the R2 closure is SUPERSEDED by this R3 closure; for backward compatibility during the
+-- jwt_migration_entity_status Phase B fallback window (per SI-024.1 Sub-decision 9), the GUC
+-- pattern MAY be used IF AND ONLY IF the entity's `phase_4_cutover_eligible=FALSE` AND
+-- `raw_guc_fallback_audited=TRUE`; in that case the wrapper additionally emits
+-- `tenant_context.raw_guc_fallback_used` audit per SI-024.1 v0.8 contract.
 --
 -- IMPORTANT: spec FORBIDS the use of `current_user` for caller authorization inside SECURITY
--- DEFINER bodies in this amendment cycle. ALL wrappers (Sub-decision 6.NEW2-NEW7) that depend on
--- app-role membership MUST validate via the GUC-supplied actor role + pg_has_role(actor_role, ...)
--- pattern. The raw transition writer (§6.NEW1) does NOT do role validation — it relies on the
--- per-reason wrapper having validated; wrappers are the trust-boundary.
+-- DEFINER bodies in this amendment cycle (R2 closure) AND FORBIDS using `app.actor_role` GUC
+-- as the sole trust source (R3 closure). ALL wrappers (Sub-decision 6.NEW2-NEW7) that depend
+-- on app-role membership MUST validate via JWT-verified claims OR (during Phase B fallback) via
+-- audited GUC. The raw transition writer (§6.NEW1) does NOT do role validation — it relies on
+-- the per-reason wrapper having validated; wrappers are the trust-boundary.
 --
--- Reference body pattern for STEP 4 in the override wrapper:
+-- Reference body pattern for STEP 4 in the override wrapper (R3-canonical):
 --
 --   DECLARE
+--       v_claims jwt_session_claims_t;  -- struct from verify_session_jwt_and_extract_claims
 --       v_actor_role TEXT;
 --   BEGIN
---       v_actor_role := current_setting('app.actor_role', true);
---       IF v_actor_role IS NULL OR length(trim(v_actor_role)) = 0 THEN
---           RAISE EXCEPTION 'actor_role_missing'
---               USING ERRCODE = 'insufficient_privilege';
+--       -- Phase 4 cutover path: trusted JWT-verified claims (canonical)
+--       v_claims := public.verify_session_jwt_and_extract_claims();  -- SI-024.1 v0.8 helper
+--       IF v_claims IS NULL THEN
+--           -- Phase B fallback path: GUC-supplied actor role, audited per jwt_migration_entity_status
+--           IF NOT public.is_jwt_required_for_entity('interaction_signal_override') THEN
+--               v_actor_role := current_setting('app.actor_role', true);
+--               IF v_actor_role IS NULL OR length(trim(v_actor_role)) = 0 THEN
+--                   RAISE EXCEPTION 'actor_role_missing'
+--                       USING ERRCODE = 'insufficient_privilege';
+--               END IF;
+--               IF public.is_raw_guc_fallback_audited_for_entity('interaction_signal_override') THEN
+--                   PERFORM public.emit_raw_guc_fallback_audit(
+--                       'interaction_signal_override',
+--                       v_actor_role
+--                   );
+--               END IF;
+--           ELSE
+--               RAISE EXCEPTION 'jwt_required_no_admission_record'
+--                   USING ERRCODE = 'insufficient_privilege';
+--           END IF;
+--       ELSE
+--           v_actor_role := v_claims.actor_role;  -- JWT-verified
 --       END IF;
+--       -- Authorization gate: validate the (now-verified) actor role has required membership
 --       IF NOT pg_has_role(v_actor_role::regrole,
 --                           'medication_interaction.override_recorder',
 --                           'MEMBER') THEN
@@ -567,6 +604,14 @@ SECURITY DEFINER wrapper that atomically INSERTs override row FIRST (Step 5) the
 -- - record_signal_emission / record_signal_activation / record_signal_supersession /
 --   record_signal_expiry: validate `medication_interaction_engine_evaluator` membership
 -- - record_signal_resolution: validate `medication_interaction_resolution_subscriber` membership
+--
+-- Cryptographic trust chain: middleware presents JWT to admit_session_jwt() at session start
+-- → session_jwt_admission row INSERTed bound to current backend → verify_session_jwt_and_extract_claims
+-- returns the verified claims under EXISTS check on the admission row. The actor identity is
+-- therefore bound to the JWT signature (SI-024.1 v0.8 cryptographic binding) + the current
+-- backend (admission-binding invariant), NOT to a mutable GUC. Compromised callers with EXECUTE
+-- on the wrapper cannot self-assert because they would need to forge a JWT signature AND
+-- successfully admit it to their backend.
 
 ALTER PROCEDURE record_interaction_signal_override(...) OWNER TO override_wrapper_owner;
 REVOKE EXECUTE ON PROCEDURE record_interaction_signal_override(...) FROM PUBLIC;
@@ -778,10 +823,13 @@ These are NOT granted to humans; they OWN the wrapper procedures and are the onl
 - **R1 MED-1 closed:** SECURITY DEFINER access function `get_interaction_signal_current_state()` declared return types `interaction_signal_state_t` + `interaction_signal_transition_reason_t` but MV columns inherit as TEXT from the transition table's TEXT+CHECK column types. Fix: explicit casts `mv.current_state::interaction_signal_state_t` + `mv.transition_reason::interaction_signal_transition_reason_t` in the return query. Future TYPES amendment cycle should formalize these as DOMAIN types backed by equivalent CHECK constraints and migrate the columns from TEXT to the domain types — at which point the casts become no-ops; for this amendment cycle the casts are the spec-compliant closure.
 - **R1 MED-2 closed:** Procedure count inconsistency — §1 scope said 6 procedures but section §3 defined 7 (1 raw + 5 lifecycle wrappers + 1 override wrapper). RBAC §8 already correctly listed 6 wrapper owner roles + 1 service-level role + 1 raw writer owner = 8 owner roles. Fix: normalized scope + §1 in-scope item 1 + §3 heading to "7 SECURITY DEFINER procedures (1 raw transition writer + 5 reason-specific lifecycle wrappers + 1 override wrapper)" — matches §3 body + §8 RBAC roles.
 
-Authored on `spec/cdm-v1-7-audit-v5-9-openapi-v0-3-sm-v1-2-rbac-v1-2-si019-followon-2026-05-21` branch off main at `af66412` (post-P-033 + Addendum 61). v0.2 commit `dc54ce1`. v0.3 commit pending push for R3 verification.
+Authored on `spec/cdm-v1-7-audit-v5-9-openapi-v0-3-sm-v1-2-rbac-v1-2-si019-followon-2026-05-21` branch off main at `af66412` (post-P-033 + Addendum 61). v0.2 commit `dc54ce1`. v0.3 commit `0c1177b`. v0.4 commit pending push for R4 verification.
 
 **v0.3 DRAFT 2026-05-21 — R2 closure applied (1 HIGH):**
 - **R2 HIGH-1 closed:** SECURITY DEFINER caller-identity check defect. Override wrapper STEP 4 clinician-role check would evaluate `current_user` against `override_wrapper_owner` (the procedure owner under SECURITY DEFINER semantics) rather than the actual app-role caller. Any role holding EXECUTE on the procedure would silently pass the role gate. Fix: spec normatively requires GUC-supplied actor-role validation pattern (`current_setting('app.actor_role') + pg_has_role(actor_role::regrole, '<role>', 'MEMBER')`) for ALL 6 reason-specific wrappers + the override wrapper; FORBIDS `current_user` for caller authorization inside SECURITY DEFINER bodies in this amendment cycle; defense-in-depth alongside the PostgreSQL-level GRANT EXECUTE chain. Added rejection codes `actor_role_missing` (Mode 1; GUC absent/blank) + `unauthorized_role` (Mode 2; actor lacks required role membership). Raw transition writer (§6.NEW1) does NOT do role validation — wrappers are the trust boundary; raw writer relies on owner-only EXECUTE chain. Pattern is identical to the I-032 v5.3 tenant-GUC Mode 1+2 guard pattern applied to actor_role instead of tenant_id.
+
+**v0.4 DRAFT 2026-05-21 — R3 closure applied (1 HIGH — recursive defect on R2):**
+- **R3 HIGH-1 closed:** R2's GUC-only pattern still trusted caller-controlled mutable state. A compromised/buggy caller with EXECUTE on the wrapper could `SET app.actor_role = 'medication_interaction.override_recorder'` and pass `pg_has_role(actor_role::regrole, '<required>', 'MEMBER')` — the GUC is caller-set, so the check proves the named role's membership but does NOT prove the caller is entitled to claim that role. Same defect-class as direct-DB-role spoofing. Fix per canonical SI-024.1 v0.8 RATIFIED JWT-binding model (P-031): SUPERSEDED the GUC-only pattern with JWT-verified-claims pattern. Wrapper STEP 4 reads actor_role from JWT-verified claims via `verify_session_jwt_and_extract_claims()` — the SI-024.1 helper that performs a read-only EXISTS check against `session_jwt_admission` (CDM v1.6 §4.NEW1) which is cryptographically bound to the current PostgreSQL backend via the (backend_pid, backend_start_at, jwt_id) admission-binding invariant. Phase B fallback to GUC pattern permitted IF AND ONLY IF the entity's `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` (per `jwt_migration_entity_status` per SI-024.1 Sub-decision 9); the fallback emits `tenant_context.raw_guc_fallback_used` audit per SI-024.1 contract. The cryptographic trust chain: middleware presents JWT → `admit_session_jwt()` INSERTs admission row bound to current backend → `verify_session_jwt_and_extract_claims()` returns verified claims under EXISTS check → actor identity bound to JWT signature + current backend. Compromised callers cannot self-assert because they would need to forge a JWT signature AND admit it to their backend. Cross-reference: SI-024.1 v0.8 §Sub-decision 1 (admission-binding invariant); CDM v1.6 §4.NEW1 (session_jwt_admission entity); CDM v1.6 §4.NEW5 (jwt_migration_entity_status fallback gate).
 
 ---
 
