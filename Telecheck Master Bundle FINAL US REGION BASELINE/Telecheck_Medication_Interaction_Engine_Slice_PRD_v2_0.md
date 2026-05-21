@@ -1,7 +1,7 @@
 # SI-019 — Medication Interaction & Validation Engine Slice PRD v1.0 → v2.0 implementation-readiness extension
 
-**Version:** 0.5 DRAFT (R3 closures applied 2026-05-20)
-**Status:** **DRAFT / POST-R3.** Codex R3 returned 1 HIGH + 2 MED — all within Option A scope, all closed inline: HIGH-1 (state-continuity invariant unenforceable; row-level CHECK validates rows in isolation; races between transition writers could corrupt current-state derivation) → new Sub-decision 8.5 canonical SECURITY DEFINER procedure `record_interaction_signal_lifecycle_transition()` as single write path for ALL 6 transition reasons; advisory-lock + latest-to_state validation + terminal-state rejection; `REVOKE INSERT FROM PUBLIC` + role-scoped EXECUTE grants prevent bypass; Sub-decision 8 override procedure refactored to wrapper calling the canonical procedure. MED-1 (SECURITY DEFINER access function RETURNS RECORD forces caller column definition lists) → RETURNS TABLE(...) with named columns + canonical types. MED-2 (cross-artifact §3 count understated DOMAIN_EVENTS as +4) → corrected to +5. Awaiting R4.
+**Version:** 0.6 DRAFT (R4 closures applied 2026-05-21)
+**Status:** **DRAFT / POST-R4.** Codex R4 returned 2 HIGH + 1 MED — all within Option A scope, all closed inline: HIGH-1 (override wrapper recorded terminal transition BEFORE override row → failed override INSERT could leave signal permanently overridden without evidence row) → inverted atomicity order: override row INSERT FIRST (STEP 5) with generated id, transition INSERT SECOND (STEP 6) with override_id in metadata; explicit caller-transaction discipline contract added (procedure raises on any internal failure; callers MUST NOT swallow exceptions); HIGH-2 (raw Sub-decision 8.5 transition writer granted directly to broad app roles → compromised callers could forge terminal transitions without reason-specific evidence) → raw writer EXECUTE restricted to per-reason wrapper owners only; 5 new SECURITY DEFINER wrappers defined (`record_signal_emission`, `record_signal_activation`, `record_signal_supersession`, `record_signal_resolution`, `record_signal_expiry`) each with reason-specific evidence checks before invoking raw writer; Sub-decision 8 override wrapper is the 6th; MED-1 (tenant-GUC guard used `missing_ok=false` causing unstructured config error to preempt structured Mode 1 rejection) → split into proper Mode 1 (NULL/blank GUC → `tenant_guc_missing`) + Mode 2 (GUC value mismatches procedure-supplied tenant_id → `tenant_guc_mismatch`) per I-032 v5.3 canonical semantics. Awaiting R5.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; ratifier-input artifact)
 **Owner:** Clinical Governance Lead (existing v1.0 owner) + Async Consult slice owner (cross-cutting consumer)
 **Related artifacts:**
@@ -209,19 +209,20 @@ Terminal states (no further transitions): `overridden`, `superseded`, `resolved`
 
 **Gap.** v1.0 §7 specifies clinician override as auditable but doesn't define the write path. Per Async Consult slice precedent (SI-005's `record_consult_clinician_decision`), override recording should go through a SECURITY DEFINER procedure with multi-step validation including the I-032 Tenant-GUC equality guard (Mode 1 + Mode 2 per the just-ratified canonical text). Under **Option A (Evans-ratified 2026-05-20)** the procedure INSERTs both the `interaction_signal_override` row AND a paired `interaction_signal_lifecycle_transition` row atomically; the `interaction_signal` row itself is NEVER mutated (preserves I-035).
 
-**Proposed procedure:** `record_interaction_signal_override(...)` — SECURITY DEFINER WRAPPER. Under R3 HIGH-1 closure 2026-05-20, the override procedure is now a thin wrapper that performs override-specific validation + calls the single canonical transition-write procedure (`record_interaction_signal_lifecycle_transition()` per Sub-decision 8.5 below) + INSERTs the override row, all atomic in one transaction. ~8-step validation:
+**Proposed procedure:** `record_interaction_signal_override(...)` — SECURITY DEFINER WRAPPER. Under R3 HIGH-1 closure 2026-05-20 + R4 HIGH-1 closure 2026-05-21, the override procedure is the **single atomic write unit for both rows** (override row + transition row); it inserts the override row FIRST with a generated id, then calls `record_interaction_signal_lifecycle_transition()` with the override_id in metadata, all within the procedure body (no caller-side BEGIN/COMMIT — the procedure itself runs in an autocommit boundary OR the caller's transaction; either way the procedure body raises on any internal failure so the whole atomic unit aborts). Order inversion vs v0.4: the override row is now inserted BEFORE the terminal transition so a failed override INSERT cannot leave the signal permanently overridden without an evidence row.
 
 - STEP 0: I-032 Mode 1 NULL/blank-GUC RAISE + Mode 2 mismatch structured-rejection (per canonical I-032 v5.3)
 - STEP 1: auth-FIRST per I-023 layer 2
 - STEP 2: idempotency-key validation
 - STEP 3: medication-still-on-active-list state check
 - STEP 4: clinician-role check (RBAC `medication_interaction.override_recorder` granted)
-- STEP 5: BEGIN transaction. Call `record_interaction_signal_lifecycle_transition(tenant_id, signal_id, to_state='overridden', transition_reason='override', actor_id=clinician_account_id, actor_role='clinician', metadata={'override_id': new_override_id_placeholder})` — this procedure acquires the advisory lock + validates current state == `active` + inserts the transition row; raises on race/contradiction
-- STEP 6: INSERT into `interaction_signal_override` (with the actual new_override_id matching the placeholder); the metadata reference in the transition row points to this row
-- STEP 7: unique_violation safety net (on both INSERTs)
-- STEP 8: COMMIT. Rejection emission (Cat A audit `interaction_signal_override` event via canonical app-layer emission per Async-Consult P-021a pattern)
+- STEP 5: **Generate `v_new_override_id := gen_ulid()`.** INSERT into `interaction_signal_override` (id = `v_new_override_id`, tenant_id, signal_id, override_by_clinician_account_id, override_at, override_rationale, override_rationale_kms_envelope). If INSERT fails (unique_violation OR any other error) → entire procedure raises and aborts; NO transition row has been written; signal state remains unchanged.
+- STEP 6: Call `record_interaction_signal_lifecycle_transition(tenant_id, signal_id, to_state='overridden', transition_reason='override', actor_id=clinician_account_id, actor_role='clinician', metadata={'override_id': v_new_override_id})` — acquires advisory lock + validates current state == `active` + INSERTs transition row referencing the just-inserted override evidence row. Raises on race/contradiction → entire procedure aborts; the override row INSERT from STEP 5 is rolled back as part of the same transaction.
+- STEP 7: Rejection emission (Cat A audit `interaction_signal_override` event via canonical app-layer outbox emission per Async-Consult P-021a pattern; runs after STEP 6 succeeds; itself transactional with STEPS 5-6 per outbox pattern).
 
-Rejection codes: `tenant_guc_mismatch` (I-032 Mode 2), `idempotency_replay_outcome_mismatch`, `signal_not_active` (returned by Sub-decision 8.5 if latest to_state ≠ 'active'), `signal_state_terminal` (returned by Sub-decision 8.5 if latest to_state is terminal), `medication_not_on_list`, `unauthorized_role`, `unique_violation`, `advisory_lock_unavailable`. (8 codes.)
+**Caller transaction discipline (R4 HIGH-1 closure):** the canonical override write path is this procedure invoked from a caller that has BEGIN-ed a transaction OR is in autocommit mode; the procedure body raises on any internal failure to ensure the caller's transaction aborts cleanly. The procedure MUST NOT issue `COMMIT`/`ROLLBACK` internally (PL/pgSQL SECURITY DEFINER procedures called inside a caller transaction cannot manage caller transactions safely). Callers MUST NOT swallow raised exceptions; doing so commits partial work (override row without transition OR transition without override) and is FORBIDDEN by the canonical contract. Implementations that need to "absorb" the rejection (e.g., HTTP 4xx response) MUST do so AFTER the caller transaction has ROLLBACK-ed.
+
+Rejection codes: `tenant_guc_mismatch` (I-032 Mode 2), `tenant_guc_missing` (I-032 Mode 1; R4 MED-1 closure), `idempotency_replay_outcome_mismatch`, `signal_not_active` (returned by Sub-decision 8.5 if latest to_state ≠ 'active'), `signal_state_terminal` (returned by Sub-decision 8.5 if latest to_state is terminal), `medication_not_on_list`, `unauthorized_role`, `unique_violation`, `advisory_lock_unavailable`. (9 codes.)
 
 **Promotion class:** content-change; CDM bump in lockstep with Sub-decision 1's entity additions.
 
@@ -246,9 +247,19 @@ CREATE PROCEDURE record_interaction_signal_lifecycle_transition(
 DECLARE
     v_latest_to_state interaction_signal_state_t;
     v_lock_acquired BOOLEAN;
+    v_tenant_guc TEXT;
 BEGIN
-    -- STEP 0: tenant GUC equality guard (I-032 v5.3)
-    IF current_setting('app.tenant_id', false)::tenant_id_t IS DISTINCT FROM p_tenant_id THEN
+    -- STEP 0: tenant GUC guard per I-032 v5.3 (R4 MED-1 closure 2026-05-21: separate Mode 1
+    -- NULL/blank-GUC rejection from Mode 2 mismatch rejection; missing_ok=true to avoid
+    -- unstructured config error preempting the structured rejection code).
+    v_tenant_guc := current_setting('app.tenant_id', true);  -- missing_ok=true
+    -- Mode 1: GUC missing or blank
+    IF v_tenant_guc IS NULL OR length(trim(v_tenant_guc)) = 0 THEN
+        RAISE EXCEPTION 'tenant_guc_missing'
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    -- Mode 2: GUC present but mismatches procedure-supplied tenant_id
+    IF v_tenant_guc::tenant_id_t IS DISTINCT FROM p_tenant_id THEN
         RAISE EXCEPTION 'tenant_guc_mismatch'
             USING ERRCODE = 'insufficient_privilege';
     END IF;
@@ -314,31 +325,46 @@ ALTER PROCEDURE record_interaction_signal_lifecycle_transition(
     ULID, interaction_signal_actor_role_t, JSONB
 ) OWNER TO lifecycle_transition_writer_owner;
 
+-- R4 HIGH-2 closure 2026-05-21: raw transition writer NOT granted to broad app roles. EXECUTE is
+-- restricted to per-reason SECURITY DEFINER WRAPPER OWNERS only (defined below). Application
+-- roles call the reason-specific wrappers which perform reason-specific evidence checks BEFORE
+-- calling the raw transition writer.
 REVOKE INSERT ON interaction_signal_lifecycle_transition FROM PUBLIC;
 GRANT INSERT ON interaction_signal_lifecycle_transition TO lifecycle_transition_writer_owner;
 REVOKE EXECUTE ON PROCEDURE record_interaction_signal_lifecycle_transition(...) FROM PUBLIC;
+-- EXECUTE granted to wrapper owners ONLY (each wrapper is itself SECURITY DEFINER owned by the
+-- corresponding *_wrapper_owner role; app roles get EXECUTE on the wrappers, NOT on the raw):
 GRANT EXECUTE ON PROCEDURE record_interaction_signal_lifecycle_transition(...) TO
-    medication_interaction_engine_evaluator,  -- engine writes emission/activation/superseded/expired
-    medication_interaction_override_recorder,  -- override procedure (Sub-decision 8) calls
-    medication_interaction_resolution_subscriber;  -- domain-event subscriber for resolution
+    emission_wrapper_owner,
+    activation_wrapper_owner,
+    override_wrapper_owner,          -- Sub-decision 8 record_interaction_signal_override() owner
+    superseded_wrapper_owner,
+    resolution_wrapper_owner,
+    expiry_wrapper_owner;
 ```
 
-**Callers (all 6 transition reasons funnel through this single procedure):**
+**Reason-specific wrappers (R4 HIGH-2 closure):**
 
-| Transition reason | Caller | Calling role |
-|---|---|---|
-| `emission` | engine evaluator (atomic with signal INSERT) | medication_interaction_engine_evaluator |
-| `activation` | engine evaluator (post-emission, if no override at decision time) | medication_interaction_engine_evaluator |
-| `override` | `record_interaction_signal_override()` wrapper (Sub-decision 8) | medication_interaction_override_recorder |
-| `superseded_by_evaluation` | engine evaluator (on new evaluation producing replacement) | medication_interaction_engine_evaluator |
-| `resolution_event` | medication-discontinuation domain-event subscriber | medication_interaction_resolution_subscriber |
-| `time_expiry` | engine background scheduler job | medication_interaction_engine_evaluator |
+Each transition reason has a dedicated SECURITY DEFINER wrapper that performs reason-specific evidence validation BEFORE invoking the raw transition writer. App roles get EXECUTE on the wrappers ONLY; the raw transition writer is owner-only. This prevents compromised/buggy callers from forging valid-looking terminal transitions without the required domain evidence.
 
-**Rejection codes:** `tenant_guc_mismatch`, `advisory_lock_unavailable`, `signal_has_no_prior_transition`, `signal_state_terminal`, plus row-level CHECK violations (`check_violation` SQLSTATE).
+| Transition reason | Wrapper procedure | App-role caller | Reason-specific evidence check |
+|---|---|---|---|
+| `emission` | `record_signal_emission(...)` (called atomically with `interaction_signal` INSERT inside the engine evaluator path) | `medication_interaction_engine_evaluator` | Validates: paired `interaction_signal` row exists; engine_version/knowledge_base_version match the active engine config; evaluation_id matches an `interaction_engine_evaluation` row |
+| `activation` | `record_signal_activation(...)` | `medication_interaction_engine_evaluator` | Validates: signal's current state is `emitted` (Sub-decision 8.5 enforces this redundantly); no override has been recorded against signal_id between emission and activation |
+| `override` | `record_interaction_signal_override(...)` (Sub-decision 8) | `medication_interaction.override_recorder` | Full Sub-decision 8 validation (Steps 0-7); INSERTs override row first; raw writer called second |
+| `superseded_by_evaluation` | `record_signal_supersession(p_signal_id, p_replacement_evaluation_id)` | `medication_interaction_engine_evaluator` | Validates: `p_replacement_evaluation_id` exists, is for the same tenant + patient + same `check_class`, was evaluated AFTER the superseded signal's emission, produced a replacement signal row with overlapping `medications_involved` |
+| `resolution_event` | `record_signal_resolution(p_signal_id, p_discontinuation_event_id)` | `medication_interaction_resolution_subscriber` | Validates: `p_discontinuation_event_id` exists in the medication-discontinuation domain-event log; affects one of the `medications_involved` for this signal; the discontinuation timestamp + protocol-specific washout period has elapsed |
+| `time_expiry` | `record_signal_expiry(p_signal_id)` | `medication_interaction_engine_evaluator` (scheduler) | Validates: the signal's `signal_payload.time_window_basis` is non-NULL AND the window end-time has actually elapsed (`now() > emission_time + time_window`); rejects premature expiry attempts |
 
-**Promotion class:** content-change; CDM bump in lockstep with Sub-decision 1's entity additions (this is the SAME single CDM bump; Sub-decision 8.5 doesn't add new entity, just new procedure).
+Each wrapper is SECURITY DEFINER, owned by its corresponding `*_wrapper_owner` role, with `search_path = pg_catalog, pg_temp`, REVOKE EXECUTE FROM PUBLIC, and GRANT EXECUTE to its specific app-role caller (per the table). The wrapper body performs the evidence check, raises a structured rejection on failure (e.g., `replacement_evaluation_not_found`, `washout_period_not_elapsed`, `expiry_premature`), and on success invokes the raw `record_interaction_signal_lifecycle_transition()` procedure (which adds tenant-GUC guard + advisory lock + state-continuity validation + row INSERT). Wrappers carry their own rejection-code namespace per reason.
 
-**Recommendation:** APPROVE. This procedure is the canonical write path; direct INSERT into `interaction_signal_lifecycle_transition` is forbidden by privilege grant.
+**Cross-references:** R4 HIGH-2 verbatim recommendation 2026-05-21 ("Do not expose the raw canonical transition procedure to application roles. Grant EXECUTE only to tightly scoped SECURITY DEFINER wrapper owners, one wrapper per transition reason, and put reason-specific evidence checks in those wrappers before calling the internal transition writer.")
+
+**Rejection codes (raw writer):** `tenant_guc_mismatch`, `tenant_guc_missing` (R4 MED-1 closure), `advisory_lock_unavailable`, `signal_has_no_prior_transition`, `signal_state_terminal`, plus row-level CHECK violations (`check_violation` SQLSTATE). Wrappers add reason-specific codes per the table above.
+
+**Promotion class:** content-change; CDM bump in lockstep with Sub-decision 1's entity additions (Sub-decision 8.5 adds 1 raw procedure + 5 wrapper procedures; Sub-decision 8 override wrapper is the 6th — all 6 land in the same CDM bump).
+
+**Recommendation:** APPROVE. The raw transition writer is the canonical state-machine integrity primitive; the per-reason wrappers are the canonical evidence-validation primitives; the privilege grant chain prevents bypass at both layers.
 
 **Cross-references:** R3 HIGH-1 verbatim recommendation 2026-05-20 ("Require every lifecycle transition insert to go through one SECURITY DEFINER transition procedure, or an equivalent trigger-backed invariant, that locks (tenant_id, signal_id), reads the latest transition, verifies from_state equals the latest to_state, and rejects any transition from terminal states.").
 
@@ -544,9 +570,14 @@ Beyond the 8 sub-decisions above, the following questions are open and should be
 - **R2 MED-1 closed:** stale 30s MV reads could let prescribing/refill/protocol-gate enforcement see overridden signals as still active. Fix: explicit read-path consumer classification table — STRICT-FRESHNESS (transition table direct + advisory lock) for ALL enforcement/gating reads (override procedure, prescribing decision gates, refill release checks, protocol gates, pharmacy enforcement, cross-prescriber concern); HOT-PATH DISPLAY (MV via access pattern; stale-state labeling required) for non-enforcement only (dashboards, patient-facing summaries, admin reporting); PUSH NOTIFICATION (domain event subscriber; never stale). Implementers MUST classify every consumer explicitly; default for safety-relevant gating is STRICT-FRESHNESS.
 
 **v0.5 DRAFT 2026-05-20 — R3 closures applied (1 HIGH + 2 MED):**
-- **R3 HIGH-1 closed:** State-continuity invariant unenforceable at row-level CHECK alone — buggy/racing writer could append `active → expired` after latest row is `active → overridden`, or two concurrent writers could both insert overlapping terminal transitions. Fix: new **Sub-decision 8.5** canonical SECURITY DEFINER procedure `record_interaction_signal_lifecycle_transition(p_tenant_id, p_signal_id, p_to_state, p_transition_reason, p_actor_id, p_actor_role, p_metadata)` as the SINGLE write path for ALL 6 transition reasons. Procedure body: STEP 0 tenant-GUC equality guard (I-032 v5.3); STEP 1 `pg_try_advisory_xact_lock` on `(tenant_id, signal_id)`; STEP 2 read latest `to_state` under lock; STEP 3 validate state continuity (emission only valid when no prior transition; terminal-state rejection on any non-emission attempt); STEP 4 INSERT new row with `from_state := COALESCE(latest_to_state, 'none')`. Rejection codes: `tenant_guc_mismatch`, `advisory_lock_unavailable`, `signal_has_no_prior_transition`, `signal_state_terminal`. `REVOKE INSERT ON interaction_signal_lifecycle_transition FROM PUBLIC` + `GRANT INSERT TO lifecycle_transition_writer_owner` (the procedure's SECURITY DEFINER owner role). EXECUTE grants to: `medication_interaction_engine_evaluator` (emission/activation/superseded/expired), `medication_interaction_override_recorder` (override via Sub-decision 8 wrapper), `medication_interaction_resolution_subscriber` (resolution domain-event subscriber). Sub-decision 8 override procedure refactored to ~8-step wrapper that calls the canonical Sub-decision 8.5 procedure + INSERTs override row atomically; `signal_not_active` + `signal_state_terminal` rejection codes now bubble up from Sub-decision 8.5.
+- **R3 HIGH-1 closed:** State-continuity invariant unenforceable at row-level CHECK alone — buggy/racing writer could append `active → expired` after latest row is `active → overridden`, or two concurrent writers could both insert overlapping terminal transitions. Fix: new **Sub-decision 8.5** canonical SECURITY DEFINER procedure `record_interaction_signal_lifecycle_transition(p_tenant_id, p_signal_id, p_to_state, p_transition_reason, p_actor_id, p_actor_role, p_metadata)` as the SINGLE write path for ALL 6 transition reasons. Procedure body: STEP 0 tenant-GUC equality guard (I-032 v5.3); STEP 1 `pg_try_advisory_xact_lock` on `(tenant_id, signal_id)`; STEP 2 read latest `to_state` under lock; STEP 3 validate state continuity (emission only valid when no prior transition; terminal-state rejection on any non-emission attempt); STEP 4 INSERT new row with `from_state := COALESCE(latest_to_state, 'none')`. Rejection codes: `tenant_guc_mismatch`, `advisory_lock_unavailable`, `signal_has_no_prior_transition`, `signal_state_terminal`. `REVOKE INSERT ON interaction_signal_lifecycle_transition FROM PUBLIC` + `GRANT INSERT TO lifecycle_transition_writer_owner` (the procedure's SECURITY DEFINER owner role). Sub-decision 8 override procedure refactored to wrapper calling the canonical Sub-decision 8.5 procedure + INSERTs override row atomically.
 - **R3 MED-1 closed:** SECURITY DEFINER access function `get_interaction_signal_current_state()` declared as `RETURNS RECORD` would force every caller to provide a column definition list. Fix: changed to `RETURNS TABLE(signal_id ulid_t, current_state interaction_signal_state_t, as_of TIMESTAMPTZ, transition_reason interaction_signal_transition_reason_t)` with named columns + canonical types; preserves the SECURITY DEFINER + tenant filter inside the body.
 - **R3 MED-2 closed:** cross-artifact §3 summary said DOMAIN_EVENTS +4 but Sub-decision 3 lists 5 events (the 5th `signal_lifecycle_transition_emitted.v1` was added at v0.3 for MV refresh + push notifications). Fix: corrected §3 to +5 DOMAIN_EVENTS with explicit reference to the 5th event.
+
+**v0.6 DRAFT 2026-05-21 — R4 closures applied (2 HIGH + 1 MED):**
+- **R4 HIGH-1 closed:** Sub-decision 8 override wrapper recorded the terminal transition BEFORE the override row → if override INSERT failed after transition was already inserted (unique_violation, retry race, app-layer error path), signal would be permanently overridden without an override evidence row — patient-safety failure (signal no longer gates care; no clinician rationale on record). Fix: inverted atomicity order — STEP 5 generates `v_new_override_id := gen_ulid()` + INSERTs `interaction_signal_override` FIRST; STEP 6 calls Sub-decision 8.5 raw transition writer with `metadata={'override_id': v_new_override_id}` SECOND. Failure at STEP 5 → no transition row written; failure at STEP 6 → override row INSERT rolls back as part of same transaction. Explicit caller-transaction discipline contract added: procedure raises on any internal failure so caller transaction aborts cleanly; procedure MUST NOT issue COMMIT/ROLLBACK internally; callers MUST NOT swallow raised exceptions (would commit partial work). New rejection code `tenant_guc_missing` added; 9 rejection codes total.
+- **R4 HIGH-2 closed:** Raw Sub-decision 8.5 `record_interaction_signal_lifecycle_transition()` granted EXECUTE directly to `medication_interaction_engine_evaluator`, `medication_interaction_override_recorder`, `medication_interaction_resolution_subscriber` → these app roles could call the raw writer with any (transition_reason, to_state, metadata) combination that satisfied the state-continuity + row-level CHECK, BYPASSING reason-specific evidence checks. A compromised/buggy caller could forge e.g. `time_expiry` on a signal whose time-window hasn't elapsed, or `resolution_event` without a real medication-discontinuation event, or `superseded_by_evaluation` pointing to a non-existent replacement. Fix: raw transition writer EXECUTE restricted to per-reason wrapper owners ONLY (`emission_wrapper_owner`, `activation_wrapper_owner`, `override_wrapper_owner`, `superseded_wrapper_owner`, `resolution_wrapper_owner`, `expiry_wrapper_owner`). 5 NEW reason-specific SECURITY DEFINER wrappers defined (`record_signal_emission` validates paired signal row exists + engine/KB version match + evaluation_id match; `record_signal_activation` validates current state is `emitted` + no override between emission and activation; `record_signal_supersession(p_replacement_evaluation_id)` validates replacement evaluation exists for same tenant+patient+check_class with overlapping medications_involved + post-emission timestamp; `record_signal_resolution(p_discontinuation_event_id)` validates discontinuation event exists + affects one of medications_involved + washout period elapsed; `record_signal_expiry()` validates time_window_basis non-NULL + window end-time elapsed). Sub-decision 8 override wrapper is the 6th (already existed; now also restricted via override_wrapper_owner role). App roles get EXECUTE on wrappers ONLY; raw writer is owner-only. Each wrapper carries its own rejection-code namespace per reason (e.g., `replacement_evaluation_not_found`, `washout_period_not_elapsed`, `expiry_premature`).
+- **R4 MED-1 closed:** Raw transition writer's tenant-GUC guard used `current_setting('app.tenant_id', false)` → if GUC is missing (NULL), PostgreSQL raises an unstructured `configuration_parameter_undefined` error (SQLSTATE 42704) BEFORE the procedure can emit the structured `tenant_guc_mismatch` rejection. The spec's I-032 Mode 1 (NULL/blank-GUC RAISE) was therefore not actually implemented. Fix: read with `missing_ok=true` into local TEXT variable; Mode 1 check first (`v_tenant_guc IS NULL OR length(trim(v_tenant_guc)) = 0` → `tenant_guc_missing`); Mode 2 check second (cast to `tenant_id_t` + compare → `tenant_guc_mismatch`). Both rejection codes use `insufficient_privilege` SQLSTATE for consistent caller handling.
 
 ---
 
