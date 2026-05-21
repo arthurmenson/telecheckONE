@@ -1,7 +1,7 @@
 # SI-020 — Async Consult Slice PRD v1.0 → v2.0 implementation-readiness extension
 
-**Version:** 0.4 DRAFT
-**Status:** POST-R3 (1 HIGH closed inline: consult_review_claim composite UNIQUE didn't prevent multiple concurrent active claims for the same `(tenant_id, consult_id, patient_id)` — under concurrent /claim requests or partial-observation retries, two clinicians could each create valid claim rows and both satisfy the decision FK. Fix: added tenant-scoped partial UNIQUE INDEX `(tenant_id, consult_id, patient_id) WHERE released_at IS NULL` enforcing single-active-claim invariant at schema level + advisory-lock-before-INSERT pattern in the `claim_consult_for_review()` SECURITY DEFINER wrapper per SI-024.1 P-031 + SI-019 P-033 wrapper-acquires-lock discipline; structured `claim_already_held` rejection on conflict + atomic reassignment path documented. Previously POST-R2 (1 HIGH closed inline: consult entity #1 schema in Sub-decision 1 omitted `payment_intent_id` despite Sub-decision 10 declaring it REQUIRED + NOT NULL; ratifiers/implementers following Sub-decision 1 row shape would create a CDM entity that couldn't persist the Billing intent reference, breaking revenue-anchor reconciliation + refund + webhook correlation. Fix: added `payment_intent_id` ULID NOT NULL + tenant-scoped composite FK to `billing_payment_intent(tenant_id, id)` + `payment_provider` TEXT NOT NULL CHECK enum + `currency` TEXT NOT NULL CHECK (ISO 4217 alpha) to the consult row shape; aligned with the OpenAPI response + DOMAIN_EVENTS payload + Billing subscription contract. Previously POST-R1 (1 HIGH + 1 MED closed inline: HIGH-1 claim/admission identity not durably modeled → added `consult_review_claim` entity #4 with composite UNIQUE enabling 5-column composite FK from `consult_clinician_decision` enforcing deciding clinician == claiming clinician at schema-invariant level + non-released/non-expired BEFORE INSERT trigger; MED-1 payment producer/consumer contract circular → canonical sequencing clarified: `POST /v1/async-consults` internally calls Billing's payment-intent creation BEFORE consult INSERT, Billing subscribes to `async_consult.initiated.v1` for observability not charge-initiation, refund flow on `decision_recorded` with `decision_type=decline`)
+**Version:** 0.5 DRAFT
+**Status:** POST-R4 (1 HIGH closed inline: consult_review_claim release semantics contradictory — claim row described as both "immutable post-INSERT / strict append-only" AND "one-way mutable on released_at" without resolving the contradiction. Reassignment path would either be impossible (if implementers followed append-only-only) OR break the single-active-claim invariant (if they bypassed). Fix: explicit hybrid persistence pattern with canonical DDL + procedure body — `consult_review_claim_one_way_released_at` BEFORE UPDATE trigger PERMITS only NULL→non-NULL on `released_at` + `release_reason`, rejects all other column updates; `reassign_consult_claim()` SECURITY DEFINER procedure does UPDATE-release-prior-THEN-INSERT-new in single transaction under advisory lock; partial UNIQUE INDEX + one-way trigger + reassignment procedure now mutually consistent. Pattern matches SI-024.1 P-031 `break_glass_active_session.closed_at` + Mode 1 P-036 R7 derived-view one-way-lifecycle-trigger discipline. Previously POST-R3 (1 HIGH closed inline: consult_review_claim composite UNIQUE didn't prevent multiple concurrent active claims for the same `(tenant_id, consult_id, patient_id)` — under concurrent /claim requests or partial-observation retries, two clinicians could each create valid claim rows and both satisfy the decision FK. Fix: added tenant-scoped partial UNIQUE INDEX `(tenant_id, consult_id, patient_id) WHERE released_at IS NULL` enforcing single-active-claim invariant at schema level + advisory-lock-before-INSERT pattern in the `claim_consult_for_review()` SECURITY DEFINER wrapper per SI-024.1 P-031 + SI-019 P-033 wrapper-acquires-lock discipline; structured `claim_already_held` rejection on conflict + atomic reassignment path documented. Previously POST-R2 (1 HIGH closed inline: consult entity #1 schema in Sub-decision 1 omitted `payment_intent_id` despite Sub-decision 10 declaring it REQUIRED + NOT NULL; ratifiers/implementers following Sub-decision 1 row shape would create a CDM entity that couldn't persist the Billing intent reference, breaking revenue-anchor reconciliation + refund + webhook correlation. Fix: added `payment_intent_id` ULID NOT NULL + tenant-scoped composite FK to `billing_payment_intent(tenant_id, id)` + `payment_provider` TEXT NOT NULL CHECK enum + `currency` TEXT NOT NULL CHECK (ISO 4217 alpha) to the consult row shape; aligned with the OpenAPI response + DOMAIN_EVENTS payload + Billing subscription contract. Previously POST-R1 (1 HIGH + 1 MED closed inline: HIGH-1 claim/admission identity not durably modeled → added `consult_review_claim` entity #4 with composite UNIQUE enabling 5-column composite FK from `consult_clinician_decision` enforcing deciding clinician == claiming clinician at schema-invariant level + non-released/non-expired BEFORE INSERT trigger; MED-1 payment producer/consumer contract circular → canonical sequencing clarified: `POST /v1/async-consults` internally calls Billing's payment-intent creation BEFORE consult INSERT, Billing subscribes to `async_consult.initiated.v1` for observability not charge-initiation, refund flow on `decision_recorded` with `decision_type=decline`)
 **Authoring date:** 2026-05-21
 **Authoring location:** `Telecheck Master Bundle FINAL US REGION BASELINE/` (directly in canonical bundle path per post-P-035 promotion-on-author pattern)
 **Owner:** Async & Refill Review Lead (existing v1.0 owner) + AI Service Lead (Mode 2 cross-cutting) + Pharmacy Portal slice owner (cross-cutting consumer)
@@ -48,7 +48,111 @@ Ten sub-decisions. Each is a ratifier-decision item; several can be batched at r
 
 3. **`consult_clinical_summary` (new entity, CDM v1.8 §4.X+2)** — 1 row per AI-prepared clinical summary; immutable. Columns: `id` ULID, `tenant_id`, `consult_id`, `patient_id`, `prepared_by_mode` enum (`mode_1 | mode_2`), `ai_provider` TEXT (per CCR), `model_id` TEXT, `summary_ciphertext` BYTEA NOT NULL (KMS-encrypted — clinical summary contains PHI), `summary_kms_envelope_*` 8-column envelope, `interaction_signals_snapshot` JSONB (Med-Interaction engine signals at prep time; non-PHI; references signal IDs from §4.NEW2 of P-034 CDM v1.7), `recommendation` enum NULL (`prescribe | recommend | refer | decline | request_more_data | escalate_to_sync`), `prepared_at` TIMESTAMPTZ DEFAULT now(). Strict append-only. Composite tenant-scoped FKs (`(tenant_id, consult_id, patient_id) → consult`) for patient identity propagation.
 
-4. **`consult_review_claim` (new entity, CDM v1.8 §4.X+3a; R1 HIGH-1 closure 2026-05-21 + R3 HIGH-1 closure 2026-05-21)** — 1 row per clinician claim of a consult for review; immutable post-INSERT (claim release happens via one-way `released_at` mutation, not row deletion). Required to durably model claim/admission identity so `consult_clinician_decision` can FK to the active claim + the SECURITY DEFINER procedure can verify deciding clinician == claiming clinician at schema-invariant level (not just runtime). Columns: `id` ULID, `tenant_id`, `consult_id`, `patient_id`, `clinician_account_id` FK to accounts (the claiming clinician), `claimed_at` TIMESTAMPTZ DEFAULT now(), `claim_expires_at` TIMESTAMPTZ NOT NULL (90-minute claim timeout per clinician-coverage discipline; configurable per program), `released_at` TIMESTAMPTZ NULL (one-way mutation per same pattern as SI-024.1 break_glass_active_session.closed_at one-way; enforced by separate `one_way_released_at` trigger), `release_reason` enum NULL (`decision_recorded | claim_expired | reassigned | clinician_unavailable`). Composite UNIQUE `(tenant_id, id, consult_id, patient_id, clinician_account_id)` enables downstream `consult_clinician_decision` 5-column composite FK enforcing claim identity. Strict append-only on identity columns; one-way mutation on `released_at` per Mode 1 P-036 R7 one-way-lifecycle-trigger pattern. RLS via `current_tenant_id_strict('consult_review_claim')`.
+4. **`consult_review_claim` (new entity, CDM v1.8 §4.X+3a; R1 HIGH-1 + R3 HIGH-1 + R4 HIGH-1 closures 2026-05-21)** — 1 row per clinician claim of a consult for review; **hybrid persistence: identity columns are strict append-only post-INSERT; `released_at` + `release_reason` are one-way-mutable (NULL → non-NULL only) per the canonical Mode 1 P-036 R7 lifecycle-trigger pattern AND the SI-024.1 P-031 `break_glass_active_session.closed_at` one-way pattern**. Required to durably model claim/admission identity so `consult_clinician_decision` can FK to the active claim + the SECURITY DEFINER procedure can verify deciding clinician == claiming clinician at schema-invariant level (not just runtime). Columns: `id` ULID, `tenant_id`, `consult_id`, `patient_id`, `clinician_account_id` FK to accounts (the claiming clinician), `claimed_at` TIMESTAMPTZ DEFAULT now(), `claim_expires_at` TIMESTAMPTZ NOT NULL (90-minute claim timeout per clinician-coverage discipline; configurable per program), `released_at` TIMESTAMPTZ NULL (**one-way mutable** per `consult_review_claim_one_way_released_at` BEFORE UPDATE trigger; permits ONLY NULL → non-NULL transition), `release_reason` enum NULL (`decision_recorded | claim_expired | reassigned | clinician_unavailable`; **one-way mutable** alongside `released_at` via same trigger). Composite UNIQUE `(tenant_id, id, consult_id, patient_id, clinician_account_id)` enables downstream `consult_clinician_decision` 5-column composite FK enforcing claim identity. RLS via `current_tenant_id_strict('consult_review_claim')`.
+
+**R4 HIGH-1 closure 2026-05-21 — explicit append-only carve-out + reassignment semantics.** The earlier draft said "immutable post-INSERT" + "Strict append-only on identity columns" + "one-way mutation on released_at" — three statements that read as contradictory. Resolution per the canonical hybrid pattern (SI-024.1 P-031 `break_glass_active_session.closed_at` + Mode 1 P-036 R7 derived-view one-way-lifecycle-trigger):
+
+```sql
+-- 1. Strict append-only enforced via BEFORE UPDATE trigger that PERMITS ONLY the release-field
+--    columns (released_at, release_reason) to transition NULL → non-NULL; rejects all other column
+--    updates and rejects non-NULL → different non-NULL transitions on the release fields:
+CREATE FUNCTION consult_review_claim_one_way_released_at() RETURNS TRIGGER AS $$
+BEGIN
+    -- Reject any change to identity columns
+    IF NEW.id IS DISTINCT FROM OLD.id
+       OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+       OR NEW.consult_id IS DISTINCT FROM OLD.consult_id
+       OR NEW.patient_id IS DISTINCT FROM OLD.patient_id
+       OR NEW.clinician_account_id IS DISTINCT FROM OLD.clinician_account_id
+       OR NEW.claimed_at IS DISTINCT FROM OLD.claimed_at
+       OR NEW.claim_expires_at IS DISTINCT FROM OLD.claim_expires_at THEN
+        RAISE EXCEPTION 'consult_review_claim identity columns are strict append-only post-INSERT'
+            USING ERRCODE = 'TLC27';
+    END IF;
+    -- Reject non-NULL → different non-NULL on release fields (one-way only)
+    IF OLD.released_at IS NOT NULL AND NEW.released_at IS DISTINCT FROM OLD.released_at THEN
+        RAISE EXCEPTION 'consult_review_claim.released_at is one-way (NULL → timestamp); cannot change once set: was % is %',
+            OLD.released_at, NEW.released_at
+            USING ERRCODE = 'invalid_column_reference';
+    END IF;
+    IF OLD.release_reason IS NOT NULL AND NEW.release_reason IS DISTINCT FROM OLD.release_reason THEN
+        RAISE EXCEPTION 'consult_review_claim.release_reason is one-way (NULL → enum value); cannot change once set'
+            USING ERRCODE = 'invalid_column_reference';
+    END IF;
+    -- Require release_reason set together with released_at
+    IF (NEW.released_at IS NULL) IS DISTINCT FROM (NEW.release_reason IS NULL) THEN
+        RAISE EXCEPTION 'consult_review_claim.released_at and release_reason must be set together'
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER consult_review_claim_one_way_released_at
+    BEFORE UPDATE ON consult_review_claim
+    FOR EACH ROW EXECUTE FUNCTION consult_review_claim_one_way_released_at();
+-- Note: BEFORE DELETE rejects via enforce_append_only() applied separately.
+
+-- 2. The tenant-scoped partial UNIQUE INDEX enforces single-active-claim:
+CREATE UNIQUE INDEX consult_review_claim_active_per_consult_uniq
+    ON consult_review_claim (tenant_id, consult_id, patient_id)
+    WHERE released_at IS NULL;
+```
+
+**Reassignment SECURITY DEFINER procedure** (`reassign_consult_claim()`) — explicit transactional contract:
+
+```sql
+CREATE PROCEDURE reassign_consult_claim(
+    p_tenant_id tenant_id_t,
+    p_consult_id ULID,
+    p_new_clinician_account_id ULID,
+    p_release_reason TEXT  -- one of {reassigned, clinician_unavailable}
+) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE
+    v_prior_claim_id ULID;
+BEGIN
+    -- STEP 0: SI-024.1 JWT-binding tenant guard (per P-031 + P-036 R3 pattern)
+    -- (omitted here for brevity; see canonical pattern in §6/Sub-decision 8)
+
+    -- STEP 1: acquire (tenant_id, consult_id) advisory lock
+    PERFORM pg_advisory_xact_lock(
+        hashtextextended('consult_review_claim:' || p_tenant_id::text || ':' || p_consult_id::text, 0)
+    );
+
+    -- STEP 2: find the currently-active claim (if any) under the lock
+    SELECT id INTO v_prior_claim_id
+        FROM consult_review_claim
+        WHERE tenant_id = p_tenant_id AND consult_id = p_consult_id AND released_at IS NULL
+        FOR UPDATE;  -- explicit row lock for the UPDATE-then-INSERT atomic pattern
+
+    -- STEP 3: if a prior claim exists, release it via UPDATE (one-way trigger permits this exactly once)
+    IF v_prior_claim_id IS NOT NULL THEN
+        UPDATE consult_review_claim
+        SET released_at = now(), release_reason = p_release_reason
+        WHERE id = v_prior_claim_id;
+    END IF;
+
+    -- STEP 4: INSERT the new claim row; partial UNIQUE INDEX now permits this (prior is released)
+    INSERT INTO consult_review_claim (
+        id, tenant_id, consult_id, patient_id, clinician_account_id,
+        claimed_at, claim_expires_at
+    ) VALUES (
+        gen_ulid(), p_tenant_id, p_consult_id,
+        (SELECT patient_id FROM consult WHERE id = p_consult_id AND tenant_id = p_tenant_id),
+        p_new_clinician_account_id,
+        now(), now() + INTERVAL '90 minutes'
+    );
+    -- Both rows committed atomically under the advisory lock; concurrent /claim requests
+    -- see the lock and serialize behind it.
+EXCEPTION
+    WHEN unique_violation THEN
+        RAISE EXCEPTION 'claim_already_held'
+            USING ERRCODE = 'unique_violation';
+END;
+$$;
+```
+
+This makes the partial UNIQUE INDEX + one-way trigger + reassignment procedure all consistent: identity columns truly immutable post-INSERT; release fields one-way-mutable exactly once; reassignment is transactional UPDATE-release-then-INSERT-new under advisory lock.
 
 **R3 HIGH-1 closure 2026-05-21 — active-claim exclusivity invariant.** The composite UNIQUE including `id` enables the downstream FK but does NOT prevent concurrent unreleased claims for the same `(tenant_id, consult_id, patient_id)`. Under concurrent `/claim` requests OR a retry after a partially-observed claim flow, two clinicians could each create a valid claim row + both satisfy the decision FK — breaking the deciding-clinician==claiming-clinician invariant in a different way (multiple valid claiming clinicians simultaneously). Fix: add a **tenant-scoped partial UNIQUE INDEX on `(tenant_id, consult_id, patient_id) WHERE released_at IS NULL`** enforcing single-active-claim-per-consult at schema level:
 
@@ -349,7 +453,10 @@ Beyond the 10 sub-decisions above, the following questions are open and should b
 - **R1 HIGH-1 closed:** Decision ownership couldn't be enforced because claim/admission identity wasn't modeled in row shapes. `consult_clinician_decision` had only `clinician_account_id` but no FK to a claim record proving deciding clinician == claiming clinician. Clinician could record decision on queued or differently-claimed consult; only audit-time (not schema-time) detection possible. Fix: added **`consult_review_claim` entity #4** (immutable post-INSERT on identity columns; one-way mutation on `released_at` per Mode 1 P-036 R7 lifecycle-trigger pattern; composite UNIQUE `(tenant_id, id, consult_id, patient_id, clinician_account_id)`); promoted `consult_clinician_decision` to entity #5 with required `claim_id` ULID NOT NULL column + **5-column composite tenant-scoped FK** `(tenant_id, claim_id, consult_id, patient_id, clinician_account_id) REFERENCES consult_review_claim(tenant_id, id, consult_id, patient_id, clinician_account_id)` enforcing claim identity propagation at schema-invariant level + BEFORE INSERT trigger validating claim is non-released + non-expired at decision time. Decision-ownership invariant now enforceable at FK-evaluation time, not just runtime.
 - **R1 MED-1 closed:** Payment producer/consumer contract had circular handoff (endpoint returned `payment_intent_id` while domain event was supposed to cause Billing to generate it). Risk: unchargeable consults / duplicate charges on retries / OpenAPI-vs-DOMAIN_EVENTS schema drift on revenue-anchor slice. Fix: canonical sequencing clarified in Sub-decision 10 — `POST /v1/async-consults` internally calls Billing's `POST /v1/billing/payment-intents` (synchronous internal call with Idempotency-Key) BEFORE consult INSERT; Billing returns `payment_intent_id` + `client_secret`; consult row REQUIRES `payment_intent_id` (NOT NULL CHECK); Billing subscribes to `async_consult.initiated.v1` for revenue-reconciliation observability ONLY (not for charge initiation; the charge was already initiated in step 1). Refund flow on `clinician_decision_recorded.v1` with `decision_type=decline` per v1.0 §6 + clear failure semantics for Billing-failure / outbox-event-failure / payment-confirmation-webhook paths.
 
-Authored on `spec/si-020-async-consult-v2-0-implementation-readiness-2026-05-21` branch off main at `3b10b4c` (post-P-036 + Addendum 64). v0.2 commit `b34e7b0`. v0.3 commit `fca9e35`. v0.4 commit pending push for R4 verification.
+Authored on `spec/si-020-async-consult-v2-0-implementation-readiness-2026-05-21` branch off main at `3b10b4c` (post-P-036 + Addendum 64). v0.2 commit `b34e7b0`. v0.3 commit `fca9e35`. v0.4 commit `79a4e24`. v0.5 commit pending push for R5 verification.
+
+**v0.5 DRAFT 2026-05-21 — R4 closure applied (1 HIGH):**
+- **R4 HIGH-1 closed:** consult_review_claim release semantics contradictory — described as both "immutable post-INSERT / strict append-only" AND "one-way mutable on released_at" without resolving. Reassignment path either impossible (under append-only-only) or schema-bypassing (breaking single-active-claim invariant). Fix per canonical hybrid pattern (SI-024.1 P-031 `break_glass_active_session.closed_at` + Mode 1 P-036 R7 derived-view one-way-lifecycle-trigger discipline): explicit `consult_review_claim_one_way_released_at` BEFORE UPDATE trigger PERMITS NULL→non-NULL transition on `released_at` + `release_reason` ONLY; rejects all other column updates with ERRCODE TLC27; rejects non-NULL→different-non-NULL on release fields. `reassign_consult_claim()` SECURITY DEFINER procedure body specified explicitly: advisory-lock-then-UPDATE-prior-release-fields-then-INSERT-new-claim in single transaction; concurrent /claim requests serialize behind the lock; unique_violation maps to structured `claim_already_held` rejection. Partial UNIQUE INDEX + one-way trigger + reassignment procedure now mutually consistent.
 
 **v0.4 DRAFT 2026-05-21 — R3 closure applied (1 HIGH):**
 - **R3 HIGH-1 closed:** consult_review_claim composite UNIQUE included `id`, enabling downstream FK but NOT preventing multiple concurrent active claims for same `(tenant_id, consult_id, patient_id)`. Under concurrent `/claim` requests or partial-observation retries, two clinicians could each create valid claim rows + both satisfy decision FK — breaking deciding-clinician==claiming-clinician invariant in a different way (multiple valid claiming clinicians simultaneously). Fix: added **tenant-scoped partial UNIQUE INDEX** `(tenant_id, consult_id, patient_id) WHERE released_at IS NULL` enforcing single-active-claim invariant at schema level + **advisory-lock-before-INSERT pattern** in `claim_consult_for_review()` SECURITY DEFINER wrapper (per SI-024.1 P-031 + SI-019 P-033 wrapper-acquires-lock discipline). Structured `claim_already_held` rejection on conflict + atomic reassignment SECURITY DEFINER procedure path (atomic-release-prior + INSERT-new under same advisory lock) for clinician handoff/takeover scenarios.
