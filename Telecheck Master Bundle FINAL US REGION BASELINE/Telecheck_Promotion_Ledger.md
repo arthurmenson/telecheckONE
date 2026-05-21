@@ -37,6 +37,39 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-039 — 2026-05-21 — SI-022 Crisis Response Slice v1.0 spec RATIFIED; 7 sub-decisions (FLOOR-020 atomic emit ordering STEP 1-5 + Sub-decision 3 logical recipient routing + Sub-decision 5 dispatch_ledger/provider_attempt two-tier shape per P-027 §4.66/§4.67 + Sub-decision 6 no-acknowledgement sweep STEP A→F atomic transaction with R53-guarded single-mutation sweep_cycle_counter + STEP F triple-guarded final UPDATE on crisis_sweep_execution + Sub-decision 7 14 merge-blocking integration tests + 1 contention benchmark); 12 new audit events (8 Cat A + 4 Cat C) registered for ratification at P-040 CDM follow-on; 5 canonical tenant config OQ4 keys (`crisis.fanout_channels[]` + `crisis.clinical_on_call_channel` + `crisis.clinical_on_call_recipient` + `crisis.clinical_on_call_principal_id` + `crisis.operator_escalation_channel` + `crisis.operator_escalation_recipient` + `crisis.operator_escalation_principal_id` + `crisis.emergency_contact_channel` per R18/R31/R63/R65); two-function recipient-mapping discipline (compute_crisis_initial_recipient_mapping for detection-time fan-out vs compute_crisis_recipient_mapping(target_tier) for sweep-time tier-advance); zero-recipients fail-closed for required target_tier ∈ {care_team, clinical_on_call, regulatory}; durable per-sweep crisis_sweep_execution table with fencing-token + lease-takeover + sweep_cycle_counter generation invariants; uniform 4-tuple recipient mapping (channel, recipient_role, recipient_address, recipient_principal_id) across all 3 target_tier branches + emergency_contact uniform-arity 4-tuple with COALESCE(consent_grant.delegate_principal_id, NULL::uuid); Artifact Registry v2.25 → v2.26; **EIGHTH instance of established post-P-029 SI-spec-first promotion pattern** (P-029, P-032, P-034, P-035, P-036, P-037, P-038, P-039); pilot-viable scope item 4 of 5 (Track 1 Clinical Care + Track 2 AI Service crisis-detection foundation; final pilot-required slice is Admin Backend basics).
+
+**Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" + dual-recommendation + two-pass + auto-proceed at commits `f3a6469` + `4f42a00` + `16d7244` + `f483535`):** when Codex APPROVE + Claude READY agree, auto-proceed. P-039 follows the established post-P-029 SI-spec-first promotion pattern; crisis-detection emit is already platform-floor via FLOOR-020 (Mode 1 Handler P-035 + I-019 invariant) and crisis-routing-canonical entities are already promoted at P-027 §4.66-4.68; P-039 specifies the canonical response surface that consumes detection emits and routes them through dispatch_ledger + provider_attempt + escalation_obligation to the configured care_team / clinical_on_call / emergency_contact / operator_escalation recipients on multi-tier no-acknowledgement sweep.
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). SI-022 v0.67 promotion via auto-proceed convergence (Codex R67 APPROVE / ship-it + Claude READY-TO-MERGE; 67 rounds, ~89 findings closed inline, 1 hard-floor item 6 DISSOLVED at R6 by adopting Codex's own Option B recommendation — replaced net-new SI-024.1 helper `current_jwt_verified_patient_id` with explicit schema-backed joins via the already-ratified verify_session_jwt_and_extract_claims + consent_grant primitives).
+
+**Type:** Content-change promotion + Registry v2.25 → v2.26 per operating rule 4.
+
+**Cycle metrics:** 67 Codex adversarial-review rounds (extreme long-tail — P-030 was 17 rounds previously; this is ~3.9× longer due to safety-critical multi-tier sweep concurrency contract iterations). Findings: ~89 closed inline (mix of HIGH / MED / 1 CRITICAL at R30 SQL parse error); 1 hard-floor item 6 DISSOLVED at R6 (NOT escalated; closure path REMOVED the architectural-judgment trigger by adopting Codex's Option B recommendation — CLAUDE.md dissolution-pattern discipline observed). R62-R67 long-tail driven by the R63 HIGH-2 introduction of clinical_on_call_recipient/principal_id keys cascading through compute_crisis_recipient_mapping source list (R64), regulatory branch 4-tuple symmetry (R65), and emergency_contact projection arity-uniformity (R66) — each round identified a genuine incomplete-propagation defect, never a recurrence; the cascade converged at R67 APPROVE once the propagation reached the emergency_contact projection (the last 3-tuple → 4-tuple corner).
+
+**Files promoted:**
+
+| File | Path | Version bump |
+|---|---|---|
+| Telecheck_SI_022_Crisis_Response_v1_0.md | bundle root | new SI spec at v1.0 RATIFIED (was v0.67 DRAFT POST-R66; promoted at R67 APPROVE) |
+| Telecheck_Artifact_Registry_v2_10.md | bundle root | v2.25 → v2.26 (header + §8 changelog) |
+| Telecheck_Active_Document_Index_v1_0.md | bundle root | §1 add SI-022 entry as canonical for crisis-response routing |
+| Telecheck_Promotion_Ledger.md (this entry) | bundle root | append-only |
+
+**Pilot-required slices status after P-039:**
+
+| # | Slice | Status |
+|---|---|---|
+| 1 | Med-Interaction (SI-019) | RATIFIED P-034 |
+| 2 | Async-Consult (SI-020) | RATIFIED P-037 + P-038 follow-on |
+| 3 | Mode 1 AI Service Handler | RATIFIED P-035 |
+| 4 | Crisis Response (SI-022) | **RATIFIED P-039 (THIS ENTRY)** |
+| 5 | Admin Backend basics | NOT YET AUTHORED |
+
+**4 of 5 pilot-required slices now FULLY RATIFIED.** Next critical-path item per Master Completion Plan v1.0: author SI-023 Admin Backend basics (final pilot-required slice; once ratified the telecheck-app pilot implementation gate opens fully).
+
+---
+
 ### Entry P-038 — 2026-05-21 — CDM v1.8 → v1.9 + AUDIT_EVENTS v5.10 → v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 → v0.4 + State Machines v1.2 → v1.3 + RBAC v1.2 → v1.3 (SI-020 Async-Consult follow-on amendment) RATIFIED; 7 new CDM entities (consult + intake_submission + clinical_summary + review_claim (hybrid persistence with one-way release) + clinician_decision + lifecycle_transition + follow_up_message) + 2 split caller-class-specific data-minimization views (async_consult_patient_summary_v with verify_session_jwt_and_extract_claims + consent_grant predicate; async_consult_staff_summary_v tenant-wide) + 1 OPTIONAL materialized view + 7 SECURITY DEFINER procedures (1 raw transition writer + 5 wrapper owners = 6 procedure-owner roles) + 17 new audit events (4 Cat A + 3 Cat B + 10 Cat C) + 7 new domain events + 11 new OpenAPI endpoints (caller-class-routed handler dispatch on read) + 1 new derived state machine `consult_lifecycle` (22 CHECK-enforced transition triples) + 13 new RBAC roles (5 application + 6 wrapper owners + 2 view/MV owners; R5 HIGH-1 split patient_reader from staff_reader); +9 jwt_migration_entity_status seed entries; Artifact Registry v2.24 → v2.25; **SEVENTH instance of established post-P-029 SI-spec-first promotion pattern** (P-029, P-032, P-034, P-035, P-036, P-037, P-038); pilot-viable scope item 2 (Track 1 Ghana revenue anchor; Async-Consult implementation-readiness now consolidated into CDM/AUDIT/OpenAPI/StateMachines/RBAC canonical files)
 
 **Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" + dual-recommendation + two-pass + auto-proceed):** when Codex APPROVE + Claude READY agree, auto-proceed. P-038 follows the established post-P-029 mechanical-consolidation cadence; SI-020 v0.11 (P-037) ratified content lands in named bundle file sections via this amendment cycle.
