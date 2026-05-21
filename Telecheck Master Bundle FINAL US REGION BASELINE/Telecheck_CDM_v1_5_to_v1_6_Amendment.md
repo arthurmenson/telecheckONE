@@ -1,7 +1,7 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.3 DRAFT
-**Status:** POST-PASS-2 R1 (R2 HIGH closed: Pass-2 caught SECURITY DEFINER + current_user pitfall — under SECURITY DEFINER current_user resolves to function owner not caller, so authorization check was broken. Fix: SECURITY INVOKER + explicit GRANT/REVOKE defense-in-depth applied to both §4.NEW1 and §4.NEW2. Awaiting Pass-2 R2 verification.)
+**Version:** 0.4 DRAFT
+**Status:** POST-PASS-2 R2 (R3 HIGH closed: Pass-2 R2 caught a FORCE-RLS gap — tenant-isolation policy applied to ALL commands, so the platform-scoped cleanup job running as sec_jwt_cleanup without per-tenant context would fail RLS BEFORE the trigger predicate could run. Fix: add permissive FOR DELETE TO sec_jwt_cleanup RLS policy on both §4.NEW1 and §4.NEW2 scoped to expired rows. Awaiting Pass-2 R3 verification.)
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
@@ -66,6 +66,17 @@ ALTER TABLE session_jwt_admission FORCE ROW LEVEL SECURITY;
 CREATE POLICY session_jwt_admission_tenant_isolation ON session_jwt_admission
     USING (tenant_id = current_tenant_id_strict('session_jwt_admission'));
 
+-- Cleanup-role DELETE policy (R3 HIGH closure 2026-05-20: Pass-2 R2 caught a FORCE-RLS gap — the
+-- tenant-isolation policy above applies to ALL commands, so the platform-scoped cleanup job running as
+-- sec_jwt_cleanup without per-tenant context would fail RLS before reaching the TTL trigger. Add a
+-- permissive FOR DELETE policy scoped to sec_jwt_cleanup on expired rows; composes as OR with the
+-- tenant-isolation policy at DELETE time). Cleanup execution context: platform-wide background job (NOT
+-- per-tenant), runs as sec_jwt_cleanup role with no app.* GUC tenant context set; relies on this policy
+-- to cross tenant boundaries for TTL cleanup. The trigger predicate remains as defense-in-depth.
+CREATE POLICY session_jwt_admission_cleanup ON session_jwt_admission
+    FOR DELETE TO sec_jwt_cleanup
+    USING (expires_at < now() - INTERVAL '1 hour');
+
 -- Append-only enforcement with TTL-cleanup carve-out (R2 HIGH closure 2026-05-20:
 -- Pass-2 caught a SECURITY DEFINER + current_user pitfall — under SECURITY DEFINER, current_user resolves
 -- to the function owner, not the caller, breaking caller-identity authorization. Fix: trigger function is
@@ -127,6 +138,13 @@ ALTER TABLE session_jwt_replay_set ENABLE ROW LEVEL SECURITY;
 ALTER TABLE session_jwt_replay_set FORCE ROW LEVEL SECURITY;
 CREATE POLICY session_jwt_replay_set_tenant_isolation ON session_jwt_replay_set
     USING (tenant_id = current_tenant_id_strict('session_jwt_replay_set'));
+
+-- Cleanup-role DELETE policy (R3 HIGH closure 2026-05-20: same FORCE-RLS gap as §4.NEW1). Higher-cost
+-- here: failed cleanup would grow the anti-replay set without bound and stale rows would eventually
+-- cause JWT admission failures (legitimate JWTs with reused jti within retention window get rejected).
+CREATE POLICY session_jwt_replay_set_cleanup ON session_jwt_replay_set
+    FOR DELETE TO sec_jwt_cleanup
+    USING (expires_at < now() - INTERVAL '1 hour');
 
 -- Append-only enforcement with TTL-cleanup carve-out (R2 HIGH closure 2026-05-20: same SECURITY INVOKER +
 -- explicit GRANT/REVOKE defense-in-depth pattern as §4.NEW1 per Pass-2 finding). Replay-set is the higher-
@@ -359,8 +377,11 @@ ALTER TABLE audit_events
 **v0.3 DRAFT 2026-05-20 — Pass-2 R1 closure (SECURITY DEFINER caller-identity defect):**
 - **HIGH-2 closed** — Pass-2 caught a real PostgreSQL semantics defect in the v0.2 HIGH-1 closure: under `SECURITY DEFINER`, `current_user` resolves to the function owner, not the invoking role. So the `current_user = 'sec_jwt_cleanup'` check was either (a) always-false (if function owner ≠ sec_jwt_cleanup) → TTL cleanup blocked, OR (b) bypassable (if function owner == sec_jwt_cleanup) → any role reaching DELETE could satisfy it. Both broken. Fix applied to BOTH §4.NEW1 and §4.NEW2: remove `SECURITY DEFINER` qualifier so the function executes as `SECURITY INVOKER` (default) and `current_user` resolves to the actual invoking role; add explicit defense-in-depth `REVOKE DELETE ... FROM PUBLIC` + `GRANT DELETE ... TO sec_jwt_cleanup` DDL so PostgreSQL-level privilege check denies non-`sec_jwt_cleanup` callers BEFORE the trigger fires, with the trigger then enforcing the TTL slack predicate on permitted callers. This makes the authorization layer enforceable at both the privilege layer AND the trigger predicate layer. The replay-set is the higher-cost case (failed cleanup → unbounded growth; over-permissive → erased replay evidence), so caller-identity correctness on §4.NEW2 was especially urgent.
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit pending push for Pass-2 R2 verification.
+**v0.4 DRAFT 2026-05-20 — Pass-2 R2 closure (FORCE-RLS cleanup gap):**
+- **HIGH-3 closed** — Pass-2 R2 caught a second real PostgreSQL semantics defect: with `FORCE ROW LEVEL SECURITY` enabled and only a tenant-isolation policy defined (no `FOR` clause → applies to ALL commands including DELETE), a platform-scoped cleanup job running as `sec_jwt_cleanup` would have no `app.actor_tenant_id` GUC set and would either fail RLS entirely OR only clean the currently-selected tenant. The GRANT DELETE privilege + trigger predicate from R1 closure couldn't help because RLS filters rows BEFORE the trigger fires. Fix applied to BOTH §4.NEW1 and §4.NEW2: add a permissive `FOR DELETE TO sec_jwt_cleanup USING (expires_at < now() - INTERVAL '1 hour')` policy. PostgreSQL RLS composes permissive policies via OR, so the cleanup policy permits cross-tenant DELETE for `sec_jwt_cleanup` on expired rows without breaking the tenant-isolation rule for other roles. Defense-in-depth is now three-layer: privilege grant (REVOKE PUBLIC + GRANT sec_jwt_cleanup) + RLS DELETE policy (sec_jwt_cleanup + expired-only) + trigger predicate (current_user check + expires_at slack). Cleanup execution context explicitly documented: platform-wide background job, NOT per-tenant, runs as `sec_jwt_cleanup` with no `app.*` GUC tenant context.
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit pending push for Pass-2 R3 verification.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.3 DRAFT (Pass-2 R1 closure applied: SECURITY DEFINER → SECURITY INVOKER + explicit GRANT/REVOKE defense-in-depth) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R2 verification queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.4 DRAFT (Pass-2 R2 closure applied: FORCE-RLS cleanup policy + three-layer defense-in-depth) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R3 verification queued.
