@@ -4931,3 +4931,93 @@ Per Evans continue-nonstop directive + Master Completion Plan v1.0 pilot-viable 
 Cumulative: **186 findings closed inline across 12 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP-to-ratifier); 1 DISSOLVED hard-floor item 6 invocation (P-038 R6 -> R7 closure removed trigger condition); 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern + fresh-review-post-major-cycles pattern + derived-view-data-minimization pattern + hybrid-persistence-with-one-way-release pattern + **NEW: hard-floor-item-6-dissolution-via-Codex-recommended-Option-B pattern (P-038 R6 -> R7)** continue to scale.
 
 — Claude (Opus 4.7, 1M context), CDM v1.8 -> v1.9 + AUDIT_EVENTS v5.10 -> v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 -> v0.4 + State Machines v1.2 -> v1.3 + RBAC v1.2 -> v1.3 (SI-020 follow-on amendment) cycle close-out 2026-05-21 via auto-proceed. Registry v2.25. P-038 appended. **12th successive Q2 2026 auto-proceed ratification.** 3 of 5 pilot-required Ghana revenue anchor slices FULLY RATIFIED (SI + CDM both landed). Next deliverable per auto-proceed continuation: Crisis Response slice SI OR Admin Backend basics SI.
+
+---
+
+## Addendum 67 — SI-022 Crisis Response Slice v1.0 RATIFIED via auto-proceed (Codex R67 ship-it APPROVE); merge 5d4df17; Registry v2.25 -> v2.26; EIGHTH instance of SI-spec-first promotion pattern; 4 of 5 pilot-required slices NOW SI-RATIFIED; 13th successive Q2 2026 auto-proceed ratification; EXTREME long-tail cycle (67 rounds; ~3.9x P-030's prior longest); 1 hard-floor item 6 DISSOLVED at R6
+
+**Date:** 2026-05-21
+**Trigger:** Master Completion Plan v1.0 pilot-viable scope item 4 (Crisis Response slice). Spec authored on `spec/SI-022-crisis-response-slice-2026-05-21` branch off main at `fab0615` (post-P-038 merge). 67 Codex adversarial-review rounds; ~89 findings closed inline; ratified via auto-proceed convergence at R67.
+
+**Spec branch HEAD:** `6b3fba1` (SI-022 v0.67 -> v1.0 RATIFIED commit on spec branch; merged to main via --no-ff merge commit `5d4df17`)
+
+**Ratification commit on main:** `80426ea` (P-039 RATIFY: Promotion Ledger entry + Registry v2.25 -> v2.26)
+
+**Merge commit on main:** `5d4df17` (Merge P-039: SI-022 Crisis Response Slice v1.0 RATIFIED)
+
+**Codex R67 verdict:** APPROVE / ship-it. Verbatim: "Ship it: I cannot support a remaining HIGH/CRITICAL blocker from the provided diff. The R66 arity defect is closed in the clinical_on_call emergency_contact projection, regulatory/care_team/clinical_on_call/operator_escalation projections are specified as 4-tuples with the expected nullable-only emergency_contact exception, and the STEP A-F sweep flow has no remaining safety-critical contradiction I can defend." Codex session ID `019e4cd0-51e6-78c2-b6c8-a6d192104bb9`.
+
+### What landed canonical at P-039
+
+| Artifact | Before | After |
+|---|---|---|
+| Telecheck_SI_022_Crisis_Response_v1_0.md | n/a (new) | v1.0 RATIFIED (1320 lines; 7 sub-decisions; 14 merge-blocking tests + 1 contention benchmark) |
+| Telecheck_Artifact_Registry_v2_10.md | v2.25 | v2.26 |
+| Telecheck_Promotion_Ledger.md | P-038 | P-039 appended |
+
+### Canonical SI-022 substantive content
+
+- **7 sub-decisions:** Sub-decision 1 (200ms patient-surface SLO STEP 1+2+3 only); Sub-decision 2 (FLOOR-020 atomic emit ordering STEP 1-5); Sub-decision 3 (logical recipient routing tree by severity + consent + regulatory_reporting); Sub-decision 4 (lifecycle state machine 11 transition triples — detected/escalated/acknowledged/responded/resolved + 9 in section 6 normative table); Sub-decision 5 (dispatch_ledger/provider_attempt two-tier shape per P-027 sections 4.66/4.67); Sub-decision 6 (no-acknowledgement sweep STEP A->F atomic transaction with single-mutation sweep_cycle_counter + STEP F triple-guarded final UPDATE); Sub-decision 7 (14 merge-blocking integration tests + 1 contention benchmark).
+- **12 new audit events** (8 Cat A + 4 Cat C); registered for ratification at P-040 CDM follow-on amendment cycle.
+- **8 canonical tenant config OQ4 keys** (per R18/R31/R63/R65 enforcement extensions): crisis.fanout_channels[], crisis.clinical_on_call_channel, crisis.clinical_on_call_recipient, crisis.clinical_on_call_principal_id, crisis.operator_escalation_channel, crisis.operator_escalation_recipient, crisis.operator_escalation_principal_id, crisis.emergency_contact_channel.
+- **3-layer enforcement** (preflight DO block + TLC-CRISIS-003 static analyzer + record_crisis_initiation() runtime validation) with Part A every-tenant + Part B regulatory_reporting=true conditional + Part C emergency_contact_consent_enabled=true conditional rules.
+- **Two-function recipient-mapping discipline:** compute_crisis_initial_recipient_mapping(crisis_event_id, severity, regulatory_reporting) for detection-time fan-out vs compute_crisis_recipient_mapping(crisis_event_id, severity, target_tier) for sweep-time tier-advance.
+- **Zero-recipients fail-closed** for required target_tier in {care_team, clinical_on_call, regulatory} -> ROLLBACK + crisis.dispatch_attempt_failed Cat C with zero_recipients_for_required_tier=true; emergency_contact MAY-have-zero (in-design when no active emergency_contact_share consent grant).
+- **Uniform 4-tuple** (channel, recipient_role, recipient_address, recipient_principal_id) across all 3 target_tier branches + all 4 recipient_role variants; emergency_contact uniform-arity 4-tuple with COALESCE(consent_grant.delegate_principal_id, NULL::uuid) — the ONLY recipient_role allowed NULL principal_id per provider_attempt CHECK constraint.
+- **Durable per-sweep crisis_sweep_execution table** (new at SI-022's P-040 CDM follow-on amendment) with fencing-token + lease-takeover (60s default + 20s heartbeat in separate autocommit txs outside STEP A->F) + sweep_cycle_counter generation invariants (partial UNIQUE constraint WHERE completed_at IS NULL on (tenant_id, crisis_event_id, scheduled_for_obligation_generation)).
+- **STEP F triple-guard** (claimed_by_worker_id + fencing_token + claim_expires_at predicates) makes takeover and old-token finalization mutually exclusive even under fencing_token-coincidence races.
+
+### Cycle metrics
+
+| Metric | Value |
+|---|---|
+| Codex adversarial-review rounds | 67 (extreme long-tail; ~3.9x P-030's prior longest of 17) |
+| Findings closed inline | ~89 (mix of HIGH/MED + 1 CRITICAL at R30 SQL parse error) |
+| Hard-floor item 6 escalations | 0 |
+| Hard-floor item 6 dissolutions | 1 (at R6; closure path REMOVED architectural-judgment trigger by adopting Codex's Option B — replaced net-new SI-024.1 helper current_jwt_verified_patient_id with explicit schema-backed joins via already-ratified verify_session_jwt_and_extract_claims + consent_grant primitives) |
+| ERR escalations | 0 |
+| Cycle duration | ~6h continuous autonomous execution |
+| Average commits per round | 1 spec commit + 1 push per round |
+| Long-tail asymptote driver | R62-R67 (6 rounds) driven by R63 HIGH-2 introduction of clinical_on_call_recipient/principal_id keys cascading through compute_crisis_recipient_mapping source list (R64), regulatory branch 4-tuple symmetry (R65), and emergency_contact projection arity-uniformity (R66) — each round genuine incomplete-propagation defect, never recurrence |
+
+### Why 67 rounds (extreme long-tail analysis)
+
+P-030 was previously the longest at 17 rounds (SI-024 v1.0 trust-anchor architecture cycle). SI-022 ran 3.9x longer for these compounding reasons:
+
+1. **Safety-critical multi-tier sweep concurrency contract** (Sub-decision 6) iterated through R6-R56 across multiple concurrent-failure modes: one-shot vs tier-cycle escalation_key semantics, sweep_cycle_counter generation invariants, lease/fencing semantics, transactional atomicity, principal-id binding, EXISTENCE vs ROW_COUNT validation, ordering of mutations. Each round Codex identified a subtle defect in a different concurrent-failure case; the contract eventually converged at R60 with the STEP A->F canonical ordering + R53 single guarded UPDATE + R57 always-NULL escalation_key invariant + R47 atomic sweep_cycle_id_committed + R51 lease-expiry triple-guard + R52 per-obligation-generation uniqueness invariant.
+2. **R61 closure was incomplete** — Codex flagged R62 HIGH-1 same-class duplicate-ordering ambiguity; closed inline (vs escalating per section-10-cadence — was 2nd round on this finding, not 3rd).
+3. **R63 HIGH-2 introduction of new canonical OQ4 keys** (clinical_on_call_recipient + clinical_on_call_principal_id) cascaded through mapping function source lists (R64) + regulatory branch symmetry (R65) + emergency_contact arity uniformity (R66) — 4 rounds of incomplete-propagation defect-correction; each round identified a genuine gap, never a recurrence.
+
+### Pilot-required slices status after P-039
+
+| # | Slice | Status |
+|---|---|---|
+| 1 | Med-Interaction (SI-019) | RATIFIED P-033 SI + P-034 CDM follow-on |
+| 2 | Async-Consult (SI-020) | RATIFIED P-037 SI + P-038 CDM follow-on |
+| 3 | Mode 1 AI Service Handler | RATIFIED P-035 SI + P-036 CDM follow-on |
+| 4 | Crisis Response (SI-022) | **RATIFIED P-039 SI (THIS ENTRY); P-040 CDM follow-on amendment cycle queued** |
+| 5 | Admin Backend basics | NOT YET AUTHORED |
+
+**4 of 5 pilot-required Ghana revenue anchor slices NOW SI-RATIFIED.** Once Admin Backend SI ratified, the telecheck-app pilot implementation gate opens fully. Master Completion Plan v1.0 Track 1 (Clinical Care) + Track 2 (AI Service) crisis-detection foundation is now ratifier-complete.
+
+### Cumulative auto-proceed ratification statistics
+
+| Cycle | Slice / amendment | Findings closed | Rounds | Codex final verdict | Hard-floor item 6 |
+|---|---|---|---|---|---|
+| P-026 | Sprint 1-20 batched | 0 | 0 (umbrella) | n/a | n/a |
+| P-028 | SI-021 SIEM Hash-Chain Archival | 8 | 5 | Codex R5 ship-it APPROVE | 0 |
+| P-029 | SI-021 CDM v1.4 -> v1.5 follow-on | 13 | 5 + 3 + 1 = 9 | Codex R5 + consults | 0 |
+| P-030 | SI-024 v1.0 Tenant/Platform RLS | 17 | 7 (4 review + 3 consult) | Pass-2 B+ synthesis | 0 |
+| P-031 | SI-024.1 v0.8 Cryptographic JWT-Binding | 19 | 4 + 4 = 8 | Codex R4 APPROVE | 0 |
+| P-032 | CDM v1.5 -> v1.6 + AUDIT_EVENTS v5.7 -> v5.8 SI-024.1 follow-on | 15 | 12 | Codex Pass-2 R12 ship-it APPROVE | 0 |
+| P-033 | SI-019 Med-Interaction v1.0 -> v2.0 | 11 | 7 (R1 STOP + R2-R7 closures) | Codex R7 ship-it APPROVE | 1 CORRECT STOP (R1 OQ7) |
+| P-034 | CDM v1.6 -> v1.7 + 4 surfaces SI-019 follow-on | 11 | 8 | Codex R8 ship-it APPROVE | 0 |
+| P-035 | AI Service Mode 1 Handler Spec v0.4 | 16 | 8 (4 prior + 4 fresh) | Codex R8 ship-it APPROVE | 0 |
+| P-036 | CDM v1.7 -> v1.8 + 3 surfaces Mode 1 follow-on | 11 | 8 | Codex R8 ship-it APPROVE | 0 |
+| P-037 | SI-020 Async Consult v1.0 -> v2.0 | 11 | 11 | Codex R11 ship-it APPROVE | 0 |
+| P-038 | CDM v1.8 -> v1.9 + 4 surfaces SI-020 follow-on | 15 | 10 | Codex R10 ship-it APPROVE | 1 DISSOLVED (R6 -> R7 closure path removed trigger condition) |
+| **P-039** | **SI-022 Crisis Response Slice v1.0** | **~89** | **67** | **Codex R67 ship-it APPROVE** | **1 DISSOLVED (R6 closure path removed trigger condition)** |
+
+Cumulative: **~275 findings closed inline across 13 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP-to-ratifier); 2 DISSOLVED hard-floor item 6 invocations (P-038 R6 + P-039 R6); 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern + fresh-review-post-major-cycles pattern + derived-view-data-minimization pattern + hybrid-persistence-with-one-way-release pattern + hard-floor-item-6-dissolution-via-Codex-recommended-Option-B pattern + **NEW: extreme-long-tail-incomplete-propagation-cascade pattern (P-039 R62-R67)** continue to scale.
+
+— Claude (Opus 4.7, 1M context), SI-022 Crisis Response Slice v1.0 cycle close-out 2026-05-21 via auto-proceed. Registry v2.26. P-039 appended. **13th successive Q2 2026 auto-proceed ratification.** 4 of 5 pilot-required Ghana revenue anchor slices SI-RATIFIED. Next deliverable per auto-proceed continuation: Admin Backend basics SI (5 of 5 pilot-required; final pilot prerequisite) OR P-040 CDM v1.9 -> v1.10 follow-on amendment cycle for SI-022 canonical entity landing.
