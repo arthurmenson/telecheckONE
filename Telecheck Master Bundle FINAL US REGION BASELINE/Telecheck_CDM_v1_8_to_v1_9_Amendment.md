@@ -1,7 +1,8 @@
 # CDM v1.8 → v1.9 + AUDIT_EVENTS v5.10 → v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 → v0.4 + State Machines v1.2 → v1.3 + RBAC v1.2 → v1.3 Amendment (SI-020 Async-Consult follow-on)
 
-**Version:** 0.3 DRAFT
-**Status:** POST-R2 (1 HIGH closed inline: R1 continuity trigger validated NEW.from_state == latest to_state but didn't enforce monotonic transition_at ordering — backdated row could pass from_state check while corrupting current-state derivation (ORDER BY transition_at DESC), future-dated row could dominate immediately. Fix: trigger now reads latest transition_at alongside latest to_state under lock; rejects NEW.transition_at < latest transition_at + rejects future-dated > now() + 5s clock-skew tolerance. Monotonic-ordering invariant now schema-enforced. Previously POST-R1 (2 HIGH + 1 MED closed inline: HIGH-1 decision-validation trigger looked up claim by id only → fix: 5-column composite identity lookup (tenant_id + claim_id + consult_id + patient_id + clinician_account_id) with RAISE on missing row; HIGH-2 lifecycle continuity not enforced at table-level → fix: added BEFORE INSERT trigger `consult_lifecycle_transition_continuity` that takes per-consult advisory lock + validates new from_state == latest to_state + rejects from-terminal transitions, regardless of caller; MED-1 RBAC count mismatch (8 vs preflight's 12) → fix: recounted to 12 roles (4 app + 6 wrapper owners + 2 view/MV owners) matching deployment preflight enumeration)
+**Version:** 0.4 DRAFT
+**Status:** POST-R3 (2 HIGH + 1 MED closed inline: HIGH-1 decision validation could race claim release/reassignment under READ COMMITTED → fix: BEFORE INSERT trigger now takes same per-consult advisory lock as claim/reassign procedures + SELECT...FOR UPDATE on claim row; HIGH-2 equal transition_at values could corrupt current-state derivation via UUID tie-break ambiguity → fix: strict > monotonic ordering on transition_at, no equality permitted for non-initial transitions; MED-1 clinician_account_id FK not tenant-scoped → fix: composite tenant-scoped FK `(tenant_id, clinician_account_id) → tenant_account_membership(tenant_id, account_id)` per assumed Identity slice canonical entity + new OQ3 for ratifier to confirm canonical name)
+**Authoring date:** 2026-05-21 (1 HIGH closed inline: R1 continuity trigger validated NEW.from_state == latest to_state but didn't enforce monotonic transition_at ordering — backdated row could pass from_state check while corrupting current-state derivation (ORDER BY transition_at DESC), future-dated row could dominate immediately. Fix: trigger now reads latest transition_at alongside latest to_state under lock; rejects NEW.transition_at < latest transition_at + rejects future-dated > now() + 5s clock-skew tolerance. Monotonic-ordering invariant now schema-enforced. Previously POST-R1 (2 HIGH + 1 MED closed inline: HIGH-1 decision-validation trigger looked up claim by id only → fix: 5-column composite identity lookup (tenant_id + claim_id + consult_id + patient_id + clinician_account_id) with RAISE on missing row; HIGH-2 lifecycle continuity not enforced at table-level → fix: added BEFORE INSERT trigger `consult_lifecycle_transition_continuity` that takes per-consult advisory lock + validates new from_state == latest to_state + rejects from-terminal transitions, regardless of caller; MED-1 RBAC count mismatch (8 vs preflight's 12) → fix: recounted to 12 roles (4 app + 6 wrapper owners + 2 view/MV owners) matching deployment preflight enumeration)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-037 (SI-020 Async Consult v1.0 → v2.0 implementation-readiness extension RATIFIED; Registry v2.23 → v2.24). Per the established post-P-029 spec-first promotion pattern, SI-020's canonical content lands in CDM + AUDIT + DOMAIN_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification. **SIXTH instance** of the SI-spec-first promotion pattern (P-029, P-032, P-034, P-036, P-038 — note P-035 was SI-only without follow-on; P-038 is the 5th follow-on amendment in the post-P-029 lineage).
 **Owner:** Async & Refill Review Lead + AI Service Lead + Pharmacy Portal slice owner + CDM owner + AUDIT_EVENTS owner + DOMAIN_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -181,12 +182,19 @@ CREATE TABLE consult_review_claim (
     release_reason TEXT NULL CHECK (release_reason IS NULL OR release_reason IN (
         'decision_recorded', 'claim_expired', 'reassigned', 'clinician_unavailable'
     )),
-    -- Composite tenant-scoped FKs
+    -- Composite tenant-scoped FKs (R3 MED-1 closure 2026-05-21: clinician FK is now
+    -- tenant-scoped composite to canonical tenant-scoped account-membership table; without
+    -- this, accounts(id) could be reused across tenant contexts and tenant-isolation on the
+    -- claim chain would depend on wrapper logic rather than table invariants).
     CONSTRAINT consult_review_claim_consult_patient_fk
         FOREIGN KEY (tenant_id, consult_id, patient_id)
         REFERENCES consult(tenant_id, id, patient_id),
-    CONSTRAINT consult_review_claim_clinician_fk
-        FOREIGN KEY (clinician_account_id) REFERENCES accounts(id),
+    CONSTRAINT consult_review_claim_clinician_tenant_fk
+        FOREIGN KEY (tenant_id, clinician_account_id)
+        REFERENCES tenant_account_membership(tenant_id, account_id),
+    -- (assumes canonical tenant_account_membership(tenant_id, account_id) composite UNIQUE
+    --  from Identity slice canonical scope; if naming differs, ratifier confirms canonical
+    --  target table name + adjust FK accordingly; ratifier OQ added in §12 OQ3 below.)
     -- 5-column composite UNIQUE enables downstream consult_clinician_decision FK
     -- enforcing deciding-clinician == claiming-clinician at schema-invariant level
     CONSTRAINT consult_review_claim_full_identity_unique
@@ -307,16 +315,26 @@ CREATE FUNCTION consult_clinician_decision_validate_claim_active() RETURNS TRIGG
 DECLARE
     v_claim_released_at TIMESTAMPTZ;
     v_claim_expires_at TIMESTAMPTZ;
-    v_claim_found BOOLEAN;
 BEGIN
-    SELECT TRUE, released_at, claim_expires_at
-        INTO v_claim_found, v_claim_released_at, v_claim_expires_at
+    -- R3 HIGH-1 closure 2026-05-21: take the same per-consult advisory lock used by
+    -- claim_consult_for_review() + reassign_consult_claim() to serialize decision insertion
+    -- against concurrent claim release/reassignment. Without this lock, a decision could
+    -- validate an active claim under READ COMMITTED while a concurrent release UPDATE-s the
+    -- claim row, leaving an append-only decision referencing a now-released claim.
+    PERFORM pg_advisory_xact_lock(
+        hashtextextended('consult_review_claim:' || NEW.tenant_id::text || ':' || NEW.consult_id::text, 0)
+    );
+
+    -- SELECT ... FOR UPDATE on the claim row pins the snapshot we'll validate against
+    SELECT released_at, claim_expires_at
+        INTO v_claim_released_at, v_claim_expires_at
         FROM consult_review_claim
         WHERE tenant_id = NEW.tenant_id
           AND id = NEW.claim_id
           AND consult_id = NEW.consult_id
           AND patient_id = NEW.patient_id
-          AND clinician_account_id = NEW.clinician_account_id;
+          AND clinician_account_id = NEW.clinician_account_id
+        FOR UPDATE;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'consult_clinician_decision cannot reference claim with mismatched composite identity: tenant_id=%, claim_id=%, consult_id=%, patient_id=%, clinician_account_id=%',
             NEW.tenant_id, NEW.claim_id, NEW.consult_id, NEW.patient_id, NEW.clinician_account_id
@@ -464,9 +482,15 @@ BEGIN
                 v_latest_to_state, NEW.consult_id
                 USING ERRCODE = 'check_violation';
         END IF;
-        -- R2 HIGH-1 closure: enforce monotonic transition_at ordering
-        IF NEW.transition_at < v_latest_transition_at THEN
-            RAISE EXCEPTION 'consult_lifecycle_transition: transition_at=% is earlier than latest transition_at=% (backdated transition forbidden); consult_id=%',
+        -- R2 HIGH-1 closure + R3 HIGH-2 closure (2026-05-21: strict monotonic ordering):
+        -- Reject NEW.transition_at <= latest_transition_at. Equal timestamps could let derived
+        -- current-state semantics break because the (transition_at DESC, id DESC) tie-break uses
+        -- UUID ordering — newer transition's UUID isn't guaranteed to sort after older one's, so
+        -- equal-timestamped successor could remain hidden behind predecessor and current_state
+        -- could stay stale even after a valid transition was accepted. STRICT > inequality
+        -- guarantees the just-inserted row is unambiguously the latest in the derivation order.
+        IF NEW.transition_at <= v_latest_transition_at THEN
+            RAISE EXCEPTION 'consult_lifecycle_transition: transition_at=% must be STRICTLY greater than latest transition_at=% (equal or backdated forbidden — UUID tie-break ambiguity would corrupt current-state derivation); consult_id=%',
                 NEW.transition_at, v_latest_transition_at, NEW.consult_id
                 USING ERRCODE = 'check_violation';
         END IF;
@@ -810,6 +834,8 @@ END $$;
 1. **OQ1 — Codex pre-ratification target rounds.** Recommendation: 6-10 rounds + ship-it verification per established mechanical-consolidation precedents (P-029 8 rounds, P-032 12, P-034 8, P-036 8). Mechanical-consolidation cycle typically converges faster than parent SI authoring cycle.
 2. **OQ2 — Med-Interaction signal_id propagation** (preserved from SI-020 OQ7). `consult_clinical_summary.interaction_signals_snapshot` JSONB + `consult_clinician_decision.interaction_signals_reviewed_ids` ULID[] reference Med-Interaction signals per P-033 CDM v1.7. Should this become a hard tenant-scoped FK array when Med-Interaction CDM follow-on (P-034 cycle) ratifies signal identity propagation contracts? Recommendation: opaque array for now; convert to FK at next Med-Interaction follow-on amendment.
 
+3. **OQ3 — Canonical tenant-scoped account membership table** (R3 MED-1 closure 2026-05-21). `consult_review_claim.clinician_account_id` FK is composite tenant-scoped per the R3 closure pattern, referencing `tenant_account_membership(tenant_id, account_id)`. The exact canonical entity name + columns for tenant-scoped account membership is owned by Identity slice (SI-017). Ratifier confirms: (a) Identity slice canonical entity name (assumed `tenant_account_membership`; may differ as `account_tenant_link`, `tenant_user`, etc.); (b) composite UNIQUE on `(tenant_id, account_id)` exists; (c) FK columns match. If the canonical entity doesn't yet exist, the implementation amendment adds it as a baseline prerequisite per Identity slice scope OR defers this FK with explicit cross-reference TODO until Identity slice formalizes the membership entity.
+
 ---
 
 ## 13. Codex pre-ratification status
@@ -821,7 +847,12 @@ END $$;
 - **R1 HIGH-2 closed:** `consult_lifecycle_transition` row-level CHECK validated individual triples but did NOT enforce that new from_state == current latest to_state — direct table INSERTs by `consult_lifecycle_transition_writer_owner` (which has INSERT grant) could create divergent histories that still passed CHECK. Fix: added `consult_lifecycle_transition_continuity` BEFORE INSERT trigger that takes per-consult advisory lock + reads latest to_state under lock + validates continuity + rejects from-terminal transitions. Regardless of caller, lifecycle integrity is now schema-enforced (not procedure-dependent).
 - **R1 MED-1 closed:** RBAC count mismatch — §1 scope + §8 said "8 roles (4 application + 4 wrapper/owner)" but §10 deployment preflight enumerated 12 roles. Implementer following §1/§8 would under-provision. Fix: recounted to **12 roles** (4 app + 6 wrapper owners + 2 view/MV owners) matching preflight enumeration; §1 + §8 + §10 now mutually consistent.
 
-Authored on `spec/cdm-v1-9-audit-v5-11-openapi-v0-4-sm-v1-3-rbac-v1-3-si020-followon-2026-05-21` branch off main at `3129579` (post-P-037 + Addendum 65). v0.2 commit `48ca67d`. v0.3 commit pending push for R3 verification.
+Authored on `spec/cdm-v1-9-audit-v5-11-openapi-v0-4-sm-v1-3-rbac-v1-3-si020-followon-2026-05-21` branch off main at `3129579` (post-P-037 + Addendum 65). v0.2 commit `48ca67d`. v0.3 commit `6522879`. v0.4 commit pending push for R4 verification.
+
+**v0.4 DRAFT 2026-05-21 — R3 closures applied (2 HIGH + 1 MED):**
+- **R3 HIGH-1 closed:** decision validation trigger could race claim release/reassignment under READ COMMITTED (validate active claim while concurrent UPDATE-s released_at, leaving append-only decision referencing released claim). Fix: trigger now acquires same per-consult advisory lock as `claim_consult_for_review()` + `reassign_consult_claim()`; uses SELECT...FOR UPDATE on claim row to pin the snapshot; all release/reassign procedures must use same lock order (already do per SI-020 v0.11).
+- **R3 HIGH-2 closed:** R2 continuity trigger permitted equal transition_at values; ORDER BY transition_at DESC, id DESC tie-break uses UUID ordering which can place newer transition BEFORE older one if UUID sorts lower → current-state derivation could stay stale even after a valid transition was accepted. Fix: strict > monotonic ordering on transition_at; no equality permitted for non-initial transitions; ensures just-inserted row is unambiguously the latest.
+- **R3 MED-1 closed:** `consult_review_claim.clinician_account_id` FK referenced `accounts(id)` without tenant_id, leaving tenant isolation on the claim chain dependent on wrapper logic. Fix: composite tenant-scoped FK `(tenant_id, clinician_account_id) → tenant_account_membership(tenant_id, account_id)` per assumed Identity slice canonical entity; new §12 OQ3 added for ratifier to confirm canonical name.
 
 **v0.3 DRAFT 2026-05-21 — R2 closure applied (1 HIGH):**
 - **R2 HIGH-1 closed:** R1 continuity trigger validated NEW.from_state == latest to_state but didn't enforce monotonic transition_at ordering. Backdated rows could pass from_state check (matches current latest to_state) while corrupting current-state derivation (since `ORDER BY transition_at DESC` determines current state — older row could shadow newer); future-dated rows could dominate current-state reads immediately. Append-only state-machine invariant undermined. Fix: trigger now reads latest transition_at alongside latest to_state under the same advisory lock + rejects NEW.transition_at < latest transition_at (backdated forbidden) + rejects NEW.transition_at > now() + 5s clock-skew tolerance (future-dated dominance attack). Monotonic-ordering invariant now schema-enforced.
