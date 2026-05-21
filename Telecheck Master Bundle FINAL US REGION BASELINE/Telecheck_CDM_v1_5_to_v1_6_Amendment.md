@@ -1,7 +1,7 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.10 DRAFT
-**Status:** POST-PASS-2 R8 (R9 HIGH-11 closed: Pass-2 R8 caught that SECURITY DEFINER ownership was only asserted in prose. In PostgreSQL, a SECURITY DEFINER function executes as the role that owns the function; if the migration is applied by a generic migration owner or superuser, the helper executes with that broader role's privileges instead of cdm_owner — defeating the cdm_owner-scoped grant/RLS scaffolding. Fix: add explicit `ALTER FUNCTION public.<helper>(TEXT) OWNER TO cdm_owner` immediately after each CREATE FUNCTION + schema-qualify the function names in REVOKE/GRANT to bind unambiguously. Awaiting Pass-2 R9 verification.)
+**Version:** 0.11 DRAFT
+**Status:** POST-PASS-2 R9 (R10 MED-1 closed: Pass-2 R9 caught that the v0.10 `ALTER FUNCTION OWNER TO cdm_owner` DDL silently depends on an unstated prerequisite — the migration executor must be superuser OR a member of cdm_owner; absent that, the migration either fails mid-way after creating SECURITY DEFINER helpers OR operators work around it by omitting the ALTER, which regresses HIGH-11. Fix: add fail-fast preflight DO block at top of §4.NEW5 helper DDL that RAISES on missing cdm_owner role OR insufficient executor identity; document all required pre-existing roles + schema posture + migration-executor identity in new §4.5. R9 was 1 MED only — no HIGH findings — and Codex explicitly said "no other material defect is supported from the provided diff," signaling convergence. Awaiting Pass-2 R10 ship-it verification.)
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
@@ -397,6 +397,25 @@ GRANT SELECT, INSERT ON jwt_migration_entity_status TO cdm_owner;
 GRANT UPDATE (phase_4_cutover_eligible, raw_guc_fallback_audited, migrated_at, updated_at)
     ON jwt_migration_entity_status TO cdm_owner;
 
+-- Deployment-prerequisite preflight assertion (R9 MED-1 closure 2026-05-20: Pass-2 R9 caught that the
+-- v0.10 ALTER FUNCTION OWNER TO cdm_owner DDL requires the migration executor to be superuser OR a
+-- member of cdm_owner; if that prerequisite isn't met, the migration either fails mid-way after
+-- creating SECURITY DEFINER helpers, OR operators work around it by omitting the ALTER — which
+-- regresses HIGH-11. Fail-fast preflight catches the misconfiguration before any helper DDL runs).
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cdm_owner') THEN
+        RAISE EXCEPTION 'CDM v1.6 amendment prerequisite missing: role cdm_owner must pre-exist before applying §4.NEW5 helper DDL'
+            USING ERRCODE = 'undefined_object';
+    END IF;
+    IF NOT (current_setting('is_superuser')::BOOLEAN
+            OR pg_has_role(current_user, 'cdm_owner', 'MEMBER')) THEN
+        RAISE EXCEPTION 'CDM v1.6 amendment prerequisite unmet: migration executor must be superuser OR member of cdm_owner to run ALTER FUNCTION OWNER TO cdm_owner (current_user=%, is_superuser=%)',
+            current_user, current_setting('is_superuser')
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+END $$;
+
 -- SECURITY DEFINER helper functions (owned by cdm_owner) expose only the minimal boolean decision
 -- interface needed by current_tenant_id_strict() and the fallback-audit emission path. PUBLIC gets
 -- EXECUTE on the helpers ONLY — the underlying table row state remains opaque to non-cdm_owner roles.
@@ -530,6 +549,28 @@ ALTER TABLE audit_events
 
 ---
 
+## 4.5. Deployment prerequisites (R9 MED-1 closure 2026-05-20)
+
+The amendment DDL assumes the following roles + schema posture exist BEFORE the migration is applied. Any of these missing causes the §4.NEW5 preflight to RAISE EXCEPTION; the migration aborts before partial state is created.
+
+**Required roles** (must pre-exist; CREATE ROLE happens in a prior baseline DDL, not in this amendment):
+
+| Role | Purpose | Granted-to in this amendment |
+|---|---|---|
+| `cdm_owner` | Owns control-table writes + SECURITY DEFINER helpers | §4.NEW5 INSERT/UPDATE + helper function ownership |
+| `admit_session_jwt_owner` | Owns admit_session_jwt() procedure execution | §4.NEW1 + §4.NEW2 INSERT |
+| `sec_jwt_cleanup` | Cleanup-job role for TTL-expired rows | §4.NEW1 + §4.NEW2 DELETE |
+| `kms_rotation_operator` | KMS signing-key rotation operator | §4.NEW3 INSERT/UPDATE |
+| `break_glass_procedure_owner` | Owns break-glass session start/close procedures | §4.NEW4 INSERT/UPDATE |
+
+**Required schema posture:**
+- `REVOKE CREATE ON SCHEMA public FROM PUBLIC` — PostgreSQL 15+ default; required for pre-15 installs as platform-floor defense-in-depth against SECURITY DEFINER name-resolution shadowing. The schema-qualified table reference in §4.NEW5 helpers already prevents the attack independently, but this REVOKE is belt-and-suspenders.
+
+**Required migration-executor identity:**
+- Migration executor MUST be PostgreSQL superuser OR a member of `cdm_owner` (required for the `ALTER FUNCTION ... OWNER TO cdm_owner` statements in §4.NEW5). The preflight DO block enforces this fail-fast.
+
+---
+
 ## 5. Open questions for ratifier (own ceremony)
 
 1. **OQ1 — `jwt_migration_entity_status` initial seed scope.** Recommendation: seed all CDM v1.5 + v1.6 RLS-bearing entities (count expected: ~75 v1.5 + 5 v1.6 new = ~80 entities) + `_legacy_v017_caller_` sentinel. Phase A migration step generates seed from canonical CDM inventory.
@@ -574,8 +615,11 @@ ALTER TABLE audit_events
 **v0.10 DRAFT 2026-05-20 — Pass-2 R8 closure (executable SECURITY DEFINER ownership):**
 - **HIGH-11 closed** — Pass-2 R8 caught that "owned by cdm_owner" was prose-only. In PostgreSQL, a SECURITY DEFINER function executes as the role that owns the function (typically the role that created it). If the migration is applied by a generic migration owner or superuser, the helper executes with that role's privileges instead of cdm_owner, defeating the entire cdm_owner-scoped grant/RLS scaffolding. The schema-qualified FROM and locked search_path close the R7 shadowing issue but do not pin the SECURITY DEFINER principal. Fix per Pass-2 R8 verbatim recommendation: add `ALTER FUNCTION public.<helper>(TEXT) OWNER TO cdm_owner` immediately after each CREATE FUNCTION; schema-qualify function names in REVOKE/GRANT to bind unambiguously to the deployed objects. Ownership is now executable in the DDL itself, not an out-of-band migration-runtime assumption.
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit `d76b24c`. v0.8 commit `b33d017`. v0.9 commit `905632c`. v0.10 commit pending push for Pass-2 R9 verification.
+**v0.11 DRAFT 2026-05-20 — Pass-2 R9 closure (deployment-prerequisite preflight + role/schema documentation):**
+- **MED-1 closed** — Pass-2 R9 found 1 MED only (no HIGH), and explicitly stated "no other material defect is supported from the provided diff" — signaling convergence per the v1.10.1 hygiene-cycle long-tail asymptote pattern. The MED: v0.10's `ALTER FUNCTION ... OWNER TO cdm_owner` silently requires the migration executor to be superuser OR a member of `cdm_owner`; if unmet, the migration either fails partway after creating SECURITY DEFINER helpers OR operators work around by omitting the ALTER (regresses HIGH-11). Fix: (a) fail-fast preflight DO block at top of §4.NEW5 helper DDL that asserts cdm_owner role exists AND executor is superuser OR cdm_owner member, raising on either failure with explicit error messages and standard SQLSTATE codes; (b) new §4.5 "Deployment prerequisites" section documenting all 5 required pre-existing roles (cdm_owner, admit_session_jwt_owner, sec_jwt_cleanup, kms_rotation_operator, break_glass_procedure_owner), the required schema posture (REVOKE CREATE ON SCHEMA public FROM PUBLIC), and the required migration-executor identity.
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit `d76b24c`. v0.8 commit `b33d017`. v0.9 commit `905632c`. v0.10 commit `9a5dcc2`. v0.11 commit pending push for Pass-2 R10 ship-it verification.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.10 DRAFT (Pass-2 R8 closure applied: executable ALTER FUNCTION OWNER TO cdm_owner + schema-qualified REVOKE/GRANT on helpers) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R9 verification queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.11 DRAFT (Pass-2 R9 closure applied: fail-fast deployment-prerequisite preflight DO block + §4.5 Deployment prerequisites section) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R10 ship-it verification queued.
