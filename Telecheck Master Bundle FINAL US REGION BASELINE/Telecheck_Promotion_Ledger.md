@@ -37,6 +37,59 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-037 — 2026-05-21 — SI-020 Async Consult v1.0 → v2.0 implementation-readiness extension RATIFIED; 10 sub-decisions + 7 new CDM entities (split-INSERT-only consult lifecycle with consult_review_claim claim/admission identity model) + 1 plain data-minimization view + 1 optional materialized view + 7 SECURITY DEFINER procedures (raw transition writer + 5 reason-specific wrappers + extended record_consult_clinician_decision per SI-005 P-021) + 17 new audit events (4 Cat A + 3 Cat B + 10 Cat C) + 7 new domain events + 11 new OpenAPI endpoints + 1 new state machine + 8 new RBAC roles; Artifact Registry v2.23 → v2.24; **SIXTH instance of established post-P-029 SI-spec-first promotion pattern** (P-029, P-032, P-034, P-035, P-036, P-037); pilot-viable scope item 2 (Track 1 Ghana revenue anchor)
+
+**Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" + dual-recommendation + two-pass + auto-proceed at commits `f3a6469` + `4f42a00` + `16d7244` + `f483535`):** when Codex APPROVE + Claude READY agree, auto-proceed. Master Completion Plan v1.0 Track 1 anchor (Ghana revenue pilot critical-path; pilot-viable scope item 2) named Async-Consult as next item after Med-Interaction; SI-020 authored proactively applying all lessons-learned from P-031 through P-036 cycles.
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). SI-020 v0.11 promotion via auto-proceed convergence (Codex R11 APPROVE / ship-it + Claude READY-TO-MERGE).
+
+**Type:** Content-change promotion + Registry v2.23 → v2.24 per operating rule 4.
+
+**Prerequisite:** Master Completion Plan v1.0 Track 1 anchor designation + Async-Consult v1.0 (canonical baseline) + SI-005 P-021 (record_consult_clinician_decision SECURITY DEFINER procedure foundation) + P-031 (SI-024.1 v0.8 JWT-binding canonical trust anchor) + P-032 (CDM v1.6 session_jwt_admission + jwt_migration_entity_status) + P-035 (Mode 1 spec; cross-mode handoff target) + P-036 (cleanest worked example of SI-024.1 pattern + data-minimization view-only pattern + R6 seed scope discipline) + P-033 (SI-019 Option A append-only-only pattern + advisory-lock-wrapper discipline) + P-034 (composite tenant-scoped FK identity propagation pattern).
+
+**Cycle convergence trajectory (11-round cycle):**
+
+| Round | HIGH | MED | Class of defect closed |
+|---|---|---|---|
+| R1 | 1 | 1 | Claim/admission identity not durably modeled + payment producer/consumer circular handoff |
+| R2 | 1 | 0 | Consult row shape missing payment_intent_id |
+| R3 | 1 | 0 | Active-claim exclusivity not enforced under concurrent /claim |
+| R4 | 1 | 0 | Claim release semantics contradictory (append-only + one-way) |
+| R5 | 1 | 0 | Expired claims still block partial UNIQUE INDEX |
+| R6 | 1 | 0 | claim_expired_auto_released audit event not in canonical table |
+| R7 | 0 | 1 | Audit category counts recount (4+6+7 prose vs 4+3+10 actual) |
+| R8 | 0 | 1 | Registry bump sequence misaligned across §3 + §7 |
+| R9 | 1 | 0 | Sub-decision 7 still 6 entities (omitted consult_review_claim) |
+| R10 | 1 | 0 | §3 follow-on seed sentence didn't propagate R9 expansion |
+| **R11** | **0** | **0** | **ship-it APPROVE — "no material findings"** |
+
+**Total:** 8 HIGH + 3 MED closed across 10 closure rounds. Zero hard-floor item 6 escalations.
+
+**Architectural shape:** the cycle worked through three distinct problem clusters:
+1. **R1-R6: Claim ownership invariant tightening** — 6 rounds progressively built up the schema-level enforcement: durable claim/admission entity (R1) → composite FK on decision (R1) → payment-anchor row-shape inclusion (R2) → active-claim exclusivity via partial UNIQUE INDEX (R3) → hybrid persistence with explicit release semantics (R4) → expired-claim auto-release (R5) → required audit event for auto-release (R6).
+2. **R7-R8: Documentation-vs-table coherence** — 2 MED rounds catching prose/table mismatches that would propagate to P-038 follow-on amendment.
+3. **R9-R10: Tenant-threading scope completeness** — 2 rounds ensuring the R1 entity addition propagated through all the cross-cutting scope tables (Sub-decision 7 enumeration + §3 seed-scope handoff sentence).
+
+The cycle is a worked example of how the established post-P-031 lessons (SI-024.1 JWT-binding + Option A append-only-only + composite tenant-scoped FKs + data-minimization views + R6 seed-scope discipline) compound: applying them all proactively didn't avoid the cycle's defect surface entirely — claim ownership was a novel SI-020-specific surface that hadn't been encountered in prior cycles + still surfaced 6 HIGH rounds.
+
+**Artifact landed:** `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_SI_020_Async_Consult_v2_0_Implementation_Readiness.md` (566 lines after R10 closure; merge commit `64de31d`; spec branch `spec/si-020-async-consult-v2-0-implementation-readiness-2026-05-21` at convergence commit `7c0f905`).
+
+**Canonical landings:**
+
+- **SI-020 v0.11 RATIFIED** at canonical bundle path. 10 sub-decisions specifying the v1.0 → v2.0 implementation-readiness extension. Implementation in `telecheck-app` code repo UNBLOCKED post-merge per "spec ratification leads implementation by ≥1 sprint" rule.
+- **Follow-on amendment P-038 queued** for CDM v1.8 → v1.9 + AUDIT v5.10 → v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 → v0.4 + State Machines v1.2 → v1.3 + RBAC v1.2 → v1.3 mechanical consolidation per established post-P-029 SI-spec-first promotion pattern.
+
+**Companion entries queued (this commit cluster):**
+
+- Artifact Registry v2.23 → v2.24 bump (next commit)
+- AI_Service_Rollout status-doc Addendum 65 + progress.json revision bump
+
+**Cross-references:** P-035 (Mode 1 Handler Spec v0.4 RATIFIED — cross-mode handoff target for Async-Consult); P-031 (SI-024.1 v0.8 JWT-binding canonical trust anchor); P-032 (CDM v1.6 session_jwt_admission + jwt_migration_entity_status); P-033 (SI-019 Option A append-only-only pattern + advisory-lock-wrapper discipline applied to claim_consult_for_review); P-034 (composite tenant-scoped FK identity propagation pattern applied to consult chain); P-036 (data-minimization plain-view pattern applied to consult_outcome_summary_view + R6 seed scope discipline applied to 8-entity scope); SI-005 P-021 (record_consult_clinician_decision foundation); ADR-002 (two-mode AI architecture); ADR-029 (AI workload taxonomy); I-019 (crisis-detection-always-on platform floor); I-026 (KMS encryption); I-027 (append-only audit); I-032 v5.3 (tenant-GUC Mode 1+2 guard); I-035 (audit-bound state-machine append-only-only); Master Completion Plan v1.0 Track 1 (Ghana revenue anchor; pilot-viable scope item 2).
+
+**Master Completion Plan progression:** Async-Consult Track 1 anchor SI ratified at P-037. **3 of 5 pilot-required Ghana revenue anchor slices** are at SI ratification status (Med-Interaction P-033 SI + P-034 CDM = fully ratified; AI Service Mode 1 P-035 SI + P-036 CDM = fully ratified; **Async-Consult P-037 SI ratified; P-038 CDM follow-on queued as next deliverable**). Remaining: Crisis Response slice SI; Admin Backend basics SI.
+
+---
+
 ### Entry P-036 — 2026-05-21 — CDM v1.7 → v1.8 + AUDIT_EVENTS v5.9 → v5.10 + DOMAIN_EVENTS additive + CCR_RUNTIME v5.3 → v5.4 Mode 1 follow-on amendment RATIFIED; 5 new CDM entities (split-INSERT-only conversation lifecycle) + 1 plain data-minimization view + 11 new audit events (3 Cat A + 3 Cat B + 5 Cat C) + 1 new CCR key (tenant.ai_provider) + 2 new RBAC roles (ai_mode1_view_owner non-BYPASSRLS + ai_mode1_reader); Artifact Registry v2.22 → v2.23; **FIFTH instance of established post-P-029 SI-spec-first promotion pattern** (P-029, P-032, P-034, P-035, P-036)
 
 **Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" + dual-recommendation + two-pass + auto-proceed at commits `f3a6469` + `4f42a00` + `16d7244` + `f483535`):** when Codex APPROVE + Claude READY agree, auto-proceed. Mode 1 Handler Spec v0.4 RATIFIED at P-035 spawned this CDM/AUDIT/CCR/RBAC follow-on amendment cycle per the established post-P-029 spec-first promotion pattern.
