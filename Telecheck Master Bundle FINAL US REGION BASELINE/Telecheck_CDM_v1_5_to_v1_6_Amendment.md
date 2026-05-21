@@ -1,7 +1,7 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.7 DRAFT
-**Status:** POST-PASS-2 R5 (R6 HIGH-7 + HIGH-8 closed: Pass-2 R5 caught (a) §4.NEW5 had FOR SELECT USING (true) policy but no GRANT SELECT — PostgreSQL RLS policies don't grant table privileges, so non-owner helper-execution contexts couldn't actually read the table; and (b) §4.NEW1 + §4.NEW2 only had REVOKE/GRANT for DELETE — no explicit INSERT grant for the admit role meant admission INSERT depended on inherited table-owner privileges, exactly the class of gap this cycle has been closing. Fix: GRANT SELECT TO PUBLIC on §4.NEW5; REVOKE INSERT FROM PUBLIC + GRANT INSERT TO admit_session_jwt_owner on §4.NEW1 + §4.NEW2 (canonical admit role defined in this amendment, not deferred to the procedure-side artifact). Awaiting Pass-2 R6 verification.)
+**Version:** 0.8 DRAFT
+**Status:** POST-PASS-2 R6 (R7 HIGH-9 closed: Pass-2 R6 caught that the R5 fix of GRANT SELECT TO PUBLIC on §4.NEW5 overexposed the fallback-gate state — every connectable role could enumerate which entities still allow raw-GUC fallback and whether fallback audit is enabled, giving an attacker a reconnaissance channel on the least-hardened surfaces. Fix per Pass-2 R6 verbatim recommendation: replace PUBLIC table grant with two SECURITY DEFINER helper functions (`is_jwt_required_for_entity` + `is_raw_guc_fallback_audited_for_entity`) owned by cdm_owner with locked search_path; GRANT EXECUTE on the helpers to PUBLIC; keep table SELECT restricted to cdm_owner only. Underlying table row state is now opaque to non-cdm_owner roles. Awaiting Pass-2 R7 verification.)
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
@@ -363,19 +363,19 @@ CREATE TABLE jwt_migration_entity_status (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Platform-scoped table; no tenant_id; readable by all (used by current_tenant_id_strict helper to make
--- per-entity fallback determinations from inside RLS policies — must be readable from ANY tenant context).
+-- Platform-scoped fallback-gate control table; no tenant_id. SELECT is NOT broadly granted (R6 HIGH-9
+-- closure 2026-05-20: PUBLIC read leaks per-entity fallback/cutover state to attackers). Reads happen
+-- only via the SECURITY DEFINER helpers below; the underlying table is opaque to non-cdm_owner roles.
 -- Write-path RLS for CDM-owner role (R4 HIGH-6 closure 2026-05-20: Pass-2 R4 caught that this
 -- security-critical fallback-gate control table had NO RLS/privilege DDL despite the prose stating
 -- "INSERT/UPDATE limited to CDM-owner role". Without executable RLS + REVOKE/GRANT, the fallback gate
 -- would depend on unspecified external grants — a role with inherited owner privileges or accidental
--- broad grant could silently disable JWT-required cutover (flip phase_4_cutover_eligible) or fallback
--- auditing (flip raw_guc_fallback_audited) without violating any trigger).
+-- broad grant could silently disable JWT-required cutover or fallback auditing).
 ALTER TABLE jwt_migration_entity_status ENABLE ROW LEVEL SECURITY;
 ALTER TABLE jwt_migration_entity_status FORCE ROW LEVEL SECURITY;
-CREATE POLICY jwt_migration_entity_status_read ON jwt_migration_entity_status
-    FOR SELECT
-    USING (true);  -- platform-wide read (needed by current_tenant_id_strict helper from any tenant context)
+CREATE POLICY jwt_migration_entity_status_cdm_owner_read ON jwt_migration_entity_status
+    FOR SELECT TO cdm_owner
+    USING (true);  -- cdm_owner sees all rows (only cdm_owner has table SELECT privilege)
 CREATE POLICY jwt_migration_entity_status_cdm_owner_insert ON jwt_migration_entity_status
     FOR INSERT TO cdm_owner
     WITH CHECK (true);
@@ -384,18 +384,59 @@ CREATE POLICY jwt_migration_entity_status_cdm_owner_update ON jwt_migration_enti
     USING (true)
     WITH CHECK (true);
 
--- Defense-in-depth privilege DDL. SELECT explicitly granted to PUBLIC (R5 HIGH-7 closure 2026-05-20:
--- Pass-2 R5 caught that the FOR SELECT USING (true) policy alone is not sufficient — PostgreSQL RLS
--- policies do not grant table privileges; a role still needs SELECT on the table before the permissive
--- policy matters. The current_tenant_id_strict() helper executes from arbitrary tenant-helper roles,
--- so explicit GRANT SELECT TO PUBLIC is required to make the policy effective). INSERT/UPDATE
+-- Defense-in-depth privilege DDL (R6 HIGH-9 closure 2026-05-20: Pass-2 R6 caught that GRANT SELECT TO
+-- PUBLIC overexposed the fallback-gate state — every connectable role could enumerate which entities
+-- still allow raw-GUC fallback and whether fallback audit is enabled, giving an attacker a
+-- reconnaissance channel on the least-hardened/least-observable surfaces. Fix per Pass-2 R6 verbatim
+-- recommendation: keep table SELECT restricted to cdm_owner; expose only narrow boolean decision
+-- helpers via SECURITY DEFINER functions; grant EXECUTE on helpers to PUBLIC). INSERT/UPDATE
 -- restricted to cdm_owner. Column-level UPDATE grants restrict mutable fields to the documented set
 -- (the append-only trigger below also enforces entity_name + production_break_glass_surface immutability).
-REVOKE INSERT, UPDATE, DELETE ON jwt_migration_entity_status FROM PUBLIC;
-GRANT SELECT ON jwt_migration_entity_status TO PUBLIC;
-GRANT INSERT ON jwt_migration_entity_status TO cdm_owner;
+REVOKE ALL ON jwt_migration_entity_status FROM PUBLIC;
+GRANT SELECT, INSERT ON jwt_migration_entity_status TO cdm_owner;
 GRANT UPDATE (phase_4_cutover_eligible, raw_guc_fallback_audited, migrated_at, updated_at)
     ON jwt_migration_entity_status TO cdm_owner;
+
+-- SECURITY DEFINER helper functions (owned by cdm_owner) expose only the minimal boolean decision
+-- interface needed by current_tenant_id_strict() and the fallback-audit emission path. Locked
+-- search_path prevents search-path injection. PUBLIC gets EXECUTE on the helpers ONLY — the
+-- underlying table row state remains opaque to non-cdm_owner roles.
+CREATE FUNCTION is_jwt_required_for_entity(p_entity_name TEXT) RETURNS BOOLEAN AS $$
+DECLARE
+    v_phase_4_cutover BOOLEAN;
+    v_production_break_glass BOOLEAN;
+BEGIN
+    SELECT phase_4_cutover_eligible, production_break_glass_surface
+        INTO v_phase_4_cutover, v_production_break_glass
+        FROM jwt_migration_entity_status
+        WHERE entity_name = p_entity_name;
+    IF NOT FOUND THEN
+        -- Conservative default: unknown entities require JWT (fail-closed).
+        RETURN TRUE;
+    END IF;
+    RETURN v_phase_4_cutover OR v_production_break_glass;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = pg_catalog, public;
+
+CREATE FUNCTION is_raw_guc_fallback_audited_for_entity(p_entity_name TEXT) RETURNS BOOLEAN AS $$
+DECLARE
+    v_audited BOOLEAN;
+BEGIN
+    SELECT raw_guc_fallback_audited INTO v_audited
+        FROM jwt_migration_entity_status
+        WHERE entity_name = p_entity_name;
+    IF NOT FOUND THEN
+        -- Conservative default: unknown entities emit fallback audit (fail-loud).
+        RETURN TRUE;
+    END IF;
+    RETURN v_audited;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = pg_catalog, public;
+
+REVOKE EXECUTE ON FUNCTION is_jwt_required_for_entity(TEXT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION is_raw_guc_fallback_audited_for_entity(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION is_jwt_required_for_entity(TEXT) TO PUBLIC;
+GRANT EXECUTE ON FUNCTION is_raw_guc_fallback_audited_for_entity(TEXT) TO PUBLIC;
 
 -- Append-only on entity_name + production_break_glass_surface (those are determined by entity classification at creation).
 CREATE TRIGGER jwt_migration_entity_status_append_only
@@ -500,8 +541,11 @@ ALTER TABLE audit_events
 - **HIGH-7 closed** — Pass-2 R5 caught that the `FOR SELECT USING (true)` policy on §4.NEW5 alone is not sufficient: PostgreSQL RLS policies do not grant table privileges. A role still needs `SELECT` on the table before any permissive policy can match. Since `current_tenant_id_strict()` executes from arbitrary tenant-helper roles, explicit `GRANT SELECT ON jwt_migration_entity_status TO PUBLIC` is required.
 - **HIGH-8 closed** — Pass-2 R5 caught that deferring INSERT privilege on §4.NEW1 + §4.NEW2 to the SI-024.1 procedure-side artifact left both tables under FORCE RLS with no explicit INSERT grant for the admit role. Admission INSERT could either fail outright or rely on inherited table-owner privileges — exactly the class of gap this cycle has been closing. Fix: define the canonical admit write role (`admit_session_jwt_owner`) here in the CDM amendment and add explicit `REVOKE INSERT FROM PUBLIC` + `GRANT INSERT TO admit_session_jwt_owner` on both tables. Replay-set is the higher-cost case: failure to INSERT the replay jti breaks the anti-replay invariant open (legitimate JWTs may double-admit). Existing tenant-isolation RLS policy (no FOR clause = all commands) already implicitly applies USING as WITH CHECK for INSERT, so RLS-wise the admit path was already covered — only the table privilege grant was missing.
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit pending push for Pass-2 R6 verification.
+**v0.8 DRAFT 2026-05-20 — Pass-2 R6 closure (SECURITY DEFINER helper interface instead of PUBLIC SELECT on fallback-gate table):**
+- **HIGH-9 closed** — Pass-2 R6 caught that the v0.7 fix of GRANT SELECT TO PUBLIC overexposed the §4.NEW5 fallback-gate state. The table is explicitly the Phase B raw-GUC fallback gate; world-readability lets any low-privilege DB foothold enumerate which entities still allow fallback (`phase_4_cutover_eligible` / `production_break_glass_surface`) and whether fallback audit is enabled (`raw_guc_fallback_audited`), then target the least-hardened/least-observable surfaces. Fix per Pass-2 R6 verbatim recommendation: replace the PUBLIC table grant with two narrow SECURITY DEFINER helpers (`is_jwt_required_for_entity(p_entity_name TEXT) RETURNS BOOLEAN` returning `phase_4_cutover_eligible OR production_break_glass_surface`; `is_raw_guc_fallback_audited_for_entity(p_entity_name TEXT) RETURNS BOOLEAN`). Both helpers are owned by cdm_owner with locked `search_path = pg_catalog, public`. GRANT EXECUTE to PUBLIC on helpers; keep table SELECT restricted to cdm_owner only. Underlying table row state is now opaque — non-cdm_owner roles see only the boolean decisions for entity names they explicitly query, never the migration timeline or entity inventory. Helpers fail-closed/fail-loud on unknown entities (return TRUE).
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit `d76b24c`. v0.8 commit pending push for Pass-2 R7 verification.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.7 DRAFT (Pass-2 R5 closure applied: GRANT SELECT TO PUBLIC on §4.NEW5; REVOKE INSERT FROM PUBLIC + GRANT INSERT TO admit_session_jwt_owner on §4.NEW1 + §4.NEW2) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R6 verification queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.8 DRAFT (Pass-2 R6 closure applied: SECURITY DEFINER narrow-helper interface replaces PUBLIC SELECT on §4.NEW5 fallback-gate table) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R7 verification queued.
