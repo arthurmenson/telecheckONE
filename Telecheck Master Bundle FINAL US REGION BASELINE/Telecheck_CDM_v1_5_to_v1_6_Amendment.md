@@ -1,7 +1,7 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.5 DRAFT
-**Status:** POST-PASS-2 R3 (R4 HIGH-4 + HIGH-5 closed: Pass-2 R3 caught (a) FORCE-RLS write-path gap on §4.NEW3 + §4.NEW4 — both had SELECT-only policies so KMS rotation INSERT/UPDATE and break-glass procedure INSERT/UPDATE would fail at RLS; and (b) one-way lifecycle-field enforcement gap on deactivated_at + closed_at — documented as one-way but no trigger enforced it, so once UPDATE was granted an operator could reactivate retired keys or reopen closed sessions. Fixes: role-scoped FOR INSERT/UPDATE policies + column-scoped one-way transition triggers on both tables. Awaiting Pass-2 R4 verification.)
+**Version:** 0.6 DRAFT
+**Status:** POST-PASS-2 R4 (R5 HIGH-6 closed: Pass-2 R4 caught that §4.NEW5 jwt_migration_entity_status had NO RLS/privilege DDL despite being a security-critical fallback-gate control table whose prose claimed "INSERT/UPDATE limited to CDM-owner role". Without executable RLS + REVOKE/GRANT, a role with inherited owner privileges or accidental broad grant could silently disable JWT-required cutover or fallback auditing. Fix: ENABLE/FORCE RLS + role-scoped policies for cdm_owner + REVOKE PUBLIC + column-level UPDATE grants restricted to mutable fields. Pass-2 R4 also flagged NEW1/NEW2 admit-path write RLS as a follow-on check for R5. Awaiting Pass-2 R5 verification.)
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
@@ -356,8 +356,35 @@ CREATE TABLE jwt_migration_entity_status (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Platform-scoped table; no tenant_id; readable by all (used by current_tenant_id_strict helper).
--- INSERT/UPDATE limited to CDM-owner role (enforced via column-level GRANTs).
+-- Platform-scoped table; no tenant_id; readable by all (used by current_tenant_id_strict helper to make
+-- per-entity fallback determinations from inside RLS policies — must be readable from ANY tenant context).
+-- Write-path RLS for CDM-owner role (R4 HIGH-6 closure 2026-05-20: Pass-2 R4 caught that this
+-- security-critical fallback-gate control table had NO RLS/privilege DDL despite the prose stating
+-- "INSERT/UPDATE limited to CDM-owner role". Without executable RLS + REVOKE/GRANT, the fallback gate
+-- would depend on unspecified external grants — a role with inherited owner privileges or accidental
+-- broad grant could silently disable JWT-required cutover (flip phase_4_cutover_eligible) or fallback
+-- auditing (flip raw_guc_fallback_audited) without violating any trigger).
+ALTER TABLE jwt_migration_entity_status ENABLE ROW LEVEL SECURITY;
+ALTER TABLE jwt_migration_entity_status FORCE ROW LEVEL SECURITY;
+CREATE POLICY jwt_migration_entity_status_read ON jwt_migration_entity_status
+    FOR SELECT
+    USING (true);  -- platform-wide read (needed by current_tenant_id_strict helper from any tenant context)
+CREATE POLICY jwt_migration_entity_status_cdm_owner_insert ON jwt_migration_entity_status
+    FOR INSERT TO cdm_owner
+    WITH CHECK (true);
+CREATE POLICY jwt_migration_entity_status_cdm_owner_update ON jwt_migration_entity_status
+    FOR UPDATE TO cdm_owner
+    USING (true)
+    WITH CHECK (true);
+
+-- Defense-in-depth privilege DDL. SELECT remains broadly granted; INSERT/UPDATE restricted to cdm_owner.
+-- Column-level UPDATE grants restrict mutable fields to the documented set (the append-only trigger
+-- below also enforces entity_name + production_break_glass_surface immutability).
+REVOKE INSERT, UPDATE, DELETE ON jwt_migration_entity_status FROM PUBLIC;
+GRANT INSERT ON jwt_migration_entity_status TO cdm_owner;
+GRANT UPDATE (phase_4_cutover_eligible, raw_guc_fallback_audited, migrated_at, updated_at)
+    ON jwt_migration_entity_status TO cdm_owner;
+
 -- Append-only on entity_name + production_break_glass_surface (those are determined by entity classification at creation).
 CREATE TRIGGER jwt_migration_entity_status_append_only
     BEFORE UPDATE OF entity_name, production_break_glass_surface OR DELETE
@@ -453,8 +480,12 @@ ALTER TABLE audit_events
 - **HIGH-4 closed** — Pass-2 R3 caught that §4.NEW3 `jwt_signing_key_public` and §4.NEW4 `break_glass_active_session` had FORCE RLS + SELECT-only policies. Required write paths (KMS rotation INSERT/UPDATE on NEW3; procedure-driven INSERT/UPDATE on NEW4) would fail under RLS or require undocumented BYPASSRLS escapes. Fix: explicit role-scoped FOR INSERT + FOR UPDATE RLS policies on both tables for the canonical write-path roles named in SI-024.1 (`kms_rotation_operator` for NEW3 per Sub-decision 4; `break_glass_procedure_owner` for NEW4 per Sub-decision 7). WITH CHECK clauses constrain inserts to active state (`deactivated_at IS NULL` / `closed_at IS NULL`) and updates to one-way close transition (`USING (... IS NULL) WITH CHECK (... IS NOT NULL)`). Defense-in-depth privilege DDL added.
 - **HIGH-5 closed** — Pass-2 R3 caught that `deactivated_at` (NEW3) and `closed_at` (NEW4) were documented as one-way lifecycle fields but the append-only triggers excluded those columns (correctly — they need to mutate once), and no separate trigger enforced the one-way constraint. Once UPDATE was granted (HIGH-4), an operator could reactivate retired keys (`deactivated_at` non-NULL → NULL) or reopen closed sessions (`closed_at` non-NULL → NULL) or shift the timestamp (non-NULL → different non-NULL). Fix: dedicated BEFORE UPDATE column-scoped triggers (`*_one_way_*()`) that reject non-NULL → NULL and non-NULL → different non-NULL transitions while permitting NULL → non-NULL. The RLS UPDATE policy WITH CHECK clause adds a second layer of enforcement (only sets to non-NULL permitted).
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit pending push for Pass-2 R4 verification.
+**v0.6 DRAFT 2026-05-20 — Pass-2 R4 closure (§4.NEW5 RLS + privilege DDL):**
+- **HIGH-6 closed** — Pass-2 R4 caught that §4.NEW5 `jwt_migration_entity_status` had NO RLS or REVOKE/GRANT DDL despite being a security-critical fallback-gate control table. The prose said "INSERT/UPDATE limited to CDM-owner role" but no DDL backed that claim, so a role with inherited owner privileges or accidental broad grant could silently disable JWT-required cutover (flip `phase_4_cutover_eligible`) or fallback auditing (flip `raw_guc_fallback_audited`) without violating any trigger. Fix: `ENABLE/FORCE ROW LEVEL SECURITY` + permissive SELECT policy (platform-wide read required by `current_tenant_id_strict` helper from any tenant context) + role-scoped `FOR INSERT/UPDATE TO cdm_owner` policies + `REVOKE INSERT, UPDATE, DELETE FROM PUBLIC` + column-level `GRANT UPDATE (phase_4_cutover_eligible, raw_guc_fallback_audited, migrated_at, updated_at) TO cdm_owner`. Combined with the existing append-only trigger (entity_name + production_break_glass_surface immutable), the table now has three-layer enforcement matching the rest of the §4 entities.
+- **Follow-on flagged for R5:** Pass-2 R4 also flagged §4.NEW1 + §4.NEW2 admit-path INSERT under FORCE RLS — admit_session_jwt() needs a writable path for the admission/replay rows. Defer to R5 verification to confirm whether the existing tenant-isolation policy permits INSERT or if a dedicated FOR INSERT policy is required.
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit pending push for Pass-2 R5 verification.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.5 DRAFT (Pass-2 R3 closure applied: write-path RLS policies + one-way lifecycle-transition triggers on §4.NEW3 + §4.NEW4) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R4 verification queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.6 DRAFT (Pass-2 R4 closure applied: §4.NEW5 RLS + REVOKE/GRANT + column-level UPDATE privileges) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R5 verification queued.
