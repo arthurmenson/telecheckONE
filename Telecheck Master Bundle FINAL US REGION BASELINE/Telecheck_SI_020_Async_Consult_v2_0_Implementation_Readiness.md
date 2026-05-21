@@ -1,7 +1,7 @@
 # SI-020 — Async Consult Slice PRD v1.0 → v2.0 implementation-readiness extension
 
-**Version:** 0.1 DRAFT
-**Status:** PRE-CODEX (awaiting R1 source-first review per CLAUDE.md two-pass discipline)
+**Version:** 0.2 DRAFT
+**Status:** POST-R1 (1 HIGH + 1 MED closed inline: HIGH-1 claim/admission identity not durably modeled → added `consult_review_claim` entity #4 with composite UNIQUE enabling 5-column composite FK from `consult_clinician_decision` enforcing deciding clinician == claiming clinician at schema-invariant level + non-released/non-expired BEFORE INSERT trigger; MED-1 payment producer/consumer contract circular → canonical sequencing clarified: `POST /v1/async-consults` internally calls Billing's payment-intent creation BEFORE consult INSERT, Billing subscribes to `async_consult.initiated.v1` for observability not charge-initiation, refund flow on `decision_recorded` with `decision_type=decline`)
 **Authoring date:** 2026-05-21
 **Authoring location:** `Telecheck Master Bundle FINAL US REGION BASELINE/` (directly in canonical bundle path per post-P-035 promotion-on-author pattern)
 **Owner:** Async & Refill Review Lead (existing v1.0 owner) + AI Service Lead (Mode 2 cross-cutting) + Pharmacy Portal slice owner (cross-cutting consumer)
@@ -40,7 +40,7 @@ Ten sub-decisions. Each is a ratifier-decision item; several can be batched at r
 
 **Gap.** Async-Consult v1.0 §12 specifies 15 lifecycle states + transitions but no canonical row shape. The consult envelope, intake submission, AI clinical summary, clinician decision evidence, follow-up messages, and lifecycle transitions all need CDM entities.
 
-**Proposed CDM additions (7 new entities + 1 derived view; Option A append-only-only persistence per I-035 — same canonical pattern as SI-019 + Mode 1; superseded mutable-state-column model from v1.0 §12):**
+**Proposed CDM additions (R1 HIGH-1 closure 2026-05-21: 7 new entities + 1 derived view; expanded from 6 to 7 entities by adding `consult_review_claim` (entity #4 numbered as §4.X+3a) to durably model claim/admission identity so deciding clinician identity is FK-enforceable against claiming clinician identity; Option A append-only-only persistence per I-035 — same canonical pattern as SI-019 + Mode 1; superseded mutable-state-column model from v1.0 §12):**
 
 1. **`consult` (new entity, CDM v1.8 §4.X)** — consult envelope; 1 row per consult; durable identity; immutable post-INSERT. Columns: `id` ULID, `tenant_id`, `patient_id` FK to `patient(tenant_id, id)` (composite tenant-scoped FK), `delegate_id` ULID NULL (set IFF delegate-initiated), `consult_type` enum (`program_pathway | general`), `program_id` ULID NULL (set IFF consult_type=program_pathway; FK to `program(tenant_id, id)`), `initiation_source` enum (`program_enrollment | care_tab | mode_1_handoff | medication_detail | rpm_ccm_dashboard`), `consult_fee_cents` INT NOT NULL CHECK (>= 0), `expected_turnaround_at` TIMESTAMPTZ (24h from initiation), `created_at` TIMESTAMPTZ DEFAULT now(). Composite UNIQUE `(tenant_id, id, patient_id)` for downstream FK enforcement of patient identity propagation. Strict append-only per I-035 (`enforce_append_only()` trigger).
 
@@ -48,7 +48,9 @@ Ten sub-decisions. Each is a ratifier-decision item; several can be batched at r
 
 3. **`consult_clinical_summary` (new entity, CDM v1.8 §4.X+2)** — 1 row per AI-prepared clinical summary; immutable. Columns: `id` ULID, `tenant_id`, `consult_id`, `patient_id`, `prepared_by_mode` enum (`mode_1 | mode_2`), `ai_provider` TEXT (per CCR), `model_id` TEXT, `summary_ciphertext` BYTEA NOT NULL (KMS-encrypted — clinical summary contains PHI), `summary_kms_envelope_*` 8-column envelope, `interaction_signals_snapshot` JSONB (Med-Interaction engine signals at prep time; non-PHI; references signal IDs from §4.NEW2 of P-034 CDM v1.7), `recommendation` enum NULL (`prescribe | recommend | refer | decline | request_more_data | escalate_to_sync`), `prepared_at` TIMESTAMPTZ DEFAULT now(). Strict append-only. Composite tenant-scoped FKs (`(tenant_id, consult_id, patient_id) → consult`) for patient identity propagation.
 
-4. **`consult_clinician_decision` (new entity, CDM v1.8 §4.X+3)** — 1 row per clinician decision; immutable. Columns: `id` ULID, `tenant_id`, `consult_id`, `patient_id`, `clinician_account_id` FK to accounts, `decision_type` enum (`prescribe | recommend | refer | decline | request_more_data | escalate_to_sync`), `agreement_with_ai_recommendation` enum (`accepted | modified | disagreed | no_ai_recommendation`), `decision_rationale_ciphertext` BYTEA NOT NULL (KMS-encrypted), `decision_rationale_kms_envelope_*` 8-column envelope, `interaction_signals_reviewed_ids` ULID[] (Med-Interaction signal IDs reviewed at decision time; non-PHI), `prescription_details_id` ULID NULL (set IFF decision_type=prescribe; FK to medication_request per CDM canonical), `referral_target_id` ULID NULL (set IFF decision_type=refer), `decided_at` TIMESTAMPTZ DEFAULT now(). Strict append-only. Composite tenant-scoped FKs to consult + patient + admission identity propagation.
+4. **`consult_review_claim` (new entity, CDM v1.8 §4.X+3a; R1 HIGH-1 closure 2026-05-21)** — 1 row per clinician claim of a consult for review; immutable post-INSERT (claim release happens via a SEPARATE append-only `claim_released` transition entry, not by mutating this row). Required to durably model claim/admission identity so `consult_clinician_decision` can FK to the active claim + the SECURITY DEFINER procedure can verify deciding clinician == claiming clinician at schema-invariant level (not just runtime). Columns: `id` ULID, `tenant_id`, `consult_id`, `patient_id`, `clinician_account_id` FK to accounts (the claiming clinician), `claimed_at` TIMESTAMPTZ DEFAULT now(), `claim_expires_at` TIMESTAMPTZ NOT NULL (90-minute claim timeout per clinician-coverage discipline; configurable per program), `released_at` TIMESTAMPTZ NULL (one-way mutation per same pattern as SI-024.1 break_glass_active_session.closed_at one-way; enforced by separate `one_way_released_at` trigger), `release_reason` enum NULL (`decision_recorded | claim_expired | reassigned | clinician_unavailable`). Composite UNIQUE `(tenant_id, id, consult_id, patient_id, clinician_account_id)` enables downstream `consult_clinician_decision` 5-column composite FK enforcing claim identity. Strict append-only on identity columns; one-way mutation on `released_at` per Mode 1 P-036 R7 one-way-lifecycle-trigger pattern. RLS via `current_tenant_id_strict('consult_review_claim')`.
+
+5. **`consult_clinician_decision` (new entity, CDM v1.8 §4.X+3b)** — 1 row per clinician decision; immutable. Columns: `id` ULID, `tenant_id`, `consult_id`, `patient_id`, **`claim_id` ULID NOT NULL** (R1 HIGH-1 closure: FK enforces deciding clinician == claiming clinician via 5-column composite reference to `consult_review_claim`), `clinician_account_id` FK to accounts (MUST match claim's clinician_account_id via composite FK), `decision_type` enum (`prescribe | recommend | refer | decline | request_more_data | escalate_to_sync`), `agreement_with_ai_recommendation` enum (`accepted | modified | disagreed | no_ai_recommendation`), `decision_rationale_ciphertext` BYTEA NOT NULL (KMS-encrypted), `decision_rationale_kms_envelope_*` 8-column envelope, `interaction_signals_reviewed_ids` ULID[] (Med-Interaction signal IDs reviewed at decision time; non-PHI), `prescription_details_id` ULID NULL (set IFF decision_type=prescribe; FK to medication_request per CDM canonical), `referral_target_id` ULID NULL (set IFF decision_type=refer), `decided_at` TIMESTAMPTZ DEFAULT now(). Strict append-only. **5-column composite tenant-scoped FK**: `(tenant_id, claim_id, consult_id, patient_id, clinician_account_id) REFERENCES consult_review_claim(tenant_id, id, consult_id, patient_id, clinician_account_id)` enforces claim identity propagation at schema-invariant level. Additional CHECK: `decided_at <= (SELECT claim_expires_at FROM consult_review_claim WHERE id = claim_id)` — actually as a trigger-enforced constraint (PostgreSQL CHECK can't subquery; canonical implementation uses BEFORE INSERT trigger that validates claim is non-released + non-expired at decision time).
 
 5. **`consult_lifecycle_transition` (new entity, CDM v1.8 §4.X+4)** — **Option A append-only transition log per I-035**; replaces the mutable-state-column model implied by v1.0 §12. 1 row per state transition. Columns: `id` ULID, `tenant_id`, `consult_id`, `from_state` enum (`none | initiated | intake | abandoned | submitted | processing | queued | under_review | decision_made | prescribed | advised | awaiting_data | escalated_to_sync | declined | referred | follow_up | completed | resumed | expired`), `to_state` enum (same set minus `none`), `transition_reason` enum (`initiation | intake_started | intake_abandoned | intake_resumed | intake_submitted | ai_processing_started | ai_processing_completed | queue_entered | clinician_claimed | decision_recorded | prescribed_outcome | advised_outcome | declined_outcome | referred_outcome | additional_data_requested | escalated_to_sync_outcome | patient_data_resubmitted | follow_up_started | follow_up_message_sent | follow_up_completed | consult_completed | intake_expired`), `transition_at`, `transition_by_actor_id` ULID (clinician/patient/system actor), `transition_by_actor_role` enum (`patient | delegate | clinician | system | ai_service | scheduler`), `metadata` JSONB. CHECK constraint enumerates allowed `(transition_reason, from_state, to_state)` triples (~22 triples per v1.0 §12 state machine; explicit enumeration in §4 below).
 
@@ -253,13 +255,30 @@ Same access-pattern discipline as Mode 1 P-036 R7 closure: plain view `consult_o
 
 **Recommendation:** APPROVE as OPTIONAL implementation aid (Phase A may defer the MV + add in Phase B if read-path latency surfaces a hot spot).
 
-### Sub-decision 10: Consult fee + payment integration
+### Sub-decision 10: Consult fee + payment integration (R1 MED-1 closure 2026-05-21: clarified sequencing to avoid circular handoff)
 
-**Gap.** v1.0 §6 describes the payment model narratively but doesn't enumerate the canonical event payloads for Billing slice consumption.
+**Gap.** v1.0 §6 describes the payment model narratively but doesn't enumerate the canonical event payloads for Billing slice consumption. Earlier draft of this SI had a circular handoff: §4 endpoint contract said `POST /v1/async-consults` returned a `payment_intent_id` while §10 said Billing subscribes to `async_consult.initiated.v1` to generate that intent — contradictory ordering.
 
-**Proposed:** `async_consult.initiated.v1` domain event payload includes `consult_fee_cents` + `currency` + `payment_intent_id` (Billing slice generates upstream); Billing slice subscribes and charges. Refund processing on `async_consult.clinician_decision_recorded.v1` with `decision_type=decline` per v1.0 §6 (declined consults are refunded). No new entities in this SI (Billing entities are in Billing Slice canonical scope).
+**Proposed canonical sequencing (R1 MED-1 closure):**
 
-**Recommendation:** APPROVE.
+1. **Patient initiates consult via `POST /v1/async-consults`** → endpoint internally calls Billing slice's `POST /v1/billing/payment-intents` (synchronous internal call OR pre-step via API gateway) BEFORE creating the consult row. The Billing endpoint returns a `payment_intent_id` (and a client_secret for client-side payment confirmation).
+2. **Async-Consult creates the `consult` row** with `payment_intent_id` populated (REQUIRED column; NOT NULL CHECK).
+3. **Async-Consult emits `async_consult.initiated.v1` domain event** with `consult_id` + `payment_intent_id` + `consult_fee_cents` + `currency`. Billing slice subscribes ONLY for revenue-reconciliation observability (not for charge initiation — that already happened in step 1).
+4. **`POST /v1/async-consults` response** returns `consult_id` + `payment_intent_id` + `client_secret` (client uses Stripe-equivalent SDK to confirm payment).
+5. **Refund processing:** Billing slice subscribes to `async_consult.clinician_decision_recorded.v1` IFF `decision_type=decline` and initiates refund per v1.0 §6 refund policy. Refund-initiated emits `billing.refund_initiated.v1` consumed by patient app + analytics.
+
+**Idempotency:** the `POST /v1/async-consults` endpoint uses `Idempotency-Key` header to ensure retries don't double-charge or double-create consults. The internal call to Billing's `POST /v1/billing/payment-intents` also uses `Idempotency-Key` derived from the consult's Idempotency-Key (canonical IDEMPOTENCY contract).
+
+**Failure semantics:**
+- Billing payment-intent creation fails → `POST /v1/async-consults` returns 503; no consult row created; no domain event emitted.
+- Consult INSERT succeeds but domain event emission fails (audit-emission outbox pattern per FLOOR-020) → consult exists; outbox retries event delivery; Billing reconciliation eventually consistent.
+- Patient confirms payment in client SDK → Stripe-equivalent webhook → Billing → emits `billing.payment_completed.v1` consumed by Async-Consult to transition consult from `initiated` → `intake` (canonical flow).
+
+Async-Consult Sub-decision 1 entity 1 schema adjusted: `consult.payment_intent_id` ULID NOT NULL added (R1 MED-1 closure; canonical pre-existence required at consult INSERT time).
+
+**No new entities in this SI for Billing** (Billing entities are in Billing Slice canonical scope; this SI's responsibility is the `payment_intent_id` reference + event emission + refund domain-event subscription).
+
+**Recommendation:** APPROVE per R1 MED-1 closure canonical sequencing.
 
 ---
 
@@ -267,7 +286,7 @@ Same access-pattern discipline as Mode 1 P-036 R7 closure: plain view `consult_o
 
 If all 10 sub-decisions ratify, the lockstep PR-A2-class commit lands:
 
-- **CDM:** +6 new entities (consult, consult_intake_submission, consult_clinical_summary, consult_clinician_decision, consult_lifecycle_transition, consult_follow_up_message) + 1 plain data-minimization view (consult_outcome_summary_view) + 1 OPTIONAL materialized view (consult_current_state_mv) + 7 SECURITY DEFINER procedures.
+- **CDM:** +**7 new entities** (consult, consult_intake_submission, consult_clinical_summary, **consult_review_claim** [R1 HIGH-1 closure 2026-05-21 — durable claim/admission identity], consult_clinician_decision, consult_lifecycle_transition, consult_follow_up_message) + 1 plain data-minimization view (consult_outcome_summary_view) + 1 OPTIONAL materialized view (consult_current_state_mv) + 7 SECURITY DEFINER procedures (including extended `record_consult_clinician_decision` with claim-FK validation per R1 HIGH-1 closure).
 - **AUDIT_EVENTS:** +16 new action IDs (4 Cat A + 5 Cat B + 7 Cat C; explicit Sampling column per P-036 pattern).
 - **DOMAIN_EVENTS:** +7 new event types (additive enum extension; no version bump).
 - **OpenAPI:** +11 endpoints (v0.3 → v0.4).
@@ -314,9 +333,13 @@ Beyond the 10 sub-decisions above, the following questions are open and should b
 
 ## 6. Codex pre-ratification status
 
-**v0.1 DRAFT 2026-05-21:** pre-Codex-review; R1 source-first review queued.
+**v0.1 DRAFT 2026-05-21:** pre-Codex-review.
 
-Authored on `spec/si-020-async-consult-v2-0-implementation-readiness-2026-05-21` branch off main at `3b10b4c` (post-P-036 + Addendum 64).
+**v0.2 DRAFT 2026-05-21 — R1 closures applied (1 HIGH + 1 MED):**
+- **R1 HIGH-1 closed:** Decision ownership couldn't be enforced because claim/admission identity wasn't modeled in row shapes. `consult_clinician_decision` had only `clinician_account_id` but no FK to a claim record proving deciding clinician == claiming clinician. Clinician could record decision on queued or differently-claimed consult; only audit-time (not schema-time) detection possible. Fix: added **`consult_review_claim` entity #4** (immutable post-INSERT on identity columns; one-way mutation on `released_at` per Mode 1 P-036 R7 lifecycle-trigger pattern; composite UNIQUE `(tenant_id, id, consult_id, patient_id, clinician_account_id)`); promoted `consult_clinician_decision` to entity #5 with required `claim_id` ULID NOT NULL column + **5-column composite tenant-scoped FK** `(tenant_id, claim_id, consult_id, patient_id, clinician_account_id) REFERENCES consult_review_claim(tenant_id, id, consult_id, patient_id, clinician_account_id)` enforcing claim identity propagation at schema-invariant level + BEFORE INSERT trigger validating claim is non-released + non-expired at decision time. Decision-ownership invariant now enforceable at FK-evaluation time, not just runtime.
+- **R1 MED-1 closed:** Payment producer/consumer contract had circular handoff (endpoint returned `payment_intent_id` while domain event was supposed to cause Billing to generate it). Risk: unchargeable consults / duplicate charges on retries / OpenAPI-vs-DOMAIN_EVENTS schema drift on revenue-anchor slice. Fix: canonical sequencing clarified in Sub-decision 10 — `POST /v1/async-consults` internally calls Billing's `POST /v1/billing/payment-intents` (synchronous internal call with Idempotency-Key) BEFORE consult INSERT; Billing returns `payment_intent_id` + `client_secret`; consult row REQUIRES `payment_intent_id` (NOT NULL CHECK); Billing subscribes to `async_consult.initiated.v1` for revenue-reconciliation observability ONLY (not for charge initiation; the charge was already initiated in step 1). Refund flow on `clinician_decision_recorded.v1` with `decision_type=decline` per v1.0 §6 + clear failure semantics for Billing-failure / outbox-event-failure / payment-confirmation-webhook paths.
+
+Authored on `spec/si-020-async-consult-v2-0-implementation-readiness-2026-05-21` branch off main at `3b10b4c` (post-P-036 + Addendum 64). v0.2 commit pending push for R2 verification.
 
 ---
 
