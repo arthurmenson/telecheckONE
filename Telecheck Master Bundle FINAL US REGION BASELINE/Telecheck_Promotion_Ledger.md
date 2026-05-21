@@ -37,6 +37,63 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-034 — 2026-05-21 — CDM v1.6 → v1.7 + AUDIT_EVENTS v5.8 → v5.9 + OpenAPI v0.2 → v0.3 + State Machines v1.1 → v1.2 + RBAC v1.1 → v1.2 SI-019 follow-on amendment RATIFIED; 4 new CDM entities + 7 SECURITY DEFINER procedures (1 raw transition writer + 5 reason-specific lifecycle wrappers + 1 override wrapper) + 1 SECURITY BARRIER view + 1 SECURITY DEFINER access function + 1 optional materialized view + 6 new audit events (4 Cat A + 2 Cat B) + 5 new domain events + 8 new OpenAPI endpoints + 1 new state machine (derived-from-append-only) + 12 new RBAC roles (4 application + 6 wrapper owner + 2 service-level owner); Artifact Registry v2.20 → v2.21
+
+**Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" + dual-recommendation + two-pass + auto-proceed at commits `f3a6469` + `4f42a00` + `16d7244` + `f483535`):** when Codex APPROVE + Claude READY agree, auto-proceed. SI-019 v0.8 RATIFIED at P-033 spawned this CDM/AUDIT/OpenAPI/SM/RBAC follow-on amendment cycle per the established post-P-029 SI-spec-first promotion pattern (third instance: P-029 [SI-021 CDM], P-032 [SI-024.1 CDM], P-034 [SI-019 CDM+AUDIT+OpenAPI+SM+RBAC]). Largest follow-on scope to date because SI-019 spans 5 contract surfaces (not just CDM+AUDIT).
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). CDM v1.7 + AUDIT_EVENTS v5.9 + OpenAPI v0.3 + State Machines v1.2 + RBAC v1.2 amendment promotion via auto-proceed convergence (Codex R8 APPROVE / ship-it + Claude READY-TO-MERGE).
+
+**Type:** Content-change promotion + Registry v2.20 → v2.21 per operating rule 4.
+
+**Prerequisite:** P-033 (SI-019 v0.8 RATIFIED; 4 entities + 7 procedures + 6 audit events + 5 domain events + 8 endpoints + 1 state machine + 12 roles authored canonical-content there, mechanically consolidated into bundle file sections here).
+
+**Cycle convergence trajectory** (R = Codex Pass-2 round; HIGH count → MED count):
+
+| Round | HIGH | MED | Class of defect closed |
+|---|---|---|---|
+| R1 | 2 | 2 | advisory-lock cast overflow + SECURITY DEFINER search_path resolution + MV access function type-mismatch + procedure count |
+| R2 | 1 | 0 | SECURITY DEFINER caller-identity via current_user (resolves to owner not invoker) |
+| R3 | 1 | 0 | R2 GUC-only pattern still trusts caller-controlled mutable state (recursive defect on R2's fix) |
+| R4 | 2 | 0 | Phase B fallback gate fail-open + plaintext override_rationale persisted alongside KMS envelope |
+| R5 | 1 | 0 | MV access surfaces use raw `app.tenant_id` GUC instead of canonical `current_tenant_id_strict()` |
+| R6 | 1 | 0 | R5 closure introduced MV trust-anchor entity-name dependency but seed scope only had 4 RLS-bearing tables |
+| R7 | 1 | 0 | SECURITY DEFINER write paths still use raw GUC for tenant identity (analogous to R3 actor_role on tenant axis) |
+| R8 | 0 | 0 | **ship-it APPROVE — "no material findings"** |
+
+**Total:** 9 HIGH + 2 MED closed across 7 closure rounds. All within SI-019 v0.8 + SI-024.1 v0.8 ratified scope — zero hard-floor item 6 escalations.
+
+**Architectural shape:** the cycle worked progressively through the defect classes that the SI-024.1 v0.8 JWT-binding canonical pattern is designed to address:
+- PostgreSQL primitive correctness (R1)
+- SECURITY DEFINER caller identity (R2, R3, R7)
+- Trust-anchor coherence (R5, R6)
+- Fail-closed enforcement (R4)
+- PHI exposure (R4)
+
+Each round demonstrated the canonical pattern applied to a different trust-axis or surface; once tenant identity (R7) was correctly bound, the amendment converged. This is the cleanest worked example to date of why the SI-024.1 JWT-binding model is necessary as the canonical trust anchor for v1.7+ slices.
+
+**Artifact landed:** `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_CDM_v1_6_to_v1_7_Amendment.md` (916 lines; merge commit `71518f0`; branch `spec/cdm-v1-7-audit-v5-9-openapi-v0-3-sm-v1-2-rbac-v1-2-si019-followon-2026-05-21` at convergence commit `32f385b`).
+
+**Canonical landings:**
+
+- **CDM v1.6 → v1.7:** 4 new entities (interaction_engine_evaluation, interaction_signal [strict append-only, NO state column per Option A], interaction_signal_override [KMS envelope only, NO plaintext column], interaction_signal_lifecycle_transition [Option A append-only log with CHECK on 6 allowed triples + `none` sentinel]) + 7 SECURITY DEFINER procedures (1 raw writer owner-only EXECUTE + 5 reason-specific wrappers + 1 override wrapper) + 1 SECURITY BARRIER view (uses current_tenant_id_strict trust anchor) + 1 SECURITY DEFINER access function (RETURNS TABLE with named columns) + 1 optional rebuildable materialized view.
+- **AUDIT_EVENTS v5.8 → v5.9:** 6 new action IDs under `medication_interaction.*` namespace (4 Cat A + 2 Cat B).
+- **DOMAIN_EVENTS additive (no version bump):** 5 new event types under `medication_interaction.*` namespace.
+- **OpenAPI v0.2 → v0.3:** 8 new endpoints under `/v1/medication-interaction/*`.
+- **State Machines v1.1 → v1.2:** 1 new state machine `interaction_signal_lifecycle` described as DERIVED from append-only `interaction_signal_lifecycle_transition` per Option A.
+- **RBAC v1.1 → v1.2:** 12 new roles (4 application + 6 wrapper owner + 2 service-level owner).
+- **`jwt_migration_entity_status` seed scope expansion:** 6 entity names (4 RLS-bearing tables + 2 MV/view trust-anchor surfaces per R6 HIGH-1 closure); fail-closed-with-audit defaults; cdm_owner sequencing guidance (flip tables first, MV/view surfaces last).
+
+**Companion entries queued (this commit cluster):**
+
+- Artifact Registry v2.20 → v2.21 bump (next commit; reflects v1.7 + v5.9 + v0.3 + v1.2 + v1.2 contract states)
+- AI_Service_Rollout status-doc Addendum 62 + progress.json revision bump
+
+**Cross-references:** P-033 (SI-019 v0.8 RATIFIED — Option A canonical Phase B append-only-only lifecycle); P-031 (SI-024.1 v0.8 RATIFIED — JWT-binding canonical trust anchor pattern); P-027 (I-035 introduction via Phase B batched promotion); P-021 (SI-005 SC3 grandfathered KMS envelope precedent); SI-005 8-column KMS envelope pattern; Master Completion Plan v1.0 Track 1 anchor (Ghana revenue pilot critical-path).
+
+**Master Completion Plan progression:** Med-Interaction Track 1 anchor — SI ratified at P-033, canonical bundle content landed at P-034. Implementation in `telecheck-app` code repo can now reference BOTH the SI source (for design rationale + 9 sub-decisions) AND the canonical CDM/AUDIT/OpenAPI/SM/RBAC bundle for canonical row shapes + procedure contracts + endpoint contracts + state machine + role definitions. Phase B fan-out per-slice ratification trajectory continues; next candidates per the Plan: Async-Consult clinician-decision loop completion SI, AI Service Mode 1 SI, Crisis Response slice SI, Admin Backend basics SI.
+
+---
+
 ### Entry P-033 — 2026-05-21 — SI-019 Medication Interaction & Validation Engine Slice PRD v1.0 → v2.0 RATIFIED via Option A canonical Phase B append-only-only lifecycle persistence; 4 new entities + 6 new audit events + 5 new domain events + 6 SECURITY DEFINER procedures (1 raw + 5 reason-specific wrappers) + 1 override wrapper + 1 SECURITY BARRIER view + 1 SECURITY DEFINER access function + 1 optional materialized view + 8 new OpenAPI endpoints + 1 new state machine + 4 new RBAC roles; Artifact Registry v2.19 → v2.20; FIRST P-NUM in Phase B fan-out per Master Completion Plan v1.0; Track 1 anchor (Ghana revenue pilot critical-path slice) UNBLOCKED
 
 **Evans's OQ7 ratification (2026-05-20 chat-message):** *"A"* — Option A (immutable `interaction_signal` + append-only `interaction_signal_lifecycle_transition` rows + optional rebuildable projection for read-path). Architectural-judgment ratification on the canonical CDM persistence pattern for safety-critical interaction signals; resolved the R1 STOP-condition that Codex invoked CLAUDE.md hard-floor item 6 on.
