@@ -4750,3 +4750,103 @@ The R5 → R6 → R7 trajectory adds a new operational pattern for v1.8+ slices:
 Cumulative: **160 findings closed inline across 10 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP for OQ7); 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern + the new fresh-review-post-major-cycles pattern + the new derived-view-data-minimization pattern continue to scale.
 
 — Claude (Opus 4.7, 1M context), CDM v1.7 → v1.8 + AUDIT_EVENTS v5.9 → v5.10 + DOMAIN_EVENTS additive + CCR_RUNTIME v5.3 → v5.4 Mode 1 follow-on amendment cycle close-out 2026-05-21 via auto-proceed. Main at `e8e1ff6`. Registry v2.23. P-036 appended. **10th successive Q2 2026 auto-proceed ratification.** 3 of 5 pilot-required slices NOW FULLY RATIFIED. Next deliverable per auto-proceed: Async-Consult clinician-decision loop completion SI OR Crisis Response slice SI OR Admin Backend basics SI OR code-repo Phase A foundation implementation.
+
+---
+
+## Addendum 65 — SI-020 Async Consult v1.0 → v2.0 implementation-readiness extension RATIFIED via auto-proceed (Codex R11 ship-it APPROVE); merge `64de31d`; Registry v2.23 → v2.24; SIXTH instance of SI-spec-first promotion pattern; Track 1 anchor item 2 SI-ratified; P-038 CDM follow-on queued
+
+**Date:** 2026-05-21
+**Status:** LANDED + RATIFIED
+**Main HEAD:** `2b91b92` (cockpit) / `64de31d` (SI merge)
+**Cycle counter:** 11th successive SI/amendment ratification in Q2 2026 (P-026 → P-028 → P-029 → P-030 → P-031 → P-032 → P-033 → P-034 → P-035 → P-036 → P-037)
+
+### What landed
+
+`Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_SI_020_Async_Consult_v2_0_Implementation_Readiness.md` (566 lines after R10 closure) — SI specifying the Async-Consult v1.0 → v2.0 implementation-readiness extension covering 10 sub-decisions across CDM + AUDIT_EVENTS + DOMAIN_EVENTS + OpenAPI + State Machines + RBAC + tenant-threading per SI-024.1 v0.8 + payment integration.
+
+### Convergence trajectory (11-round Codex cycle)
+
+| Round | HIGH | MED | Class of defect closed |
+|---|---|---|---|
+| R1 | 1 | 1 | Claim/admission identity not durably modeled + payment producer/consumer circular handoff |
+| R2 | 1 | 0 | Consult row shape missing payment_intent_id |
+| R3 | 1 | 0 | Active-claim exclusivity not enforced under concurrent /claim |
+| R4 | 1 | 0 | Claim release semantics contradictory (append-only + one-way mutable) |
+| R5 | 1 | 0 | Expired claims still block partial UNIQUE INDEX (stuck consult) |
+| R6 | 1 | 0 | claim_expired_auto_released audit event not in canonical table |
+| R7 | 0 | 1 | Audit category counts recount (prose 4+6+7 vs actual 4+3+10) |
+| R8 | 0 | 1 | Registry bump sequence misaligned across §3 + §7 |
+| R9 | 1 | 0 | Sub-decision 7 still 6 entities (omitted consult_review_claim) |
+| R10 | 1 | 0 | §3 follow-on seed-scope sentence didn't propagate R9 expansion |
+| **R11** | **0** | **0** | **ship-it APPROVE — "no material findings"** |
+
+**Total:** 8 HIGH + 3 MED closed inline across 10 closure rounds. Zero hard-floor item 6 escalations.
+
+### Architectural shape of the cycle — 3 distinct problem clusters
+
+The 10 closure rounds fall into 3 clusters:
+
+**Cluster 1 (R1-R6): Claim ownership invariant tightening** — 6 rounds progressively built up the schema-level enforcement of "deciding clinician == claiming clinician":
+- R1: durable `consult_review_claim` entity + 5-column composite FK on decision
+- R2: payment_intent_id added to consult row shape
+- R3: active-claim exclusivity via tenant-scoped partial UNIQUE INDEX
+- R4: hybrid persistence — strict append-only identity + one-way mutable release + explicit reassignment procedure
+- R5: expired-claim auto-release in claim wrapper STEP 2
+- R6: `claim_expired_auto_released` audit event added to canonical table
+
+**Cluster 2 (R7-R8): Documentation-vs-table coherence** — 2 MED rounds catching prose/table mismatches that would have propagated to P-038 follow-on:
+- R7: audit category recount (prose 4+6+7 vs actual 4+3+10)
+- R8: Registry bump sequence alignment across §3 + §7
+
+**Cluster 3 (R9-R10): Tenant-threading scope completeness** — 2 rounds ensuring R1 entity addition propagated through all cross-cutting scope tables:
+- R9: Sub-decision 7 expanded to 7 RLS-bearing entities (was 6)
+- R10: §3 follow-on seed-scope sentence aligned with Sub-decision 7's R9 expansion
+
+The cycle is a worked example of how the established post-P-031 lessons-learned (SI-024.1 JWT-binding + Option A append-only-only + composite tenant-scoped FKs + data-minimization views + R6 seed-scope discipline) **compound rather than substitute**: applying them all proactively didn't avoid the cycle's defect surface entirely — the claim-ownership cluster was a novel SI-020-specific surface that hadn't been encountered in prior cycles + still surfaced 6 HIGH rounds. The hybrid-persistence lesson (R4 — append-only identity + one-way mutable release) is the most general new pattern that future ratifier-input SIs should apply proactively.
+
+### Companion landings
+
+- `Telecheck_Promotion_Ledger.md` — entry P-037 appended at top (commit `2b91b92`)
+- `Telecheck_Artifact_Registry_v2_10.md` — header bumped v2.23 → v2.24 (commit `2b91b92`)
+- Canonical version states: SI-020 v0.11 newly canonical; **Artifact Registry v2.24**
+
+### Production gates explicit
+
+| Gate | Status post-P-037 merge |
+|---|---|
+| SI-020 Async-Consult implementation-readiness extension canonical | **LANDED** |
+| Async-Consult implementation in `telecheck-app` code repo | **UNBLOCKED** per "spec ratification leads implementation by ≥1 sprint" — implementers can author against the canonical SI; canonical CDM/AUDIT/OpenAPI/etc landings follow at P-038 |
+| Master Completion Plan v1.0 Track 1 anchor item 2 (Async-Consult clinician-decision loop completion) | **SI ratified**; full canonical landing (SI + CDM) at P-038 |
+| Master Completion Plan v1.0 pilot-viable scope progression | **3 of 5 critical-path slices SI-ratified** (Med-Interaction P-033+P-034 full; AI Service Mode 1 P-035+P-036 full; Async-Consult P-037 SI ratified + P-038 CDM queued) |
+| Phase B fan-out trajectory | 6 successive promotion-pattern cycles completed (P-029, P-032, P-034, P-035, P-036, P-037); P-038 queued |
+
+**Rollback path:** `git revert -m 1 64de31d` reverts SI artifact; `git revert 2b91b92` reverts cockpit. Would require new P-037a ledger entry + Registry v2.24 → v2.25 bump per lockstep rule.
+
+### Outstanding queue (post-P-037)
+
+1. **P-038 follow-on amendment cycle** — CDM v1.8 → v1.9 + AUDIT v5.10 → v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 → v0.4 + State Machines v1.2 → v1.3 + RBAC v1.2 → v1.3 mechanical consolidation per established post-P-029 SI-spec-first promotion pattern. SIXTH follow-on instance (after P-029, P-032, P-034, P-036; P-035 was SI-only without follow-on; P-037 SI ratifies first, P-038 mechanical landing follows).
+2. **Crisis Response slice SI** — Master Completion Plan pilot-viable scope item 4; I-019 crisis-detection already wired at foundation; this slice spec'es the response surface.
+3. **Admin Backend basics SI** — Master Completion Plan pilot-viable scope item 5; operator monitoring + manual template review.
+4. **Phase A foundation implementation** in `telecheck-app` code repo (Med-Interaction + Mode 1 + Async-Consult).
+
+### Discipline observation
+
+**Q2 2026 cycle pattern**, now with 11 ratifications under codified disciplines:
+
+| Ledger entry | Cycle | Findings | Rounds | Ship-it path | Hard-floor item 6 |
+|---|---|---|---|---|---|
+| P-026 | Q2 batched ratifier ceremony Phase A | 13 OQ-groups | n/a | Ratifier ceremony | 0 |
+| P-028 | SI-021 SIEM Hash-Chain Archival | 16 | 5 | §10 cadence boundary | 0 |
+| P-029 | SI-021 CDM v1.4 → v1.5 follow-on | 13 | 8 | Multi-cycle pre-merge | 0 |
+| P-030 | SI-024 v0.17 TRANSITIONAL | 35 | 17 | Pass-2 B+ synthesis | 0 |
+| P-031 | SI-024.1 v0.8 Cryptographic JWT-Binding | 19 | 8 | Codex cycle-4 APPROVE | 0 |
+| P-032 | CDM v1.5 → v1.6 SI-024.1 follow-on | 15 | 12 | Pass-2 R12 ship-it APPROVE | 0 |
+| P-033 | SI-019 Med-Interaction v1.0 → v2.0 Option A | 11 | 7 | Codex R7 ship-it APPROVE | 1 CORRECT INVOCATION (R1 STOP for OQ7) |
+| P-034 | CDM v1.6 → v1.7 + 4 surfaces SI-019 follow-on | 11 | 8 | Codex R8 ship-it APPROVE | 0 |
+| P-035 | AI Service Mode 1 Handler Spec v0.4 | 16 | 8 | Codex R8 ship-it APPROVE | 0 |
+| P-036 | CDM v1.7 → v1.8 + 4 surfaces Mode 1 follow-on | 11 | 8 | Codex R8 ship-it APPROVE | 0 |
+| **P-037** | **SI-020 Async-Consult v1.0 → v2.0** | **11** | **11** | **Codex R11 ship-it APPROVE** | **0** |
+
+Cumulative: **171 findings closed inline across 11 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP for OQ7); 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern + fresh-review-post-major-cycles pattern + derived-view-data-minimization pattern + hybrid-persistence-with-one-way-release pattern (new at P-037 R4) continue to scale.
+
+— Claude (Opus 4.7, 1M context), SI-020 Async-Consult v1.0 → v2.0 implementation-readiness extension cycle close-out 2026-05-21 via auto-proceed. Main at `2b91b92`. Registry v2.24. P-037 appended. **11th successive Q2 2026 auto-proceed ratification.** 3 of 5 pilot-required slices SI-ratified. Next deliverable per auto-proceed: P-038 SI-020 follow-on CDM/AUDIT/etc amendment cycle (SIXTH instance of SI-spec-first promotion pattern) OR Crisis Response slice SI OR Admin Backend basics SI.
