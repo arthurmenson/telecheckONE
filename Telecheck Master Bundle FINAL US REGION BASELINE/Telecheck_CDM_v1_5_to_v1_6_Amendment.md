@@ -1,7 +1,7 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.4 DRAFT
-**Status:** POST-PASS-2 R2 (R3 HIGH closed: Pass-2 R2 caught a FORCE-RLS gap — tenant-isolation policy applied to ALL commands, so the platform-scoped cleanup job running as sec_jwt_cleanup without per-tenant context would fail RLS BEFORE the trigger predicate could run. Fix: add permissive FOR DELETE TO sec_jwt_cleanup RLS policy on both §4.NEW1 and §4.NEW2 scoped to expired rows. Awaiting Pass-2 R3 verification.)
+**Version:** 0.5 DRAFT
+**Status:** POST-PASS-2 R3 (R4 HIGH-4 + HIGH-5 closed: Pass-2 R3 caught (a) FORCE-RLS write-path gap on §4.NEW3 + §4.NEW4 — both had SELECT-only policies so KMS rotation INSERT/UPDATE and break-glass procedure INSERT/UPDATE would fail at RLS; and (b) one-way lifecycle-field enforcement gap on deactivated_at + closed_at — documented as one-way but no trigger enforced it, so once UPDATE was granted an operator could reactivate retired keys or reopen closed sessions. Fixes: role-scoped FOR INSERT/UPDATE policies + column-scoped one-way transition triggers on both tables. Awaiting Pass-2 R4 verification.)
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
@@ -218,12 +218,47 @@ CREATE POLICY jwt_signing_key_public_read ON jwt_signing_key_public
             AND tenant_id = current_tenant_id_strict('jwt_signing_key_public'))
     );
 
--- INSERT/UPDATE limited to KMS-key-rotation operator role; key-rotation = new row with new key_id + activated_at.
--- Append-only on rotated-out key rows (deactivated_at can be set NULL → timestamp, one-way; same pattern as break_glass_approval.revoked_at).
+-- Write-path RLS for KMS rotation operator role (R3 HIGH-4 closure 2026-05-20: Pass-2 R3 caught that
+-- FORCE RLS + SELECT-only policy blocks all writes; KMS rotation INSERT and key-deactivation UPDATE
+-- need explicit role-scoped policies). INSERT permits the rotation operator to add new key rows.
+-- UPDATE policy is column-scoped to deactivated_at only (the only mutable field; identity columns are
+-- locked by the append-only trigger below).
+CREATE POLICY jwt_signing_key_public_rotation_insert ON jwt_signing_key_public
+    FOR INSERT TO kms_rotation_operator
+    WITH CHECK (deactivated_at IS NULL);  -- new rows always start active
+CREATE POLICY jwt_signing_key_public_rotation_deactivate ON jwt_signing_key_public
+    FOR UPDATE TO kms_rotation_operator
+    USING (deactivated_at IS NULL)        -- only active rows are eligible for deactivation
+    WITH CHECK (deactivated_at IS NOT NULL);  -- update must set deactivated_at (one-way NULL → timestamp)
+
+-- Defense-in-depth privilege DDL
+REVOKE INSERT, UPDATE, DELETE ON jwt_signing_key_public FROM PUBLIC;
+GRANT INSERT, UPDATE ON jwt_signing_key_public TO kms_rotation_operator;
+
+-- Append-only on identity columns; deactivated_at is the only mutable lifecycle field (NULL → timestamp,
+-- one-way; same pattern as break_glass_approval.revoked_at).
 CREATE TRIGGER jwt_signing_key_public_append_only
     BEFORE UPDATE OF key_id, key_purpose, tenant_id, public_key_pem, kms_key_arn, algorithm, created_at, activated_at
     OR DELETE ON jwt_signing_key_public
     FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
+
+-- One-way lifecycle enforcement for deactivated_at (R3 HIGH-5 closure 2026-05-20: Pass-2 R3 caught that
+-- deactivated_at was documented as one-way but no trigger enforced it — once UPDATE was granted, an
+-- operator could reactivate a retired key by setting deactivated_at back to NULL or to a different
+-- timestamp. Enforce NULL → non-NULL only; reject non-NULL → NULL and non-NULL → different timestamp).
+CREATE FUNCTION jwt_signing_key_public_one_way_deactivated_at() RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.deactivated_at IS NOT NULL AND NEW.deactivated_at IS DISTINCT FROM OLD.deactivated_at THEN
+        RAISE EXCEPTION 'jwt_signing_key_public.deactivated_at is one-way (NULL → timestamp); cannot change once set: was % is %',
+            OLD.deactivated_at, NEW.deactivated_at
+            USING ERRCODE = 'invalid_column_reference';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SET search_path = pg_catalog, public;
+CREATE TRIGGER jwt_signing_key_public_one_way_deactivated_at
+    BEFORE UPDATE OF deactivated_at ON jwt_signing_key_public
+    FOR EACH ROW EXECUTE FUNCTION jwt_signing_key_public_one_way_deactivated_at();
 ```
 
 **Cross-references:** SI-024.1 §Sub-decision 2 (two-key model) + §Sub-decision 4 (KMS HSM); Sprint 13 KMS Architecture §HSM-signer-role.
@@ -263,12 +298,46 @@ CREATE POLICY break_glass_active_session_operator_self ON break_glass_active_ses
         AND session_expires_at > now()
     );
 
--- Append-only on identity columns; closed_at is mutable (NULL → timestamp, one-way) for session-close.
+-- Write-path RLS for break-glass procedure role (R3 HIGH-4 closure 2026-05-20: Pass-2 R3 caught that
+-- FORCE RLS + SELECT-only policy blocks INSERT by begin_target_tenant_break_glass_session() and UPDATE
+-- by session-close path; needs explicit role-scoped policies). The break_glass_procedure_owner role is
+-- the privilege-holder for the SI-024.1 begin/close procedures; it's the only role that can write rows.
+CREATE POLICY break_glass_active_session_procedure_insert ON break_glass_active_session
+    FOR INSERT TO break_glass_procedure_owner
+    WITH CHECK (closed_at IS NULL);  -- new sessions always start open
+CREATE POLICY break_glass_active_session_procedure_close ON break_glass_active_session
+    FOR UPDATE TO break_glass_procedure_owner
+    USING (closed_at IS NULL)        -- only open sessions are eligible for close
+    WITH CHECK (closed_at IS NOT NULL);  -- update must set closed_at (one-way NULL → timestamp)
+
+-- Defense-in-depth privilege DDL
+REVOKE INSERT, UPDATE, DELETE ON break_glass_active_session FROM PUBLIC;
+GRANT INSERT, UPDATE ON break_glass_active_session TO break_glass_procedure_owner;
+
+-- Append-only on identity columns; closed_at is the only mutable lifecycle field (NULL → timestamp,
+-- one-way) for session-close.
 CREATE TRIGGER break_glass_active_session_append_only
     BEFORE UPDATE OF id, target_tenant_id, operator_user_id, operator_role, bound_jwt_id,
                     session_start, session_expires_at, intended_purpose, approval_id
     OR DELETE ON break_glass_active_session
     FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
+
+-- One-way lifecycle enforcement for closed_at (R3 HIGH-5 closure 2026-05-20: same pattern as
+-- §4.NEW3.deactivated_at — without this trigger, once UPDATE was granted, an operator could reopen
+-- a closed session by setting closed_at back to NULL or to a different timestamp).
+CREATE FUNCTION break_glass_active_session_one_way_closed_at() RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.closed_at IS NOT NULL AND NEW.closed_at IS DISTINCT FROM OLD.closed_at THEN
+        RAISE EXCEPTION 'break_glass_active_session.closed_at is one-way (NULL → timestamp); cannot change once set: was % is %',
+            OLD.closed_at, NEW.closed_at
+            USING ERRCODE = 'invalid_column_reference';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SET search_path = pg_catalog, public;
+CREATE TRIGGER break_glass_active_session_one_way_closed_at
+    BEFORE UPDATE OF closed_at ON break_glass_active_session
+    FOR EACH ROW EXECUTE FUNCTION break_glass_active_session_one_way_closed_at();
 ```
 
 **Cross-references:** SI-024.1 §Sub-decision 7 (per-access break-glass session); INVARIANTS v5.4 §I-023/I-024/I-027.
@@ -380,8 +449,12 @@ ALTER TABLE audit_events
 **v0.4 DRAFT 2026-05-20 — Pass-2 R2 closure (FORCE-RLS cleanup gap):**
 - **HIGH-3 closed** — Pass-2 R2 caught a second real PostgreSQL semantics defect: with `FORCE ROW LEVEL SECURITY` enabled and only a tenant-isolation policy defined (no `FOR` clause → applies to ALL commands including DELETE), a platform-scoped cleanup job running as `sec_jwt_cleanup` would have no `app.actor_tenant_id` GUC set and would either fail RLS entirely OR only clean the currently-selected tenant. The GRANT DELETE privilege + trigger predicate from R1 closure couldn't help because RLS filters rows BEFORE the trigger fires. Fix applied to BOTH §4.NEW1 and §4.NEW2: add a permissive `FOR DELETE TO sec_jwt_cleanup USING (expires_at < now() - INTERVAL '1 hour')` policy. PostgreSQL RLS composes permissive policies via OR, so the cleanup policy permits cross-tenant DELETE for `sec_jwt_cleanup` on expired rows without breaking the tenant-isolation rule for other roles. Defense-in-depth is now three-layer: privilege grant (REVOKE PUBLIC + GRANT sec_jwt_cleanup) + RLS DELETE policy (sec_jwt_cleanup + expired-only) + trigger predicate (current_user check + expires_at slack). Cleanup execution context explicitly documented: platform-wide background job, NOT per-tenant, runs as `sec_jwt_cleanup` with no `app.*` GUC tenant context.
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit pending push for Pass-2 R3 verification.
+**v0.5 DRAFT 2026-05-20 — Pass-2 R3 closure (write-path RLS + one-way lifecycle enforcement):**
+- **HIGH-4 closed** — Pass-2 R3 caught that §4.NEW3 `jwt_signing_key_public` and §4.NEW4 `break_glass_active_session` had FORCE RLS + SELECT-only policies. Required write paths (KMS rotation INSERT/UPDATE on NEW3; procedure-driven INSERT/UPDATE on NEW4) would fail under RLS or require undocumented BYPASSRLS escapes. Fix: explicit role-scoped FOR INSERT + FOR UPDATE RLS policies on both tables for the canonical write-path roles named in SI-024.1 (`kms_rotation_operator` for NEW3 per Sub-decision 4; `break_glass_procedure_owner` for NEW4 per Sub-decision 7). WITH CHECK clauses constrain inserts to active state (`deactivated_at IS NULL` / `closed_at IS NULL`) and updates to one-way close transition (`USING (... IS NULL) WITH CHECK (... IS NOT NULL)`). Defense-in-depth privilege DDL added.
+- **HIGH-5 closed** — Pass-2 R3 caught that `deactivated_at` (NEW3) and `closed_at` (NEW4) were documented as one-way lifecycle fields but the append-only triggers excluded those columns (correctly — they need to mutate once), and no separate trigger enforced the one-way constraint. Once UPDATE was granted (HIGH-4), an operator could reactivate retired keys (`deactivated_at` non-NULL → NULL) or reopen closed sessions (`closed_at` non-NULL → NULL) or shift the timestamp (non-NULL → different non-NULL). Fix: dedicated BEFORE UPDATE column-scoped triggers (`*_one_way_*()`) that reject non-NULL → NULL and non-NULL → different non-NULL transitions while permitting NULL → non-NULL. The RLS UPDATE policy WITH CHECK clause adds a second layer of enforcement (only sets to non-NULL permitted).
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit pending push for Pass-2 R4 verification.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.4 DRAFT (Pass-2 R2 closure applied: FORCE-RLS cleanup policy + three-layer defense-in-depth) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R3 verification queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.5 DRAFT (Pass-2 R3 closure applied: write-path RLS policies + one-way lifecycle-transition triggers on §4.NEW3 + §4.NEW4) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R4 verification queued.
