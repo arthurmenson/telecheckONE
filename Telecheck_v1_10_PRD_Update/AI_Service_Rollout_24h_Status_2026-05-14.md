@@ -4850,3 +4850,84 @@ The cycle is a worked example of how the established post-P-031 lessons-learned 
 Cumulative: **171 findings closed inline across 11 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP for OQ7); 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern + fresh-review-post-major-cycles pattern + derived-view-data-minimization pattern + hybrid-persistence-with-one-way-release pattern (new at P-037 R4) continue to scale.
 
 — Claude (Opus 4.7, 1M context), SI-020 Async-Consult v1.0 → v2.0 implementation-readiness extension cycle close-out 2026-05-21 via auto-proceed. Main at `2b91b92`. Registry v2.24. P-037 appended. **11th successive Q2 2026 auto-proceed ratification.** 3 of 5 pilot-required slices SI-ratified. Next deliverable per auto-proceed: P-038 SI-020 follow-on CDM/AUDIT/etc amendment cycle (SIXTH instance of SI-spec-first promotion pattern) OR Crisis Response slice SI OR Admin Backend basics SI.
+
+---
+
+## Addendum 66 — CDM v1.8 → v1.9 + AUDIT_EVENTS v5.10 → v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 → v0.4 + State Machines v1.2 → v1.3 + RBAC v1.2 → v1.3 (SI-020 Async-Consult follow-on amendment) RATIFIED via auto-proceed (Codex R10 ship-it APPROVE); Registry v2.24 → v2.25; SEVENTH instance of SI-spec-first promotion pattern; 3 of 5 pilot-required slices NOW FULLY RATIFIED; 12th successive Q2 2026 auto-proceed ratification
+
+**Timestamp:** 2026-05-21 (continuation; following Addendum 65 SI-020 RATIFIED 2026-05-21)
+**Branch:** `spec/cdm-v1-9-audit-v5-11-openapi-v0-4-sm-v1-3-rbac-v1-3-si020-followon-2026-05-21` off main at `3129579` post-P-037 + Addendum 65
+**Convergence:** R1=2H+1M, R2=1H, R3=2H+1M, R4=1H, R5=1H, R6=2H, R7=1H, R8=1M, R9=1M, R10=APPROVE = 11 HIGH + 4 MED = 15 findings closed inline across 10 rounds
+**Codex R10 verdict (2026-05-21):** `approve` — ship-it: §1.1, §3, §8, and §10 are consistent on 7 procedures, 6 procedure-owner roles, 5 wrapper owners, and 1 raw writer owner; the 13-role RBAC count also reconciles as 5 app + 6 wrapper/service owners + 2 view/MV owners. Stale R7/R9 strings remain only in historical/deprecation/commentary contexts, and no defensible hard-floor item 6 architectural-judgment regression.
+
+### Scope (what landed via this amendment cycle)
+
+| Surface | Bump | Content |
+|---|---|---|
+| CDM | v1.8 → v1.9 | 7 new active entities (consult + intake_submission + clinical_summary + review_claim [hybrid persistence with one-way release] + clinician_decision + lifecycle_transition + follow_up_message); 2 caller-class-split data-minimization views (async_consult_patient_summary_v with verify_session_jwt_and_extract_claims + consent_grant predicate; async_consult_staff_summary_v tenant-wide); 1 OPTIONAL materialized view; 7 SECURITY DEFINER procedures owned by 6 distinct owner roles |
+| AUDIT_EVENTS | v5.10 → v5.11 | +17 action IDs under `async_consult.*`: 4 Cat A + 3 Cat B + 10 Cat C |
+| DOMAIN_EVENTS | additive | +7 event types under `async_consult.*` namespace (no version bump) |
+| OpenAPI | v0.3 → v0.4 | +11 endpoints under `/v1/async-consults/*`; caller-class-routed handler dispatch on `/v1/async-consults/:consult_id` read (patient/delegate -> patient_summary_v; clinician/admin/pharmacy -> staff_summary_v) |
+| State Machines | v1.2 → v1.3 | +1 derived-from-append-only state machine `consult_lifecycle` (22 CHECK-enforced transition triples) |
+| RBAC | v1.2 → v1.3 | +13 roles: 5 application + 6 wrapper owners + 2 view/MV owners |
+| jwt_migration_entity_status | seed +9 | 7 RLS-bearing tables + 2 view trust-anchors; Phase B fail-closed-with-audit defaults |
+| Artifact Registry | v2.24 → v2.25 | Header bump + P-038 context prepended to Last-updated line |
+
+### Cycle highlights — convergence trajectory + closure-class breakdown
+
+**Round-by-round:**
+1. **R1 (2H+1M):** HIGH-1 decision validation trigger lookup by id only -> composite tenant identity 5-column lookup; HIGH-2 lifecycle continuity not table-level -> BEFORE INSERT trigger with per-consult advisory lock + state continuity validation; MED-1 RBAC count mismatch 8 vs preflight 12 -> recounted to 12.
+2. **R2 (1H):** Backdated/future-dated transition rows could corrupt current-state derivation -> trigger now reads latest transition_at + rejects backdated + rejects future-dated.
+3. **R3 (2H+1M):** Decision-validation race under READ COMMITTED -> same advisory lock + SELECT FOR UPDATE on claim row; equal transition_at corruption -> strict > monotonic ordering; clinician FK not tenant-scoped -> composite tenant-scoped FK.
+4. **R4 (1H):** Invariant-enforcing trigger functions lacked schema-qualified table references + locked search_path -> canonical P-034 R7 SECURITY DEFINER hardening applied.
+5. **R5 (1H):** Single tenant-wide consult_outcome_summary_view leaked OTHER patients metadata to patient-app callers -> split into two caller-class-specific view+role pairs.
+6. **R6 (2H — incl. dissolved hard-floor item 6):** R5 closure introduced NET-NEW current_jwt_verified_patient_id() SI-024.1 helper as a hard dependency — Codex flagged this as hard-floor item 6 architectural-judgment finding. **Dissolved (not escalated)** by adopting Codex own recommended Option B: replace helper assumption with explicit schema-backed joins to canonical admission + delegate-scope tables. Also fixed stale OpenAPI section 6 row 5 reference.
+7. **R7 (1H):** Section 9 cutover sequencing guidance still referenced the walked-back helper -> rewrote to enumerate actual v0.7+ dependency set + added stale-reference assertion + sweep.
+8. **R8 (1M):** Section 8 RBAC subsection-heading (4) contradicted 5+6+2=13 breakdown -> split previously-compressed slash row into 5 distinct wrapper-owner rows; renamed subsection (6); added explicit View/MV owner roles (2).
+9. **R9 (1M):** Section 3 raw record_consult_lifecycle_transition EXECUTE-grants prose said "5 reason-specific wrapper owners + override wrapper + claim wrapper" — internally inconsistent. Rewrote to canonical "7 procedures (1 raw + 6 wrapper) owned by 6 owner roles".
+10. **R10 — APPROVE.**
+
+**Hard-floor item 6 dissolution pattern (codification trigger):** at R5 I authored a closure that would have required a net-new SI-024.1 platform-floor helper. Codex correctly flagged this at R6 as hard-floor item 6 architectural-judgment finding. Rather than escalate to ratifier ceremony, I adopted Codex own recommended Option B closure — replacing the helper assumption with explicit schema-backed joins composed entirely from already-ratified canonical primitives. The closure REMOVED the architectural-judgment trigger condition rather than escalating it. CLAUDE.md hard-floor item 6 discipline observed: the R6 to R7 closure was NOT prose iteration extending unratified architecture; it was REMOVING the proposed unratified architecture and recomposing from ratified primitives only. This dissolution pattern complements P-033 R1 STOP-to-ratifier discipline (where the architectural-judgment item was OQ7 Option A vs B and could NOT be removed from the SI scope, so escalation was required). The discriminator: if the architectural-judgment trigger condition can be removed by adopting Codex own recommended in-scope closure path, DISSOLUTION is in-scope inline behavior; if removal is impossible because the architectural decision is intrinsic to the SI under review, ESCALATION is required.
+
+### Master Completion Plan v1.0 status update
+
+| Pilot-required slice | SI ratified | CDM follow-on landed | Phase |
+|---|---|---|---|
+| 1. Med-Interaction | P-033 (R7 APPROVE) | P-034 (R8 APPROVE) | **FULLY RATIFIED** |
+| 2. Async-Consult clinician decision loop | P-037 (R11 APPROVE) | **P-038 (R10 APPROVE; THIS ADDENDUM)** | **FULLY RATIFIED** |
+| 3. AI Service Mode 1 conversational scaffolding | P-035 (R8 APPROVE) | P-036 (R8 APPROVE) | **FULLY RATIFIED** |
+| 4. Crisis Response slice | not yet ratified | not yet ratified | next deliverable |
+| 5. Admin Backend basics | not yet ratified | not yet ratified | next deliverable |
+
+**3 of 5 pilot-required Ghana revenue anchor slices NOW FULLY RATIFIED** (SI + CDM both landed). Phase A foundation implementation in telecheck-app code repo is unblocked for the 3 fully-ratified slices procedure shapes, endpoint contracts, state machines, and RBAC roles.
+
+### Next deliverables (per auto-proceed continuation)
+
+Per Evans continue-nonstop directive + Master Completion Plan v1.0 pilot-viable scope:
+
+1. **Crisis Response slice SI** — pilot-viable scope item 4; I-019 crisis-detection already wired at foundation; this slice spec the response surface.
+2. **Admin Backend basics SI** — pilot-viable scope item 5; operator monitoring + manual template review.
+3. **Phase A foundation implementation** in telecheck-app code repo (Med-Interaction + Mode 1 + Async-Consult).
+
+### Discipline observation
+
+**Q2 2026 cycle pattern**, now with 12 ratifications under codified disciplines:
+
+| Ledger entry | Cycle | Findings | Rounds | Ship-it path | Hard-floor item 6 |
+|---|---|---|---|---|---|
+| P-026 | Q2 batched ratifier ceremony Phase A | 13 OQ-groups | n/a | Ratifier ceremony | 0 |
+| P-028 | SI-021 SIEM Hash-Chain Archival | 16 | 5 | Cadence boundary | 0 |
+| P-029 | SI-021 CDM v1.4 -> v1.5 follow-on | 13 | 8 | Multi-cycle pre-merge | 0 |
+| P-030 | SI-024 v0.17 TRANSITIONAL | 35 | 17 | Pass-2 B+ synthesis | 0 |
+| P-031 | SI-024.1 v0.8 Cryptographic JWT-Binding | 19 | 8 | Codex cycle-4 APPROVE | 0 |
+| P-032 | CDM v1.5 -> v1.6 SI-024.1 follow-on | 15 | 12 | Pass-2 R12 ship-it APPROVE | 0 |
+| P-033 | SI-019 Med-Interaction v1.0 -> v2.0 Option A | 11 | 7 | Codex R7 ship-it APPROVE | 1 CORRECT (R1 STOP for OQ7) |
+| P-034 | CDM v1.6 -> v1.7 + 4 surfaces SI-019 follow-on | 11 | 8 | Codex R8 ship-it APPROVE | 0 |
+| P-035 | AI Service Mode 1 Handler Spec v0.4 | 16 | 8 | Codex R8 ship-it APPROVE | 0 |
+| P-036 | CDM v1.7 -> v1.8 + 4 surfaces Mode 1 follow-on | 11 | 8 | Codex R8 ship-it APPROVE | 0 |
+| P-037 | SI-020 Async-Consult v1.0 -> v2.0 | 11 | 11 | Codex R11 ship-it APPROVE | 0 |
+| **P-038** | **CDM v1.8 -> v1.9 + 4 surfaces SI-020 follow-on** | **15** | **10** | **Codex R10 ship-it APPROVE** | **1 DISSOLVED (R6 -> R7 closure path removed trigger condition)** |
+
+Cumulative: **186 findings closed inline across 12 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP-to-ratifier); 1 DISSOLVED hard-floor item 6 invocation (P-038 R6 -> R7 closure removed trigger condition); 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern + fresh-review-post-major-cycles pattern + derived-view-data-minimization pattern + hybrid-persistence-with-one-way-release pattern + **NEW: hard-floor-item-6-dissolution-via-Codex-recommended-Option-B pattern (P-038 R6 -> R7)** continue to scale.
+
+— Claude (Opus 4.7, 1M context), CDM v1.8 -> v1.9 + AUDIT_EVENTS v5.10 -> v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 -> v0.4 + State Machines v1.2 -> v1.3 + RBAC v1.2 -> v1.3 (SI-020 follow-on amendment) cycle close-out 2026-05-21 via auto-proceed. Registry v2.25. P-038 appended. **12th successive Q2 2026 auto-proceed ratification.** 3 of 5 pilot-required Ghana revenue anchor slices FULLY RATIFIED (SI + CDM both landed). Next deliverable per auto-proceed continuation: Crisis Response slice SI OR Admin Backend basics SI.
