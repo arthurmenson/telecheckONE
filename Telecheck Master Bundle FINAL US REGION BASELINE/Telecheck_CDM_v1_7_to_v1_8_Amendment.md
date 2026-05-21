@@ -1,7 +1,7 @@
 # CDM v1.7 → v1.8 + AUDIT_EVENTS v5.9 → v5.10 + DOMAIN_EVENTS additive + CCR_RUNTIME v5.3 → v5.4 Amendment (Mode 1 Handler Spec follow-on)
 
-**Version:** 0.2 DRAFT
-**Status:** POST-R1 (2 HIGH + 2 MED closed inline: HIGH-1 single-column FKs to tenant-scoped parents enabled cross-tenant referential corruption → composite tenant-scoped FKs on turn_admission + detector_result + turn_result with required composite UNIQUE constraints on parents; HIGH-2 crisis_server_signal_id had no FK to i019_enqueue_ack_log → added tenant-scoped composite FK (DEFERRABLE INITIALLY DEFERRED for ordering); MED-1 audit event taxonomy inconsistent (3+0+6 in scope text vs 3+1+5 in §3 table; sampling posture inconsistent across Cat C) → normalized to 11 total events (3 Cat A + 3 Cat B + 5 Cat C) with explicit sampling column for every Cat C; MED-2 CCR `tenant.ai_provider` referenced placeholder audit action → registered real Cat B `ccr.ai_provider_updated` event + updated CHECK constraint + CCR schema field)
+**Version:** 0.3 DRAFT
+**Status:** POST-R2 (2 HIGH closed inline: HIGH-1 patient FK references `patient(id)` instead of tenant-scoped `patient(tenant_id, id)` → same cross-tenant referential corruption class as R1 closure on conversation FK; fix: composite tenant-scoped patient FKs on conversation + turn_admission + turn_result. HIGH-2 turn_result.patient_id could diverge from admission/conversation's patient_id since FKs only covered (tenant_id, turn_id) not patient_id; fix: added composite UNIQUE (tenant_id, id, patient_id) on conversation + admission; composite FKs from admission `(tenant_id, conversation_id, patient_id)` to conversation + from result `(tenant_id, turn_id, patient_id)` to admission + `(tenant_id, conversation_id, patient_id)` to conversation; enforces patient identity propagation from conversation through admission through result. Previously POST-R1 (2 HIGH + 2 MED closed inline: HIGH-1 single-column FKs to tenant-scoped parents enabled cross-tenant referential corruption → composite tenant-scoped FKs on turn_admission + detector_result + turn_result with required composite UNIQUE constraints on parents; HIGH-2 crisis_server_signal_id had no FK to i019_enqueue_ack_log → added tenant-scoped composite FK (DEFERRABLE INITIALLY DEFERRED for ordering); MED-1 audit event taxonomy inconsistent (3+0+6 in scope text vs 3+1+5 in §3 table; sampling posture inconsistent across Cat C) → normalized to 11 total events (3 Cat A + 3 Cat B + 5 Cat C) with explicit sampling column for every Cat C; MED-2 CCR `tenant.ai_provider` referenced placeholder audit action → registered real Cat B `ccr.ai_provider_updated` event + updated CHECK constraint + CCR schema field)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-035 (AI Service Mode 1 Handler Spec v0.4 RATIFIED; Registry v2.21 → v2.22). Per the established post-P-029 spec-first promotion pattern, Mode 1's canonical content lands in CDM + AUDIT_EVENTS + DOMAIN_EVENTS + CCR_RUNTIME via a separate amendment cycle following SI ratification. **FIFTH instance** of the SI-spec-first promotion pattern (precedents: P-029 SI-021 → CDM v1.4→v1.5; P-032 SI-024.1 → CDM v1.5→v1.6; P-034 SI-019 → CDM v1.6→v1.7 + 4 surfaces; P-035 Mode 1 spec ratification → P-036 mechanical consolidation).
 **Owner:** AI Service Lead + Clinical Lead (Mode 1 SI co-owners) + CDM owner + AUDIT_EVENTS owner + DOMAIN_EVENTS owner + CCR_RUNTIME owner.
@@ -52,10 +52,20 @@ Conversation envelope; 1 row per conversation; durable identity; immutable post-
 CREATE TABLE ai_mode1_conversation (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id tenant_id_t NOT NULL,
-    patient_id UUID NOT NULL REFERENCES patient(id),
+    patient_id UUID NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ai_mode1_conversation_tenant_check CHECK (tenant_id IS NOT NULL),
-    CONSTRAINT ai_mode1_conversation_tenant_id_unique UNIQUE (tenant_id, id)
+    -- R2 HIGH-1 closure 2026-05-21: composite tenant-scoped patient FK (assumes canonical
+    -- patient(tenant_id, id) UNIQUE constraint; if patient table doesn't yet have it,
+    -- the implementation amendment adds it as a baseline prerequisite per the canonical
+    -- tenant-isolation discipline).
+    CONSTRAINT ai_mode1_conversation_patient_tenant_fk
+        FOREIGN KEY (tenant_id, patient_id)
+        REFERENCES patient(tenant_id, id),
+    CONSTRAINT ai_mode1_conversation_tenant_id_unique UNIQUE (tenant_id, id),
+    -- R2 HIGH-2 closure 2026-05-21: composite UNIQUE including patient_id enables downstream
+    -- composite FKs from turn_admission + turn_result to enforce patient identity propagation.
+    CONSTRAINT ai_mode1_conversation_tenant_id_patient_unique UNIQUE (tenant_id, id, patient_id)
 );
 
 ALTER TABLE ai_mode1_conversation ENABLE ROW LEVEL SECURITY;
@@ -112,7 +122,7 @@ CREATE TABLE ai_mode1_conversation_turn_admission (
     id UUID PRIMARY KEY,                                      -- = turn_id (client-generated UUID; idempotency key)
     tenant_id tenant_id_t NOT NULL,
     conversation_id UUID NOT NULL,
-    patient_id UUID NOT NULL REFERENCES patient(id),
+    patient_id UUID NOT NULL,
     user_message TEXT NOT NULL,                               -- KMS-encrypted at rest per I-026
     request_body_hash BYTEA NOT NULL,                         -- SHA-256 of canonicalized request body
     history_snapshot_high_water_mark TIMESTAMPTZ NOT NULL,
@@ -120,13 +130,22 @@ CREATE TABLE ai_mode1_conversation_turn_admission (
     client_capabilities JSONB,
     admitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- R1 HIGH-1 closure 2026-05-21: composite tenant-scoped FK enforces tenant_id matches
-    -- conversation's tenant_id (preventing cross-tenant referential corruption).
-    CONSTRAINT ai_mode1_conversation_turn_admission_tenant_fk
-        FOREIGN KEY (tenant_id, conversation_id)
-        REFERENCES ai_mode1_conversation(tenant_id, id),
+    -- conversation's tenant_id.
+    -- R2 HIGH-2 closure 2026-05-21: composite (tenant_id, conversation_id, patient_id) FK to
+    -- conversation enforces patient_id propagates correctly from conversation row (preventing
+    -- admission row claiming a different patient than the conversation it belongs to).
+    CONSTRAINT ai_mode1_conversation_turn_admission_conversation_patient_fk
+        FOREIGN KEY (tenant_id, conversation_id, patient_id)
+        REFERENCES ai_mode1_conversation(tenant_id, id, patient_id),
+    -- R2 HIGH-1 closure 2026-05-21: composite tenant-scoped patient FK
+    CONSTRAINT ai_mode1_conversation_turn_admission_patient_tenant_fk
+        FOREIGN KEY (tenant_id, patient_id)
+        REFERENCES patient(tenant_id, id),
     CONSTRAINT ai_mode1_conversation_turn_admission_unique UNIQUE (tenant_id, conversation_id, id),
-    -- Composite UNIQUE on (tenant_id, id) needed for downstream composite FKs from detector/result
-    CONSTRAINT ai_mode1_conversation_turn_admission_tenant_id_unique UNIQUE (tenant_id, id)
+    -- Composite UNIQUE on (tenant_id, id) needed for downstream composite FKs from detector
+    CONSTRAINT ai_mode1_conversation_turn_admission_tenant_id_unique UNIQUE (tenant_id, id),
+    -- Composite UNIQUE including patient_id enables downstream turn_result composite FK
+    CONSTRAINT ai_mode1_conversation_turn_admission_tenant_id_patient_unique UNIQUE (tenant_id, id, patient_id)
 );
 CREATE INDEX ai_mode1_conversation_turn_admission_lookup_idx
     ON ai_mode1_conversation_turn_admission(tenant_id, conversation_id, admitted_at DESC);
@@ -198,14 +217,22 @@ CREATE TABLE ai_mode1_conversation_turn_result (
     turn_id UUID PRIMARY KEY,
     tenant_id tenant_id_t NOT NULL,
     conversation_id UUID NOT NULL,
-    patient_id UUID NOT NULL REFERENCES patient(id),
-    -- R1 HIGH-1 closure 2026-05-21: composite tenant-scoped FKs to admission + conversation
-    CONSTRAINT ai_mode1_conversation_turn_result_admission_fk
-        FOREIGN KEY (tenant_id, turn_id)
-        REFERENCES ai_mode1_conversation_turn_admission(tenant_id, id),
-    CONSTRAINT ai_mode1_conversation_turn_result_conversation_fk
-        FOREIGN KEY (tenant_id, conversation_id)
-        REFERENCES ai_mode1_conversation(tenant_id, id),
+    patient_id UUID NOT NULL,
+    -- R1 HIGH-1 closure 2026-05-21: composite tenant-scoped FK to conversation;
+    -- R2 HIGH-2 closure 2026-05-21: composite tenant+patient FK to admission enforces
+    -- turn_result.patient_id matches admission.patient_id (preventing result row claiming a
+    -- different patient than the admitted turn). Composite tenant+conversation+patient FK to
+    -- conversation enforces same patient_id propagation from conversation level.
+    CONSTRAINT ai_mode1_conversation_turn_result_admission_patient_fk
+        FOREIGN KEY (tenant_id, turn_id, patient_id)
+        REFERENCES ai_mode1_conversation_turn_admission(tenant_id, id, patient_id),
+    CONSTRAINT ai_mode1_conversation_turn_result_conversation_patient_fk
+        FOREIGN KEY (tenant_id, conversation_id, patient_id)
+        REFERENCES ai_mode1_conversation(tenant_id, id, patient_id),
+    -- R2 HIGH-1 closure 2026-05-21: composite tenant-scoped patient FK
+    CONSTRAINT ai_mode1_conversation_turn_result_patient_tenant_fk
+        FOREIGN KEY (tenant_id, patient_id)
+        REFERENCES patient(tenant_id, id),
     assistant_message TEXT,                                   -- KMS-encrypted at rest per I-026; null IFF turn_outcome='failed'
     provider TEXT,                                            -- null IFF turn failed pre-LLM
     model_id TEXT,
@@ -457,7 +484,11 @@ VALUES
 - **R1 MED-1 closed:** Audit event count/category contract inconsistent across §1 + §3. Scope text said "9 + 1 = 10" with "3 Cat A + 0 Cat B + 6 Cat C"; §3 table actually had 9 `ai.mode1.*` events including 1 Cat B (`mode2_handoff_proposed`) + 1 `audit.*` Cat B = 10 total with 3 Cat A + 2 Cat B + 5 Cat C. Sampling posture ambiguous (5 of 6 Cat C marked sampled in §3.1 spec but uniformly listed without distinction in §3 table). Fix: normalized to **11 new action IDs total** (added `ccr.ai_provider_updated` per MED-2; now 3 Cat A + 3 Cat B + 5 Cat C) with explicit per-event Sampling column (4 Cat C high-volume sampled + 1 Cat C not-sampled-low-volume-per-failure + all Cat A/Cat B not-sampled); aligned §1 scope text + §3 tables + CHECK constraint enumeration.
 - **R1 MED-2 closed:** §5 `tenant.ai_provider` CCR key referenced `medication_interaction.engine_knowledge_base_updated` as `update_audit_action` — explicit placeholder defeats governance/audit classification for high-risk PHI-provider configuration changes. Fix: registered real `ccr.ai_provider_updated` Cat B P2 audit event in §3 (11th new action ID); added to CHECK constraint; updated §5 CCR schema field to point to the new canonical action.
 
-Authored on `spec/cdm-v1-8-audit-v5-10-ccr-v5-4-mode-1-followon-2026-05-21` branch off main at `9a1fcd2` (post-P-035 + Addendum 63). v0.2 commit pending push for R2 verification.
+Authored on `spec/cdm-v1-8-audit-v5-10-ccr-v5-4-mode-1-followon-2026-05-21` branch off main at `9a1fcd2` (post-P-035 + Addendum 63). v0.2 commit `cba5266`. v0.3 commit pending push for R3 verification.
+
+**v0.3 DRAFT 2026-05-21 — R2 closures applied (2 HIGH):**
+- **R2 HIGH-1 closed:** Patient FK references were `patient(id)` not `patient(tenant_id, id)` on `ai_mode1_conversation`, `ai_mode1_conversation_turn_admission`, `ai_mode1_conversation_turn_result` — same cross-tenant referential corruption class as the R1 conversation-FK closure but on the clinical identity anchor. Fix: added composite tenant-scoped patient FK `FOREIGN KEY (tenant_id, patient_id) REFERENCES patient(tenant_id, id)` on all 3 tables that carry patient_id; assumes canonical `patient(tenant_id, id)` UNIQUE constraint exists (if not, baseline DDL prerequisite for the implementation amendment).
+- **R2 HIGH-2 closed:** `ai_mode1_conversation_turn_result.patient_id` could diverge from `ai_mode1_conversation_turn_admission.patient_id` or `ai_mode1_conversation.patient_id` since the existing tenant-scoped FKs only covered `(tenant_id, turn_id)` + `(tenant_id, conversation_id)` — patient_id was independently mutable per row, corrupting the P1 audit/history surface (terminal row could claim different patient than the admitted turn / parent conversation). Fix: added composite UNIQUE `(tenant_id, id, patient_id)` on both `ai_mode1_conversation` + `ai_mode1_conversation_turn_admission` + composite FK `(tenant_id, conversation_id, patient_id) → conversation(tenant_id, id, patient_id)` on admission + composite FKs `(tenant_id, turn_id, patient_id) → admission(tenant_id, id, patient_id)` + `(tenant_id, conversation_id, patient_id) → conversation(tenant_id, id, patient_id)` on result. Patient identity now propagates correctly through conversation → admission → result; mismatches are rejected at FK-constraint-evaluation time.
 
 ---
 
