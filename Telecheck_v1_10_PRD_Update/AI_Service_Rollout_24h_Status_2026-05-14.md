@@ -4545,3 +4545,102 @@ The cycle worked progressively through the defect classes that the SI-024.1 v0.8
 Cumulative: **133 findings closed inline across 8 cycles; 1 CORRECT hard-floor item 6 invocation; 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern continue to scale. P-034's worked example demonstrates the SI-024.1 JWT-binding canonical pattern's necessity across multiple trust-axes (actor identity + tenant identity + trust-anchor coherence + fail-closed enforcement + PHI protection).
 
 — Claude (Opus 4.7, 1M context), CDM v1.7 + AUDIT v5.9 + OpenAPI v0.3 + SM v1.2 + RBAC v1.2 SI-019 follow-on cycle close-out 2026-05-21 via auto-proceed. Main at `41ff4d0`. Registry v2.21. P-034 appended. 8th successive Q2 2026 auto-proceed ratification. Phase B fan-out trajectory continuing per Master Completion Plan v1.0. Next deliverable per auto-proceed: SI-019 Phase A foundation implementation in `telecheck-app` code repo OR next critical-path SI (Async-Consult clinician-decision loop completion, AI Service Mode 1, Crisis Response, Admin Backend basics).
+
+---
+
+## Addendum 63 — AI Service Mode 1 Handler Spec v0.4 RATIFIED via fresh-review-post-major-cycles alignment (Codex R8 ship-it APPROVE); merge `7b2e3ec`; Registry v2.21 → v2.22; FIRST instance of 'fresh-review-post-major-cycles' pattern; 3 of 5 pilot-required slices ratified; 9th successive Q2 2026 auto-proceed ratification
+
+**Date:** 2026-05-21
+**Status:** LANDED + RATIFIED
+**Main HEAD:** `2a3d799` (cockpit) / `7b2e3ec` (spec merge)
+**Cycle counter:** 9th successive SI/amendment ratification in Q2 2026 under codified disciplines (P-026 → P-028 → P-029 → P-030 → P-031 → P-032 → P-033 → P-034 → P-035)
+
+### What landed
+
+`Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_AI_Service_Mode_1_Handler_Spec_v0_1.md` (~691 lines after R5-R7 closures; promoted from `Telecheck_v1_10_PRD_Update/AI-Service-Mode-1-Handler-Spec-v0-1-DRAFT.md` via `git mv`) — canonical HTTP handler contract for the conversational-assistant AI workload class per ADR-002 + ADR-029 WORKLOAD_TAXONOMY.
+
+### FIRST instance of 'fresh-review-post-major-cycles' pattern
+
+This cycle documents a new operational pattern. The Mode 1 spec was authored 2026-05-19 as Sprint 9 of the autonomous 24h-loop work plan + reached RATIFIER-READY-WITH-KNOWN-OQs at R4 close. It then sat for ~2 days through 4 major canonical landings:
+
+| Landing | Date | Impact on Mode 1 spec |
+|---|---|---|
+| P-031 SI-024.1 v0.8 Cryptographic JWT-Binding | 2026-05-20 | Introduced canonical JWT-verified-claims trust anchor; SUPERSEDED raw-GUC tenant binding inside SECURITY DEFINER bodies |
+| P-032 CDM v1.6 follow-on | 2026-05-20 | session_jwt_admission + jwt_migration_entity_status entities; new seed-scope discipline |
+| P-033 SI-019 Med-Interaction Option A | 2026-05-21 | Append-only-only lifecycle pattern; OQ7 architectural-judgment ratification example |
+| P-034 CDM v1.7 follow-on | 2026-05-21 | Cleanest worked example of SI-024.1 JWT-binding pattern across multiple trust-axes |
+
+When promoted to canonical bundle path for ratification 2026-05-21, **fresh Codex review surfaced staleness** against the post-P-034 baseline: SI-017 raw-GUC tenant binding (R5 HIGH-1), missing entity-name RLS policies + seed scope (R5 HIGH-2), Contracts Pack version skew (R5 MED-1), OQ scope text stale (R6 MED-1), derived view RLS-inheritance assumption (R7 HIGH-1).
+
+**Lesson learned:** specs sitting at RATIFIER-READY through major canonical landings MUST undergo fresh review at promotion. Authoring-time + Sprint-9 closure status do NOT carry forward across canonical-baseline changes. This pattern is now operational discipline — future specs in similar position should expect a fresh-review pass.
+
+### Convergence trajectory (8 rounds total)
+
+| Round | HIGH | MED | Class of defect closed | Cycle phase |
+|---|---|---|---|---|
+| R1 | 3 | 3 | Detector-LLM ordering + ACK durability + Mode 1/2 boundary + history-window replay + test coverage | Sprint 9 (2026-05-19) |
+| R2 | 2 | 2 | §12 cross-SI stale claim + multi-state vs append-only + missing schema column | Sprint 9 |
+| R3 | 1 | 0 | last_turn_at mutable field | Sprint 9 |
+| R4 | 1 | 1 | I-027 append-only DDL + archival event tenant integrity FK | Sprint 9 |
+| **R5** | **2** | **1** | **SI-017 raw-GUC → SI-024.1 JWT-binding; missing RLS DDL + seed scope; Contracts Pack v5.3 + AUDIT v5.9** | **Fresh-review post-P-034 (2026-05-21)** |
+| **R6** | **0** | **1** | **§10 OQ scope text stale → 5 entities + post-P-034 baseline** | **Fresh-review post-P-034** |
+| **R7** | **1** | **0** | **Derived view bare CREATE VIEW → security_invoker + non-BYPASSRLS owner-role + deployment-prerequisite** | **Fresh-review post-P-034** |
+| **R8** | **0** | **0** | **ship-it APPROVE — "no material findings"** | **Fresh-review post-P-034** |
+
+**Total:** 10 HIGH + 6 MED closed inline across 7 closure rounds. Zero hard-floor item 6 escalations.
+
+### Architectural shape of R5-R7
+
+R5-R7 applied the same SI-024.1 JWT-binding canonical pattern that was the cleanest worked example at P-034 to the Mode 1 spec:
+
+- **R5 HIGH-1:** Tenant identity in SECURITY DEFINER bodies — replaced raw `app.tenant_id` GUC with `verify_session_jwt_and_extract_claims().tenant_id`.
+- **R5 HIGH-2:** New RLS-bearing entities — added concrete `current_tenant_id_strict('<entity_name>')` policies + `jwt_migration_entity_status` seed-scope requirement.
+- **R7 HIGH-1:** Derived view — added `WITH (security_invoker = true)` + non-BYPASSRLS owner-role discipline (analogous to P-034 R5 MV-access closure).
+
+Three rounds, three distinct trust-axes (tenant identity at SECURITY DEFINER layer; new RLS entity coherence; derived view inheritance assumption), same canonical pattern applied each time.
+
+### Companion landings
+
+- `Telecheck_Promotion_Ledger.md` — entry P-035 appended at top (commit `2a3d799`)
+- `Telecheck_Artifact_Registry_v2_10.md` — header bumped v2.21 → v2.22 (commit `2a3d799`)
+- Canonical version states post-merge: AI Service Mode 1 Handler Spec **v0.4** (NEW); Registry **v2.22**; all other versions unchanged (Master PRD v1.10 · CDM v1.7 · AUDIT_EVENTS v5.9 · OpenAPI v0.3 · State Machines v1.2 · RBAC v1.2 · Contracts Pack v5.3)
+
+### Production gates explicit
+
+| Gate | Status post-P-035 merge |
+|---|---|
+| AI Service Mode 1 Handler Spec canonical in named bundle | **LANDED** |
+| Mode 1 implementation in `telecheck-app` code repo | **UNBLOCKED** per "spec ratification leads implementation by ≥1 sprint" rule; existing guardrails + NullLLMProvider + crisis gate are in place; needs HTTP handler + FLOOR-020 audit emission |
+| Mode 1 CDM follow-on amendment (CDM v1.7 → v1.8 + AUDIT_EVENTS v5.9 → v5.10 + DOMAIN_EVENTS additive + CCR_RUNTIME v5.3 → v5.4) | Queued per established post-P-029 SI-spec-first promotion pattern; FIFTH instance of the pattern after P-029, P-032, P-034 |
+| Master Completion Plan v1.0 Track 2 (AI Service Mode 1) | Ratified at P-035 |
+| Master Completion Plan v1.0 pilot-viable scope progression | **3 of 5 critical-path slices ratified** (Med-Interaction at P-033+P-034; AI Service Mode 1 at P-035) |
+
+**Rollback path:** `git revert -m 1 7b2e3ec` reverts spec merge; `git revert 2a3d799` reverts cockpit. Would require new P-035a ledger entry + Registry v2.22 → v2.23 bump per lockstep rule.
+
+### Outstanding queue (post-P-035)
+
+1. **Mode 1 CDM follow-on amendment cycle** — land 5 new Mode 1 CDM entities + 1 derived view + RLS policies + jwt_migration_entity_status seed + 6 new audit events + 5 new domain events + CCR_RUNTIME ai_provider key (if not registered) into canonical bundle file sections per established post-P-029 SI-spec-first promotion pattern.
+2. **Async-Consult clinician-decision loop completion SI** — Track 1 Phase B fan-out item depending on SI-005 ratification (P-021).
+3. **Crisis Response slice SI** — Master Completion Plan pilot-viable scope item 4.
+4. **Admin Backend basics SI** — Master Completion Plan pilot-viable scope item 5.
+5. **Mode 1 + SI-019 Phase A foundation implementation** in `telecheck-app` code repo.
+
+### Discipline observation
+
+**Q2 2026 cycle pattern**, now with 9 ratifications under codified disciplines:
+
+| Ledger entry | Cycle | Findings | Rounds | Ship-it path | Hard-floor item 6 |
+|---|---|---|---|---|---|
+| P-026 | Q2 batched ratifier ceremony Phase A | 13 OQ-groups | n/a | Ratifier ceremony | 0 |
+| P-028 | SI-021 SIEM Hash-Chain Archival | 16 | 5 | §10 cadence boundary | 0 |
+| P-029 | SI-021 CDM v1.4 → v1.5 follow-on | 13 | 8 | Multi-cycle pre-merge | 0 |
+| P-030 | SI-024 v0.17 TRANSITIONAL | 35 | 17 | Pass-2 B+ synthesis | 0 |
+| P-031 | SI-024.1 v0.8 Cryptographic JWT-Binding | 19 | 8 | Codex cycle-4 APPROVE | 0 |
+| P-032 | CDM v1.5 → v1.6 SI-024.1 follow-on | 15 | 12 | Pass-2 R12 ship-it APPROVE | 0 |
+| P-033 | SI-019 Med-Interaction v1.0 → v2.0 Option A | 11 | 7 | Codex R7 ship-it APPROVE | 1 CORRECT INVOCATION (R1 STOP for OQ7) |
+| P-034 | CDM v1.6 → v1.7 + 4 surfaces SI-019 follow-on | 11 | 8 | Codex R8 ship-it APPROVE | 0 |
+| **P-035** | **AI Service Mode 1 Handler Spec v0.4** | **16** | **8** | **Codex R8 ship-it APPROVE** | **0** |
+
+Cumulative: **149 findings closed inline across 9 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP for OQ7); 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern + the new fresh-review-post-major-cycles pattern continue to scale.
+
+— Claude (Opus 4.7, 1M context), AI Service Mode 1 Handler Spec v0.4 ratification cycle close-out 2026-05-21 via auto-proceed. Main at `2a3d799`. Registry v2.22. P-035 appended. 9th successive Q2 2026 auto-proceed ratification. 3 of 5 pilot-required slices ratified. Next deliverable per auto-proceed: Mode 1 CDM follow-on amendment cycle (FIFTH instance of SI-spec-first promotion pattern) OR Async-Consult clinician-decision loop completion SI OR Crisis Response slice SI OR Admin Backend basics SI OR code-repo Phase A foundation implementation.
