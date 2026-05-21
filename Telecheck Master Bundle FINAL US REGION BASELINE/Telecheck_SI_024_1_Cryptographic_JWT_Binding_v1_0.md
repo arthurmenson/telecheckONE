@@ -1,7 +1,7 @@
 # SI-024.1 — Cryptographic JWT-Binding for Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.6 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycle-1 closures applied
-**Status:** Pre-merge Pass-1 closed inline (2 HIGH + 1 MED): Phase A DDL ordered with explicit prerequisites + guarded ALTERs (closes HIGH-1 deployability gap); current_tenant_id_strict signature extended with p_entity_name TEXT parameter + jwt_migration_entity_status table + enforceable per-entity fallback gate body (closes HIGH-2 unenforceable contract); verify_session_jwt_and_extract_claims now compares all security-relevant admitted claims against parsed claims (closes MED claim-mismatch detection). 14 findings closed cumulative. Pass-2 contrast-and-synthesize queued.
+**Version:** 1.0 v0.7 DRAFT — RATIFIER-READY at §10-cadence boundary + pre-merge cycles 1+2 closures applied
+**Status:** Pre-merge Pass-2 closed inline (2 HIGH + 1 MED): zero-arg `current_tenant_id_strict()` transitional wrapper preserves SI-024 v0.17 contract during Phase B coexistence (closes HIGH-1 PG-overload-not-replacement breakage); jwt_migration_entity_status initial seed step + CDM-owner maintenance authority documented + OQ8/9 ratifier questions added (closes HIGH-2 missing seed); fallback-audit moved out of STABLE helper into VOLATILE `emit_raw_guc_fallback_audit()` function (closes MED STABLE-side-effect-INSERT bug — repeat of R1 CRITICAL pattern). 17 findings closed cumulative. Pre-merge cycle-3 verification queued.
 **Authoring date:** 2026-05-20
 **Trigger:** SI-024 v0.17 TRANSITIONAL ratification at Promotion Ledger P-030 (committed via auto-proceed merge `3fcbef8` on main). SI-024.1 closes the cryptographic-binding gap deferred from SI-024 v1.0 — specifically the compromised-middleware-credential threat class that the role-constrained-GUC pattern explicitly does NOT close. Per OQ-NEW1/2 commitments at P-030: SI-024.1 v0.1 DRAFT target 2026-06-19 (30 days from P-030); ratifier ceremony target 2026-08-18 (90 days from P-030). SI-024.1 IS the gate that lifts the "production target-tenant break-glass BLOCKED" + "Phase 4 cutover BLOCKED" + "INVARIANTS I-036 BLOCKED" constraints carried in SI-024 v1.0 TRANSITIONAL.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024).
@@ -693,9 +693,11 @@ This closes SI-024 v0.17 simplification #9 — no longer requires out-of-band tr
   -- All break_glass_* entities + Phase-4-bound PHI entities default-locked to JWT-only.
   ```
 
-  **Helper body shape (closes the enforcement gap):**
+  **Helper body shape (pre-merge Pass-2 closures 2026-05-20: zero-arg transitional wrapper preserves v0.17 contract; STABLE helper is side-effect-free; fallback audit moved to admission/wrapper path):**
 
   ```sql
+  -- Parameterized helper: STABLE + read-only. Per-entity fallback gate via jwt_migration_entity_status lookup
+  -- (READ ONLY; no audit INSERT — that would violate STABLE per the same constraint that SPLIT the JWT verifier).
   CREATE FUNCTION current_tenant_id_strict(p_entity_name TEXT) RETURNS tenant_id_t AS $$
   DECLARE
       claims verified_jwt_claims_t;
@@ -709,27 +711,56 @@ This closes SI-024 v0.17 simplification #9 — no longer requires out-of-band tr
           RETURN claims.tenant_id;
       END IF;
       -- No JWT: check whether this entity permits raw-GUC fallback.
-      SELECT phase_4_cutover_eligible, production_break_glass_surface, raw_guc_fallback_audited
+      SELECT phase_4_cutover_eligible, production_break_glass_surface
         INTO entity_status
         FROM public.jwt_migration_entity_status
         WHERE entity_name = p_entity_name;
       IF NOT FOUND OR entity_status.phase_4_cutover_eligible = TRUE
          OR entity_status.production_break_glass_surface = TRUE THEN
-          -- No fallback permitted: entity is Phase-4-bound OR in production-break-glass surface OR unknown.
-          RAISE EXCEPTION 'current_tenant_id_strict(%) requires JWT; raw-GUC fallback denied (entity is Phase-4-bound or production-break-glass surface or unknown)',
+          RAISE EXCEPTION 'current_tenant_id_strict(%) requires JWT; raw-GUC fallback denied (entity Phase-4-bound, production-break-glass, or unknown)',
               p_entity_name
               USING ERRCODE = 'insufficient_privilege';
       END IF;
-      -- Fallback permitted: emit audit + return raw-GUC tenant_id.
-      IF entity_status.raw_guc_fallback_audited THEN
-          INSERT INTO public.audit_events (action_id, partition, partition_key, event_metadata, occurred_at)
-          VALUES ('tenant_context.raw_guc_fallback_used', 'P2', 'platform',
-                  jsonb_build_object('entity_name', p_entity_name, 'caller_role', current_user), now());
-      END IF;
+      -- Fallback permitted; audit emission deferred to VOLATILE wrapper or admission-path tracking (Pass-2 MED closure).
       RETURN current_setting('app.tenant_id', false)::tenant_id_t;
   END;
   $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
+
+  -- Zero-arg transitional wrapper: preserves SI-024 v0.17 contract during Phase B coexistence.
+  -- Pre-merge Pass-2 HIGH-1 closure 2026-05-20: PostgreSQL treats current_tenant_id_strict() and
+  -- current_tenant_id_strict(TEXT) as DIFFERENT overloads — they don't replace each other. Existing v0.17
+  -- policies call the zero-arg form; without this wrapper, they would break at Phase A deploy.
+  -- The wrapper hardcodes a sentinel entity_name = '_legacy_v017_caller_'; jwt_migration_entity_status MUST
+  -- contain a seed row for that sentinel with phase_4_cutover_eligible = FALSE during Phase A-B,
+  -- flipped to TRUE only when all v0.17 policies have been migrated to the parameterized form.
+  CREATE OR REPLACE FUNCTION current_tenant_id_strict() RETURNS tenant_id_t AS $$
+  BEGIN
+      RETURN current_tenant_id_strict('_legacy_v017_caller_');
+  END;
+  $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
+
+  -- VOLATILE fallback-audit emitter: called by middleware OR by per-statement triggers.
+  -- Pre-merge Pass-2 MED closure 2026-05-20: moved out of the STABLE helper. Middleware that issues
+  -- a query in Phase B coexistence path SHOULD call this function explicitly at request-start if
+  -- raw-GUC fallback is expected (i.e., app.session_jwt is unset). Alternative: a statement-level
+  -- audit trigger on entities permitting fallback (deferred to Phase A implementation detail).
+  CREATE FUNCTION emit_raw_guc_fallback_audit(p_entity_name TEXT) RETURNS VOID AS $$
+  BEGIN
+      INSERT INTO public.audit_events (action_id, partition, partition_key, event_metadata, occurred_at)
+      VALUES ('tenant_context.raw_guc_fallback_used', 'P2', 'platform',
+              jsonb_build_object('entity_name', p_entity_name, 'caller_role', current_user),
+              now());
+  END;
+  $$ LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public;
   ```
+
+  **Initial seed (pre-merge Pass-2 HIGH-2 closure 2026-05-20):** Phase A migration MUST include a seed step populating `jwt_migration_entity_status` from the canonical RLS-entity inventory in CDM v1.5 (and CDM v1.4 inherited entities). Each existing v0.17 entity gets a seed row with:
+  - `entity_name` = the canonical entity name
+  - `phase_4_cutover_eligible = FALSE` (default during Phase B; permits fallback)
+  - `production_break_glass_surface = FALSE` (default; entities explicitly in break-glass surface flipped to TRUE)
+  - `_legacy_v017_caller_` sentinel row with `phase_4_cutover_eligible = FALSE` (allows the zero-arg transitional wrapper to function during Phase B)
+
+  **Ownership + maintenance authority (per pre-merge Pass-2 HIGH-2 OQ):** the table is maintained by the CDM owner. New entities added to CDM amendments MUST include a `jwt_migration_entity_status` seed row in the same amendment commit (enforced by Phase A onward as a CDM-amendment authoring discipline; tracked by the audit_events.action_id `cdm.entity_jwt_migration_status_added` Cat B event added to AUDIT_EVENTS at SI-024.1 promotion). See OQ8/9 below.
 
   - **Production-break-glass surface:** `is_target_tenant_break_glass_active()` + `begin_target_tenant_break_glass_session()` REQUIRE JWT — NO raw-GUC fallback EVER (enforced by the `production_break_glass_surface = TRUE` default for these entities + by the unconditional `verify_session_jwt_and_extract_claims()` call in the helper body which raises on missing JWT).
   - **Audit emission for fallback usage:** every raw-GUC fallback fires Cat A `tenant_context.raw_guc_fallback_used` event with the entity name + caller role + reason. Telemetry-tracked; >0 events for a Phase 4-bound entity = migration defect.
@@ -781,6 +812,8 @@ This closes SI-024 v0.17 simplification #9 — no longer requires out-of-band tr
 5. **OQ5 — Phase D timing.** Recommendation: 60-day window between Phase B (middleware cutover begin) and Phase D (raw-GUC deprecation) to allow full middleware fleet rollout + telemetry.
 6. **OQ6 — Phase E SI-024 v0.17 Phase 4 cutover authorization.** Recommendation: AUTOMATIC unlock at SI-024.1 Phase D completion + 30-day telemetry-clean window. No separate ratifier ceremony needed.
 7. **OQ7 — Codex pre-ratification target.** Recommendation: 4-5 rounds (higher than SI-024 OQ6's 3-4 target because SI-024.1 adds new infrastructure surface; the per-tenant key model + JWT verification logic + two-phase workflow each have multiple ways to be wrong).
+8. **OQ8 — jwt_migration_entity_status initial population (pre-merge Pass-2 HIGH-2 closure 2026-05-20).** Recommendation: Phase A migration includes seed step populating one row per existing v0.17 RLS entity (sourced from canonical CDM v1.5 entity inventory) + `_legacy_v017_caller_` sentinel row for the zero-arg transitional wrapper. Default posture: phase_4_cutover_eligible=FALSE during Phase B coexistence; flipped to TRUE per-entity as policies are migrated to the parameterized helper.
+9. **OQ9 — jwt_migration_entity_status ongoing maintenance authority (pre-merge Pass-2 HIGH-2 closure 2026-05-20).** Recommendation: CDM owner owns the table. CDM amendments adding new RLS entities MUST include a `jwt_migration_entity_status` seed row in the same amendment commit. Enforced via amendment-authoring discipline + Cat B `cdm.entity_jwt_migration_status_added` audit event at every new-entity addition. SI-024.1 promotion adds this discipline as a canonical contract authoring requirement.
 
 ---
 
