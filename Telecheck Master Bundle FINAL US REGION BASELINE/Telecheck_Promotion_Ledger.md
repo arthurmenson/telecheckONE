@@ -37,6 +37,32 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-038 — 2026-05-21 — CDM v1.8 → v1.9 + AUDIT_EVENTS v5.10 → v5.11 + DOMAIN_EVENTS additive + OpenAPI v0.3 → v0.4 + State Machines v1.2 → v1.3 + RBAC v1.2 → v1.3 (SI-020 Async-Consult follow-on amendment) RATIFIED; 7 new CDM entities (consult + intake_submission + clinical_summary + review_claim (hybrid persistence with one-way release) + clinician_decision + lifecycle_transition + follow_up_message) + 2 split caller-class-specific data-minimization views (async_consult_patient_summary_v with verify_session_jwt_and_extract_claims + consent_grant predicate; async_consult_staff_summary_v tenant-wide) + 1 OPTIONAL materialized view + 7 SECURITY DEFINER procedures (1 raw transition writer + 5 wrapper owners = 6 procedure-owner roles) + 17 new audit events (4 Cat A + 3 Cat B + 10 Cat C) + 7 new domain events + 11 new OpenAPI endpoints (caller-class-routed handler dispatch on read) + 1 new derived state machine `consult_lifecycle` (22 CHECK-enforced transition triples) + 13 new RBAC roles (5 application + 6 wrapper owners + 2 view/MV owners; R5 HIGH-1 split patient_reader from staff_reader); +9 jwt_migration_entity_status seed entries; Artifact Registry v2.24 → v2.25; **SEVENTH instance of established post-P-029 SI-spec-first promotion pattern** (P-029, P-032, P-034, P-035, P-036, P-037, P-038); pilot-viable scope item 2 (Track 1 Ghana revenue anchor; Async-Consult implementation-readiness now consolidated into CDM/AUDIT/OpenAPI/StateMachines/RBAC canonical files)
+
+**Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" + dual-recommendation + two-pass + auto-proceed):** when Codex APPROVE + Claude READY agree, auto-proceed. P-038 follows the established post-P-029 mechanical-consolidation cadence; SI-020 v0.11 (P-037) ratified content lands in named bundle file sections via this amendment cycle.
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). P-038 promotion via auto-proceed convergence (Codex R10 APPROVE / ship-it + Claude READY-TO-MERGE; 10 rounds, 11 findings closed inline, 0 hard-floor item 6 escalations).
+
+**Type:** Content-change promotion + Registry v2.24 → v2.25 per operating rule 4.
+
+**Cycle metrics:** 10 Codex adversarial-review rounds. Findings: R1=2H+1M, R2=1H, R3=2H+1M, R4=1H, R5=1H, R6=2H, R7=1H, R8=1M, R9=1M, R10=APPROVE. Total: 11 HIGH + 4 MED = 15 findings closed inline (target 6-10 per established mechanical-consolidation precedents — slight long-tail asymptote on R8/R9 enumeration drift). R6 surfaced a Codex hard-floor item 6 architectural-judgment finding (`current_jwt_verified_patient_id()` net-new platform-floor primitive proposed at R5) that Claude **dissolved** rather than escalated by adopting Codex's own recommended Option B (replace helper assumption with explicit schema-backed joins to canonical admission + delegate-scope tables). Hard-floor item 6 dissolution is permitted when the closure path REMOVES the architectural-judgment trigger condition (vs. iterating prose changes that would extend unratified architecture); CLAUDE.md discipline observed.
+
+**Files promoted:**
+
+| File | Path | Version bump |
+|---|---|---|
+| Telecheck_CDM_v1_8_to_v1_9_Amendment.md | bundle root | new amendment doc at v1.0 RATIFIED |
+| (consolidation target) Telecheck_Canonical_Data_Model_v1_2.md | bundle root | engineering reference; v1.9 content lives in amendment doc per delta-artifact convention until next baseline bump |
+| (consolidation target) Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md | bundle root | header bump to v5.11 with doc-control entry pointing to delta artifact |
+| (consolidation target) Telecheck_Contracts_Pack_v5_00_DOMAIN_EVENTS.md | bundle root | additive enum extension; no version bump |
+| (consolidation target) Telecheck_OpenAPI_v0_2.md | bundle root | header bump to v0.4 with doc-control entry pointing to delta artifact |
+| (consolidation target) Telecheck_State_Machines_v1_1.md | bundle root | header bump to v1.3 with doc-control entry pointing to delta artifact |
+| (consolidation target) Telecheck_RBAC_Permissions_Matrix_v1_2.md | bundle root | header bump to v1.3 with doc-control entry pointing to delta artifact |
+| Telecheck_Artifact_Registry_v2_10.md | bundle root | v2.24 → v2.25 (header + §8 changelog) |
+| Telecheck_Promotion_Ledger.md (this entry) | bundle root | append-only |
+
+---
+
 ### Entry P-037 — 2026-05-21 — SI-020 Async Consult v1.0 → v2.0 implementation-readiness extension RATIFIED; 10 sub-decisions + 7 new CDM entities (split-INSERT-only consult lifecycle with consult_review_claim claim/admission identity model) + 1 plain data-minimization view + 1 optional materialized view + 7 SECURITY DEFINER procedures (raw transition writer + 5 reason-specific wrappers + extended record_consult_clinician_decision per SI-005 P-021) + 17 new audit events (4 Cat A + 3 Cat B + 10 Cat C) + 7 new domain events + 11 new OpenAPI endpoints + 1 new state machine + 8 new RBAC roles; Artifact Registry v2.23 → v2.24; **SIXTH instance of established post-P-029 SI-spec-first promotion pattern** (P-029, P-032, P-034, P-035, P-036, P-037); pilot-viable scope item 2 (Track 1 Ghana revenue anchor)
 
 **Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" + dual-recommendation + two-pass + auto-proceed at commits `f3a6469` + `4f42a00` + `16d7244` + `f483535`):** when Codex APPROVE + Claude READY agree, auto-proceed. Master Completion Plan v1.0 Track 1 anchor (Ghana revenue pilot critical-path; pilot-viable scope item 2) named Async-Consult as next item after Med-Interaction; SI-020 authored proactively applying all lessons-learned from P-031 through P-036 cycles.
