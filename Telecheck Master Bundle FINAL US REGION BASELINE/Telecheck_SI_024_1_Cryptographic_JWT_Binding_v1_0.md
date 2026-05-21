@@ -1,7 +1,7 @@
 # SI-024.1 — Cryptographic JWT-Binding for Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.1 DRAFT
-**Status:** PRE-CODEX (awaiting Pass-1 source-first independent review per CLAUDE.md two-pass discipline)
+**Version:** 1.0 v0.2 DRAFT
+**Status:** R1 Pass-1 closed inline (1 CRITICAL + 2 HIGH + 1 MED): JWT verifier SPLIT into pure-STABLE claim verifier + VOLATILE admission path (closes CRIT STABLE-vs-replay contradiction); Sub-decision 6 helper now requires active break_glass_active_session row with bound_jwt_id (closes HIGH-1); replay-window clarified as per-DB-session-admission unit with kid + key_purpose binding (closes HIGH-2 + missing-consideration on JWT-purpose confusion); Phase B raw-GUC fallback gated per-entity + production-break-glass surface entirely excluded (closes MED). 1 new audit event added (raw_guc_fallback_used). Pass-2 contrast-and-synthesize queued.
 **Authoring date:** 2026-05-20
 **Trigger:** SI-024 v0.17 TRANSITIONAL ratification at Promotion Ledger P-030 (committed via auto-proceed merge `3fcbef8` on main). SI-024.1 closes the cryptographic-binding gap deferred from SI-024 v1.0 — specifically the compromised-middleware-credential threat class that the role-constrained-GUC pattern explicitly does NOT close. Per OQ-NEW1/2 commitments at P-030: SI-024.1 v0.1 DRAFT target 2026-06-19 (30 days from P-030); ratifier ceremony target 2026-08-18 (90 days from P-030). SI-024.1 IS the gate that lifts the "production target-tenant break-glass BLOCKED" + "Phase 4 cutover BLOCKED" + "INVARIANTS I-036 BLOCKED" constraints carried in SI-024 v1.0 TRANSITIONAL.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024).
@@ -41,47 +41,78 @@
 
 ## 2. Sub-decisions (ratifier-targetable units)
 
-### Sub-decision 1 — Cryptographic JWT verification function
+### Sub-decision 1 — Cryptographic JWT verification (SPLIT: pure-STABLE claim verifier + VOLATILE admission path; R1 CRITICAL closure 2026-05-20)
 
-**Decision shape:** add a canonical SQL function `verify_session_jwt_and_extract_claims()` that takes the JWT from `app.session_jwt` GUC, verifies the signature against the KMS-stored public key, and returns the verified claims as a typed record. The helper functions then consume the verified-claims record instead of trusting raw session GUCs.
+**Decision shape:** the JWT verification responsibility is SPLIT into two functions to satisfy PostgreSQL STABLE-vs-VOLATILE constraints:
+
+1. **`verify_session_jwt_and_extract_claims()` — pure STABLE** (RLS-safe): performs signature verification + claim extraction; performs NO writes (no replay-set INSERT). Safe to call from RLS predicates + STABLE helper bodies.
+2. **`admit_session_jwt(jwt TEXT)` — VOLATILE** (NOT RLS-safe): performs replay-set INSERT + session admission; MUST be called by middleware at the start of each DB session/request BEFORE any RLS-protected query.
+
+The middleware's responsibility per the canonical session-management contract: at session-start, call `admit_session_jwt(<jwt>)` once; on success, set `app.session_jwt` GUC; subsequent RLS-protected queries trigger pure-STABLE `verify_session_jwt_and_extract_claims()` from helpers; replay-detection happens at admission-time, NOT at every RLS evaluation.
 
 ```sql
--- Canonical JWT verification function (SECURITY DEFINER owned by sec_jwt_verifier role).
--- Returns: verified claims record OR raises on signature failure / expired / malformed JWT.
--- KMS-backed public-key lookup; per-tenant signing key OR platform-wide signing key per Sub-decision 2.
+-- Canonical claims type (referenced by both functions).
 CREATE TYPE verified_jwt_claims_t AS (
     tenant_id tenant_id_t,
     actor_human_id UUID,
     actor_role TEXT,
-    session_id UUID,
+    session_id UUID,        -- DB session identifier; bound to the JWT at admission
     issued_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ,
-    jwt_id UUID  -- unique per session; used for replay detection
+    jwt_id UUID,            -- The `jti` claim; bound to (session_id, jwt_id) pair at admission
+    key_id UUID,            -- The signing key's `kid` claim; binds to jwt_signing_key_public.key_id
+    key_purpose TEXT        -- 'platform_tenant_jwt' | 'tenant_break_glass_jwt'; per R1 missing-consideration: prevents JWT-purpose confusion
 );
 
+-- VOLATILE admission path: middleware calls ONCE per DB session/request.
+-- Performs signature verification + replay-set INSERT + session binding.
+-- Raises on signature failure, expired, replayed, OR purpose-mismatch.
+CREATE FUNCTION admit_session_jwt(jwt TEXT) RETURNS verified_jwt_claims_t AS $$
+DECLARE
+    claims verified_jwt_claims_t;
+BEGIN
+    -- 1. Extract header + payload + signature from JWT.
+    -- 2. Lookup public key from jwt_signing_key_public by header.kid; verify it's currently active.
+    -- 3. Verify signature (RSA-PSS-SHA256 per Sub-decision 3).
+    -- 4. Verify expires_at > now() AND issued_at <= now() AND not-before <= now() (clock-skew tolerance ±60s).
+    -- 5. INSERT into session_jwt_replay_set(jwt_id, tenant_id, first_seen_at, expires_at)
+    --    ON CONFLICT (jwt_id) DO NOTHING; check if rows_affected = 0 → REPLAY DETECTED → raise.
+    -- 6. Extract claims into typed record.
+    -- 7. Bind claims to current DB session via app.session_jwt GUC (caller's responsibility post-admission).
+    RAISE EXCEPTION 'admit_session_jwt() implementation pending Phase A infrastructure; see Sub-decisions 3+4+5';
+END;
+$$ LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public;
+
+-- Pure STABLE claim verifier: RLS-safe; called from STABLE helpers + RLS predicates.
+-- Performs signature verification only; NO replay-set writes (those happen at admission).
+-- Trusts that admit_session_jwt() was called at session-start; if not, current_setting raises.
 CREATE FUNCTION verify_session_jwt_and_extract_claims() RETURNS verified_jwt_claims_t AS $$
 DECLARE
     jwt TEXT;
     claims verified_jwt_claims_t;
 BEGIN
     jwt := current_setting('app.session_jwt', false);  -- fail-loud on unset
-    -- Signature verification via pgcrypto + KMS-stored public key (see Sub-decision 4).
-    -- Implementation detail deferred to canonical infrastructure spec; pseudocode shape:
-    --   1. Extract header + payload + signature from JWT
-    --   2. Lookup signing-key public component from KMS-managed table
-    --   3. Verify signature (RSA-PSS-SHA256 OR Ed25519 per Sub-decision 3)
-    --   4. Verify expires_at > now() AND issued_at <= now() (anti-replay)
-    --   5. Verify jwt_id not in session_jwt_replay_set table (anti-replay; bounded LRU)
-    --   6. Extract claims into typed record
-    -- Raises on any failure: invalid signature, expired, malformed, replay.
-    RETURN claims;
+    -- 1. Extract header + payload + signature from JWT.
+    -- 2. Lookup public key from jwt_signing_key_public by header.kid.
+    -- 3. Verify signature (RSA-PSS-SHA256).
+    -- 4. Verify expires_at > now() (already-expired JWT detected here even if admitted earlier).
+    -- 5. Extract claims into typed record.
+    -- NOTE: NO replay-set INSERT (would violate STABLE); replay is enforced at admit_session_jwt().
+    -- NOTE: NO session-binding check (admission already bound; this helper trusts the binding).
+    RAISE EXCEPTION 'verify_session_jwt_and_extract_claims() implementation pending Phase A';
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
 ```
 
-**Why STABLE SECURITY DEFINER:**
-- STABLE → query-result-cacheable per execution; one verification per query, not per row.
-- SECURITY DEFINER → owned by `sec_jwt_verifier` role with SELECT on KMS public-key table; EXECUTE granted to PUBLIC (analogous to SI-024 v1.0 `is_target_tenant_break_glass_active`); body does its own caller-checks (not relying on EXECUTE-grant gating).
+**Replay-window unit (R1 HIGH-2 closure 2026-05-20):** the JWT is **per-DB-session admission unit**, NOT per-query. `admit_session_jwt()` is called ONCE at session-start; the same `app.session_jwt` is reused across multiple queries within that session. Replay-detection runs at admission only; the second admission of the same `jwt_id` (whether from the same session or a different one) raises REPLAY. This means:
+- A single middleware connection per request → one admission per request → one JWT per request → no replay-within-session ambiguity.
+- A connection-pool session reused across N requests → N admissions with N distinct JWTs (middleware mints a fresh JWT per request) → no replay-within-session ambiguity.
+- Multiple DB sessions trying to use the same JWT → second admission raises REPLAY → blocked.
+
+**Why split:**
+- STABLE → query-result-cacheable per execution; helpers + RLS predicates can call freely without triggering side-effects.
+- VOLATILE admission path → can perform writes (replay-set INSERT); called only at request-boundary by middleware.
+- Both SECURITY DEFINER → owned by `sec_jwt_verifier` role with SELECT on `jwt_signing_key_public` + INSERT on `session_jwt_replay_set`; EXECUTE granted to PUBLIC for the STABLE helper, to middleware roles for the VOLATILE admission.
 
 ### Sub-decision 2 — Per-tenant vs. platform-wide signing key
 
@@ -169,17 +200,28 @@ BEGIN
     ) THEN
         RETURN FALSE;
     END IF;
-    -- Approval lookup matches on (target_tenant_id, operator_user_id from verified claims, operator_role from verified claims, active-window).
-    -- Closes SI-024 v1.0 simplification #2: now matches by specific operator_role, not just human_id.
+    -- R1 HIGH-1 closure 2026-05-20: helper now requires an ACTIVE break_glass_active_session row
+    -- (NOT just an active approval). Approval-only without explicit session-start does NOT admit cross-tenant reads.
+    -- Operator MUST explicitly call begin_target_tenant_break_glass_session() to start a session that
+    -- emits the canonical tenant_context.target_tenant_break_glass_session_started Cat A audit event.
+    -- The session row is bound to (target_tenant_id, operator_user_id, operator_role, jwt_id/session_id, approval_id, expiry).
     RETURN EXISTS (
-        SELECT 1 FROM public.break_glass_approval
-        WHERE break_glass_approval.target_tenant_id = is_target_tenant_break_glass_active.target_tenant_id
-            AND operator_user_id = claims.actor_human_id
-            AND operator_role = claims.actor_role
-            AND state = 'active'  -- two-phase workflow per Sub-decision 8 below
-            AND approved_at <= now()
-            AND expires_at > now()
-            AND revoked_at IS NULL
+        SELECT 1 FROM public.break_glass_active_session bgas
+        WHERE bgas.target_tenant_id = is_target_tenant_break_glass_active.target_tenant_id
+            AND bgas.operator_user_id = claims.actor_human_id
+            AND bgas.operator_role = claims.actor_role
+            AND bgas.closed_at IS NULL
+            AND bgas.session_expires_at > now()
+            -- Session bound to the current verified JWT (prevents stolen-session-id reuse across JWTs)
+            AND bgas.bound_jwt_id = claims.jwt_id
+            -- Underlying approval still active (revocation propagates)
+            AND EXISTS (
+                SELECT 1 FROM public.break_glass_approval bga
+                WHERE bga.id = bgas.approval_id
+                    AND bga.state = 'active'
+                    AND bga.revoked_at IS NULL
+                    AND bga.expires_at > now()
+            )
     );
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = pg_catalog, public;
@@ -208,10 +250,11 @@ BEGIN
     -- Record session-start; subsequent helper invocations check this active-session row.
     INSERT INTO public.break_glass_active_session (
         id, target_tenant_id, operator_user_id, operator_role,
-        session_start, session_expires_at, intended_purpose, approval_id
+        bound_jwt_id, session_start, session_expires_at, intended_purpose, approval_id
     )
     SELECT
         gen_random_uuid(), target_tenant_id, claims.actor_human_id, claims.actor_role,
+        claims.jwt_id,  -- R1 HIGH-1 closure: bind session to verified JWT
         now(), least(now() + INTERVAL '1 hour', approval.expires_at), intended_purpose, approval.id
     FROM public.break_glass_approval approval
     WHERE approval.target_tenant_id = begin_target_tenant_break_glass_session.target_tenant_id
@@ -221,6 +264,13 @@ BEGIN
         AND approval.revoked_at IS NULL
         AND approval.expires_at > now()
     RETURNING break_glass_active_session.id INTO session_record_id;
+
+    -- R1 missing-consideration: handle no-row case (revoked/expired between is_target_tenant_break_glass_active() check + INSERT)
+    IF session_record_id IS NULL THEN
+        RAISE EXCEPTION 'break-glass approval no longer active for target_tenant_id=% (race with revocation/expiry)',
+            target_tenant_id
+            USING ERRCODE = 'invalid_transaction_state';
+    END IF;
 
     -- Emit per-access audit (closes SI-024 v1.0 simplification #8).
     INSERT INTO public.audit_events (
@@ -252,13 +302,21 @@ CREATE TABLE break_glass_active_session (
     target_tenant_id tenant_id_t NOT NULL,
     operator_user_id UUID NOT NULL,
     operator_role TEXT NOT NULL,
+    bound_jwt_id UUID NOT NULL,  -- R1 HIGH-1 closure: binds session row to specific JWT (prevents stolen-session-id reuse)
     session_start TIMESTAMPTZ NOT NULL DEFAULT now(),
     session_expires_at TIMESTAMPTZ NOT NULL,
     intended_purpose TEXT NOT NULL,
     approval_id UUID NOT NULL REFERENCES break_glass_approval(id),
-    closed_at TIMESTAMPTZ
+    closed_at TIMESTAMPTZ,
+    -- One active session per (jwt_id, target_tenant_id) tuple to prevent multi-session-from-one-JWT abuse
+    CONSTRAINT break_glass_active_session_unique_per_jwt
+        UNIQUE (bound_jwt_id, target_tenant_id)
 );
--- Active iff closed_at IS NULL AND session_expires_at > now().
+-- Active iff closed_at IS NULL AND session_expires_at > now() AND bound_jwt_id matches caller's current verified JWT.
+-- Indexed on (bound_jwt_id) + (operator_user_id, target_tenant_id, closed_at) for helper-EXISTS lookup performance.
+CREATE INDEX break_glass_active_session_helper_lookup
+    ON break_glass_active_session (bound_jwt_id, target_tenant_id, operator_user_id, operator_role, closed_at)
+    WHERE closed_at IS NULL;
 ```
 
 The `is_target_tenant_break_glass_active()` helper post-SI-024.1 checks for an active session row (not just approval); approval-without-session no longer admits cross-tenant reads — operator MUST explicitly open a session first.
@@ -298,7 +356,10 @@ This closes SI-024 v0.17 simplification #9 — no longer requires out-of-band tr
 **Decision shape:** zero-downtime migration via helper-name versioning:
 
 - **Phase A (SI-024.1 foundation):** create `verify_session_jwt_and_extract_claims()` + `jwt_signing_key_public` table + `session_jwt_replay_set` table + `break_glass_active_session` table + `propose_break_glass_approval()` + `co_authorize_break_glass_approval()` procedures. New helpers coexist with SI-024 v0.17 helpers (under same names — function bodies updated; semantics extended).
-- **Phase B (middleware cutover):** middleware starts populating `app.session_jwt` GUC alongside (NOT instead of) `app.tenant_id`. Helpers prefer JWT when present + fall back to raw GUC for backwards compatibility.
+- **Phase B (middleware cutover):** middleware starts populating `app.session_jwt` GUC alongside (NOT instead of) `app.tenant_id`. **Helpers prefer JWT when present, fall back to raw GUC ONLY for entities NOT on the Phase 4 cutover list AND NOT in the production-break-glass surface (R1 MED closure 2026-05-20).** Specifically:
+  - **Per-entity fallback gate:** `current_tenant_id_strict()` accepts raw-GUC fallback only for entities marked `phase_4_cutover_eligible = FALSE` in a new `jwt_migration_entity_status` table. Phase 4-bound entities require JWT (raise on missing); fallback denied at the helper layer.
+  - **Production-break-glass surface:** `is_target_tenant_break_glass_active()` + `begin_target_tenant_break_glass_session()` REQUIRE JWT — NO raw-GUC fallback EVER. Production target-tenant break-glass operations cannot proceed without verified JWT during Phase B (closes SI-024 v0.17 production-break-glass block at Phase B, not Phase D).
+  - **Audit emission for fallback usage:** every raw-GUC fallback fires Cat A `tenant_context.raw_guc_fallback_used` event with the entity name + caller role + reason. Telemetry-tracked; >0 events for a Phase 4-bound entity = migration defect.
 - **Phase C (telemetry):** 30-day window measuring JWT-verification overhead + failure modes.
 - **Phase D (raw-GUC deprecation):** middleware stops populating raw `app.tenant_id`; helpers fail-closed if JWT absent.
 - **Phase E (SI-024 v0.17 Phase 4 cutover unlock):** with SI-024.1 in production, SI-024 v0.17's Phase 4 (drop raw-GUC permissive policy) is unblocked.
@@ -318,8 +379,9 @@ This closes SI-024 v0.17 simplification #9 — no longer requires out-of-band tr
 | `tenant_context.break_glass_approval_proposed` | propose_break_glass_approval() — phase 1 |
 | `tenant_context.break_glass_approval_co_authorized` | co_authorize_break_glass_approval() — phase 2 → 'active' |
 | `tenant_context.break_glass_approval_rejected` | explicit rejection by co-authorizer |
+| `tenant_context.raw_guc_fallback_used` | R1 MED closure: helper fell back to raw-GUC during Phase B coexistence (entity-name + caller-role + reason in event_metadata; telemetry-tracked for Phase 4 migration discipline) |
 
-8 new Cat A events added to AUDIT_EVENTS at SI-024.1 promotion.
+9 new Cat A events added to AUDIT_EVENTS at SI-024.1 promotion.
 
 ---
 
