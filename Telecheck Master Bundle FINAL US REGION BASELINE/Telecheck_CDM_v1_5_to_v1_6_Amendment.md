@@ -1,7 +1,7 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.6 DRAFT
-**Status:** POST-PASS-2 R4 (R5 HIGH-6 closed: Pass-2 R4 caught that §4.NEW5 jwt_migration_entity_status had NO RLS/privilege DDL despite being a security-critical fallback-gate control table whose prose claimed "INSERT/UPDATE limited to CDM-owner role". Without executable RLS + REVOKE/GRANT, a role with inherited owner privileges or accidental broad grant could silently disable JWT-required cutover or fallback auditing. Fix: ENABLE/FORCE RLS + role-scoped policies for cdm_owner + REVOKE PUBLIC + column-level UPDATE grants restricted to mutable fields. Pass-2 R4 also flagged NEW1/NEW2 admit-path write RLS as a follow-on check for R5. Awaiting Pass-2 R5 verification.)
+**Version:** 0.7 DRAFT
+**Status:** POST-PASS-2 R5 (R6 HIGH-7 + HIGH-8 closed: Pass-2 R5 caught (a) §4.NEW5 had FOR SELECT USING (true) policy but no GRANT SELECT — PostgreSQL RLS policies don't grant table privileges, so non-owner helper-execution contexts couldn't actually read the table; and (b) §4.NEW1 + §4.NEW2 only had REVOKE/GRANT for DELETE — no explicit INSERT grant for the admit role meant admission INSERT depended on inherited table-owner privileges, exactly the class of gap this cycle has been closing. Fix: GRANT SELECT TO PUBLIC on §4.NEW5; REVOKE INSERT FROM PUBLIC + GRANT INSERT TO admit_session_jwt_owner on §4.NEW1 + §4.NEW2 (canonical admit role defined in this amendment, not deferred to the procedure-side artifact). Awaiting Pass-2 R6 verification.)
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
@@ -110,10 +110,15 @@ CREATE TRIGGER session_jwt_admission_append_only_with_ttl
     BEFORE UPDATE OR DELETE ON session_jwt_admission
     FOR EACH ROW EXECUTE FUNCTION session_jwt_admission_append_only_with_ttl_cleanup();
 
--- Defense-in-depth privilege DDL: PostgreSQL-level DELETE privilege is restricted to sec_jwt_cleanup ONLY.
--- INSERT remains restricted to the admit_session_jwt() procedure's owner role (granted separately at the
--- procedure's GRANT specification in the SI-024.1 procedure-side artifact).
-REVOKE DELETE ON session_jwt_admission FROM PUBLIC;
+-- Defense-in-depth privilege DDL (R5 HIGH-8 closure 2026-05-20: Pass-2 R5 caught that deferring INSERT
+-- privilege to the SI-024.1 procedure-side artifact left the table under FORCE RLS with no explicit
+-- INSERT grant for the admit role — admission INSERT could fail or rely on inherited table-owner
+-- privileges, which is exactly the class of gap this cycle has been closing. Define the canonical
+-- admit write role here and grant INSERT explicitly). The existing tenant-isolation policy (no FOR
+-- clause = all commands) implicitly applies its USING expression as the WITH CHECK for INSERT, so
+-- RLS-wise the admit path is already covered — only the table privilege grant was missing.
+REVOKE INSERT, DELETE ON session_jwt_admission FROM PUBLIC;
+GRANT INSERT ON session_jwt_admission TO admit_session_jwt_owner;
 GRANT DELETE ON session_jwt_admission TO sec_jwt_cleanup;
 ```
 
@@ -176,10 +181,12 @@ CREATE TRIGGER session_jwt_replay_set_append_only_with_ttl
     BEFORE UPDATE OR DELETE ON session_jwt_replay_set
     FOR EACH ROW EXECUTE FUNCTION session_jwt_replay_set_append_only_with_ttl_cleanup();
 
--- Defense-in-depth privilege DDL: PostgreSQL-level DELETE privilege is restricted to sec_jwt_cleanup ONLY.
--- INSERT remains restricted to the admit_session_jwt() procedure's owner role (granted separately at the
--- procedure's GRANT specification in the SI-024.1 procedure-side artifact).
-REVOKE DELETE ON session_jwt_replay_set FROM PUBLIC;
+-- Defense-in-depth privilege DDL (R5 HIGH-8 closure 2026-05-20: same FORCE-RLS + missing-INSERT-grant
+-- gap as §4.NEW1; same fix — define canonical admit role and grant INSERT explicitly). Replay-set
+-- INSERT failure mode is especially urgent: if admit cannot record the jti in the replay set, the
+-- anti-replay invariant breaks open (legitimate JWTs may double-admit).
+REVOKE INSERT, DELETE ON session_jwt_replay_set FROM PUBLIC;
+GRANT INSERT ON session_jwt_replay_set TO admit_session_jwt_owner;
 GRANT DELETE ON session_jwt_replay_set TO sec_jwt_cleanup;
 ```
 
@@ -377,10 +384,15 @@ CREATE POLICY jwt_migration_entity_status_cdm_owner_update ON jwt_migration_enti
     USING (true)
     WITH CHECK (true);
 
--- Defense-in-depth privilege DDL. SELECT remains broadly granted; INSERT/UPDATE restricted to cdm_owner.
--- Column-level UPDATE grants restrict mutable fields to the documented set (the append-only trigger
--- below also enforces entity_name + production_break_glass_surface immutability).
+-- Defense-in-depth privilege DDL. SELECT explicitly granted to PUBLIC (R5 HIGH-7 closure 2026-05-20:
+-- Pass-2 R5 caught that the FOR SELECT USING (true) policy alone is not sufficient — PostgreSQL RLS
+-- policies do not grant table privileges; a role still needs SELECT on the table before the permissive
+-- policy matters. The current_tenant_id_strict() helper executes from arbitrary tenant-helper roles,
+-- so explicit GRANT SELECT TO PUBLIC is required to make the policy effective). INSERT/UPDATE
+-- restricted to cdm_owner. Column-level UPDATE grants restrict mutable fields to the documented set
+-- (the append-only trigger below also enforces entity_name + production_break_glass_surface immutability).
 REVOKE INSERT, UPDATE, DELETE ON jwt_migration_entity_status FROM PUBLIC;
+GRANT SELECT ON jwt_migration_entity_status TO PUBLIC;
 GRANT INSERT ON jwt_migration_entity_status TO cdm_owner;
 GRANT UPDATE (phase_4_cutover_eligible, raw_guc_fallback_audited, migrated_at, updated_at)
     ON jwt_migration_entity_status TO cdm_owner;
@@ -484,8 +496,12 @@ ALTER TABLE audit_events
 - **HIGH-6 closed** — Pass-2 R4 caught that §4.NEW5 `jwt_migration_entity_status` had NO RLS or REVOKE/GRANT DDL despite being a security-critical fallback-gate control table. The prose said "INSERT/UPDATE limited to CDM-owner role" but no DDL backed that claim, so a role with inherited owner privileges or accidental broad grant could silently disable JWT-required cutover (flip `phase_4_cutover_eligible`) or fallback auditing (flip `raw_guc_fallback_audited`) without violating any trigger. Fix: `ENABLE/FORCE ROW LEVEL SECURITY` + permissive SELECT policy (platform-wide read required by `current_tenant_id_strict` helper from any tenant context) + role-scoped `FOR INSERT/UPDATE TO cdm_owner` policies + `REVOKE INSERT, UPDATE, DELETE FROM PUBLIC` + column-level `GRANT UPDATE (phase_4_cutover_eligible, raw_guc_fallback_audited, migrated_at, updated_at) TO cdm_owner`. Combined with the existing append-only trigger (entity_name + production_break_glass_surface immutable), the table now has three-layer enforcement matching the rest of the §4 entities.
 - **Follow-on flagged for R5:** Pass-2 R4 also flagged §4.NEW1 + §4.NEW2 admit-path INSERT under FORCE RLS — admit_session_jwt() needs a writable path for the admission/replay rows. Defer to R5 verification to confirm whether the existing tenant-isolation policy permits INSERT or if a dedicated FOR INSERT policy is required.
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit pending push for Pass-2 R5 verification.
+**v0.7 DRAFT 2026-05-20 — Pass-2 R5 closure (table-privilege grants for SELECT on NEW5 + INSERT on NEW1/NEW2):**
+- **HIGH-7 closed** — Pass-2 R5 caught that the `FOR SELECT USING (true)` policy on §4.NEW5 alone is not sufficient: PostgreSQL RLS policies do not grant table privileges. A role still needs `SELECT` on the table before any permissive policy can match. Since `current_tenant_id_strict()` executes from arbitrary tenant-helper roles, explicit `GRANT SELECT ON jwt_migration_entity_status TO PUBLIC` is required.
+- **HIGH-8 closed** — Pass-2 R5 caught that deferring INSERT privilege on §4.NEW1 + §4.NEW2 to the SI-024.1 procedure-side artifact left both tables under FORCE RLS with no explicit INSERT grant for the admit role. Admission INSERT could either fail outright or rely on inherited table-owner privileges — exactly the class of gap this cycle has been closing. Fix: define the canonical admit write role (`admit_session_jwt_owner`) here in the CDM amendment and add explicit `REVOKE INSERT FROM PUBLIC` + `GRANT INSERT TO admit_session_jwt_owner` on both tables. Replay-set is the higher-cost case: failure to INSERT the replay jti breaks the anti-replay invariant open (legitimate JWTs may double-admit). Existing tenant-isolation RLS policy (no FOR clause = all commands) already implicitly applies USING as WITH CHECK for INSERT, so RLS-wise the admit path was already covered — only the table privilege grant was missing.
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit pending push for Pass-2 R6 verification.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.6 DRAFT (Pass-2 R4 closure applied: §4.NEW5 RLS + REVOKE/GRANT + column-level UPDATE privileges) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R5 verification queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.7 DRAFT (Pass-2 R5 closure applied: GRANT SELECT TO PUBLIC on §4.NEW5; REVOKE INSERT FROM PUBLIC + GRANT INSERT TO admit_session_jwt_owner on §4.NEW1 + §4.NEW2) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R6 verification queued.
