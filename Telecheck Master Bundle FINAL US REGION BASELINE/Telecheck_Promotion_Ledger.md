@@ -37,6 +37,55 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-036 — 2026-05-21 — CDM v1.7 → v1.8 + AUDIT_EVENTS v5.9 → v5.10 + DOMAIN_EVENTS additive + CCR_RUNTIME v5.3 → v5.4 Mode 1 follow-on amendment RATIFIED; 5 new CDM entities (split-INSERT-only conversation lifecycle) + 1 plain data-minimization view + 11 new audit events (3 Cat A + 3 Cat B + 5 Cat C) + 1 new CCR key (tenant.ai_provider) + 2 new RBAC roles (ai_mode1_view_owner non-BYPASSRLS + ai_mode1_reader); Artifact Registry v2.22 → v2.23; **FIFTH instance of established post-P-029 SI-spec-first promotion pattern** (P-029, P-032, P-034, P-035, P-036)
+
+**Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" + dual-recommendation + two-pass + auto-proceed at commits `f3a6469` + `4f42a00` + `16d7244` + `f483535`):** when Codex APPROVE + Claude READY agree, auto-proceed. Mode 1 Handler Spec v0.4 RATIFIED at P-035 spawned this CDM/AUDIT/CCR/RBAC follow-on amendment cycle per the established post-P-029 spec-first promotion pattern.
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). CDM v1.8 + AUDIT_EVENTS v5.10 + CCR_RUNTIME v5.4 amendment promotion via auto-proceed convergence (Codex R8 APPROVE / ship-it + Claude READY-TO-MERGE).
+
+**Type:** Content-change promotion + Registry v2.22 → v2.23 per operating rule 4.
+
+**Prerequisite:** P-035 (AI Service Mode 1 Handler Spec v0.4 RATIFIED) + P-031 (SI-024.1 v0.8 JWT-binding canonical pattern) + P-032 (CDM v1.6 session_jwt_admission + jwt_migration_entity_status) + P-027 (Contracts Pack v5.3 + I-035) + P-034 (cleanest worked example of SI-024.1 pattern; replicated here at R1-R7).
+
+**Cycle convergence trajectory:**
+
+| Round | HIGH | MED | Class of defect closed |
+|---|---|---|---|
+| R1 | 2 | 2 | Single-column FKs on 3 child tables + crisis_server_signal_id no FK + audit taxonomy inconsistent + CCR placeholder audit action |
+| R2 | 2 | 0 | Patient FK not tenant-scoped + patient identity propagation gap |
+| R3 | 0 | 1 | §9 OQ1 stale relative to R1 closure |
+| R4 | 1 | 0 | Conversation_id propagation gap in turn_result |
+| R5 | 0 | 1 | SECURITY INVOKER view base-table privilege gap |
+| R6 | 1 | 0 | R5 broad base-table grants overexposed raw conversation content |
+| R7 | 1 | 0 | R6 column-level grants still bypassed view's data-minimization boundary |
+| **R8** | **0** | **0** | **ship-it APPROVE — "no material findings"** |
+
+**Total:** 7 HIGH + 4 MED closed across 7 closure rounds. Zero hard-floor item 6 escalations.
+
+**Architectural shape:** the cycle was a sustained tightening of trust-boundary discipline on per-tenant + per-patient + per-conversation identity propagation, ending with a data-minimization-priority view-access pattern. R1-R4 closed referential corruption gaps (FK composition); R5-R7 closed information-disclosure gaps (grant chain progressively tightened from broad table SELECT → column-level → view-only with owner-only base-table grants). The trajectory is the second worked example (after P-034) of why the SI-024.1 JWT-binding model is necessary for v1.7+ slices and adds a new pattern (R5-R7 data-minimization on derived views) for future similar slices.
+
+**Artifact landed:** `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_CDM_v1_7_to_v1_8_Amendment.md` (544 lines after R7 closure; merge commit `2686751`; spec branch `spec/cdm-v1-8-audit-v5-10-ccr-v5-4-mode-1-followon-2026-05-21` at convergence commit `f785fbc`).
+
+**Canonical landings:**
+
+- **CDM v1.7 → v1.8:** 5 new entities + 1 plain view. All entities strict append-only per I-035 + I-027; all RLS via `current_tenant_id_strict('<entity_name>')` per SI-024.1 canonical pattern; all FKs tenant-scoped + identity-propagation-correct (conversation → admission → result chain enforced by composite UNIQUE + composite FK constraints).
+- **AUDIT_EVENTS v5.9 → v5.10:** 11 new action IDs (9 under `ai.mode1.*` + 1 `audit.cat_c_drop_observed` + 1 `ccr.ai_provider_updated`) with explicit per-event Sampling column (4 Cat C high-volume-sampled + 1 Cat C not-sampled-per-failure + 3 Cat A + 3 Cat B not-sampled).
+- **DOMAIN_EVENTS additive:** 0 new event types (Mode 1 routes through canonical AUDIT_EVENTS path).
+- **CCR_RUNTIME v5.3 → v5.4:** 1 new key `tenant.ai_provider` (enum: anthropic | aws_bedrock | azure_openai | null_local_dev) with dual-control update via I-015 + canonical `ccr.ai_provider_updated` audit event.
+- **RBAC additive:** 2 new roles (`ai_mode1_view_owner` non-BYPASSRLS + `ai_mode1_reader` view-only access).
+- **`jwt_migration_entity_status` seed scope:** 5 entity names with fail-closed-with-audit defaults.
+
+**Companion entries queued (this commit cluster):**
+
+- Artifact Registry v2.22 → v2.23 bump (next commit)
+- AI_Service_Rollout status-doc Addendum 64 + progress.json revision bump
+
+**Cross-references:** P-035 (Mode 1 Handler Spec v0.4 RATIFIED); P-031 (SI-024.1 v0.8 JWT-binding canonical trust anchor); P-032 (CDM v1.6 session_jwt_admission + jwt_migration_entity_status); P-034 (cleanest worked example of SI-024.1 pattern across multiple trust-axes; replicated at R1-R7 of this cycle); P-027 (Contracts Pack v5.3 + I-035); ADR-002 (two-mode AI architecture); ADR-029 (AI workload taxonomy); I-019 (crisis-detection-always-on platform floor); I-026 (KMS encryption); I-027 (append-only audit); I-032 v5.3 (tenant-GUC Mode 1+2 guard); Master Completion Plan v1.0 Track 2 (AI Service Mode 1).
+
+**Master Completion Plan progression:** AI Service Mode 1 CDM follow-on landed at P-036. **3 of 5 pilot-required slices now FULLY RATIFIED** (SI + CDM both landed): Med-Interaction (P-033 SI + P-034 CDM); AI Service Mode 1 (P-035 SI + P-036 CDM). Remaining: Async-Consult clinician-decision loop completion SI; Crisis Response slice SI; Admin Backend basics SI.
+
+---
+
 ### Entry P-035 — 2026-05-21 — AI Service Mode 1 Handler Spec v0.4 RATIFIED via fresh-review-post-major-cycles alignment; canonical HTTP handler contract for conversational-assistant AI workload class (ADR-002 + ADR-029); 5 new Mode 1 CDM entities (4 lifecycle + 1 archival event) + 1 security_invoker derived view + 3-layer Mode 1/Mode 2 boundary enforcement + 22 merge-blocking integration tests + 3 static-analyzer rules; Artifact Registry v2.21 → v2.22; 3rd of 5 Master Completion Plan v1.0 Track 2 pilot-required slices ratified (Med-Interaction at P-033+P-034 + AI Service Mode 1 at P-035)
 
 **Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" + dual-recommendation + two-pass + auto-proceed at commits `f3a6469` + `4f42a00` + `16d7244` + `f483535`):** when Codex APPROVE + Claude READY agree, auto-proceed. AI Service Mode 1 Handler Spec was authored 2026-05-19 as Sprint 9 of the autonomous 24h-loop work plan + reached RATIFIER-READY-WITH-KNOWN-OQs at R4 close; then sat through 4 major canonical landings (P-031 SI-024.1, P-032 CDM v1.6, P-033 SI-019, P-034 CDM v1.7) before being promoted to canonical bundle path for ratification 2026-05-21. Fresh Codex review at promotion surfaced staleness against the post-P-034 baseline; R5-R7 closures applied; R8 ship-it APPROVE.
