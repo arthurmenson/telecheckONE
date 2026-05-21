@@ -1,7 +1,7 @@
 # CDM v1.6 → v1.7 + AUDIT_EVENTS v5.8 → v5.9 + OpenAPI v0.2 → v0.3 + State Machines v1.1 → v1.2 + RBAC v1.1 → v1.2 Amendment (SI-019 follow-on)
 
-**Version:** 0.2 DRAFT
-**Status:** POST-R1 (2 HIGH + 2 MED closed inline: advisory-lock cast overflow → BIGINT single-arg overload with namespace-prefixed key; SECURITY DEFINER search_path resolution → schema-qualified `public.gen_ulid()`; MV access function type-mismatch → explicit `::interaction_signal_state_t` / `::interaction_signal_transition_reason_t` casts + future TYPES amendment note; procedure count normalized from 6 to 7 throughout scope + heading)
+**Version:** 0.3 DRAFT
+**Status:** POST-R2 (1 HIGH closed inline: SECURITY DEFINER caller-identity check — override wrapper STEP 4 cannot use `current_user` because SECURITY DEFINER procedures execute as procedure OWNER not invoker; would bypass clinician-role gate for any role holding EXECUTE on the procedure. Fix: spec mandates GUC-supplied `app.actor_role` validation via `pg_has_role(actor_role::regrole, 'medication_interaction.override_recorder', 'MEMBER')` pattern; FORBIDS `current_user` for caller authorization inside SECURITY DEFINER bodies; rule extends to all 7 procedure bodies (raw writer skips role check by design since wrappers enforce; 6 wrappers all use the canonical pattern with reason-specific role name). Added rejection codes `actor_role_missing` (Mode 1) + `unauthorized_role` (Mode 2 — previously listed but now formally specified). Override wrapper total rejection codes = 10.)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-033 (SI-019 Medication Interaction & Validation Engine Slice PRD v1.0 → v2.0 RATIFIED via Option A canonical Phase B append-only-only lifecycle persistence; Registry v2.19 → v2.20). Per the established post-P-029 spec-first promotion pattern, SI-019's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified; mirrors P-032's pattern of CDM amendment AFTER SI-024.1 ratified).
 **Owner:** Clinical Governance Lead (SI-019 v1.0 owner) + Async Consult slice owner (cross-cutting consumer) + CDM owner + AUDIT_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -506,24 +506,81 @@ Each wrapper raises a reason-specific structured rejection on evidence failure (
 SECURITY DEFINER wrapper that atomically INSERTs override row FIRST (Step 5) then calls the raw transition writer (Step 6) — order inverted per SI-019 R4 HIGH-1 closure to prevent terminal-transition-without-evidence-row failures.
 
 ```sql
--- 8-step procedure body summarized per SI-019 Sub-decision 8 v0.8 final:
--- STEP 0: I-032 Mode 1+2 tenant-GUC guard
+-- 8-step procedure body summarized per SI-019 Sub-decision 8 v0.8 final + R2 HIGH-1 closure
+-- 2026-05-21 (caller-identity check under SECURITY DEFINER):
+-- STEP 0: I-032 Mode 1+2 tenant-GUC guard (current_setting('app.tenant_id') vs p_tenant_id)
 -- STEP 1: auth-FIRST per I-023 layer 2
 -- STEP 2: idempotency-key validation
+-- STEP 4: clinician-role check via GUC-supplied actor-role (NOT current_user — see R2 HIGH-1 below)
 -- STEP 3: medication-still-on-active-list state check
--- STEP 4: clinician-role check (RBAC medication_interaction.override_recorder)
 -- STEP 4.5 (R5 HIGH closure): acquire (tenant_id, signal_id) advisory lock BEFORE Step 5
--- STEP 5: generate v_new_override_id := gen_ulid(); INSERT interaction_signal_override FIRST
+-- STEP 5: generate v_new_override_id := public.gen_ulid(); INSERT interaction_signal_override FIRST
 --         (failure here → no transition row written; transaction aborts cleanly)
 -- STEP 6: call record_interaction_signal_lifecycle_transition(..., metadata={override_id: v_new_override_id})
 --         (failure here → override row INSERT rolls back atomically)
 -- STEP 7: unique_violation safety net on both INSERTs
 -- STEP 8: COMMIT (caller-managed); rejection emission via application-layer outbox
 
+-- R2 HIGH-1 closure 2026-05-21: SECURITY DEFINER caller-identity check.
+--
+-- Problem: SECURITY DEFINER procedures execute as the procedure OWNER (override_wrapper_owner),
+-- not the calling app role. PostgreSQL `current_user` inside the procedure body resolves to the
+-- owner, NOT the original caller. A clinician-role check written as
+-- `pg_has_role(current_user, 'medication_interaction.override_recorder', 'MEMBER')` would always
+-- pass (the owner is whatever the migration created it as), defeating the gate.
+--
+-- Resolution: the canonical pattern for caller-identity validation under Telecheck's
+-- middleware-GUC architecture (per the just-ratified SI-024.1 JWT-binding model) is to read the
+-- caller's application-supplied actor role from a session GUC (e.g., `app.actor_role`), then
+-- validate via `pg_has_role(app_actor_role, 'medication_interaction.override_recorder', 'MEMBER')`.
+-- The application middleware that issues the procedure call is responsible for setting
+-- `app.actor_role` to the JWT-verified user's role BEFORE calling the procedure; cryptographic
+-- integrity of the actor identity is delegated to the SI-024.1 admission/replay infrastructure
+-- (per CDM v1.6 §4.NEW1-NEW5 + ADR-029 AI Workload Taxonomy actor-attribution scaffolding).
+--
+-- IMPORTANT: spec FORBIDS the use of `current_user` for caller authorization inside SECURITY
+-- DEFINER bodies in this amendment cycle. ALL wrappers (Sub-decision 6.NEW2-NEW7) that depend on
+-- app-role membership MUST validate via the GUC-supplied actor role + pg_has_role(actor_role, ...)
+-- pattern. The raw transition writer (§6.NEW1) does NOT do role validation — it relies on the
+-- per-reason wrapper having validated; wrappers are the trust-boundary.
+--
+-- Reference body pattern for STEP 4 in the override wrapper:
+--
+--   DECLARE
+--       v_actor_role TEXT;
+--   BEGIN
+--       v_actor_role := current_setting('app.actor_role', true);
+--       IF v_actor_role IS NULL OR length(trim(v_actor_role)) = 0 THEN
+--           RAISE EXCEPTION 'actor_role_missing'
+--               USING ERRCODE = 'insufficient_privilege';
+--       END IF;
+--       IF NOT pg_has_role(v_actor_role::regrole,
+--                           'medication_interaction.override_recorder',
+--                           'MEMBER') THEN
+--           RAISE EXCEPTION 'unauthorized_role: actor_role=% lacks medication_interaction.override_recorder membership',
+--               v_actor_role
+--               USING ERRCODE = 'insufficient_privilege';
+--       END IF;
+--   END;
+--
+-- The same pattern (substituting the appropriate role name) applies to:
+-- - record_signal_emission / record_signal_activation / record_signal_supersession /
+--   record_signal_expiry: validate `medication_interaction_engine_evaluator` membership
+-- - record_signal_resolution: validate `medication_interaction_resolution_subscriber` membership
+
 ALTER PROCEDURE record_interaction_signal_override(...) OWNER TO override_wrapper_owner;
 REVOKE EXECUTE ON PROCEDURE record_interaction_signal_override(...) FROM PUBLIC;
 GRANT EXECUTE ON PROCEDURE record_interaction_signal_override(...) TO medication_interaction.override_recorder;
+-- Note: even though the PostgreSQL-level GRANT EXECUTE restricts callers to those with the
+-- override_recorder role (or members thereof), the runtime STEP 4 GUC + pg_has_role check is
+-- defense-in-depth and provides a structured rejection (unauthorized_role) that callers can map
+-- to HTTP responses; without it, mistakenly broad GRANT EXECUTE elsewhere in the deployment chain
+-- would silently authorize override writes.
 ```
+
+**New rejection codes (R2 HIGH-1):** `actor_role_missing` (Mode 1 — GUC absent or blank); `unauthorized_role` (Mode 2 — GUC present but actor role lacks the required role membership). Both use `insufficient_privilege` SQLSTATE for consistent caller handling.
+
+**Updated 10-rejection-code total for override wrapper:** `tenant_guc_missing`, `tenant_guc_mismatch`, `actor_role_missing`, `idempotency_replay_outcome_mismatch`, `signal_not_active`, `signal_state_terminal`, `medication_not_on_list`, `unauthorized_role`, `unique_violation`, `advisory_lock_unavailable`.
 
 **Rejection codes (9 total):** `tenant_guc_mismatch`, `tenant_guc_missing`, `idempotency_replay_outcome_mismatch`, `signal_not_active`, `signal_state_terminal`, `medication_not_on_list`, `unauthorized_role`, `unique_violation`, `advisory_lock_unavailable`.
 
@@ -721,7 +778,10 @@ These are NOT granted to humans; they OWN the wrapper procedures and are the onl
 - **R1 MED-1 closed:** SECURITY DEFINER access function `get_interaction_signal_current_state()` declared return types `interaction_signal_state_t` + `interaction_signal_transition_reason_t` but MV columns inherit as TEXT from the transition table's TEXT+CHECK column types. Fix: explicit casts `mv.current_state::interaction_signal_state_t` + `mv.transition_reason::interaction_signal_transition_reason_t` in the return query. Future TYPES amendment cycle should formalize these as DOMAIN types backed by equivalent CHECK constraints and migrate the columns from TEXT to the domain types — at which point the casts become no-ops; for this amendment cycle the casts are the spec-compliant closure.
 - **R1 MED-2 closed:** Procedure count inconsistency — §1 scope said 6 procedures but section §3 defined 7 (1 raw + 5 lifecycle wrappers + 1 override wrapper). RBAC §8 already correctly listed 6 wrapper owner roles + 1 service-level role + 1 raw writer owner = 8 owner roles. Fix: normalized scope + §1 in-scope item 1 + §3 heading to "7 SECURITY DEFINER procedures (1 raw transition writer + 5 reason-specific lifecycle wrappers + 1 override wrapper)" — matches §3 body + §8 RBAC roles.
 
-Authored on `spec/cdm-v1-7-audit-v5-9-openapi-v0-3-sm-v1-2-rbac-v1-2-si019-followon-2026-05-21` branch off main at `af66412` (post-P-033 + Addendum 61). v0.2 commit pending push for R2 verification.
+Authored on `spec/cdm-v1-7-audit-v5-9-openapi-v0-3-sm-v1-2-rbac-v1-2-si019-followon-2026-05-21` branch off main at `af66412` (post-P-033 + Addendum 61). v0.2 commit `dc54ce1`. v0.3 commit pending push for R3 verification.
+
+**v0.3 DRAFT 2026-05-21 — R2 closure applied (1 HIGH):**
+- **R2 HIGH-1 closed:** SECURITY DEFINER caller-identity check defect. Override wrapper STEP 4 clinician-role check would evaluate `current_user` against `override_wrapper_owner` (the procedure owner under SECURITY DEFINER semantics) rather than the actual app-role caller. Any role holding EXECUTE on the procedure would silently pass the role gate. Fix: spec normatively requires GUC-supplied actor-role validation pattern (`current_setting('app.actor_role') + pg_has_role(actor_role::regrole, '<role>', 'MEMBER')`) for ALL 6 reason-specific wrappers + the override wrapper; FORBIDS `current_user` for caller authorization inside SECURITY DEFINER bodies in this amendment cycle; defense-in-depth alongside the PostgreSQL-level GRANT EXECUTE chain. Added rejection codes `actor_role_missing` (Mode 1; GUC absent/blank) + `unauthorized_role` (Mode 2; actor lacks required role membership). Raw transition writer (§6.NEW1) does NOT do role validation — wrappers are the trust boundary; raw writer relies on owner-only EXECUTE chain. Pattern is identical to the I-032 v5.3 tenant-GUC Mode 1+2 guard pattern applied to actor_role instead of tenant_id.
 
 ---
 
