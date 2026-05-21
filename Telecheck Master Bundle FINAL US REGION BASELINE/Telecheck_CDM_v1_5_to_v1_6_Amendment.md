@@ -1,7 +1,7 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.12 DRAFT
-**Status:** POST-PASS-2 R10 (R11 MED-1 closed: Pass-2 R10 caught that the v0.11 preflight was misplaced (inside §4.NEW5 — runs AFTER §4.NEW1-NEW4 reference prerequisite roles) and incomplete (only checked cdm_owner, not all 5). PostgreSQL would fail at the first missing-role reference before the preflight executed, leaving partial DDL behind. Fix: new §4.NEW0 consolidated preflight DO block at the very TOP of the migration DDL — runs BEFORE §4.NEW1, asserts all 5 required roles + executor identity + advisory probe for REVOKE CREATE ON SCHEMA public FROM PUBLIC. Old preflight at §4.NEW5 removed with explanatory cross-reference comment. Awaiting Pass-2 R11 ship-it verification.)
+**Version:** 0.13 DRAFT
+**Status:** POST-PASS-2 R11 (R12 MED-1 closed: Pass-2 R11 caught that the v0.12 §4.NEW0 advisory probe `has_schema_privilege('public', 'public', 'CREATE')` resolves the first 'public' as a role name, but PUBLIC is a pseudo-role not in pg_roles — on installs without an actual role named public, the call RAISES undefined_object and aborts the migration even when all required roles + executor identity are correct. Fix: drop the in-migration advisory probe; document the equivalent ACL-inspection check in §4.5 deployment runbook (using `aclexplode(...)` with grantee=0 for PUBLIC). The §4.NEW5 SECURITY DEFINER helpers schema-qualify + lock search_path so are independently safe; the REVOKE is genuinely belt-and-suspenders, not a §4.NEW5 precondition. Awaiting Pass-2 R12 ship-it verification.)
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
@@ -82,11 +82,15 @@ BEGIN
             USING ERRCODE = 'insufficient_privilege';
     END IF;
 
-    -- Assertion 3 (advisory probe, RAISE NOTICE on misconfig — not RAISE EXCEPTION because
-    -- non-superuser executors can't fix it from inside this migration):
-    IF has_schema_privilege('public', 'public', 'CREATE') THEN
-        RAISE NOTICE 'CDM v1.6 amendment advisory: PUBLIC has CREATE on schema public — platform-floor REVOKE CREATE ON SCHEMA public FROM PUBLIC is missing. The §4.NEW5 SECURITY DEFINER helpers schema-qualify their table references so are unaffected, but the REVOKE is required as defense-in-depth per CLAUDE.md hard-floor.';
-    END IF;
+    -- Assertion 3 (advisory probe on PUBLIC CREATE on schema public): MOVED to §4.5 deployment
+    -- runbook per R11 MED-1 closure 2026-05-20. Pass-2 R11 caught that
+    -- has_schema_privilege('public', 'public', 'CREATE') resolves the first 'public' as a role name,
+    -- but PUBLIC is a pseudo-role not in pg_roles — on installations without an actual role named
+    -- public, the probe RAISES undefined_object and aborts the migration. Since the §4.NEW5
+    -- SECURITY DEFINER helpers schema-qualify their table references and use locked search_path,
+    -- they are unaffected by PUBLIC having CREATE on schema public; the REVOKE is genuinely
+    -- belt-and-suspenders defense-in-depth, not a precondition for §4.NEW5 correctness. Moving
+    -- the probe to the deployment runbook removes a fragile blocker without weakening security.
 END $$;
 ```
 
@@ -602,7 +606,8 @@ The amendment DDL assumes the following roles + schema posture exist BEFORE the 
 | `break_glass_procedure_owner` | Owns break-glass session start/close procedures | §4.NEW4 INSERT/UPDATE |
 
 **Required schema posture:**
-- `REVOKE CREATE ON SCHEMA public FROM PUBLIC` — PostgreSQL 15+ default; required for pre-15 installs as platform-floor defense-in-depth against SECURITY DEFINER name-resolution shadowing. The schema-qualified table reference in §4.NEW5 helpers already prevents the attack independently, but this REVOKE is belt-and-suspenders.
+- `REVOKE CREATE ON SCHEMA public FROM PUBLIC` — PostgreSQL 15+ default; required for pre-15 installs as platform-floor defense-in-depth against SECURITY DEFINER name-resolution shadowing. The schema-qualified table reference in §4.NEW5 helpers already prevents the attack independently (using `FROM public.jwt_migration_entity_status` + `search_path = pg_catalog, pg_temp`), so this REVOKE is belt-and-suspenders rather than a §4.NEW5 correctness precondition.
+- **Deployment-runbook verification step (R11 MED-1 closure 2026-05-20):** the platform deployment runbook must verify this posture out-of-band before applying the amendment. Example check (run as a role with USAGE on schema public): `SELECT EXISTS (SELECT 1 FROM pg_namespace n, aclexplode(coalesce(n.nspacl, acldefault('n', n.nspowner))) acl WHERE n.nspname = 'public' AND acl.grantee = 0 AND acl.privilege_type = 'CREATE') AS public_has_create_on_public_schema;` — expected result: `FALSE`. (An earlier in-migration `has_schema_privilege('public', 'public', 'CREATE')` probe was removed from §4.NEW0 because PUBLIC is a pseudo-role and the call raises `undefined_object` on installs without an actual role named `public` — false-positive blocker.)
 
 **Required migration-executor identity:**
 - Migration executor MUST be PostgreSQL superuser OR a member of `cdm_owner` (required for the `ALTER FUNCTION ... OWNER TO cdm_owner` statements in §4.NEW5). The preflight DO block enforces this fail-fast.
@@ -659,8 +664,11 @@ The amendment DDL assumes the following roles + schema posture exist BEFORE the 
 **v0.12 DRAFT 2026-05-20 — Pass-2 R10 closure (preflight relocation + completeness):**
 - **MED-1 closed** — Pass-2 R10 caught two defects in the v0.11 R9 preflight: (a) placement — preflight DO block was inside §4.NEW5, which runs AFTER §4.NEW1-NEW4 had already referenced `admit_session_jwt_owner`, `sec_jwt_cleanup`, `kms_rotation_operator`, `break_glass_procedure_owner` in their GRANT/POLICY statements. PostgreSQL would fail at the first missing-role reference before reaching the preflight, leaving partial DDL behind in non-transactional/manually-replayed deployments and pushing operators toward the same workaround class R9 was meant to close. (b) Completeness — preflight only asserted `cdm_owner` existed, missing the other 4 required roles. Fix per Pass-2 R10 verbatim recommendation: consolidated preflight DO block moved to new §4.NEW0 at the very TOP of the migration DDL — runs BEFORE §4.NEW1 creates or grants anything; asserts all 5 required roles in a single FOREACH loop with accumulated missing-role report; asserts executor identity (superuser OR cdm_owner member); advisory probe for `REVOKE CREATE ON SCHEMA public FROM PUBLIC` via `has_schema_privilege('public', 'public', 'CREATE')` (RAISE NOTICE not RAISE EXCEPTION — non-superuser executors can't fix it from inside the migration, but the misconfig is loudly reported). Old preflight at §4.NEW5 removed with explanatory cross-reference comment.
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit `d76b24c`. v0.8 commit `b33d017`. v0.9 commit `905632c`. v0.10 commit `9a5dcc2`. v0.11 commit `49a7450`. v0.12 commit pending push for Pass-2 R11 ship-it verification.
+**v0.13 DRAFT 2026-05-20 — Pass-2 R11 closure (drop fragile PUBLIC-schema in-migration probe; move to deployment runbook):**
+- **MED-1 closed** — Pass-2 R11 caught a self-inflicted defect from v0.12: the advisory probe `has_schema_privilege('public', 'public', 'CREATE')` resolves the first 'public' as a role name. PUBLIC is a pseudo-role used by GRANT/REVOKE, not a normal role in pg_roles — on installations without an actual role literally named 'public', the three-argument form raises `undefined_object` and aborts the migration. Turning a defense-in-depth advisory into a hard blocker is exactly what R10 was trying to fix. Fix: drop the in-migration probe entirely (the §4.NEW5 SECURITY DEFINER helpers schema-qualify + lock search_path so are independently safe — the REVOKE is genuinely belt-and-suspenders, not a §4.NEW5 correctness precondition); document the equivalent ACL-inspection check in §4.5 deployment runbook (using `aclexplode(coalesce(n.nspacl, acldefault(...)))` with `grantee = 0` for PUBLIC). The deployment runbook performs the check out-of-band before the migration runs; the migration itself stays free of fragile pseudo-role probes.
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit `d76b24c`. v0.8 commit `b33d017`. v0.9 commit `905632c`. v0.10 commit `9a5dcc2`. v0.11 commit `49a7450`. v0.12 commit `9d3e8e3`. v0.13 commit pending push for Pass-2 R12 ship-it verification.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.12 DRAFT (Pass-2 R10 closure applied: §4.NEW0 consolidated preflight at top of migration DDL; all 5 roles + executor + schema-CREATE advisory probe) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R11 ship-it verification queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.13 DRAFT (Pass-2 R11 closure applied: drop fragile in-migration PUBLIC pseudo-role probe; document equivalent ACL-inspection check in §4.5 deployment runbook) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R12 ship-it verification queued.
