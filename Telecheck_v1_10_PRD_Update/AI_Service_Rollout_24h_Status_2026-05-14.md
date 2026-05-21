@@ -4336,3 +4336,111 @@ Every closure was within SI-024.1's ratified sub-decision scope — **zero CLAUD
 Cumulative: **111 findings closed inline across 6 cycles; 0 hard-floor item 6 violations; 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed disciplines + the SI-spec-first promotion pattern continue to scale. The long-tail asymptote pattern (12-round convergence on v1.10.1 + P-032) is now an empirical regularity, not a single observation.
 
 — Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 SI-024.1 follow-on cycle close-out 2026-05-20 via auto-proceed. Main at `cbf99da`. Registry v2.19. P-032 appended. Day-1 SI-spec-first follow-on delivered. Next deliverable per auto-proceed: SI-024.1 Phase A foundation implementation in `telecheck-app` code repo OR next critical-path SI per Master Completion Plan v1.0.
+
+---
+
+## Addendum 61 — SI-019 Med-Interaction v1.0 → v2.0 RATIFIED via auto-proceed (Codex R7 ship-it APPROVE) after Evans OQ7 Option A ratification; merge `08a41b8`; Registry v2.19 → v2.20; FIRST P-NUM in Phase B fan-out per Master Completion Plan v1.0; Track 1 anchor (Ghana revenue pilot) UNBLOCKED
+
+**Date:** 2026-05-21
+**Status:** LANDED + RATIFIED
+**Main HEAD:** `ed75aa9` (cockpit) / `08a41b8` (SI merge)
+**Cycle counter:** 7th successive SI/amendment ratification in Q2 2026 under auto-proceed + dual-recommendation + two-pass disciplines (P-026 → P-028 → P-029 → P-030 → P-031 → P-032 → P-033)
+
+### What landed
+
+`Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Medication_Interaction_Engine_Slice_PRD_v2_0.md` — SI-019 v0.8 implementation-readiness extension to Med-Interaction v1.0; 9 sub-decisions; Option A canonical Phase B append-only-only lifecycle persistence per Evans's OQ7 ratification 2026-05-20.
+
+### The OQ7 ratifier-decision episode (worked example of dual-recommendation + hard-floor item 6)
+
+This cycle is the cleanest worked example to date of the CLAUDE.md dual-recommendation + two-pass + hard-floor item 6 discipline working as designed:
+
+1. **R1 STOP** — Codex correctly invoked hard-floor item 6 on a canonical contradiction (Sub-decision 1 strict append-only `interaction_signal` ↔ Sub-decision 5 state-machine UPDATE transitions ↔ Sub-decision 8 procedure performing UPDATE). Iteration halted; ratifier escalation required.
+
+2. **Three-way recommendation:**
+   - Claude draft (pre-evidence): Option B (P-021 two-tier append-only precedent + read-path simplicity)
+   - Codex Pass-1 (source-first independent): Option A variant + rebuildable projection (I-035 decisive)
+   - Codex Pass-2 (contrast-and-synthesize): Option A canonical + rebuildable projection (NEW consideration: two-authority divergence risk on Option B)
+   - Claude post-evidence: SHIFTED to Option A (I-035 ratified 2026-05-20 via P-027 post-dates P-021 2026-05-17; P-021 grandfathered)
+   - Convergence: all three on Option A canonical + rebuildable projection
+
+3. **Hard-floor item 6 held:** even though Claude + Pass-2 agreed, auto-proceed was correctly disallowed; ratifier (Evans) made the architectural decision via chat-message ratification ("A").
+
+4. **Cycle resumes with architectural contradiction resolved:** R2-R7 closures all within Option A scope; no further hard-floor item 6 escalations.
+
+### Convergence trajectory (7-round Codex cycle = R1 STOP + R2-R6 closures + R7 ship-it)
+
+| Round | HIGH | MED | Class of defect closed |
+|---|---|---|---|
+| R1 | 1 STOP | — | Architectural contradiction (Sub-decision 1↔5↔8) → escalated to ratifier; resolved via OQ7 Option A |
+| R2 | 2 | 1 | Initial transition NULL/enum unimplementable + MV RLS not natively supported + stale MV gating |
+| R3 | 1 | 2 | State-continuity invariant unenforceable at row-level CHECK + RETURNS RECORD anonymous + DOMAIN_EVENTS count understated |
+| R4 | 2 | 1 | Override atomicity ordering (terminal transition before override row) + raw transition writer too-broadly granted + tenant-GUC missing_ok=false |
+| R5 | 1 | 0 | Activation race against override evidence INSERT — **HIGH cleared mid-cycle** |
+| R6 | 0 | 1 | Derived-state SQL dropped tenant_id scope |
+| **R7** | **0** | **0** | **ship-it APPROVE — "no material R7 blocker found"** |
+
+**Total:** 6 HIGH + 5 MED closed inline across 6 closure rounds. Long-tail asymptote pattern confirmed for the THIRD time in Q2 2026: P-029 (8 rounds), P-032 (12 rounds), P-033 (7 rounds total including R1 STOP). Faster convergence than P-032 because architectural-judgment item was surfaced EARLY via R1 STOP rather than discovered mid-cycle — the dual-recommendation discipline pays off in cycle length when applied at the first sign of contradiction.
+
+### Architectural shape of closures (R2-R7, post-OQ7)
+
+Each closure round worked down the stack of PostgreSQL semantics + concurrency invariants progressively layered on the Option A append-only-only persistence:
+
+1. **R2:** Initial transition row contract + MV RLS implementability + stale MV gating
+2. **R3:** State-continuity invariant enforcement via single canonical SECURITY DEFINER writer + access function contract + cross-artifact count discipline
+3. **R4:** Atomicity ordering for evidence + transition pair + per-reason wrapper grant chain + tenant-GUC structured rejection
+4. **R5:** Activation-vs-override race serialization via shared advisory lock + explicit override-evidence existence check
+5. **R6:** Tenant-scope discipline in canonical derived-state SQL + MV partitioning
+6. **R7:** ship-it APPROVE
+
+Every closure was within Option A scope — zero further hard-floor item 6 escalations after OQ7. The cycle is the second worked example (after P-032's CDM v1.6 amendment) of the "iterate-to-asymptote within scope" discipline.
+
+### Process novelties (continued)
+
+1. **First Phase B fan-out promotion.** Phase A engineering items closed 2026-05-15 + Phase A spec backlog cleared via P-026-P-032; P-033 is the FIRST per-slice content-change promotion in Phase B per Master Completion Plan v1.0 trajectory.
+2. **Architectural-judgment surfaced early via R1 STOP.** The dual-recommendation + two-pass discipline + hard-floor item 6 escalation, when applied at the first sign of canonical contradiction, prevented the cycle from re-discovering the contradiction at R3 or R4. R1 STOP → ratifier decision → cycle resumes is materially faster than discovering the contradiction mid-cycle.
+3. **Three Q2 2026 long-tail asymptote confirmations.** P-029 (8 rounds), P-032 (12 rounds), P-033 (7 rounds). Pattern is now load-bearing operational regularity.
+4. **Seven successive auto-proceeded Q2 2026 cycles.** P-026 → P-028 → P-029 → P-030 → P-031 → P-032 → P-033. Cumulative 122 findings closed inline across 7 cycles; 0 hard-floor item 6 violations across the closures (R1 STOP on P-033 was a CORRECT invocation, not a violation; the ratifier-escalation completed and the cycle resumed cleanly).
+
+### Companion landings
+
+- `Telecheck_Promotion_Ledger.md` — entry P-033 appended at top (commit `ed75aa9`)
+- `Telecheck_Artifact_Registry_v2_10.md` — header bumped v2.19 → v2.20 (commit `ed75aa9`)
+- New role registrations in §4.5-equivalent reference shape: 4 RBAC roles + 6 wrapper owner roles + lifecycle_transition_writer_owner + mv_refresh_owner
+
+### Production gates explicit
+
+| Gate | Status post-P-033 merge |
+|---|---|
+| Master Completion Plan v1.0 Track 1 anchor "new critical path" | **UNBLOCKED** for `telecheck-app` code repo implementation |
+| Med-Interaction skeleton → ratified | Resolved; was only skeleton among 5 pilot-required slices |
+| Ghana revenue anchor (pilot-viable scope) | 1 of 5 critical-path items now ratified; 4 remaining: Async-Consult clinician-decision loop completion, AI Service Mode 1 conversational scaffolding, Crisis Response slice, Admin Backend basics |
+| Phase B fan-out trajectory | First P-NUM landed; future Phase B SIs follow established cycle pattern |
+
+**Rollback path:** `git revert -m 1 08a41b8` reverts SI-019 amendment; `git revert ed75aa9` reverts cockpit. Would require new P-033a ledger entry + Registry v2.20 → v2.21 bump per lockstep rule.
+
+### Outstanding queue (post-P-033)
+
+1. **SI-019 Phase A foundation implementation** in `telecheck-app` code repo (engine module + lifecycle transition procedures + projection MV + 8 OpenAPI endpoints + 4 RBAC role assignments).
+2. **Async-Consult clinician-decision loop completion** (depends on SI-005 ratification per Track 1 Phase B fan-out item).
+3. **AI Service Mode 1 conversational scaffolding** (Track 2 Phase B fan-out; buildable now per Master Completion Plan).
+4. **Crisis Response slice** (per Master Completion Plan pilot-viable scope item 4).
+5. **Admin Backend basics** (per Master Completion Plan pilot-viable scope item 5).
+6. **Possible CDM v1.6 → v1.7 + AUDIT_EVENTS v5.8 → v5.9 + OpenAPI v0.2 → v0.3 + State Machines v1.1 → v1.2 + RBAC v1.1 → v1.2 follow-on amendment cycle** to physically land the SI-019 canonical entities + procedures into the named CDM/AUDIT/OpenAPI/State Machines/RBAC files per the established post-P-029 SI-spec-first promotion pattern (precedent: P-029 → P-029 follow-on; P-031 → P-032; same pattern applies here).
+
+### Discipline observation
+
+**Q2 2026 cycle pattern**, now with 7 ratifications under codified disciplines:
+
+| Ledger entry | Cycle | Findings | Rounds | Ship-it path | Hard-floor item 6 |
+|---|---|---|---|---|---|
+| P-026 | Q2 batched ratifier ceremony Phase A | 13 OQ-groups | n/a | Ratifier ceremony | 0 |
+| P-028 | SI-021 SIEM Hash-Chain Archival | 16 | 5 | §10 cadence boundary | 0 |
+| P-029 | SI-021 CDM v1.4 → v1.5 follow-on | 13 | 8 | Multi-cycle pre-merge | 0 |
+| P-030 | SI-024 v0.17 TRANSITIONAL | 35 | 17 | Pass-2 B+ synthesis | 0 |
+| P-031 | SI-024.1 v0.8 Cryptographic JWT-Binding | 19 | 8 | Codex cycle-4 APPROVE | 0 |
+| P-032 | CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 SI-024.1 follow-on | 15 | 12 | Pass-2 R12 ship-it APPROVE | 0 |
+| **P-033** | **SI-019 Med-Interaction v1.0 → v2.0 Option A** | **11** | **7** | **Codex R7 ship-it APPROVE** | **1 CORRECT INVOCATION (R1 STOP for OQ7 ratifier escalation)** |
+
+Cumulative: **122 findings closed inline across 7 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1) leading to ratifier-decision resolution + clean cycle resumption; 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + the SI-spec-first promotion pattern continue to scale; P-033's worked example demonstrates the hard-floor item 6 discipline catches architectural-judgment items at R1 cleanly rather than letting them propagate through closure rounds.
+
+— Claude (Opus 4.7, 1M context), SI-019 Med-Interaction v1.0 → v2.0 Option A cycle close-out 2026-05-21 via auto-proceed. Main at `ed75aa9`. Registry v2.20. P-033 appended. FIRST Phase B fan-out promotion. Track 1 anchor UNBLOCKED. Next deliverable per auto-proceed: SI-019 Phase A foundation implementation in `telecheck-app` code repo OR next critical-path SI per Master Completion Plan v1.0 (likely candidates: SI-019 CDM v1.6 → v1.7 + AUDIT_EVENTS v5.8 → v5.9 follow-on amendment cycle; Async-Consult clinician-decision loop completion SI; AI Service Mode 1 SI; Crisis Response slice SI).
