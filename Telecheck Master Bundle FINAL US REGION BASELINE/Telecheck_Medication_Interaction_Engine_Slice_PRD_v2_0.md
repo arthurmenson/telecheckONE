@@ -1,7 +1,7 @@
 # SI-019 — Medication Interaction & Validation Engine Slice PRD v1.0 → v2.0 implementation-readiness extension
 
-**Version:** 0.4 DRAFT (R2 closures applied 2026-05-20)
-**Status:** **DRAFT / POST-R2.** Codex R2 returned 2 HIGH + 1 MED — all within Option A scope, all closed inline per established cadence: HIGH-1 (initial transition from_state enum couldn't satisfy CHECK because none/NULL not declared) → added `none` sentinel enum value + reformulated CHECK as enumerated triple; HIGH-2 (MV RLS not natively supported in PostgreSQL) → replaced direct MV grants with SECURITY BARRIER view + optional SECURITY DEFINER access function pattern, both applying `current_setting('app.tenant_id')` predicate at I-023 layer 2; MED-1 (stale MV reads could drive clinical gating) → reclassified all enforcement/gating reads (override procedure, prescribing decision gates, refill release checks, protocol gates, pharmacy enforcement) as STRICT-FRESHNESS (transition table direct), MV permitted only for non-authoritative hot-path display with stale-state labeling required. Awaiting R3.
+**Version:** 0.5 DRAFT (R3 closures applied 2026-05-20)
+**Status:** **DRAFT / POST-R3.** Codex R3 returned 1 HIGH + 2 MED — all within Option A scope, all closed inline: HIGH-1 (state-continuity invariant unenforceable; row-level CHECK validates rows in isolation; races between transition writers could corrupt current-state derivation) → new Sub-decision 8.5 canonical SECURITY DEFINER procedure `record_interaction_signal_lifecycle_transition()` as single write path for ALL 6 transition reasons; advisory-lock + latest-to_state validation + terminal-state rejection; `REVOKE INSERT FROM PUBLIC` + role-scoped EXECUTE grants prevent bypass; Sub-decision 8 override procedure refactored to wrapper calling the canonical procedure. MED-1 (SECURITY DEFINER access function RETURNS RECORD forces caller column definition lists) → RETURNS TABLE(...) with named columns + canonical types. MED-2 (cross-artifact §3 count understated DOMAIN_EVENTS as +4) → corrected to +5. Awaiting R4.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; ratifier-input artifact)
 **Owner:** Clinical Governance Lead (existing v1.0 owner) + Async Consult slice owner (cross-cutting consumer)
 **Related artifacts:**
@@ -158,7 +158,7 @@ CONSTRAINT interaction_signal_lifecycle_transition_valid_triple CHECK (
 ```
 
 - Terminal states (`overridden`, `superseded`, `resolved`, `expired`) MUST NOT have further outgoing transitions; the CHECK constraint rejects any row whose `from_state` is one of those four.
-- Idempotency-race safety: the `record_interaction_signal_override()` procedure (Sub-decision 8) acquires an advisory lock on `(tenant_id, signal_id)` before checking current state + inserting the transition row, preventing two concurrent overrides from both seeing `active` and both inserting `active → overridden` rows.
+- **State-continuity invariant (R3 HIGH-1 closure 2026-05-20):** the row-level CHECK constraint validates each row IN ISOLATION but cannot enforce continuity (from_state == previous to_state) or terminal-state rejection across rows. A buggy or racing writer could append e.g. an `active → expired` row after the latest row is already `active → overridden`. To make state-continuity enforceable, **ALL** lifecycle transition writers MUST go through a single SECURITY DEFINER procedure `record_interaction_signal_lifecycle_transition()` (defined in Sub-decision 8.5 below) that acquires the advisory lock on `(tenant_id, signal_id)`, reads the latest transition's `to_state`, verifies the proposed `from_state` matches, rejects if the latest `to_state` is terminal, then inserts the new transition row — all under the lock. Direct INSERT into `interaction_signal_lifecycle_transition` by app roles is forbidden via `REVOKE INSERT ON interaction_signal_lifecycle_transition FROM PUBLIC` + `GRANT INSERT TO lifecycle_transition_writer_owner` (the procedure's SECURITY DEFINER owner role). Sub-decision 8 `record_interaction_signal_override()` becomes a wrapper that calls `record_interaction_signal_lifecycle_transition()` PLUS inserts the override row in the same transaction.
 
 Transitions per the canonical pattern (per R2 HIGH-1 closure: initial transition uses `none` sentinel from_state, not NULL):
 - `none → emitted` (atomic with `interaction_signal` row INSERT during engine evaluation; `transition_reason='emission'`)
@@ -209,23 +209,138 @@ Terminal states (no further transitions): `overridden`, `superseded`, `resolved`
 
 **Gap.** v1.0 §7 specifies clinician override as auditable but doesn't define the write path. Per Async Consult slice precedent (SI-005's `record_consult_clinician_decision`), override recording should go through a SECURITY DEFINER procedure with multi-step validation including the I-032 Tenant-GUC equality guard (Mode 1 + Mode 2 per the just-ratified canonical text). Under **Option A (Evans-ratified 2026-05-20)** the procedure INSERTs both the `interaction_signal_override` row AND a paired `interaction_signal_lifecycle_transition` row atomically; the `interaction_signal` row itself is NEVER mutated (preserves I-035).
 
-**Proposed procedure:** `record_interaction_signal_override(...)` — SECURITY DEFINER. ~10-step validation:
+**Proposed procedure:** `record_interaction_signal_override(...)` — SECURITY DEFINER WRAPPER. Under R3 HIGH-1 closure 2026-05-20, the override procedure is now a thin wrapper that performs override-specific validation + calls the single canonical transition-write procedure (`record_interaction_signal_lifecycle_transition()` per Sub-decision 8.5 below) + INSERTs the override row, all atomic in one transaction. ~8-step validation:
+
 - STEP 0: I-032 Mode 1 NULL/blank-GUC RAISE + Mode 2 mismatch structured-rejection (per canonical I-032 v5.3)
 - STEP 1: auth-FIRST per I-023 layer 2
 - STEP 2: idempotency-key validation
-- STEP 3: advisory-lock acquisition on `(tenant_id, signal_id)` (race serialization for current-state check vs concurrent override attempts; per SI-008/SI-009 precedent)
-- STEP 4: signal-exists check (interaction_signal row must exist) + current-state derivation (most-recent transition row's to_state must be `active`); reject with `signal_not_active` if current state ≠ `active`
-- STEP 5: medication-still-on-active-list state check
-- STEP 6: clinician-role check (RBAC `medication_interaction.override_recorder` granted)
-- STEP 7: atomic INSERT into `interaction_signal_override` AND paired INSERT into `interaction_signal_lifecycle_transition` with `(from_state='active', to_state='overridden', transition_reason='override', transition_by_actor_id=clinician_account_id, transition_by_actor_role='clinician', metadata={'override_id': new_override_id})` — both INSERTs in same transaction; advisory-lock released on transaction commit/rollback
-- STEP 8: unique_violation safety net (on both INSERTs)
-- STEP 9: rejection emission (Cat A audit `interaction_signal_override` event via canonical app-layer emission per Async-Consult P-021a pattern)
+- STEP 3: medication-still-on-active-list state check
+- STEP 4: clinician-role check (RBAC `medication_interaction.override_recorder` granted)
+- STEP 5: BEGIN transaction. Call `record_interaction_signal_lifecycle_transition(tenant_id, signal_id, to_state='overridden', transition_reason='override', actor_id=clinician_account_id, actor_role='clinician', metadata={'override_id': new_override_id_placeholder})` — this procedure acquires the advisory lock + validates current state == `active` + inserts the transition row; raises on race/contradiction
+- STEP 6: INSERT into `interaction_signal_override` (with the actual new_override_id matching the placeholder); the metadata reference in the transition row points to this row
+- STEP 7: unique_violation safety net (on both INSERTs)
+- STEP 8: COMMIT. Rejection emission (Cat A audit `interaction_signal_override` event via canonical app-layer emission per Async-Consult P-021a pattern)
 
-Rejection codes: `tenant_guc_mismatch` (I-032 Mode 2), `idempotency_replay_outcome_mismatch`, `signal_not_active`, `medication_not_on_list`, `unauthorized_role`, `unique_violation`, `advisory_lock_unavailable`. (7 codes; may expand during Codex pre-ratification.)
+Rejection codes: `tenant_guc_mismatch` (I-032 Mode 2), `idempotency_replay_outcome_mismatch`, `signal_not_active` (returned by Sub-decision 8.5 if latest to_state ≠ 'active'), `signal_state_terminal` (returned by Sub-decision 8.5 if latest to_state is terminal), `medication_not_on_list`, `unauthorized_role`, `unique_violation`, `advisory_lock_unavailable`. (8 codes.)
 
 **Promotion class:** content-change; CDM bump in lockstep with Sub-decision 1's entity additions.
 
 **Recommendation:** APPROVE.
+
+### Sub-decision 8.5: Canonical lifecycle-transition write procedure (R3 HIGH-1 closure 2026-05-20)
+
+**Gap.** The row-level CHECK constraint on `interaction_signal_lifecycle_transition` enforces only the in-isolation validity of a single row. It cannot prevent (a) a second writer racing the first and both inserting `active → overridden` against the same signal, OR (b) a buggy writer inserting `active → expired` after the signal is already `active → overridden`. The override procedure (Sub-decision 8) has its own advisory-lock + current-state check, but that pattern is not shared by the other transition writers (engine activation, engine supersede, domain-event-driven resolution, scheduler expiry). The result without this canonical procedure: current-state derivation can be corrupted by races or buggy writers, producing contradictory clinical gating state.
+
+**Proposed procedure:** `record_interaction_signal_lifecycle_transition(p_tenant_id, p_signal_id, p_to_state, p_transition_reason, p_actor_id, p_actor_role, p_metadata)` — SECURITY DEFINER, owned by `lifecycle_transition_writer_owner`.
+
+```sql
+CREATE PROCEDURE record_interaction_signal_lifecycle_transition(
+    p_tenant_id tenant_id_t,
+    p_signal_id ulid_t,
+    p_to_state interaction_signal_state_t,
+    p_transition_reason interaction_signal_transition_reason_t,
+    p_actor_id ULID,
+    p_actor_role interaction_signal_actor_role_t,
+    p_metadata JSONB
+) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE
+    v_latest_to_state interaction_signal_state_t;
+    v_lock_acquired BOOLEAN;
+BEGIN
+    -- STEP 0: tenant GUC equality guard (I-032 v5.3)
+    IF current_setting('app.tenant_id', false)::tenant_id_t IS DISTINCT FROM p_tenant_id THEN
+        RAISE EXCEPTION 'tenant_guc_mismatch'
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+
+    -- STEP 1: acquire advisory lock on (tenant_id, signal_id) for race serialization
+    -- (single-process scope; using try_advisory_xact_lock with structured 2-int keys derived from
+    -- a stable hash of the composite key; lock auto-released on transaction end)
+    v_lock_acquired := pg_try_advisory_xact_lock(
+        hashtextextended(p_tenant_id::text || ':' || p_signal_id::text, 0)::int,
+        hashtextextended('interaction_signal_lifecycle_transition', 0)::int
+    );
+    IF NOT v_lock_acquired THEN
+        RAISE EXCEPTION 'advisory_lock_unavailable'
+            USING ERRCODE = 'lock_not_available';
+    END IF;
+
+    -- STEP 2: read latest transition's to_state (under lock; deterministic by (transition_at, id) DESC)
+    SELECT to_state INTO v_latest_to_state
+        FROM public.interaction_signal_lifecycle_transition
+        WHERE tenant_id = p_tenant_id AND signal_id = p_signal_id
+        ORDER BY transition_at DESC, id DESC
+        LIMIT 1;
+
+    -- STEP 3: validate state continuity
+    IF v_latest_to_state IS NULL THEN
+        -- No prior transition; only allowed under 'emission' transition_reason
+        IF p_transition_reason <> 'emission' THEN
+            RAISE EXCEPTION 'signal_has_no_prior_transition'
+                USING ERRCODE = 'check_violation';
+        END IF;
+    ELSIF v_latest_to_state IN ('overridden', 'superseded', 'resolved', 'expired') THEN
+        -- Terminal state; no further transitions permitted
+        RAISE EXCEPTION 'signal_state_terminal: latest_to_state=%, attempted to_state=%',
+            v_latest_to_state, p_to_state
+            USING ERRCODE = 'check_violation';
+    ELSE
+        -- Non-terminal previous state; the row-level CHECK on the INSERT will enforce
+        -- (transition_reason, from_state=v_latest_to_state, to_state=p_to_state) is a valid triple
+        NULL;
+    END IF;
+
+    -- STEP 4: INSERT the new transition row; the row-level CHECK validates the triple in isolation;
+    -- this procedure enforced continuity above
+    INSERT INTO public.interaction_signal_lifecycle_transition (
+        id, tenant_id, signal_id,
+        from_state, to_state, transition_reason,
+        transition_at, transition_by_actor_id, transition_by_actor_role,
+        metadata
+    ) VALUES (
+        gen_ulid(), p_tenant_id, p_signal_id,
+        COALESCE(v_latest_to_state, 'none'), p_to_state, p_transition_reason,
+        now(), p_actor_id, p_actor_role,
+        p_metadata
+    );
+
+    -- (Domain event medication_interaction.signal_lifecycle_transition_emitted.v1 emitted via
+    -- application-layer outbox after this procedure returns + transaction commits; per the
+    -- canonical app-layer-emission pattern, not inside the SECURITY DEFINER procedure)
+END;
+$$;
+ALTER PROCEDURE record_interaction_signal_lifecycle_transition(
+    tenant_id_t, ulid_t, interaction_signal_state_t, interaction_signal_transition_reason_t,
+    ULID, interaction_signal_actor_role_t, JSONB
+) OWNER TO lifecycle_transition_writer_owner;
+
+REVOKE INSERT ON interaction_signal_lifecycle_transition FROM PUBLIC;
+GRANT INSERT ON interaction_signal_lifecycle_transition TO lifecycle_transition_writer_owner;
+REVOKE EXECUTE ON PROCEDURE record_interaction_signal_lifecycle_transition(...) FROM PUBLIC;
+GRANT EXECUTE ON PROCEDURE record_interaction_signal_lifecycle_transition(...) TO
+    medication_interaction_engine_evaluator,  -- engine writes emission/activation/superseded/expired
+    medication_interaction_override_recorder,  -- override procedure (Sub-decision 8) calls
+    medication_interaction_resolution_subscriber;  -- domain-event subscriber for resolution
+```
+
+**Callers (all 6 transition reasons funnel through this single procedure):**
+
+| Transition reason | Caller | Calling role |
+|---|---|---|
+| `emission` | engine evaluator (atomic with signal INSERT) | medication_interaction_engine_evaluator |
+| `activation` | engine evaluator (post-emission, if no override at decision time) | medication_interaction_engine_evaluator |
+| `override` | `record_interaction_signal_override()` wrapper (Sub-decision 8) | medication_interaction_override_recorder |
+| `superseded_by_evaluation` | engine evaluator (on new evaluation producing replacement) | medication_interaction_engine_evaluator |
+| `resolution_event` | medication-discontinuation domain-event subscriber | medication_interaction_resolution_subscriber |
+| `time_expiry` | engine background scheduler job | medication_interaction_engine_evaluator |
+
+**Rejection codes:** `tenant_guc_mismatch`, `advisory_lock_unavailable`, `signal_has_no_prior_transition`, `signal_state_terminal`, plus row-level CHECK violations (`check_violation` SQLSTATE).
+
+**Promotion class:** content-change; CDM bump in lockstep with Sub-decision 1's entity additions (this is the SAME single CDM bump; Sub-decision 8.5 doesn't add new entity, just new procedure).
+
+**Recommendation:** APPROVE. This procedure is the canonical write path; direct INSERT into `interaction_signal_lifecycle_transition` is forbidden by privilege grant.
+
+**Cross-references:** R3 HIGH-1 verbatim recommendation 2026-05-20 ("Require every lifecycle transition insert to go through one SECURITY DEFINER transition procedure, or an equivalent trigger-backed invariant, that locks (tenant_id, signal_id), reads the latest transition, verifies from_state equals the latest to_state, and rejects any transition from terminal states.").
 
 ### Sub-decision 9 (NEW, Option A): Optional rebuildable read-path projection
 
@@ -281,15 +396,24 @@ REVOKE ALL ON interaction_signal_current_state_v FROM PUBLIC;
 GRANT SELECT ON interaction_signal_current_state_v TO medication_interaction_signal_viewer;
 
 -- OR: tenant-scoped SECURITY DEFINER access function (alternate equivalent pattern;
--- ratifier picks one at ratification ceremony — both are I-023 layer-2 compliant):
-CREATE FUNCTION get_interaction_signal_current_state(p_signal_id ULID) RETURNS RECORD AS $$
-    SELECT signal_id, current_state, as_of, transition_reason
-    FROM public.interaction_signal_current_state_mv
-    WHERE tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
-      AND signal_id = p_signal_id;
+-- ratifier picks one at ratification ceremony — both are I-023 layer-2 compliant).
+-- R3 MED-1 closure 2026-05-20: RETURNS TABLE(...) with named columns + canonical types instead
+-- of RETURNS RECORD (which would force every caller to provide a column definition list — bad
+-- app-facing contract that pressures bypass).
+CREATE FUNCTION get_interaction_signal_current_state(p_signal_id ulid_t)
+RETURNS TABLE(
+    signal_id ulid_t,
+    current_state interaction_signal_state_t,
+    as_of TIMESTAMPTZ,
+    transition_reason interaction_signal_transition_reason_t
+) AS $$
+    SELECT mv.signal_id, mv.current_state, mv.as_of, mv.transition_reason
+    FROM public.interaction_signal_current_state_mv mv
+    WHERE mv.tenant_id = current_setting('app.tenant_id', false)::tenant_id_t
+      AND mv.signal_id = p_signal_id;
 $$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = pg_catalog, pg_temp;
-ALTER FUNCTION public.get_interaction_signal_current_state(ULID) OWNER TO mv_refresh_owner;
-GRANT EXECUTE ON FUNCTION public.get_interaction_signal_current_state(ULID) TO medication_interaction_signal_viewer;
+ALTER FUNCTION public.get_interaction_signal_current_state(ulid_t) OWNER TO mv_refresh_owner;
+GRANT EXECUTE ON FUNCTION public.get_interaction_signal_current_state(ulid_t) TO medication_interaction_signal_viewer;
 ```
 
 Both patterns enforce `tenant_id = current_setting('app.tenant_id')` per I-023 layer 2 BEFORE the underlying MV row is returned. The SECURITY BARRIER view is preferred for read-set queries (e.g., clinician dashboard lists all active signals); the access function is preferred for single-signal lookups. Implementers MAY use either; both are spec-compliant.
@@ -310,7 +434,7 @@ If all 9 sub-decisions ratify, the lockstep PR-A2-class commit lands:
 
 - **CDM:** +**4 new entities** (interaction_engine_evaluation, interaction_signal, interaction_signal_override, **interaction_signal_lifecycle_transition** [Option A add]) + 1 new SECURITY DEFINER procedure (record_interaction_signal_override) + 1 OPTIONAL rebuildable materialized view (interaction_signal_current_state_mv per Sub-decision 9) + 1 SECURITY BARRIER view (interaction_signal_current_state_v per R2 HIGH-2 closure) + 1 optional SECURITY DEFINER access function (get_interaction_signal_current_state per R2 HIGH-2 closure).
 - **AUDIT_EVENTS:** +**6 net-new action IDs under Option A** (1 evaluation_completed + 1 signal_emitted + 1 evaluation_failed + 1 knowledge_base_updated + 1 signal_enforcement_override + **1 interaction_engine_projection_divergence_detected** [Cat B, Sub-decision 9 add]; signal_override already exists in canonical).
-- **DOMAIN_EVENTS:** +4 new event types (additive enum extension; no version bump).
+- **DOMAIN_EVENTS:** +**5 new event types** (R3 MED-2 closure 2026-05-20: was incorrectly stated as +4; the 5th event `medication_interaction.signal_lifecycle_transition_emitted.v1` was added under Sub-decision 3 to support Sub-decision 9's projection refresh + push notifications). Additive enum extension; no version bump.
 - **OpenAPI:** +8 endpoints (v0.2 → v0.3).
 - **State Machines:** +1 new state machine (interaction_signal_lifecycle); v1.1 → v1.2.
 - **RBAC:** +4 new role definitions; v1.1 → v1.2.
@@ -418,6 +542,11 @@ Beyond the 8 sub-decisions above, the following questions are open and should be
 - **R2 HIGH-1 closed:** initial emission transition's `from_state` couldn't be NULL under declared enum. Fix: added `none` sentinel enum value (`from_state` enum now 7 values; `to_state` enum stays at 6 values — `none` is NEVER a valid to_state); CHECK constraint reformulated as enumerated 6-triple `OR` predicate explicitly enumerating each `(transition_reason, from_state, to_state)` triple; derived-current-state SQL note clarified that exactly one row always returned because initial emission row is atomic with signal INSERT.
 - **R2 HIGH-2 closed:** PostgreSQL materialized views don't natively enforce RLS — direct GRANT SELECT on MV is a tenant-isolation bypass. Fix: REVOKE ALL FROM PUBLIC on MV; restrict to `mv_refresh_owner` role only; expose access via SECURITY BARRIER view `interaction_signal_current_state_v` (applies `tenant_id = current_setting('app.tenant_id')` filter at view level per I-023 layer 2) OR optional SECURITY DEFINER access function `get_interaction_signal_current_state(p_signal_id)` (locked search_path + ALTER FUNCTION OWNER per SECURITY DEFINER discipline). Both patterns canonical; implementers pick per use case (view for sets; function for singletons). New OPEN QUESTION for ratifier: pick one canonical pattern OR permit both? Recommendation: permit both.
 - **R2 MED-1 closed:** stale 30s MV reads could let prescribing/refill/protocol-gate enforcement see overridden signals as still active. Fix: explicit read-path consumer classification table — STRICT-FRESHNESS (transition table direct + advisory lock) for ALL enforcement/gating reads (override procedure, prescribing decision gates, refill release checks, protocol gates, pharmacy enforcement, cross-prescriber concern); HOT-PATH DISPLAY (MV via access pattern; stale-state labeling required) for non-enforcement only (dashboards, patient-facing summaries, admin reporting); PUSH NOTIFICATION (domain event subscriber; never stale). Implementers MUST classify every consumer explicitly; default for safety-relevant gating is STRICT-FRESHNESS.
+
+**v0.5 DRAFT 2026-05-20 — R3 closures applied (1 HIGH + 2 MED):**
+- **R3 HIGH-1 closed:** State-continuity invariant unenforceable at row-level CHECK alone — buggy/racing writer could append `active → expired` after latest row is `active → overridden`, or two concurrent writers could both insert overlapping terminal transitions. Fix: new **Sub-decision 8.5** canonical SECURITY DEFINER procedure `record_interaction_signal_lifecycle_transition(p_tenant_id, p_signal_id, p_to_state, p_transition_reason, p_actor_id, p_actor_role, p_metadata)` as the SINGLE write path for ALL 6 transition reasons. Procedure body: STEP 0 tenant-GUC equality guard (I-032 v5.3); STEP 1 `pg_try_advisory_xact_lock` on `(tenant_id, signal_id)`; STEP 2 read latest `to_state` under lock; STEP 3 validate state continuity (emission only valid when no prior transition; terminal-state rejection on any non-emission attempt); STEP 4 INSERT new row with `from_state := COALESCE(latest_to_state, 'none')`. Rejection codes: `tenant_guc_mismatch`, `advisory_lock_unavailable`, `signal_has_no_prior_transition`, `signal_state_terminal`. `REVOKE INSERT ON interaction_signal_lifecycle_transition FROM PUBLIC` + `GRANT INSERT TO lifecycle_transition_writer_owner` (the procedure's SECURITY DEFINER owner role). EXECUTE grants to: `medication_interaction_engine_evaluator` (emission/activation/superseded/expired), `medication_interaction_override_recorder` (override via Sub-decision 8 wrapper), `medication_interaction_resolution_subscriber` (resolution domain-event subscriber). Sub-decision 8 override procedure refactored to ~8-step wrapper that calls the canonical Sub-decision 8.5 procedure + INSERTs override row atomically; `signal_not_active` + `signal_state_terminal` rejection codes now bubble up from Sub-decision 8.5.
+- **R3 MED-1 closed:** SECURITY DEFINER access function `get_interaction_signal_current_state()` declared as `RETURNS RECORD` would force every caller to provide a column definition list. Fix: changed to `RETURNS TABLE(signal_id ulid_t, current_state interaction_signal_state_t, as_of TIMESTAMPTZ, transition_reason interaction_signal_transition_reason_t)` with named columns + canonical types; preserves the SECURITY DEFINER + tenant filter inside the body.
+- **R3 MED-2 closed:** cross-artifact §3 summary said DOMAIN_EVENTS +4 but Sub-decision 3 lists 5 events (the 5th `signal_lifecycle_transition_emitted.v1` was added at v0.3 for MV refresh + push notifications). Fix: corrected §3 to +5 DOMAIN_EVENTS with explicit reference to the 5th event.
 
 ---
 
