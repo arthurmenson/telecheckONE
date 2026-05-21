@@ -1,7 +1,7 @@
 # SI-022 — Crisis Response Slice (Resource Lookup + Escalation Routing) Spec v1.0
 
-**Version:** 0.1 DRAFT
-**Status:** PRE-RATIFICATION (Codex R1 queued)
+**Version:** 0.2 DRAFT
+**Status:** POST-R1 (2 HIGH + 1 MED closed inline: R1 HIGH-1 CCR lookup was placed on FLOOR-020 synchronous emit path, contradicting non-blocking detection invariant — restructured Sub-decision 2 with explicit STEP 1-5 emit ordering placing Cat A `crisis_detection_trigger` synchronous and FLOOR-020 fail-closed; CCR resolution + `crisis.escalation_destination_resolved` Cat B explicitly DOWNSTREAM and asynchronous; Crisis Response Card MAY render with cached/generic content at STEP 3 then hydrate at STEP 5 after CCR resolution; resolver failure never blocks Cat A detection emission. R1 HIGH-2 dispatch_ledger UNIQUE(tenant_id, patient_id, server_signal_id, channel) cannot represent multi-recipient fan-out (care-team SMS + clinical-on-call SMS + emergency-contact SMS would collide on the channel-level UNIQUE) — restructured Sub-decision 5 to align with P-027 §4.66-4.67 canonical two-tier shape: §4.66 dispatch_ledger row per channel-class records the channel-level obligation; §4.67 provider_attempt row per (recipient_role, channel) tuple records per-recipient outcome; no schema amendment to P-027 required. R1 MED-1 Cat A vs Cat B mismatch on `crisis.no_acknowledgement_escalation` between Sub-decision 6 (claimed Cat A) and §3 AUDIT_EVENTS table (defined Cat B) — chose Cat A for safety-floor escalation fail-closed semantics; updated §1 in-scope tally from "4 Cat A + 1 Cat B + 2 Cat C" to "5 Cat A + 0 Cat B + 2 Cat C"; R2 Codex review queued)
 **Authoring date:** 2026-05-21
 **Trigger:** Master Completion Plan v1.0 pilot-viable scope item 4 (Crisis Response slice). Companion to AI Service Mode 1 Handler Spec v0.4 P-035 (FLOOR-020 crisis-detection emit path) and SI-013 P-025 (CCR crisis-helpline namespace).
 **Owner:** Crisis Response slice owner + Platform AI Safety + Mode 1 AI Service owner + Notification slice owner + Adverse-Event slice owner + Audit owner.
@@ -29,7 +29,7 @@ The Crisis Response slice defines the canonical platform-floor response surface 
 
 **In scope:**
 - 6 new CDM entities (1 crisis_event + 5 lifecycle/coordination entities)
-- 7 new AUDIT_EVENTS action IDs (4 Cat A + 1 Cat B + 2 Cat C) under `crisis.*` namespace EXTENDING the P-025 `crisis.escalation_destination_resolved` ratified scope
+- 7 new AUDIT_EVENTS action IDs (5 Cat A + 0 Cat B + 2 Cat C; R1 MED-1 closure 2026-05-21 moved no_acknowledgement_escalation Cat B → Cat A to align with Sub-decision 6's safety-floor escalation fail-closed claim) under `crisis.*` namespace EXTENDING the P-025 `crisis.escalation_destination_resolved` ratified Cat B scope
 - 4 new DOMAIN_EVENTS event types (additive)
 - 6 new OpenAPI endpoints under `/v1/crisis/*`
 - 1 new state machine `crisis_event_lifecycle` (DERIVED from append-only per I-035)
@@ -63,7 +63,7 @@ The card MUST render BEFORE any other UI mutation (no race with chat-stream comp
 
 **Patient-surface-agreement contract (extends P-025 Rule 4):** the resolved card MAY render BEFORE the `crisis.escalation_destination_resolved` Cat B audit emits (Cat B fail-soft per P-025); the card MUST NOT block on Cat B success. The `crisis_detection_trigger` Cat A audit is on the synchronous emit path and uses standard Cat A fail-closed FLOOR-020 discipline.
 
-### Sub-decision 2 — Resource lookup contract (CCR integration)
+### Sub-decision 2 — Resource lookup contract (CCR integration; DOWNSTREAM of FLOOR-020 emit)
 
 **Decision:** All 3 P-025 typed resolvers are called in parallel during card resolution. The resolution outcome is recorded in a single `crisis.escalation_destination_resolved` Cat B audit row per P-025's 4-value `resolution_status` enum. Sub-decision 1's card consumes the resolution outcome:
 
@@ -74,7 +74,25 @@ The card MUST render BEFORE any other UI mutation (no race with chat-stream comp
 | `'unmapped_country'` | "Call your local emergency services" fallback copy; helpline null |
 | `'ccr_unavailable'` | fail-soft per P-025 Rule 4; cached-last-known values used if available; otherwise generic fallback |
 
-**No platform admin can disable the lookup** (I-019 invariant). The lookup is on the FLOOR-020 synchronous emit path.
+**Critical FLOOR-020 invariant ordering (R1 HIGH-1 closure 2026-05-21):** CCR resource lookup MUST be **strictly downstream** of `crisis_detection_trigger` Cat A audit emission (the FLOOR-020 synchronous emit path) — NOT synchronous with it. This separation is required because:
+
+1. **FLOOR-020 + I-019 platform-floor:** crisis detection emission must NEVER block on, latency-degrade with, or fail-with-cascade-from downstream response-surface work. CCR latency, DNS failures, or resolver retries must not delay or suppress the Cat A `crisis_detection_trigger` emit.
+2. **Cat A vs Cat B fail-mode mismatch:** `crisis_detection_trigger` is Cat A (fail-closed; FLOOR-020 discipline); `crisis.escalation_destination_resolved` is Cat B (fail-soft per P-025 Rule 4). Co-placing on the same synchronous path would have forced Cat B to inherit Cat A's fail-closed semantics OR forced Cat A to inherit Cat B's fail-soft tolerance — neither is correct.
+3. **Card render independence:** the Crisis Response Card MAY render with generic fallback copy (cached-last-known values OR "Call your local emergency services" + null helpline) BEFORE the CCR resolution completes, so the patient-facing safety surface is never blocked by resolver latency.
+
+**Canonical emit ordering:**
+
+```
+STEP 1 (synchronous; FLOOR-020 fail-closed): crisis_detection_trigger Cat A emit
+STEP 2 (synchronous; FLOOR-020 fail-closed): INSERT crisis_event row + 'detected' lifecycle transition
+STEP 3 (synchronous; FLOOR-020 fail-closed): render Crisis Response Card with cached/generic content
+STEP 4 (asynchronous; Cat B fail-soft): call 3 CCR resolvers + emit crisis.escalation_destination_resolved Cat B
+STEP 5 (asynchronous; downstream of STEP 4 outcome): if resolver returns 'resolved' / 'partial_defaults' /
+        'ccr_unavailable' with cached-last-known, hydrate the Crisis Response Card with the resolved values
+        via the patient client's normal reactive update path; otherwise the card stays at fallback content.
+```
+
+**No platform admin can disable CCR lookup OR card rendering** (I-019 invariant). But resolver failure NEVER blocks Cat A detection emission, lifecycle row insertion, or card rendering. The 200ms render budget in Sub-decision 1 is for STEP 3 (cached/generic content), NOT STEP 5 (hydration of resolved values).
 
 ### Sub-decision 3 — Escalation routing decision tree
 
@@ -132,31 +150,54 @@ none → detected
 
 Transition triples enforced by CHECK on `crisis_event_lifecycle_transition` (NEW from_state, NEW to_state, NEW transition_reason). Mirrors P-037 + P-038 patterns: per-event advisory lock + monotonic transition_at + state continuity validation in BEFORE INSERT trigger.
 
-### Sub-decision 5 — Notification fan-out + dispatch obligation
+### Sub-decision 5 — Notification fan-out + dispatch obligation (R1 HIGH-2 closure 2026-05-21)
 
-**Decision:** Crisis fan-out reuses the canonical `notification_crisis_dispatch_ledger` infrastructure from P-027 Sprint 16 §4.66 (channel-scoped UNIQUE on (tenant_id, patient_id, server_signal_id, channel)). Each crisis_event row generates one or more dispatch_ledger rows — one per (recipient_role, channel) tuple per the decision tree (Sub-decision 3).
+**Decision:** Crisis fan-out reuses the canonical P-027 §4.66-4.67 two-tier pattern unchanged:
 
-Wire-up at the crisis_detection_trigger Cat A emit-time:
+- **§4.66 `notification_crisis_dispatch_ledger`** — channel-level OBLIGATION (one row per channel-class per crisis event). UNIQUE on `(tenant_id, patient_id, server_signal_id, channel)` per P-027 canonical schema. Records the obligation that "this crisis event MUST result in dispatch on this channel-class".
+- **§4.67 `notification_crisis_provider_attempt`** — per-recipient ATTEMPT (one row per (recipient_role, recipient_address, channel) tuple). The child table is where multi-recipient fan-out is represented; multiple recipients on the same channel (e.g., care-team SMS + clinical-on-call SMS + emergency-contact SMS) are multiple provider_attempt rows under the same dispatch_ledger SMS row.
+
+**R1 HIGH-2 closure:** prior draft proposed "one dispatch_ledger row per (recipient_role, channel) tuple" which would have required amending the P-027 §4.66 UNIQUE constraint to include `recipient_role` — that would have been a structural change to a ratified canonical schema (hard-floor item 6 territory). Closure: align with the existing two-tier shape per Codex's recommendation:
+
+Wire-up at the crisis_event INSERT (STEP 2 of Sub-decision 2 emit ordering; downstream of STEP 1 Cat A FLOOR-020 emit):
 
 ```sql
--- Step 1: INSERT crisis_event row (atomic with Cat A audit)
+-- STEP 2a: INSERT crisis_event row (atomic with Cat A audit per Sub-decision 2 ordering)
 INSERT INTO crisis_event (tenant_id, patient_id, server_signal_id, ...) ...;
 
--- Step 2: INSERT initial lifecycle transition
+-- STEP 2b: INSERT initial lifecycle transition
 INSERT INTO crisis_event_lifecycle_transition
     (tenant_id, crisis_event_id, from_state, to_state, transition_reason, transition_at)
 VALUES (..., 'none', 'detected', 'initial_detection', now());
 
--- Step 3: INSERT N notification_crisis_dispatch_ledger rows per Sub-decision 3 tree
+-- STEP 2c: INSERT one dispatch_ledger row PER CHANNEL-CLASS per Sub-decision 3 tree
+-- (channel-class enumeration: sms, email, in_app_push; max N=3 channels per crisis_event)
 INSERT INTO notification_crisis_dispatch_ledger (tenant_id, patient_id, server_signal_id, channel, ...)
-VALUES (..., 'sms'), (..., 'email'), (..., 'in_app_push'), ...;
+VALUES (..., 'sms'), (..., 'email'), (..., 'in_app_push');
+-- UNIQUE(tenant_id, patient_id, server_signal_id, channel) per P-027 §4.66 unchanged.
 
--- Step 4: INSERT notification_crisis_escalation_obligation row with persisted undeliverable_deadline
-INSERT INTO notification_crisis_escalation_obligation (tenant_id, patient_id, server_signal_id, escalation_key, undeliverable_deadline)
+-- STEP 2d: INSERT one provider_attempt row PER (recipient_role, channel) tuple
+-- (Sub-decision 3 routing tree determines which recipients per channel)
+INSERT INTO notification_crisis_provider_attempt
+    (tenant_id, patient_id, server_signal_id, channel, recipient_role, recipient_address, attempt_sequence, ...)
+VALUES
+    -- Routing tree step 4: care team on all configured channels
+    (..., 'sms', 'care_team', care_team_address, 1, ...),
+    (..., 'email', 'care_team', care_team_email, 1, ...),
+    -- Routing tree step 5: clinical-on-call IF imminent/life-threatening severity
+    (..., 'sms', 'clinical_on_call', on_call_address, 1, ...),
+    -- Routing tree step 6: emergency contact IFF Consent grant emergency_contact_share scope
+    (..., 'sms', 'emergency_contact', emergency_contact_address, 1, ...);
+
+-- STEP 2e: INSERT notification_crisis_escalation_obligation row with persisted undeliverable_deadline
+INSERT INTO notification_crisis_escalation_obligation
+    (tenant_id, patient_id, server_signal_id, escalation_key, undeliverable_deadline)
 VALUES (..., now() + INTERVAL '5 minutes');
 ```
 
-The 5-minute undeliverable_deadline is the canonical acknowledgement window for non-imminent severity. Imminent severity collapses to 60 seconds. Life-threatening collapses to 30 seconds.
+**Channel-vs-recipient identity model:** dispatch_ledger tracks channel-level OBLIGATION (must dispatch on SMS at all); provider_attempt tracks per-recipient OUTCOME (each individual SMS recipient + their delivery status). This matches the P-027 R2 HIGH closure interpretation. Multiple SMS recipients = N provider_attempt rows under the single SMS dispatch_ledger row.
+
+**Severity-tier deadlines:** 5-minute undeliverable_deadline is the canonical acknowledgement window for non-imminent severity. Imminent severity collapses to 60 seconds. Life-threatening collapses to 30 seconds.
 
 ### Sub-decision 6 — No-acknowledgement escalation timer
 
@@ -199,7 +240,7 @@ The escalation_key write is one-way mutable via BEFORE UPDATE trigger (mirrors P
 
 ## 3. AUDIT_EVENTS amendment (v5.11 → v5.12)
 
-**7 new action IDs** under `crisis.*` namespace EXTENDING P-025 (which contributed `crisis.escalation_destination_resolved` Cat B):
+**7 new action IDs** under `crisis.*` namespace EXTENDING P-025 (which contributed `crisis.escalation_destination_resolved` Cat B): **5 Cat A + 0 Cat B + 2 Cat C** (R1 MED-1 closure 2026-05-21 moved no_acknowledgement_escalation Cat B → Cat A):
 
 | # | Action ID | Category | Sampling | Partition |
 |---|---|---|---|---|
@@ -207,7 +248,7 @@ The escalation_key write is one-way mutable via BEFORE UPDATE trigger (mirrors P
 | 2 | `crisis.acknowledged` | Cat A | NOT sampled | P1 keyed by patient_id |
 | 3 | `crisis.responded` | Cat A | NOT sampled | P1 keyed by patient_id |
 | 4 | `crisis.resolved` | Cat A | NOT sampled | P1 keyed by patient_id |
-| 5 | `crisis.no_acknowledgement_escalation` | Cat B | NOT sampled (governance) | P1 keyed by patient_id |
+| 5 | `crisis.no_acknowledgement_escalation` | Cat A | NOT sampled (safety-floor escalation; R1 MED-1 closure 2026-05-21: aligned with Sub-decision 6 Cat A claim — escalation evidence MUST be fail-closed audit-complete when a safety timeout fires; Cat B fail-soft tolerance would risk silent loss of escalation evidence during the exact failure mode the timer exists to catch) | P1 keyed by patient_id |
 | 6 | `crisis.regulatory_threshold_reached` | Cat A | NOT sampled (safety-floor) | P1 keyed by patient_id |
 | 7 | `crisis.dispatch_attempt_failed` | Cat C | high-volume sampled | P2 governance-partition |
 
@@ -356,7 +397,11 @@ Preflight DO block mirrors P-038 §10 deployment preflight pattern.
 ## 12. Codex pre-ratification status
 
 **v0.1 DRAFT 2026-05-21:** pre-Codex-review.
+**v0.2 DRAFT 2026-05-21 — R1 closures applied (2 HIGH + 1 MED):**
+- **R1 HIGH-1 closed:** CCR lookup was placed on FLOOR-020 synchronous emit path, contradicting non-blocking detection invariant + creating Cat A/Cat B fail-mode mismatch on the same path. Fix: restructured Sub-decision 2 with explicit STEP 1-5 ordering — STEP 1 Cat A `crisis_detection_trigger` synchronous FLOOR-020 fail-closed; STEP 2 crisis_event INSERT + initial transition; STEP 3 Crisis Response Card render with cached/generic content (≤ 200ms); STEP 4 ASYNCHRONOUS CCR resolvers + `crisis.escalation_destination_resolved` Cat B fail-soft per P-025; STEP 5 reactive card hydration after STEP 4 outcome. Resolver failure NEVER blocks Cat A emission.
+- **R1 HIGH-2 closed:** Sub-decision 5 proposed "one dispatch_ledger row per (recipient_role, channel)" — would have required amending P-027 §4.66 UNIQUE(tenant_id, patient_id, server_signal_id, channel) constraint to include recipient_role (structural change to ratified canonical schema; hard-floor item 6 territory). Fix: aligned with existing P-027 two-tier shape per Codex's recommendation — §4.66 dispatch_ledger row per channel-class records channel-level OBLIGATION (preserves canonical UNIQUE); §4.67 provider_attempt row per (recipient_role, channel) tuple records per-recipient OUTCOME (multiple SMS recipients = N provider_attempt rows under single SMS dispatch_ledger row). No P-027 schema amendment required.
+- **R1 MED-1 closed:** Sub-decision 6 claimed `crisis.no_acknowledgement_escalation` is Cat A; §3 AUDIT_EVENTS table defined the same action ID as Cat B. Chose Cat A — safety-floor escalation evidence MUST be fail-closed audit-complete when a safety timeout fires; Cat B fail-soft tolerance would risk silent loss of escalation evidence during the exact failure mode the timer exists to catch. Updated §3 table + §1 in-scope tally (4 Cat A + 1 Cat B + 2 Cat C → 5 Cat A + 0 Cat B + 2 Cat C).
 
-Authored on `spec/SI-022-crisis-response-slice-2026-05-21` branch off main at `fab0615` (post-P-038 merge).
+Authored on `spec/SI-022-crisis-response-slice-2026-05-21` branch off main at `fab0615` (post-P-038 merge). v0.1 commit `e7a7ebb`. v0.2 commit pending push for R2 verification.
 
 — Claude (Opus 4.7, 1M context), SI-022 Crisis Response Slice Spec v0.1 DRAFT authored 2026-05-21 per Master Completion Plan v1.0 Track 1 pilot-viable scope item 4 + established post-P-029 SI authoring pattern + CLAUDE.md autonomous-work + dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + proactive application of all lessons-learned from P-031 through P-038 cycles. R1 Codex review queued.
