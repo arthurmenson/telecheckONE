@@ -1,7 +1,7 @@
 # SI-019 — Medication Interaction & Validation Engine Slice PRD v1.0 → v2.0 implementation-readiness extension
 
-**Version:** 0.2 DRAFT (R1 STOP-and-queue 2026-05-19)
-**Status:** **DRAFT / BLOCKED-PENDING-EVANS-SI-019-OQ-SIGNAL-LIFECYCLE-RATIFIER-DECISION.** Codex R1 (2026-05-19, review-mpcvz3wr-593vo1) explicitly invoked CLAUDE.md hard-floor item 6 on the canonical contradiction between Sub-decision 1's strict append-only `interaction_signal` row (BEFORE UPDATE + BEFORE DELETE triggers per I-016 + I-003) AND Sub-decision 5's state machine requiring `active → {overridden, superseded, resolved, expired}` UPDATE transitions on the same row. The conflict is design-blocking + architectural-judgment per the discriminator (canonical CDM entity persistence semantics). Iteration HALTED at R1 per the §10-escalation cadence. See §5 Open Question 7 (SI-019-OQ-SIGNAL-LIFECYCLE) for the framed ratifier-decision question.
+**Version:** 0.3 DRAFT (post-OQ7-ratification 2026-05-20)
+**Status:** **DRAFT / R1 STOP-CONDITION RESOLVED.** Evans's chat-message ratification 2026-05-20 selected **Option A** (immutable `interaction_signal` + append-only `interaction_signal_lifecycle_transition` rows + optional rebuildable projection for read-path) per three-way recommendation convergence (Claude post-evidence + Codex Pass-1 + Codex Pass-2). Decisive evidence: **I-035** ("state-machine lifecycle expressed as existence of progressively more rows in append-only tables, NOT mutation on single row; `enforce_append_only()` trigger is the canonical implementation") ratified 2026-05-20 via P-027 (newer than P-021 of 2026-05-17; P-021's two-tier append-only pattern is grandfathered for SI-005's consult entity, not governing precedent for new SIs). Sub-decisions 1, 5, 8 amended below; new Sub-decision 9 (rebuildable projection); §3 cross-artifact impact recalculated (now +4 entities, not +3). OQ7 RATIFIED-OPTION-A; Codex pre-ratification cycle resumes from R2 on the resolved spec.
 **Authoring location:** `Telecheck_v1_10_PRD_Update/` (workstream folder; ratifier-input artifact)
 **Owner:** Clinical Governance Lead (existing v1.0 owner) + Async Consult slice owner (cross-cutting consumer)
 **Related artifacts:**
@@ -35,15 +35,18 @@ Eight sub-decision categories. Each one is a ratifier-decision item; some can be
 
 **Gap.** Med-Interaction v1.0 §5.1 specifies a "Signal structure" payload but no canonical row shape. The engine's evaluation records, signal records, and override records need CDM entities.
 
-**Proposed CDM additions (3 new entities; row shapes per SI-007/SI-008/SI-009 ratification precedent):**
+**Proposed CDM additions (4 new entities under Option A; row shapes per SI-007/SI-008/SI-009 ratification precedent + I-035 append-only-only invariant):**
 
-1. **`interaction_engine_evaluation` (new entity, CDM §4.X)** — one row per engine invocation. Columns: `id` ULID, `tenant_id` Telecheck-{country}, `patient_id` FK to patients, `triggered_by` enum (`prescribing | refill | protocol_gate | manual_recheck | lab_update | adverse_event_investigation`), `triggered_by_resource_id` ULID (the prescription / refill / protocol-execution / lab-result / adverse-event ID that triggered), `evaluated_at` timestamp, `evaluation_window_ms` int (latency observability), `engine_version` semver, `knowledge_base_version` semver, `medication_set_snapshot` JSONB (the medication list considered), `condition_set_snapshot` JSONB, `lab_set_snapshot` JSONB (with `lab_freshness_status_at_evaluation` per signal). Triple-composite UNIQUE `(tenant_id, patient_id, id)` + CHECK constraint on triggered_by enum.
-2. **`interaction_signal` (new entity, CDM §4.X+1)** — one row per signal produced by an evaluation. Columns: `id` ULID, `tenant_id`, `evaluation_id` FK to interaction_engine_evaluation, `check_class` enum (`drug_drug | drug_condition | drug_lab | pharmacogenomic | special_clinical_flag`), `severity` enum (`critical | major | moderate | minor`), `recommended_action` enum (`block | warn | monitor`), `medications_involved` ULID[], `evidence_sources` JSONB (knowledge base citations), `signal_payload` JSONB (the structured signal per v1.0 §5.1). FK 1 composite to evaluation. Strict append-only (BEFORE UPDATE + BEFORE DELETE triggers per I-016 + I-003).
-3. **`interaction_signal_override` (new entity, CDM §4.X+2)** — one row per clinician override. Columns: `id` ULID, `tenant_id`, `signal_id` FK to interaction_signal, `override_by_clinician_account_id` FK to accounts, `override_at` timestamp, `override_rationale` text NOT NULL (free-text + KMS-encrypted at rest per same pattern as Consult clinician decision rationale), `override_rationale_kms_envelope` 8-column flat envelope (mirrors SI-005). Strict append-only.
+1. **`interaction_engine_evaluation` (new entity, CDM §4.X)** — one row per engine invocation. Columns: `id` ULID, `tenant_id` Telecheck-{country}, `patient_id` FK to patients, `triggered_by` enum (`prescribing | refill | protocol_gate | manual_recheck | lab_update | adverse_event_investigation`), `triggered_by_resource_id` ULID (the prescription / refill / protocol-execution / lab-result / adverse-event ID that triggered), `evaluated_at` timestamp, `evaluation_window_ms` int (latency observability), `engine_version` semver, `knowledge_base_version` semver, `medication_set_snapshot` JSONB (the medication list considered), `condition_set_snapshot` JSONB, `lab_set_snapshot` JSONB (with `lab_freshness_status_at_evaluation` per signal). Triple-composite UNIQUE `(tenant_id, patient_id, id)` + CHECK constraint on triggered_by enum. Strict append-only per I-035 (`enforce_append_only()` trigger).
+2. **`interaction_signal` (new entity, CDM §4.X+1)** — one row per signal produced by an evaluation. Columns: `id` ULID, `tenant_id`, `evaluation_id` FK to interaction_engine_evaluation, `check_class` enum (`drug_drug | drug_condition | drug_lab | pharmacogenomic | special_clinical_flag`), `severity` enum (`critical | major | moderate | minor`), `recommended_action` enum (`block | warn | monitor`), `medications_involved` ULID[], `evidence_sources` JSONB (knowledge base citations), `signal_payload` JSONB (the structured signal per v1.0 §5.1). FK 1 composite to evaluation. **Strict append-only per I-035 (`enforce_append_only()` trigger; BEFORE UPDATE rejects ALL columns; BEFORE DELETE rejects DELETE).** No `state` column — current lifecycle state is DERIVED from `interaction_signal_lifecycle_transition` per Sub-decision 5.
+3. **`interaction_signal_override` (new entity, CDM §4.X+2)** — one row per clinician override. Columns: `id` ULID, `tenant_id`, `signal_id` FK to interaction_signal, `override_by_clinician_account_id` FK to accounts, `override_at` timestamp, `override_rationale` text NOT NULL (free-text + KMS-encrypted at rest per same pattern as Consult clinician decision rationale), `override_rationale_kms_envelope` 8-column flat envelope (mirrors SI-005). Strict append-only per I-035. **Co-INSERTed atomically with a paired `interaction_signal_lifecycle_transition` row of `to_state = 'overridden'` per Sub-decision 8 procedure** — see Sub-decision 5.
+4. **`interaction_signal_lifecycle_transition` (new entity, CDM §4.X+3) — Option A append-only transition log; replaces UPDATE-on-signal-row pattern.** Columns: `id` ULID, `tenant_id`, `signal_id` FK to interaction_signal, `from_state` enum (`emitted | active | overridden | superseded | resolved | expired`), `to_state` enum (same as from_state values), `transition_reason` enum (`emission | activation | override | superseded_by_evaluation | resolution_event | time_expiry`), `transition_at` timestamp, `transition_by_actor_id` ULID NULL (clinician account_id on override; NULL on system-driven transitions), `transition_by_actor_role` enum (`clinician | system | engine_evaluator | scheduler`), `metadata` JSONB (e.g., `superseded_by_evaluation_id` for superseded; `medication_discontinuation_event_id` for resolution; `time_window_basis` for expiry; `override_id` for override). Composite FK to (tenant_id, signal_id) on interaction_signal. CHECK constraint enforces only allowed `(from_state, to_state, transition_reason)` triples per the state machine in Sub-decision 5. Strict append-only per I-035 (`enforce_append_only()` trigger). UNIQUE constraint `(tenant_id, signal_id, transition_at, id)` to prevent dup-INSERT races; advisory-lock pattern at write time per SI-008/SI-009 precedent for race serialization.
 
 **Promotion-class:** content-change; CDM bump (TBD destination version).
 
-**Recommendation:** APPROVE (3 new entities; structural; matches established CDM expansion pattern from SI-005 + SI-008 + SI-009).
+**Recommendation:** APPROVE (4 new entities under Option A; structural; matches established CDM expansion pattern from SI-005 + SI-008 + SI-009; I-035-aligned append-only-only persistence).
+
+**Read-path optimization (Sub-decision 9 below):** an OPTIONAL rebuildable materialized view `interaction_signal_current_state` derived from `interaction_signal_lifecycle_transition` provides O(1) current-state lookup without breaking I-035 (the view is non-authoritative; the transition table is the source of truth; the view can be dropped + rebuilt at any time without data loss).
 
 ### Sub-decision 2: AUDIT_EVENTS new action IDs
 
@@ -77,6 +80,7 @@ Eight sub-decision categories. Each one is a ratifier-decision item; some can be
 2. `medication_interaction.signal_emitted.v1` — partition_key `tenant_id:patient_id`
 3. `medication_interaction.signal_override_recorded.v1` — partition_key `tenant_id:patient_id`
 4. `medication_interaction.evaluation_failed.v1` — partition_key `tenant_id:patient_id` (or null on KB-unreachable case; ratifier clarifies)
+5. **`medication_interaction.signal_lifecycle_transition_emitted.v1` (Option A add 2026-05-20)** — partition_key `tenant_id:patient_id`; emitted on every INSERT into `interaction_signal_lifecycle_transition`; carries `signal_id`, `from_state`, `to_state`, `transition_reason`, `transition_at`. Subscribed by the rebuildable projection refresher (Sub-decision 9) for incremental MV refresh AND by patient-facing surfaces that need lifecycle-change push notifications.
 
 **Subscribers (read-only consumers; new amendments to existing slice subscriber lists):**
 - Async Consult clinician-decision branch — re-evaluate gating logic on `signal_emitted` if new critical/major appeared since prescribing
@@ -109,7 +113,7 @@ Eight sub-decision categories. Each one is a ratifier-decision item; some can be
 
 **Open question for ratifier:** are endpoints 1 + 7 idempotent? Recommendation: YES — endpoint 1 uses `Idempotency-Key` header per canonical IDEMPOTENCY contract; endpoint 7 idempotent on `(kb_version_target, attempted_at)` tuple.
 
-### Sub-decision 5: State machine for signal lifecycle
+### Sub-decision 5: State machine for signal lifecycle (Option A: derived from append-only transition rows)
 
 **Gap.** v1.0 has no state machine for signal lifecycle. State Machines v1.1 §X (new) should formalize the lifecycle.
 
@@ -117,23 +121,43 @@ Eight sub-decision categories. Each one is a ratifier-decision item; some can be
 
 States: `emitted → active → (overridden | superseded | resolved | expired)`
 
-- `emitted` (initial state on signal row insertion; visible at clinician/pharmacist decision surfaces)
-- `active` (signal continues to apply; visible in all consumer surfaces)
-- `overridden` (clinician documented override; signal remains in audit but no longer gates new actions)
-- `superseded` (a new evaluation produced a different signal for the same medication pair; old signal is superseded)
-- `resolved` (the underlying condition is no longer present — e.g., medication discontinued + 30-day washout period elapsed)
-- `expired` (a time-bounded signal — e.g., post-procedure interaction window — has passed)
+- `emitted` (initial state on signal row insertion; visible at clinician/pharmacist decision surfaces). Recorded as the FIRST `interaction_signal_lifecycle_transition` row inserted atomically alongside the `interaction_signal` row.
+- `active` (signal continues to apply; visible in all consumer surfaces). Reached via `emitted → active` transition row inserted by the engine immediately after evaluation completion if no override applied at decision time.
+- `overridden` (clinician documented override; signal remains in audit but no longer gates new actions). Reached via `active → overridden` transition row co-INSERTed atomically with the paired `interaction_signal_override` row by `record_interaction_signal_override()` per Sub-decision 8.
+- `superseded` (a new evaluation produced a different signal for the same medication pair; old signal is superseded). Reached via `active → superseded` transition row inserted by the engine on the prior signal during a fresh evaluation.
+- `resolved` (the underlying condition is no longer present — e.g., medication discontinued + 30-day washout period elapsed). Reached via `active → resolved` transition row inserted by a domain-event subscriber on medication-discontinuation event.
+- `expired` (a time-bounded signal — e.g., post-procedure interaction window — has passed). Reached via `active → expired` transition row inserted by the engine background job.
 
-Transitions:
-- `emitted → active` (automatic on evaluation completion if no override applied at decision time)
-- `active → overridden` (clinician POST /signals/:id/overrides)
-- `active → superseded` (new evaluation produces replacement signal)
-- `active → resolved` (medication discontinuation event + washout elapsed)
-- `active → expired` (time-based; engine background job)
+**Persistence model (Option A — append-only-only per I-035):**
+
+- The `interaction_signal` row itself is IMMUTABLE post-INSERT (`enforce_append_only()` BEFORE UPDATE/DELETE trigger).
+- Each lifecycle transition is recorded as a new INSERT into `interaction_signal_lifecycle_transition` (Sub-decision 1 entity 4).
+- "Current state of signal X" is DERIVED as: `SELECT to_state FROM interaction_signal_lifecycle_transition WHERE signal_id = X ORDER BY transition_at DESC, id DESC LIMIT 1` (deterministic by `(transition_at, id)` tie-breaker per Pass-1 idempotency-race guidance).
+- The CHECK constraint on `interaction_signal_lifecycle_transition` enforces only allowed `(from_state, to_state, transition_reason)` triples:
+
+```
+('emission',      NULL → 'emitted')
+('activation',    'emitted' → 'active')
+('override',      'active' → 'overridden')
+('superseded_by_evaluation', 'active' → 'superseded')
+('resolution_event', 'active' → 'resolved')
+('time_expiry',   'active' → 'expired')
+```
+
+- Terminal states (`overridden`, `superseded`, `resolved`, `expired`) MUST NOT have further outgoing transitions; the CHECK constraint rejects any row whose `from_state` is one of those four.
+- Idempotency-race safety: the `record_interaction_signal_override()` procedure (Sub-decision 8) acquires an advisory lock on `(tenant_id, signal_id)` before checking current state + inserting the transition row, preventing two concurrent overrides from both seeing `active` and both inserting `active → overridden` rows.
+
+Transitions per the canonical pattern:
+- `(NULL) → emitted` (atomic with `interaction_signal` row INSERT during engine evaluation)
+- `emitted → active` (engine post-emission activation; automatic if no override at decision time)
+- `active → overridden` (Sub-decision 8 procedure; atomic with `interaction_signal_override` row INSERT)
+- `active → superseded` (engine, on new evaluation producing replacement signal)
+- `active → resolved` (domain-event subscriber on medication discontinuation + washout elapsed)
+- `active → expired` (engine background job on time-based windows)
 
 Terminal states (no further transitions): `overridden`, `superseded`, `resolved`, `expired`.
 
-**Promotion class:** content-change; State Machines v1.1 → v1.2 (new state machine).
+**Promotion class:** content-change; State Machines v1.1 → v1.2 (new state machine; described as append-only transition-row pattern per I-035).
 
 **Recommendation:** APPROVE.
 
@@ -168,35 +192,67 @@ Terminal states (no further transitions): `overridden`, `superseded`, `resolved`
 
 **Recommendation:** APPROVE.
 
-### Sub-decision 8: Per-procedure SECURITY DEFINER (1 new procedure)
+### Sub-decision 8: Per-procedure SECURITY DEFINER (1 new procedure; Option A append-only INSERT pattern)
 
-**Gap.** v1.0 §7 specifies clinician override as auditable but doesn't define the write path. Per Async Consult slice precedent (SI-005's `record_consult_clinician_decision`), override recording should go through a SECURITY DEFINER procedure with multi-step validation including the I-032 Tenant-GUC equality guard (Mode 1 + Mode 2 per the just-ratified canonical text).
+**Gap.** v1.0 §7 specifies clinician override as auditable but doesn't define the write path. Per Async Consult slice precedent (SI-005's `record_consult_clinician_decision`), override recording should go through a SECURITY DEFINER procedure with multi-step validation including the I-032 Tenant-GUC equality guard (Mode 1 + Mode 2 per the just-ratified canonical text). Under **Option A (Evans-ratified 2026-05-20)** the procedure INSERTs both the `interaction_signal_override` row AND a paired `interaction_signal_lifecycle_transition` row atomically; the `interaction_signal` row itself is NEVER mutated (preserves I-035).
 
-**Proposed procedure:** `record_interaction_signal_override(...)` — SECURITY DEFINER. ~8-step validation including:
+**Proposed procedure:** `record_interaction_signal_override(...)` — SECURITY DEFINER. ~10-step validation:
 - STEP 0: I-032 Mode 1 NULL/blank-GUC RAISE + Mode 2 mismatch structured-rejection (per canonical I-032 v5.3)
 - STEP 1: auth-FIRST per I-023 layer 2
 - STEP 2: idempotency-key validation
-- STEP 3: signal-exists-and-active state check
-- STEP 4: medication-still-on-active-list state check
-- STEP 5: clinician-role check (RBAC `medication_interaction.override_recorder` granted)
-- STEP 6: atomic INSERT into `interaction_signal_override` + state-transition `active → overridden` on `interaction_signal`
-- STEP 7: unique_violation safety net
-- STEP 8: rejection emission
+- STEP 3: advisory-lock acquisition on `(tenant_id, signal_id)` (race serialization for current-state check vs concurrent override attempts; per SI-008/SI-009 precedent)
+- STEP 4: signal-exists check (interaction_signal row must exist) + current-state derivation (most-recent transition row's to_state must be `active`); reject with `signal_not_active` if current state ≠ `active`
+- STEP 5: medication-still-on-active-list state check
+- STEP 6: clinician-role check (RBAC `medication_interaction.override_recorder` granted)
+- STEP 7: atomic INSERT into `interaction_signal_override` AND paired INSERT into `interaction_signal_lifecycle_transition` with `(from_state='active', to_state='overridden', transition_reason='override', transition_by_actor_id=clinician_account_id, transition_by_actor_role='clinician', metadata={'override_id': new_override_id})` — both INSERTs in same transaction; advisory-lock released on transaction commit/rollback
+- STEP 8: unique_violation safety net (on both INSERTs)
+- STEP 9: rejection emission (Cat A audit `interaction_signal_override` event via canonical app-layer emission per Async-Consult P-021a pattern)
 
-Rejection codes: `tenant_guc_mismatch` (I-032 Mode 2), `idempotency_replay_outcome_mismatch`, `signal_not_active`, `medication_not_on_list`, `unauthorized_role`, `unique_violation`. (6 codes; will likely expand during Codex pre-ratification.)
+Rejection codes: `tenant_guc_mismatch` (I-032 Mode 2), `idempotency_replay_outcome_mismatch`, `signal_not_active`, `medication_not_on_list`, `unauthorized_role`, `unique_violation`, `advisory_lock_unavailable`. (7 codes; may expand during Codex pre-ratification.)
 
 **Promotion class:** content-change; CDM bump in lockstep with Sub-decision 1's entity additions.
 
 **Recommendation:** APPROVE.
 
+### Sub-decision 9 (NEW, Option A): Optional rebuildable read-path projection
+
+**Gap.** Under Option A's append-only-only persistence model, "get current state of signal X" requires deriving from `interaction_signal_lifecycle_transition`. The most-recent-row lookup is O(transitions-per-signal) at read time, which is fine for typical workloads (1-4 transitions per signal lifetime) but unfriendly for hot-path patient-safety reads (every prescribing/refill/protocol-gate evaluation queries active-signal state for every medication on the patient's list).
+
+**Proposed solution:** an OPTIONAL non-authoritative rebuildable materialized view `interaction_signal_current_state_mv`:
+
+```
+CREATE MATERIALIZED VIEW interaction_signal_current_state_mv AS
+SELECT DISTINCT ON (signal_id)
+    tenant_id, signal_id, to_state AS current_state, transition_at AS as_of, transition_reason
+FROM interaction_signal_lifecycle_transition
+ORDER BY signal_id, transition_at DESC, id DESC;
+
+CREATE UNIQUE INDEX interaction_signal_current_state_mv_pk
+    ON interaction_signal_current_state_mv (tenant_id, signal_id);
+```
+
+**Refresh model:**
+- `REFRESH MATERIALIZED VIEW CONCURRENTLY interaction_signal_current_state_mv` on a low-jitter schedule (e.g., every 30s) OR triggered incrementally by domain-event subscriber on every `medication_interaction.signal_lifecycle_transition_emitted.v1` (Sub-decision 3 — add 5th event type below).
+- The MV is **non-authoritative**: read-time staleness is bounded; clients that require strict freshness (e.g., the override procedure's STEP 4 state check) MUST query `interaction_signal_lifecycle_transition` directly + acquire the advisory lock; clients reading for hot-path display (clinician dashboard, pharmacy portal) MAY use the MV.
+- Reconciliation check: a hourly cron compares MV rows to derived-from-transition-rows; divergence (e.g., from missed REFRESH) RAISES Cat B audit `interaction_engine_projection_divergence_detected` (new audit event added below).
+- The MV can be dropped + rebuilt at any time without data loss — the transition table is the source of truth per I-035; the MV is a derived projection.
+
+**RLS posture:** the MV inherits `tenant_id` from the underlying transition table; FORCE RLS + tenant-isolation policy mirroring `interaction_signal_lifecycle_transition`.
+
+**Promotion class:** content-change; CDM addition (1 materialized view) + 1 new domain event type (`signal_lifecycle_transition_emitted`) + 1 new Cat B audit event (`interaction_engine_projection_divergence_detected`).
+
+**Recommendation:** APPROVE as OPTIONAL implementation aid (Phase A may defer the MV + add it in Phase B if read-path latency observability surfaces a hot spot). The amendment lands the SPEC for the MV (read-model contract) regardless of when implementation lands it.
+
+**Cross-references:** Pass-1 recommendation 2026-05-20 ("If read latency is the concern, define a non-authoritative rebuildable projection rather than mutating `interaction_signal.state`"); Pass-2 synthesis 2026-05-20 ("Use append-only transition rows as the source of truth and add only a rebuildable projection/materialized view for frequent reads, with reconciliation checks that compare the projection to transition rows").
+
 ---
 
-## 3. Cross-artifact impact summary
+## 3. Cross-artifact impact summary (Option A, post-OQ7 ratification)
 
-If all 8 sub-decisions ratify, the lockstep PR-A2-class commit lands:
+If all 9 sub-decisions ratify, the lockstep PR-A2-class commit lands:
 
-- **CDM:** +3 new entities (interaction_engine_evaluation, interaction_signal, interaction_signal_override) + 1 new SECURITY DEFINER procedure (record_interaction_signal_override).
-- **AUDIT_EVENTS:** +5 net-new action IDs (1 evaluation_completed + 1 signal_emitted + 1 evaluation_failed + 1 knowledge_base_updated + 1 signal_enforcement_override; signal_override already exists in canonical).
+- **CDM:** +**4 new entities** (interaction_engine_evaluation, interaction_signal, interaction_signal_override, **interaction_signal_lifecycle_transition** [Option A add]) + 1 new SECURITY DEFINER procedure (record_interaction_signal_override) + 1 OPTIONAL rebuildable materialized view (interaction_signal_current_state_mv per Sub-decision 9).
+- **AUDIT_EVENTS:** +**6 net-new action IDs under Option A** (1 evaluation_completed + 1 signal_emitted + 1 evaluation_failed + 1 knowledge_base_updated + 1 signal_enforcement_override + **1 interaction_engine_projection_divergence_detected** [Cat B, Sub-decision 9 add]; signal_override already exists in canonical).
 - **DOMAIN_EVENTS:** +4 new event types (additive enum extension; no version bump).
 - **OpenAPI:** +8 endpoints (v0.2 → v0.3).
 - **State Machines:** +1 new state machine (interaction_signal_lifecycle); v1.1 → v1.2.
@@ -228,7 +284,20 @@ Beyond the 8 sub-decisions above, the following questions are open and should be
 5. **Multi-prescriber notification** (preserved from v1.0 §15 OQ 4) — when signals involve different prescribers' medications, should the engine surface a "cross-prescriber concern" signal, or only notify the currently-prescribing clinician? Recommendation: surface the concern as a signal but route the notification to the currently-prescribing clinician (cross-prescriber visibility through the patient's chart, not via direct notification to the other prescriber).
 6. **Patient-reported OTC** (preserved from v1.0 §15 OQ 5) — treat as full medications for interaction checking? Recommendation: YES (treat identically); the patient-reported flag on the medication row is metadata, not a checking gate.
 
-### Open Question 7 (SI-019-OQ-SIGNAL-LIFECYCLE) — **STOP-CONDITION; HARD-FLOOR ITEM 6 ESCALATION; AWAITING EVANS'S RATIFIER DECISION**
+### Open Question 7 (SI-019-OQ-SIGNAL-LIFECYCLE) — **RATIFIED-OPTION-A 2026-05-20** (Evans's chat-message ratification under CLAUDE.md dual-recommendation + two-pass discipline)
+
+**Resolution:** Evans selected Option A. The amendments at Sub-decisions 1, 5, 8 + new Sub-decision 9 (rebuildable projection) implement the ratified decision. The contradiction that triggered Codex R1 STOP is resolved: `interaction_signal` is strict append-only; lifecycle progression is recorded as INSERTs into the new `interaction_signal_lifecycle_transition` entity (Sub-decision 1 entity 4); current state is derived from most-recent transition row; the optional rebuildable MV (Sub-decision 9) addresses Claude's original read-path concern without breaking I-035.
+
+**Three-way recommendation trail (recorded for ratification audit):**
+
+- **Claude's draft (pre-evidence):** Option B citing P-021 two-tier append-only precedent + read-path simplicity + migration story.
+- **Codex Pass-1 (source-first independent 2026-05-20, thread `019e48d3-c38b-79a1-9275-104820205838`):** Option A variant + rebuildable projection; identified I-035 as decisive; called Option B deal-breaker disqualified unless explicit I-035 amendment recorded.
+- **Codex Pass-2 (contrast-and-synthesize 2026-05-20, thread `019e48d6-211c-7c30-ab79-83abab975f37`):** Option A canonical + optional rebuildable projection; NEW consideration not in either prior position — Option B's mutable state + audit log creates two authorities that can diverge under retry/partial-failure/repair; Option A model derives single source of truth.
+- **Claude post-evidence (shifted):** Option A canonical + rebuildable projection. Original draft missed I-035 entirely; I-035 ratification 2026-05-20 (P-027) post-dates P-021 (2026-05-17), so P-021's two-tier pattern is grandfathered for SI-005's specific entity (consults) not governing precedent for new SIs like SI-019.
+
+**Convergence:** all three positions converged on Option A after evidence surfaced. Hard-floor item 6 escalation correctly held: ratifier (Evans) made the final architectural decision via chat-message ratification; auto-proceed disallowed regardless of reviewer agreement.
+
+#### Original framing preserved below for ratification-audit reproducibility
 
 **Trigger:** Codex R1 on SI-019 v0.1 (2026-05-19, review-mpcvz3wr-593vo1) explicitly invoked CLAUDE.md hard-floor item 6: *"Append-only signal rows conflict with required lifecycle state updates... This is a blocking implementation-readiness issue because the spec gives contradictory persistence semantics for a safety-critical clinical signal."*
 
@@ -273,16 +342,31 @@ Beyond the 8 sub-decisions above, the following questions are open and should be
 
 **v0.1 DRAFT 2026-05-19:** pre-Codex-review; awaiting Codex R1.
 
+**v0.2 DRAFT 2026-05-19 — R1 STOP-and-queue:** Codex R1 invoked CLAUDE.md hard-floor item 6 on Sub-decision 1 ↔ Sub-decision 5 ↔ Sub-decision 8 contradiction (interaction_signal strict append-only vs state machine UPDATE transitions). Iteration HALTED. Open Question 7 framed for ratifier decision.
+
+**v0.3 DRAFT 2026-05-20 — R1 STOP-condition RESOLVED via Option A ratification:**
+- Three-way dual-recommendation consult executed under CLAUDE.md discipline (Claude draft + Codex Pass-1 source-first independent + Codex Pass-2 contrast-and-synthesize)
+- All three converged on Option A canonical + rebuildable projection
+- Evans's chat-message ratification 2026-05-20 selected Option A
+- Sub-decisions 1, 5, 8 amended for Option A append-only-only persistence per I-035
+- New Sub-decision 9 added (optional rebuildable materialized view for read-path)
+- 4th CDM entity `interaction_signal_lifecycle_transition` added per Sub-decision 1
+- §3 cross-artifact impact summary recalculated (CDM: +3 → +4 entities; AUDIT_EVENTS: +5 → +6 net-new action IDs)
+- OQ7 flipped from STOP-CONDITION to RATIFIED-OPTION-A
+- Codex pre-ratification cycle resumes from R2 on resolved spec
+
+**Convergence target:** 4-5 rounds + 1 ship-it verification = 5-6 total. Med-Interaction scope is large (9 sub-decisions, 4 new entities, 1 new SECURITY DEFINER procedure, 6 new audit events, 5 new domain events incl. new transition_emitted event, 8 new endpoints, 1 new state machine described as derived from append-only transitions, 4 new RBAC roles, 1 optional MV) — but the architectural contradiction is resolved; remaining rounds focus on row-shape + procedure-validation + cross-artifact alignment defects.
+
 ---
 
 ## 7. Sequence for ratification
 
-1. Codex pre-ratification cycle on this SI (target 5 + 1 = 6 rounds).
-2. SI converges → Decision Brief authored summarizing the 8 sub-decisions + 6 open questions for ratifier review.
+1. ~~Codex pre-ratification cycle on this SI (target 5 + 1 = 6 rounds).~~ **R1 STOP-condition resolved 2026-05-20 via Option A ratification (OQ7).** Resume from R2 on v0.3 DRAFT.
+2. SI converges → Decision Brief authored summarizing the 9 sub-decisions + 6 remaining open questions for ratifier review (OQ7 already ratified).
 3. Ratifier ceremony (Evans-led; chat-message ratification per cycle precedent).
-4. Canonical content port lockstep commit lands CDM + AUDIT_EVENTS + DOMAIN_EVENTS + OpenAPI + State Machines + RBAC + Slice PRD v2.0 + Promotion Ledger entry + Registry bump in single commit.
+4. Canonical content port lockstep commit lands CDM + AUDIT_EVENTS + DOMAIN_EVENTS + OpenAPI + State Machines + RBAC + Slice PRD v2.0 + Promotion Ledger entry P-033 + Registry v2.19 → v2.20 bump in single commit.
 5. Implementation work begins on telecheck-app code repo (post-ratification per "spec ratification leads implementation by ≥1 sprint" rule).
 
 ---
 
-— Claude (Opus 4.7, 1M context), SI-019 v0.1 DRAFT authored 2026-05-19 under "lets keep working. we are behind time" + standing autonomous-work authorization per CLAUDE.md.
+— Claude (Opus 4.7, 1M context), SI-019 v0.1 DRAFT authored 2026-05-19 under "lets keep working. we are behind time" + standing autonomous-work authorization per CLAUDE.md. v0.3 DRAFT authored 2026-05-20 post-Evans's Option A ratification on OQ7 via three-way dual-recommendation convergence (Claude post-evidence + Codex Pass-1 + Codex Pass-2 all on Option A canonical + rebuildable projection).
