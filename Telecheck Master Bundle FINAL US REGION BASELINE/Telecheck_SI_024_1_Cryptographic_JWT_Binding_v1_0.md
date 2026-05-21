@@ -1,7 +1,7 @@
 # SI-024.1 — Cryptographic JWT-Binding for Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.3 DRAFT
-**Status:** R2 Pass-2 closed inline (1 CRIT + 1 HIGH + 1 MED): admission-binding invariant added via new session_jwt_admission table + read-only EXISTS check in STABLE verifier (closes CRIT bypass — populating app.session_jwt alone no longer satisfies the verifier; requires session_jwt_admission row created by admit_session_jwt() in same backend); begin_target_tenant_break_glass_session() validates approval directly (closes HIGH chicken-and-egg); ON CONFLICT idempotent UPSERT semantics for admission + session-start (closes MED retry/duplicate-call hard-fail). R3 verification queued.
+**Version:** 1.0 v0.4 DRAFT
+**Status:** R3 closed inline (2 HIGH + 1 MED): session_jwt_replay_set schema extended with backend_pid + backend_start_at columns enabling cross-backend-vs-same-backend distinction (closes HIGH-1); partial-index `WHERE expires_at > now()` replaced with normal btree index covering expires_at (closes HIGH-2 — `now()` is STABLE not IMMUTABLE, partial-index predicates require IMMUTABLE); current_backend_start_at() canonical helper added reading from pg_stat_activity (closes MED — PostgreSQL has no zero-arg pg_backend_start() built-in). R4 verification queued.
 **Authoring date:** 2026-05-20
 **Trigger:** SI-024 v0.17 TRANSITIONAL ratification at Promotion Ledger P-030 (committed via auto-proceed merge `3fcbef8` on main). SI-024.1 closes the cryptographic-binding gap deferred from SI-024 v1.0 — specifically the compromised-middleware-credential threat class that the role-constrained-GUC pattern explicitly does NOT close. Per OQ-NEW1/2 commitments at P-030: SI-024.1 v0.1 DRAFT target 2026-06-19 (30 days from P-030); ratifier ceremony target 2026-08-18 (90 days from P-030). SI-024.1 IS the gate that lifts the "production target-tenant break-glass BLOCKED" + "Phase 4 cutover BLOCKED" + "INVARIANTS I-036 BLOCKED" constraints carried in SI-024 v1.0 TRANSITIONAL.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024).
@@ -71,7 +71,7 @@ CREATE TYPE verified_jwt_claims_t AS (
 CREATE TABLE session_jwt_admission (
     -- Composite primary identity bound to the specific PostgreSQL backend process.
     backend_pid INTEGER NOT NULL,                  -- pg_backend_pid() at admission time
-    backend_start_at TIMESTAMPTZ NOT NULL,         -- pg_backend_start() — protects against pid reuse after backend restart
+    backend_start_at TIMESTAMPTZ NOT NULL,         -- current_backend_start_at() — protects against pid reuse after backend restart
     jwt_id UUID NOT NULL,
     tenant_id tenant_id_t NOT NULL,
     actor_human_id UUID NOT NULL,
@@ -82,9 +82,34 @@ CREATE TABLE session_jwt_admission (
     expires_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY (backend_pid, backend_start_at, jwt_id)
 );
+-- R3 HIGH-2 closure 2026-05-20: partial-index predicate cannot reference `now()` (PostgreSQL requires
+-- IMMUTABLE predicates; now() is STABLE). Use normal btree index covering expires_at; the verifier filters
+-- with expires_at > now() at query time + scheduled cleanup deletes expired rows hourly.
 CREATE INDEX session_jwt_admission_active_lookup
-    ON session_jwt_admission (backend_pid, backend_start_at, jwt_id)
-    WHERE expires_at > now();
+    ON session_jwt_admission (backend_pid, backend_start_at, jwt_id, expires_at);
+
+-- R3 MED closure 2026-05-20: canonical helper to retrieve current backend's start time from pg_stat_activity.
+-- PostgreSQL does not expose a zero-arg current_backend_start_at() built-in; this helper bridges the gap.
+-- SECURITY DEFINER required because pg_stat_activity is restricted (requires pg_read_all_stats or superuser
+-- on PG >= 14 for full visibility). The helper limits its scope to ONLY the current backend's row.
+CREATE FUNCTION current_backend_start_at() RETURNS TIMESTAMPTZ AS $$
+DECLARE
+    result TIMESTAMPTZ;
+BEGIN
+    SELECT backend_start INTO result
+        FROM pg_catalog.pg_stat_activity
+        WHERE pid = pg_backend_pid()
+        LIMIT 1;
+    IF result IS NULL THEN
+        RAISE EXCEPTION 'pg_stat_activity has no row for current backend (pid=%)', pg_backend_pid()
+            USING ERRCODE = 'internal_error';
+    END IF;
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
+-- ALTER FUNCTION current_backend_start_at() OWNER TO sec_jwt_verifier;
+-- REVOKE EXECUTE ON FUNCTION current_backend_start_at() FROM PUBLIC;
+-- GRANT EXECUTE ON FUNCTION current_backend_start_at() TO PUBLIC;  -- callable from RLS predicates
 
 -- VOLATILE admission path: middleware calls ONCE per DB session/request.
 -- R2 MED closure 2026-05-20: idempotent under same-backend same-jwt retries
@@ -99,9 +124,23 @@ BEGIN
     -- 3. Verify signature (RSA-PSS-SHA256 per Sub-decision 3).
     -- 4. Verify expires_at > now() AND issued_at <= now() AND not-before <= now() (clock-skew tolerance ±60s).
     -- 5. Extract claims into typed record.
-    -- 6. Cross-backend replay detection: INSERT into session_jwt_replay_set; ON CONFLICT (jwt_id) DO NOTHING.
-    --    If conflict AND existing replay-set row's pg_backend_pid differs from current → REPLAY → raise.
-    --    If conflict AND existing replay-set row's pg_backend_pid matches current → idempotent retry → allowed.
+    -- 6. R3 HIGH-1 closure: cross-backend replay detection via extended session_jwt_replay_set schema
+    --    (now includes backend_pid + backend_start_at).
+    --    INSERT INTO session_jwt_replay_set (jwt_id, tenant_id, backend_pid, backend_start_at, expires_at)
+    --        VALUES (claims.jwt_id, claims.tenant_id, pg_backend_pid(), current_backend_start_at(), claims.expires_at)
+    --    ON CONFLICT (jwt_id) DO NOTHING;
+    --    GET DIAGNOSTICS inserted_rows = ROW_COUNT;
+    --    IF inserted_rows = 0 THEN
+    --        SELECT backend_pid, backend_start_at INTO existing_pid, existing_start
+    --            FROM session_jwt_replay_set WHERE jwt_id = claims.jwt_id;
+    --        IF existing_pid = pg_backend_pid() AND existing_start = current_backend_start_at() THEN
+    --            -- Same-backend idempotent retry: return claims (caller already got admission earlier in this backend).
+    --        ELSE
+    --            RAISE EXCEPTION 'JWT replay detected (jwt_id=% previously admitted by backend %/%)',
+    --                claims.jwt_id, existing_pid, existing_start
+    --                USING ERRCODE = 'invalid_authorization_specification';
+    --        END IF;
+    --    END IF;
     -- 7. UPSERT into session_jwt_admission (backend_pid, backend_start_at, jwt_id, ...) — idempotent for same-backend.
     --    ON CONFLICT (backend_pid, backend_start_at, jwt_id) DO NOTHING.
     -- 8. Bind claims to current DB session: SET LOCAL app.session_jwt = <jwt> + SET LOCAL app.session_jwt_admitted_backend = pg_backend_pid()::TEXT.
@@ -130,7 +169,7 @@ BEGIN
     SELECT EXISTS (
         SELECT 1 FROM public.session_jwt_admission
         WHERE backend_pid = pg_backend_pid()
-            AND backend_start_at = pg_backend_start()
+            AND backend_start_at = current_backend_start_at()
             AND jwt_id = claims.jwt_id
             AND expires_at > now()
     ) INTO admission_exists;
@@ -205,13 +244,22 @@ CREATE TABLE jwt_signing_key_public (
 **Decision shape:** `session_jwt_replay_set` table tracks recently-seen JWT IDs (`jti` claim); JWT verification rejects if `jti` already in set within the JWT's validity window. Bounded LRU to prevent table growth; expired JWT IDs eligible for eviction.
 
 ```sql
+-- R3 HIGH-1 closure 2026-05-20: schema extended with backend_pid + backend_start_at so admit_session_jwt()
+-- can distinguish same-backend idempotent retry from cross-backend replay (per R2 MED idempotency closure).
 CREATE TABLE session_jwt_replay_set (
     jwt_id UUID PRIMARY KEY,
     tenant_id tenant_id_t NOT NULL,
+    backend_pid INTEGER NOT NULL,                  -- pg_backend_pid() at first admission
+    backend_start_at TIMESTAMPTZ NOT NULL,         -- current_backend_start_at() — protects against pid reuse
     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    expires_at TIMESTAMPTZ NOT NULL  -- = JWT's expires_at claim; row deletable after this
+    expires_at TIMESTAMPTZ NOT NULL                -- = JWT's expires_at claim; row deletable after this
 );
 -- Cleanup: scheduled job deletes rows where expires_at < now() - 1 hour (slack window).
+-- Conflict-handling semantics in admit_session_jwt():
+--   ON CONFLICT (jwt_id) DO NOTHING; if rows_affected = 0, SELECT the existing row.
+--   IF existing.backend_pid = pg_backend_pid() AND existing.backend_start_at = current_backend_start_at()
+--     → same-backend idempotent retry → return claims.
+--   ELSE → genuine cross-backend replay → raise REPLAY DETECTED.
 ```
 
 **Performance:** JWT verification adds 1 INSERT to `session_jwt_replay_set` per first-seen JWT + PK-conflict-detection on replay attempts. Estimated <1ms per verification on modern hardware.
