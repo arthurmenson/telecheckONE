@@ -1,7 +1,7 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.9 DRAFT
-**Status:** POST-PASS-2 R7 (R8 HIGH-10 closed: Pass-2 R7 caught a SECURITY DEFINER name-resolution hazard in the v0.8 fallback-gate helpers — they referenced `FROM jwt_migration_entity_status` unqualified with `search_path = pg_catalog, public`, which allows search-path-shadowing attacks if any role can CREATE in `public` (pre-PostgreSQL-15 default). Fix: schema-qualify as `FROM public.jwt_migration_entity_status` so name resolution is independent of search_path; tighten `search_path = pg_catalog, pg_temp` (no user-schema in path); document `REVOKE CREATE ON SCHEMA public FROM PUBLIC` as platform-floor deployment requirement. Awaiting Pass-2 R8 verification.)
+**Version:** 0.10 DRAFT
+**Status:** POST-PASS-2 R8 (R9 HIGH-11 closed: Pass-2 R8 caught that SECURITY DEFINER ownership was only asserted in prose. In PostgreSQL, a SECURITY DEFINER function executes as the role that owns the function; if the migration is applied by a generic migration owner or superuser, the helper executes with that broader role's privileges instead of cdm_owner — defeating the cdm_owner-scoped grant/RLS scaffolding. Fix: add explicit `ALTER FUNCTION public.<helper>(TEXT) OWNER TO cdm_owner` immediately after each CREATE FUNCTION + schema-qualify the function names in REVOKE/GRANT to bind unambiguously. Awaiting Pass-2 R9 verification.)
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
@@ -427,6 +427,10 @@ BEGIN
     RETURN v_phase_4_cutover OR v_production_break_glass;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = pg_catalog, pg_temp;
+-- R8 HIGH-11 closure 2026-05-20: enforce ownership executably (Pass-2 R8 caught that ownership was
+-- only asserted in prose — migration applier could be a generic owner/superuser, defeating the
+-- cdm_owner-scoped grant/RLS scaffolding). ALTER FUNCTION OWNER pins the SECURITY DEFINER principal.
+ALTER FUNCTION public.is_jwt_required_for_entity(TEXT) OWNER TO cdm_owner;
 
 CREATE FUNCTION is_raw_guc_fallback_audited_for_entity(p_entity_name TEXT) RETURNS BOOLEAN AS $$
 DECLARE
@@ -442,11 +446,14 @@ BEGIN
     RETURN v_audited;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = pg_catalog, pg_temp;
+ALTER FUNCTION public.is_raw_guc_fallback_audited_for_entity(TEXT) OWNER TO cdm_owner;
 
-REVOKE EXECUTE ON FUNCTION is_jwt_required_for_entity(TEXT) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION is_raw_guc_fallback_audited_for_entity(TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION is_jwt_required_for_entity(TEXT) TO PUBLIC;
-GRANT EXECUTE ON FUNCTION is_raw_guc_fallback_audited_for_entity(TEXT) TO PUBLIC;
+-- Schema-qualified REVOKE/GRANT (R8 HIGH-11 closure): function names schema-qualified to bind to
+-- specific deployed objects unambiguously, matching the schema-qualified table reference inside.
+REVOKE EXECUTE ON FUNCTION public.is_jwt_required_for_entity(TEXT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.is_raw_guc_fallback_audited_for_entity(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_jwt_required_for_entity(TEXT) TO PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_raw_guc_fallback_audited_for_entity(TEXT) TO PUBLIC;
 
 -- Platform-floor deployment requirement (R7 HIGH-10 closure): the CDM baseline DDL MUST include
 -- `REVOKE CREATE ON SCHEMA public FROM PUBLIC` (PostgreSQL 15+ default; required for pre-15 installs).
@@ -564,8 +571,11 @@ ALTER TABLE audit_events
 **v0.9 DRAFT 2026-05-20 — Pass-2 R7 closure (SECURITY DEFINER schema-qualification):**
 - **HIGH-10 closed** — Pass-2 R7 caught that the v0.8 SECURITY DEFINER helpers used unqualified `FROM jwt_migration_entity_status` with `search_path = pg_catalog, public`. Under SECURITY DEFINER, unqualified name resolution is a classic search-path-shadowing attack surface: if any role can CREATE objects in `public` (the PostgreSQL pre-15 default), it can create a same-named relation that the helper resolves to instead of the real table, while executing with `cdm_owner` privileges — returning attacker-controlled JWT-required and fallback-audit decisions. Fix per Pass-2 R7 verbatim recommendation: (a) schema-qualify the table reference as `public.jwt_migration_entity_status` so resolution is independent of search_path; (b) tighten `search_path = pg_catalog, pg_temp` (no user-writable schema in path; pg_temp last per PostgreSQL SECURITY DEFINER best practice); (c) document `REVOKE CREATE ON SCHEMA public FROM PUBLIC` as platform-floor deployment requirement (PostgreSQL 15+ default; required for pre-15 installs).
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit `d76b24c`. v0.8 commit `b33d017`. v0.9 commit pending push for Pass-2 R8 verification.
+**v0.10 DRAFT 2026-05-20 — Pass-2 R8 closure (executable SECURITY DEFINER ownership):**
+- **HIGH-11 closed** — Pass-2 R8 caught that "owned by cdm_owner" was prose-only. In PostgreSQL, a SECURITY DEFINER function executes as the role that owns the function (typically the role that created it). If the migration is applied by a generic migration owner or superuser, the helper executes with that role's privileges instead of cdm_owner, defeating the entire cdm_owner-scoped grant/RLS scaffolding. The schema-qualified FROM and locked search_path close the R7 shadowing issue but do not pin the SECURITY DEFINER principal. Fix per Pass-2 R8 verbatim recommendation: add `ALTER FUNCTION public.<helper>(TEXT) OWNER TO cdm_owner` immediately after each CREATE FUNCTION; schema-qualify function names in REVOKE/GRANT to bind unambiguously to the deployed objects. Ownership is now executable in the DDL itself, not an out-of-band migration-runtime assumption.
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit `68909a8`. v0.4 commit `99ec59c`. v0.5 commit `24a6a21`. v0.6 commit `781731a`. v0.7 commit `d76b24c`. v0.8 commit `b33d017`. v0.9 commit `905632c`. v0.10 commit pending push for Pass-2 R9 verification.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.9 DRAFT (Pass-2 R7 closure applied: SECURITY DEFINER schema-qualification + search_path hardening + platform-floor deployment requirement) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R8 verification queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.10 DRAFT (Pass-2 R8 closure applied: executable ALTER FUNCTION OWNER TO cdm_owner + schema-qualified REVOKE/GRANT on helpers) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R9 verification queued.
