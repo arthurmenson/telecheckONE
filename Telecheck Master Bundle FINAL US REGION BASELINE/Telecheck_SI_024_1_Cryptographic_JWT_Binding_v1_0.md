@@ -1,7 +1,7 @@
 # SI-024.1 — Cryptographic JWT-Binding for Hardened Tenant/Platform RLS Helper Pattern
 
-**Version:** 1.0 v0.2 DRAFT
-**Status:** R1 Pass-1 closed inline (1 CRITICAL + 2 HIGH + 1 MED): JWT verifier SPLIT into pure-STABLE claim verifier + VOLATILE admission path (closes CRIT STABLE-vs-replay contradiction); Sub-decision 6 helper now requires active break_glass_active_session row with bound_jwt_id (closes HIGH-1); replay-window clarified as per-DB-session-admission unit with kid + key_purpose binding (closes HIGH-2 + missing-consideration on JWT-purpose confusion); Phase B raw-GUC fallback gated per-entity + production-break-glass surface entirely excluded (closes MED). 1 new audit event added (raw_guc_fallback_used). Pass-2 contrast-and-synthesize queued.
+**Version:** 1.0 v0.3 DRAFT
+**Status:** R2 Pass-2 closed inline (1 CRIT + 1 HIGH + 1 MED): admission-binding invariant added via new session_jwt_admission table + read-only EXISTS check in STABLE verifier (closes CRIT bypass — populating app.session_jwt alone no longer satisfies the verifier; requires session_jwt_admission row created by admit_session_jwt() in same backend); begin_target_tenant_break_glass_session() validates approval directly (closes HIGH chicken-and-egg); ON CONFLICT idempotent UPSERT semantics for admission + session-start (closes MED retry/duplicate-call hard-fail). R3 verification queued.
 **Authoring date:** 2026-05-20
 **Trigger:** SI-024 v0.17 TRANSITIONAL ratification at Promotion Ledger P-030 (committed via auto-proceed merge `3fcbef8` on main). SI-024.1 closes the cryptographic-binding gap deferred from SI-024 v1.0 — specifically the compromised-middleware-credential threat class that the role-constrained-GUC pattern explicitly does NOT close. Per OQ-NEW1/2 commitments at P-030: SI-024.1 v0.1 DRAFT target 2026-06-19 (30 days from P-030); ratifier ceremony target 2026-08-18 (90 days from P-030). SI-024.1 IS the gate that lifts the "production target-tenant break-glass BLOCKED" + "Phase 4 cutover BLOCKED" + "INVARIANTS I-036 BLOCKED" constraints carried in SI-024 v1.0 TRANSITIONAL.
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024).
@@ -64,45 +64,90 @@ CREATE TYPE verified_jwt_claims_t AS (
     key_purpose TEXT        -- 'platform_tenant_jwt' | 'tenant_break_glass_jwt'; per R1 missing-consideration: prevents JWT-purpose confusion
 );
 
+-- Admission record table (R2 Pass-2 CRITICAL closure 2026-05-20: STABLE verifier validates
+-- THIS record was created in the current DB backend, not just that app.session_jwt holds a valid signature).
+-- Without this binding, any path that can set app.session_jwt (e.g., a compromised middleware credential)
+-- bypasses admit_session_jwt() + replay enforcement entirely.
+CREATE TABLE session_jwt_admission (
+    -- Composite primary identity bound to the specific PostgreSQL backend process.
+    backend_pid INTEGER NOT NULL,                  -- pg_backend_pid() at admission time
+    backend_start_at TIMESTAMPTZ NOT NULL,         -- pg_backend_start() — protects against pid reuse after backend restart
+    jwt_id UUID NOT NULL,
+    tenant_id tenant_id_t NOT NULL,
+    actor_human_id UUID NOT NULL,
+    actor_role TEXT NOT NULL,
+    key_id UUID NOT NULL,
+    key_purpose TEXT NOT NULL,
+    admitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (backend_pid, backend_start_at, jwt_id)
+);
+CREATE INDEX session_jwt_admission_active_lookup
+    ON session_jwt_admission (backend_pid, backend_start_at, jwt_id)
+    WHERE expires_at > now();
+
 -- VOLATILE admission path: middleware calls ONCE per DB session/request.
--- Performs signature verification + replay-set INSERT + session binding.
--- Raises on signature failure, expired, replayed, OR purpose-mismatch.
+-- R2 MED closure 2026-05-20: idempotent under same-backend same-jwt retries
+-- (UPSERT semantics; returns existing claims if already admitted for this backend+jwt).
 CREATE FUNCTION admit_session_jwt(jwt TEXT) RETURNS verified_jwt_claims_t AS $$
 DECLARE
     claims verified_jwt_claims_t;
+    inserted_rows INTEGER;
 BEGIN
     -- 1. Extract header + payload + signature from JWT.
     -- 2. Lookup public key from jwt_signing_key_public by header.kid; verify it's currently active.
     -- 3. Verify signature (RSA-PSS-SHA256 per Sub-decision 3).
     -- 4. Verify expires_at > now() AND issued_at <= now() AND not-before <= now() (clock-skew tolerance ±60s).
-    -- 5. INSERT into session_jwt_replay_set(jwt_id, tenant_id, first_seen_at, expires_at)
-    --    ON CONFLICT (jwt_id) DO NOTHING; check if rows_affected = 0 → REPLAY DETECTED → raise.
-    -- 6. Extract claims into typed record.
-    -- 7. Bind claims to current DB session via app.session_jwt GUC (caller's responsibility post-admission).
-    RAISE EXCEPTION 'admit_session_jwt() implementation pending Phase A infrastructure; see Sub-decisions 3+4+5';
+    -- 5. Extract claims into typed record.
+    -- 6. Cross-backend replay detection: INSERT into session_jwt_replay_set; ON CONFLICT (jwt_id) DO NOTHING.
+    --    If conflict AND existing replay-set row's pg_backend_pid differs from current → REPLAY → raise.
+    --    If conflict AND existing replay-set row's pg_backend_pid matches current → idempotent retry → allowed.
+    -- 7. UPSERT into session_jwt_admission (backend_pid, backend_start_at, jwt_id, ...) — idempotent for same-backend.
+    --    ON CONFLICT (backend_pid, backend_start_at, jwt_id) DO NOTHING.
+    -- 8. Bind claims to current DB session: SET LOCAL app.session_jwt = <jwt> + SET LOCAL app.session_jwt_admitted_backend = pg_backend_pid()::TEXT.
+    RAISE EXCEPTION 'admit_session_jwt() implementation pending Phase A infrastructure';
 END;
 $$ LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public;
 
 -- Pure STABLE claim verifier: RLS-safe; called from STABLE helpers + RLS predicates.
--- Performs signature verification only; NO replay-set writes (those happen at admission).
--- Trusts that admit_session_jwt() was called at session-start; if not, current_setting raises.
+-- R2 Pass-2 CRITICAL closure 2026-05-20: validates the current DB backend has an active admission record
+-- for the JWT in app.session_jwt. Without this check, app.session_jwt could be set by a path that
+-- bypassed admit_session_jwt() entirely (e.g., compromised middleware credential setting GUC directly).
 CREATE FUNCTION verify_session_jwt_and_extract_claims() RETURNS verified_jwt_claims_t AS $$
 DECLARE
     jwt TEXT;
     claims verified_jwt_claims_t;
+    admission_exists BOOLEAN;
 BEGIN
     jwt := current_setting('app.session_jwt', false);  -- fail-loud on unset
     -- 1. Extract header + payload + signature from JWT.
     -- 2. Lookup public key from jwt_signing_key_public by header.kid.
     -- 3. Verify signature (RSA-PSS-SHA256).
-    -- 4. Verify expires_at > now() (already-expired JWT detected here even if admitted earlier).
+    -- 4. Verify expires_at > now().
     -- 5. Extract claims into typed record.
-    -- NOTE: NO replay-set INSERT (would violate STABLE); replay is enforced at admit_session_jwt().
-    -- NOTE: NO session-binding check (admission already bound; this helper trusts the binding).
-    RAISE EXCEPTION 'verify_session_jwt_and_extract_claims() implementation pending Phase A';
+    -- 6. R2 Pass-2 CRITICAL closure: validate admission record exists for current backend + jwt_id.
+    --    This is a READ-ONLY EXISTS check (STABLE-safe; no writes).
+    SELECT EXISTS (
+        SELECT 1 FROM public.session_jwt_admission
+        WHERE backend_pid = pg_backend_pid()
+            AND backend_start_at = pg_backend_start()
+            AND jwt_id = claims.jwt_id
+            AND expires_at > now()
+    ) INTO admission_exists;
+    IF NOT admission_exists THEN
+        -- Bypass attempt: app.session_jwt populated but no admission record for current backend.
+        -- This catches the case where a compromised middleware credential set the GUC directly,
+        -- bypassing admit_session_jwt() + replay enforcement.
+        RAISE EXCEPTION 'session JWT not admitted on current backend (backend_pid=%, jwt_id=%); call admit_session_jwt() first',
+            pg_backend_pid(), claims.jwt_id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN claims;
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public;
 ```
+
+**Cleanup discipline:** `session_jwt_admission` rows are bounded by `expires_at`; a scheduled job deletes expired rows hourly (mirrors `session_jwt_replay_set` cleanup per Sub-decision 5). Connection-pool backends that reset their state via `DISCARD ALL` between requests should NOT lose admission records (the table is independent of session-local GUCs); but connection-pool backends that explicitly close + reopen connections will leave stale admission records that the cleanup job reaps.
 
 **Replay-window unit (R1 HIGH-2 closure 2026-05-20):** the JWT is **per-DB-session admission unit**, NOT per-query. `admit_session_jwt()` is called ONCE at session-start; the same `app.session_jwt` is reused across multiple queries within that session. Replay-detection runs at admission only; the second admission of the same `jwt_id` (whether from the same session or a different one) raises REPLAY. This means:
 - A single middleware connection per request → one admission per request → one JWT per request → no replay-within-session ambiguity.
@@ -239,37 +284,74 @@ CREATE PROCEDURE begin_target_tenant_break_glass_session(
 DECLARE
     claims verified_jwt_claims_t;
     session_record_id UUID;
+    approval_record_id UUID;
 BEGIN
     claims := verify_session_jwt_and_extract_claims();  -- raises on invalid
-    -- Verify caller has platform-operator role + active approval for target_tenant_id.
-    IF NOT is_target_tenant_break_glass_active(target_tenant_id) THEN
+    -- R2 Pass-2 HIGH closure 2026-05-20: validate caller's verified claims + active approval DIRECTLY (NOT via
+    -- is_target_tenant_break_glass_active() — that helper now requires the session row this procedure is about to create;
+    -- using it as precondition creates a chicken-and-egg deadlock on first session-start).
+    -- Cryptographic role check from verified JWT claims:
+    IF claims.actor_role NOT IN (
+        'platform_operator_break_glass',
+        'platform_operator_dr_recovery',
+        'platform_operator_compliance_audit'
+    ) THEN
+        RAISE EXCEPTION 'caller role (%) not in platform-operator set; break-glass session-start denied',
+            claims.actor_role
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    -- Active-approval check (direct, NOT via the post-session helper):
+    SELECT id INTO approval_record_id
+        FROM public.break_glass_approval
+        WHERE target_tenant_id = begin_target_tenant_break_glass_session.target_tenant_id
+            AND operator_user_id = claims.actor_human_id
+            AND operator_role = claims.actor_role
+            AND state = 'active'
+            AND approved_at <= now()
+            AND expires_at > now()
+            AND revoked_at IS NULL
+        LIMIT 1;
+    IF approval_record_id IS NULL THEN
         RAISE EXCEPTION 'no active break-glass approval for target_tenant_id=% by operator_user_id=% operator_role=%',
             target_tenant_id, claims.actor_human_id, claims.actor_role
             USING ERRCODE = 'insufficient_privilege';
     END IF;
     -- Record session-start; subsequent helper invocations check this active-session row.
+    -- R2 MED closure 2026-05-20: idempotent UPSERT for same-(bound_jwt_id, target_tenant_id) retries.
+    -- Duplicate session-start from a middleware retry returns the existing session row (no replay error,
+    -- no double-audit) instead of failing hard. The UNIQUE(bound_jwt_id, target_tenant_id) constraint catches
+    -- the conflict; ON CONFLICT DO NOTHING + the follow-up SELECT returns the existing row.
     INSERT INTO public.break_glass_active_session (
         id, target_tenant_id, operator_user_id, operator_role,
         bound_jwt_id, session_start, session_expires_at, intended_purpose, approval_id
     )
-    SELECT
+    VALUES (
         gen_random_uuid(), target_tenant_id, claims.actor_human_id, claims.actor_role,
-        claims.jwt_id,  -- R1 HIGH-1 closure: bind session to verified JWT
-        now(), least(now() + INTERVAL '1 hour', approval.expires_at), intended_purpose, approval.id
-    FROM public.break_glass_approval approval
-    WHERE approval.target_tenant_id = begin_target_tenant_break_glass_session.target_tenant_id
-        AND approval.operator_user_id = claims.actor_human_id
-        AND approval.operator_role = claims.actor_role
-        AND approval.state = 'active'
-        AND approval.revoked_at IS NULL
-        AND approval.expires_at > now()
+        claims.jwt_id,
+        now(),
+        least(now() + INTERVAL '1 hour',
+              (SELECT expires_at FROM public.break_glass_approval WHERE id = approval_record_id)),
+        intended_purpose, approval_record_id
+    )
+    ON CONFLICT (bound_jwt_id, target_tenant_id) DO NOTHING
     RETURNING break_glass_active_session.id INTO session_record_id;
 
-    -- R1 missing-consideration: handle no-row case (revoked/expired between is_target_tenant_break_glass_active() check + INSERT)
+    -- Idempotent retry: existing row not returned by INSERT (DO NOTHING); fetch it.
     IF session_record_id IS NULL THEN
-        RAISE EXCEPTION 'break-glass approval no longer active for target_tenant_id=% (race with revocation/expiry)',
-            target_tenant_id
-            USING ERRCODE = 'invalid_transaction_state';
+        SELECT id INTO session_record_id
+            FROM public.break_glass_active_session
+            WHERE bound_jwt_id = claims.jwt_id
+                AND target_tenant_id = begin_target_tenant_break_glass_session.target_tenant_id
+                AND closed_at IS NULL
+                AND session_expires_at > now();
+        IF session_record_id IS NULL THEN
+            -- Genuine failure: row neither inserted nor found (e.g., conflict with a closed/expired row).
+            RAISE EXCEPTION 'break-glass session-start failed for target_tenant_id=% (conflicting closed/expired session row exists for jwt_id=%)',
+                target_tenant_id, claims.jwt_id
+                USING ERRCODE = 'invalid_transaction_state';
+        END IF;
+        -- Idempotent return: existing session reused; skip duplicate audit emission.
+        RETURN;
     END IF;
 
     -- Emit per-access audit (closes SI-024 v1.0 simplification #8).
