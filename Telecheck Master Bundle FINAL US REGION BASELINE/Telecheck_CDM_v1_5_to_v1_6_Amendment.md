@@ -1,7 +1,7 @@
 # CDM v1.5 → v1.6 Amendment (SI-024.1 follow-on)
 
-**Version:** 0.2 DRAFT
-**Status:** POST-PASS-1 (R1 closed: 1 HIGH + 1 MED applied 2026-05-20; awaiting Pass-2 contrast-and-synthesize per CLAUDE.md two-pass discipline)
+**Version:** 0.3 DRAFT
+**Status:** POST-PASS-2 R1 (R2 HIGH closed: Pass-2 caught SECURITY DEFINER + current_user pitfall — under SECURITY DEFINER current_user resolves to function owner not caller, so authorization check was broken. Fix: SECURITY INVOKER + explicit GRANT/REVOKE defense-in-depth applied to both §4.NEW1 and §4.NEW2. Awaiting Pass-2 R2 verification.)
 **Authoring date:** 2026-05-20
 **Trigger:** Promotion Ledger P-031 (SI-024.1 v0.8 RATIFIED + Registry v2.17 → v2.18). Per the established post-P-029 spec-first promotion pattern, SI-024.1's 5 new entities + 10 new audit events (9 Cat A + 1 Cat B) land in CDM + AUDIT_EVENTS via a separate amendment cycle following SI ratification (mirrors P-029's pattern of CDM amendment AFTER SI-021 ratified).
 **Owner:** SRE Lead + Security Engineering Lead + CDM owner (same triad as SI-024.1).
@@ -66,9 +66,13 @@ ALTER TABLE session_jwt_admission FORCE ROW LEVEL SECURITY;
 CREATE POLICY session_jwt_admission_tenant_isolation ON session_jwt_admission
     USING (tenant_id = current_tenant_id_strict('session_jwt_admission'));
 
--- Append-only enforcement with TTL-cleanup carve-out (R1 HIGH closure 2026-05-20: comment-only exception
--- replaced with executable DDL — UPDATE always rejected; DELETE permitted ONLY for sec_jwt_cleanup role on
--- expired rows past the retention slack window).
+-- Append-only enforcement with TTL-cleanup carve-out (R2 HIGH closure 2026-05-20:
+-- Pass-2 caught a SECURITY DEFINER + current_user pitfall — under SECURITY DEFINER, current_user resolves
+-- to the function owner, not the caller, breaking caller-identity authorization. Fix: trigger function is
+-- SECURITY INVOKER (default — omit the qualifier) so current_user equals the actual role performing the
+-- DML. Complemented by explicit GRANT/REVOKE DDL below to make sec_jwt_cleanup the only role permitted to
+-- DELETE — defense-in-depth: PostgreSQL-level privilege check denies non-sec_jwt_cleanup callers BEFORE the
+-- trigger fires; the trigger then enforces the TTL slack predicate on permitted callers).
 CREATE FUNCTION session_jwt_admission_append_only_with_ttl_cleanup() RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'UPDATE' THEN
@@ -77,6 +81,7 @@ BEGIN
     END IF;
     IF TG_OP = 'DELETE' THEN
         -- Permit DELETE only for the dedicated cleanup role on rows past their TTL+slack window.
+        -- current_user is the invoking role here because the function is SECURITY INVOKER (default).
         IF current_user = 'sec_jwt_cleanup' AND OLD.expires_at < now() - INTERVAL '1 hour' THEN
             RETURN OLD;
         END IF;
@@ -86,11 +91,19 @@ BEGIN
     END IF;
     RETURN NULL;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;
+$$ LANGUAGE plpgsql SET search_path = pg_catalog, public;
+-- Note: no SECURITY DEFINER qualifier — function executes as SECURITY INVOKER (default), so
+-- current_user resolves correctly to the role invoking the DML.
 
 CREATE TRIGGER session_jwt_admission_append_only_with_ttl
     BEFORE UPDATE OR DELETE ON session_jwt_admission
     FOR EACH ROW EXECUTE FUNCTION session_jwt_admission_append_only_with_ttl_cleanup();
+
+-- Defense-in-depth privilege DDL: PostgreSQL-level DELETE privilege is restricted to sec_jwt_cleanup ONLY.
+-- INSERT remains restricted to the admit_session_jwt() procedure's owner role (granted separately at the
+-- procedure's GRANT specification in the SI-024.1 procedure-side artifact).
+REVOKE DELETE ON session_jwt_admission FROM PUBLIC;
+GRANT DELETE ON session_jwt_admission TO sec_jwt_cleanup;
 ```
 
 **Cross-references:** SI-024.1 §Sub-decision 1 (split verifier + admission-binding invariant); INVARIANTS v5.4 §I-023/I-027 (three-layer tenant isolation + append-only platform floor).
@@ -115,9 +128,10 @@ ALTER TABLE session_jwt_replay_set FORCE ROW LEVEL SECURITY;
 CREATE POLICY session_jwt_replay_set_tenant_isolation ON session_jwt_replay_set
     USING (tenant_id = current_tenant_id_strict('session_jwt_replay_set'));
 
--- Append-only enforcement with TTL-cleanup carve-out (R1 HIGH closure 2026-05-20: matching the §4.NEW1
--- pattern — comment-only exception replaced with executable DDL; UPDATE always rejected; DELETE permitted
--- ONLY for sec_jwt_cleanup role on expired rows past the retention slack window).
+-- Append-only enforcement with TTL-cleanup carve-out (R2 HIGH closure 2026-05-20: same SECURITY INVOKER +
+-- explicit GRANT/REVOKE defense-in-depth pattern as §4.NEW1 per Pass-2 finding). Replay-set is the higher-
+-- cost case: failed TTL deletion grows the table without bound; over-permissive deletion erases replay
+-- evidence. Both failure modes are unacceptable, so caller-identity authorization MUST resolve correctly.
 CREATE FUNCTION session_jwt_replay_set_append_only_with_ttl_cleanup() RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'UPDATE' THEN
@@ -126,6 +140,7 @@ BEGIN
     END IF;
     IF TG_OP = 'DELETE' THEN
         -- Permit DELETE only for the dedicated cleanup role on rows past their TTL+slack window.
+        -- current_user is the invoking role here because the function is SECURITY INVOKER (default).
         IF current_user = 'sec_jwt_cleanup' AND OLD.expires_at < now() - INTERVAL '1 hour' THEN
             RETURN OLD;
         END IF;
@@ -135,11 +150,19 @@ BEGIN
     END IF;
     RETURN NULL;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public;
+$$ LANGUAGE plpgsql SET search_path = pg_catalog, public;
+-- Note: no SECURITY DEFINER qualifier — function executes as SECURITY INVOKER (default), so
+-- current_user resolves correctly to the role invoking the DML.
 
 CREATE TRIGGER session_jwt_replay_set_append_only_with_ttl
     BEFORE UPDATE OR DELETE ON session_jwt_replay_set
     FOR EACH ROW EXECUTE FUNCTION session_jwt_replay_set_append_only_with_ttl_cleanup();
+
+-- Defense-in-depth privilege DDL: PostgreSQL-level DELETE privilege is restricted to sec_jwt_cleanup ONLY.
+-- INSERT remains restricted to the admit_session_jwt() procedure's owner role (granted separately at the
+-- procedure's GRANT specification in the SI-024.1 procedure-side artifact).
+REVOKE DELETE ON session_jwt_replay_set FROM PUBLIC;
+GRANT DELETE ON session_jwt_replay_set TO sec_jwt_cleanup;
 ```
 
 **Cross-references:** SI-024.1 §Sub-decision 5; INVARIANTS v5.4 §I-023/I-027.
@@ -330,11 +353,14 @@ ALTER TABLE audit_events
 **v0.1 DRAFT 2026-05-20:** pre-Codex-review.
 
 **v0.2 DRAFT 2026-05-20 — Pass-1 R1 closure:**
-- **HIGH-1 closed** — both `session_jwt_admission` (§4.NEW1) and `session_jwt_replay_set` (§4.NEW2) replaced the comment-only TTL exception with executable DDL: SECURITY DEFINER `*_append_only_with_ttl_cleanup()` functions that reject UPDATE always and permit DELETE only for `sec_jwt_cleanup` role on rows past `expires_at + INTERVAL '1 hour'` slack. Pass-1 verbatim recommendation applied to both tables ("both admission and replay tables, not just one of them").
+- **HIGH-1 closed (initial)** — both `session_jwt_admission` (§4.NEW1) and `session_jwt_replay_set` (§4.NEW2) replaced the comment-only TTL exception with executable DDL: SECURITY DEFINER `*_append_only_with_ttl_cleanup()` functions that reject UPDATE always and permit DELETE only for `sec_jwt_cleanup` role on rows past `expires_at + INTERVAL '1 hour'` slack. Pass-1 verbatim recommendation applied to both tables ("both admission and replay tables, not just one of them").
 - **MED-1 closed** — audit event taxonomy prose swept from "10 new Cat A events" to "9 new Cat A + 1 new Cat B" throughout §1, §2 (in-scope item 2), and §3 header to reflect the actual mix (`cdm.entity_jwt_migration_status_added` is Cat B as already correctly labeled in the §3 table).
 
-Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit pending push for Pass-2 contrast-and-synthesize.
+**v0.3 DRAFT 2026-05-20 — Pass-2 R1 closure (SECURITY DEFINER caller-identity defect):**
+- **HIGH-2 closed** — Pass-2 caught a real PostgreSQL semantics defect in the v0.2 HIGH-1 closure: under `SECURITY DEFINER`, `current_user` resolves to the function owner, not the invoking role. So the `current_user = 'sec_jwt_cleanup'` check was either (a) always-false (if function owner ≠ sec_jwt_cleanup) → TTL cleanup blocked, OR (b) bypassable (if function owner == sec_jwt_cleanup) → any role reaching DELETE could satisfy it. Both broken. Fix applied to BOTH §4.NEW1 and §4.NEW2: remove `SECURITY DEFINER` qualifier so the function executes as `SECURITY INVOKER` (default) and `current_user` resolves to the actual invoking role; add explicit defense-in-depth `REVOKE DELETE ... FROM PUBLIC` + `GRANT DELETE ... TO sec_jwt_cleanup` DDL so PostgreSQL-level privilege check denies non-`sec_jwt_cleanup` callers BEFORE the trigger fires, with the trigger then enforcing the TTL slack predicate on permitted callers. This makes the authorization layer enforceable at both the privilege layer AND the trigger predicate layer. The replay-set is the higher-cost case (failed cleanup → unbounded growth; over-permissive → erased replay evidence), so caller-identity correctness on §4.NEW2 was especially urgent.
+
+Authored on `spec/cdm-v1-6-audit-events-v5-8-si024-1-followon-2026-05-20` branch off main at `18f2fc2` (post-P-031 + Addendum 59). v0.2 commit `3b7df56`. v0.3 commit pending push for Pass-2 R2 verification.
 
 ---
 
-— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.2 DRAFT (Pass-1 R1 closure applied) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 contrast-and-synthesize queued.
+— Claude (Opus 4.7, 1M context), CDM v1.5 → v1.6 + AUDIT_EVENTS v5.7 → v5.8 amendment artifact v0.3 DRAFT (Pass-2 R1 closure applied: SECURITY DEFINER → SECURITY INVOKER + explicit GRANT/REVOKE defense-in-depth) 2026-05-20 per P-031 OQ canonical decision + established post-P-029 SI-spec-first promotion pattern + CLAUDE.md two-pass discipline + auto-proceed rule. Pass-2 R2 verification queued.
