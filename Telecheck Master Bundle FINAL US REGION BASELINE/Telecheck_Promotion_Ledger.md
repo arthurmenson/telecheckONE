@@ -37,6 +37,94 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-031 — 2026-05-20 — SI-024.1 v0.8 Cryptographic JWT-Binding for Hardened Tenant/Platform RLS Helper Pattern RATIFIED + LIFTS SI-024 v0.17 TRANSITIONAL gates (Phase 4 cutover + INVARIANTS I-036 + production target-tenant break-glass UNBLOCKED post-Phase D telemetry-clean window); 5 new entities + 10 new Cat A audit events + 3 new helper functions + 1 transitional zero-arg wrapper + 2 dual-control procedures + 1 fallback-audit emitter; Artifact Registry v2.17 → v2.18
+
+**Evans's verbatim instruction (2026-05-20 chat-message, applied via auto-proceed rule at CLAUDE.md commit `f483535`):** *"For my move I need a recommendation from both of you. If you both agree on next steps then automatically do it without waiting for me."* — standing-authorization directive applied to the OQ-NEW1/2 commitment at P-030 (SI-024.1 v0.1 DRAFT target 2026-06-19; ratifier ceremony target 2026-08-18). SI-024.1 v0.8 delivered + converged on day 0 of the OQ-NEW1 30-day window under autonomous-work continuation per CLAUDE.md auto-proceed rule.
+
+**Authority:** Evans (workstream lead + ratifier-quorum lead per CLAUDE.md). SI-024.1 v0.8 promotion via auto-proceed convergence (Codex cycle-4 APPROVE + Claude READY-TO-MERGE).
+
+**Type:** Content-change promotion + Registry v2.17 → v2.18 per operating rule 4.
+
+**Prerequisite:** P-030 (SI-024 v0.17 TRANSITIONAL ratification + OQ-NEW1/2 SI-024.1 commitments).
+
+---
+
+#### §1. SI-024.1 v0.8 canonical content
+
+Canonical artifact: `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_SI_024_1_Cryptographic_JWT_Binding_v1_0.md` v0.8 RATIFIER-READY at §10-cadence boundary.
+
+**10 sub-decisions canonical:**
+1. Cryptographic JWT verification: SPLIT into pure-STABLE `verify_session_jwt_and_extract_claims()` + VOLATILE `admit_session_jwt()` admission path. Admission-binding invariant via `session_jwt_admission` table bound to (backend_pid, backend_start_at, jwt_id). Claim-consistency check between admitted + parsed claims.
+2. Two-key model: platform-wide signing key for tenant JWTs + per-tenant signing key for break-glass JWTs.
+3. RSA-PSS-SHA256 signature algorithm (consistency with SI-021 HSM-signing).
+4. KMS-backed signing key management via `jwt_signing_key_public` table + AWS KMS HSM private keys.
+5. Anti-replay via `session_jwt_replay_set` (jwt_id + backend identity tracking; same-backend idempotent retry vs cross-backend replay).
+6. Helper extension to consume verified claims (closes SI-024 v0.17 simplifications #1, #2, #4).
+7. Per-access break-glass session procedure `begin_target_tenant_break_glass_session()` (closes SI-024 v0.17 simplification #8 — per-invocation audit emission).
+8. Two-phase dual-control workflow: `propose_break_glass_approval()` + `co_authorize_break_glass_approval()` procedures with distinct-role + distinct-human enforcement + atomic state transition (closes SI-024 v0.17 simplification #9).
+9. 6-phase zero-downtime migration: A foundation → B middleware cutover → C 30-day telemetry → D raw-GUC deprecation → **E unblocks SI-024 v0.17 Phase 4 cutover** → **F lands INVARIANTS I-036 at first Phase 4 entity cutover**.
+10. Audit event taxonomy: 10 new Cat A events under `tenant_context.*` namespace.
+
+---
+
+#### §2. New CDM entities (5)
+
+To be added to CDM as next amendment cycle (NOT in P-031 scope per spec-first promotion pattern):
+
+1. `session_jwt_admission` — admission-binding invariant table.
+2. `session_jwt_replay_set` — anti-replay tracking.
+3. `jwt_signing_key_public` — KMS public-key registry.
+4. `break_glass_active_session` — per-access break-glass session table.
+5. `jwt_migration_entity_status` — per-entity Phase B fallback control table.
+
+---
+
+#### §3. New AUDIT_EVENTS (10 Cat A)
+
+To be added at SI-024.1 Phase A foundation implementation:
+
+1. `tenant_context.target_tenant_break_glass_session_started` (closes v0.17 simplification #8)
+2. `tenant_context.target_tenant_break_glass_session_closed`
+3. `tenant_context.jwt_signature_verification_failed`
+4. `tenant_context.jwt_replay_attempt_detected`
+5. `tenant_context.jwt_signing_key_rotated`
+6. `tenant_context.break_glass_approval_proposed`
+7. `tenant_context.break_glass_approval_co_authorized`
+8. `tenant_context.break_glass_approval_rejected`
+9. `tenant_context.raw_guc_fallback_used`
+10. (Cat B) `cdm.entity_jwt_migration_status_added`
+
+---
+
+#### §4. Artifact Registry version bump
+
+**v2.17 → v2.18.** P-031 lands SI-024.1 v0.8 as canonical; CDM/AUDIT_EVENTS co-bumps deferred to Phase A foundation implementation per established post-P-029 SI-spec-first promotion pattern.
+
+---
+
+#### §5. Cycle convergence metrics
+
+- **4 adversarial-review rounds (R1-R4)** + **4 pre-merge consult cycles** = 8 total Codex closure cycles.
+- **Two-pass discipline used at R1 + Pre-merge cycles 1+2 (full Pass-1 + Pass-2); R2 used Pass-2 after R1's Pass-1; R3+R4 single-invocation; pre-merge cycle-4 single-invocation APPROVE.**
+- **19 findings closed inline** (2 CRITICAL + 11 HIGH + 6 MED).
+- **0 hard-floor item 6 violations.**
+- **0 ERR escalations.**
+- **10 acknowledged v1.0 simplifications carried forward** (the SI-024 v0.17 9 simplifications are CLOSED by SI-024.1 v0.8; simplification #10 — DB-side cryptographic per-statement enforcement of fallback audit — is documented + deferred to hypothetical future SI-024.2).
+- **Day-0 OQ-NEW1 commitment delivery:** SI-024.1 v0.8 delivered on day 0 of the 30-day window committed at P-030.
+
+---
+
+#### §6. SI-024 v0.17 TRANSITIONAL gates LIFTED post-Phase-D telemetry-clean window
+
+Per SI-024 v0.17 OQ-NEW2 + SI-024.1 Sub-decision 9 Phase E:
+- **Phase 4 cutover** (drop raw-GUC permissive RLS policies; hardened helper becomes sole canonical enforcement): **UNBLOCKED** post-SI-024.1 v0.8 Phase A foundation deploy + Phase B middleware cutover + Phase C 30-day telemetry-clean window.
+- **INVARIANTS I-036** platform-floor invariant: lands at INVARIANTS v5.5 co-bumped with first Phase 4 entity cutover (per SI-024 OQ5).
+- **Production target-tenant break-glass operations**: **UNBLOCKED** post-Phase A foundation deploy. Production paths use `begin_target_tenant_break_glass_session()` + per-access audit + cryptographic JWT-verified operator claims.
+
+SI-024 v0.17 TRANSITIONAL designation EXPIRES at first Phase 4 cutover (no SI-update needed; status flips by operational reality of the Phase 4 entity migration trail).
+
+---
+
 ### Entry P-030 — 2026-05-20 — SI-024 v1.0 Canonical Hardened Tenant/Platform RLS Helper Pattern, RATIFIED AS TRANSITIONAL canonical implementation guidance for Phases 1-3 only (B+ Pass-2 synthesis); role-constrained-GUC hardening — direct-DB-role spoofing closure only; cryptographic JWT-binding deferred to SI-024.1; production target-tenant break-glass use BLOCKED until SI-024.1 ratification + integration; 1 new entity (`break_glass_approval`) + 6 new Cat A audit events (per-invocation `target_tenant_break_glass_invoked` DEFERRED to SI-024.1 per STABLE-function constraint) + 3 new helper functions; Artifact Registry v2.16 → v2.17 (TRANSITIONAL marker on the canonical-floor surface)
 
 **Evans's verbatim instruction (2026-05-20 chat-message, applied via auto-proceed rule at CLAUDE.md commit `f483535`):** *"For my move I need a recommendation from both of you. If you both agree on next steps then automatically do it without waiting for me."* — standing-authorization directive. **Final cycle state (updated cycle-12 MED closure 2026-05-20):** SI source at v0.17 (post-cycle-11 closures + cycle-12 version sweep). Pass-2 strategic synthesis at B+ confirmed (Claude's Option B + Pass-1's TRANSITIONAL designation + Production-break-glass-blocked + Phase 4/I-036/durable-floor strictly gated on SI-024.1). Pre-merge two-pass cycles 1-12 all closed inline (35 findings closed cumulative: 2 CRITICAL + 21 HIGH + 12 MED). Cycle-12 returned 0 HIGH + 2 MED — first cycle with NO HIGH findings, signaling architectural correctness convergence; remaining work is metadata paperwork hygiene.
