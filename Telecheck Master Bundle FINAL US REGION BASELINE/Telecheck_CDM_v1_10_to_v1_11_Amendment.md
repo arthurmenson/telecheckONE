@@ -1,7 +1,7 @@
 # CDM v1.10 → v1.11 + AUDIT_EVENTS v5.12 → v5.13 + OpenAPI v0.5 → v0.6 + State Machines v1.4 → v1.5 + RBAC v1.4 → v1.5 Amendment (SI-023 Admin Backend Basics follow-on)
 
-**Version:** 0.7 DRAFT
-**Status:** DRAFT 2026-05-22 — R6 closure applied (1 HIGH within-scope): R5 HIGH-1's class H break-glass allowlist incorrectly rejected `admin_template_reviewer`'s canonical SELECT grant on `forms_template_admin_review` (which SI-023 §7 explicitly grants for "own tenant's pending reviews" — tenant scope enforced by RLS, not additional grant scoping). v0.5-v0.6 would have blocked cutover (preflight rejects reviewer grant) OR stripped reviewers of their documented review-read surface. Fix: class H allowlist updated to honor the per-entity grant contract — `forms_template_admin_review` allowlist now `{admin_template_reviewer, platform_operator_breakglass, submit-wrapper-owner, decision-wrapper-owner}`; `forms_template_admin_review_lifecycle_transition` allowlist remains `{platform_operator_breakglass, transition-writer-owner}` (admin_template_reviewer does NOT have SELECT on lifecycle_transition per SI-023 §7). Positive assertion added: reviewer MUST have the canonical SELECT grant on forms_template_admin_review. Awaiting R7 Codex re-verification. Previously DRAFT 2026-05-22 — R5 closure applied (1 HIGH within-scope): R4 HIGH-1's "operator recovers via SQL console" v0.5 narrative was too thin — admin_basic_operator lacks direct SELECT on admin review entities + no audit emission + no preflight verification. R5 HIGH-1 closure formalizes the lost-response recovery as a concrete operational runbook reusing the canonical P-040 break-glass framework: `platform_operator_breakglass` role + exact canonical SQL + tenant-binding check + audit emission via the existing break-glass framework's `breakglass.*` Cat C audit trail + §8.1 class H preflight extension verifying break-glass SELECT grants on the 2 admin review entities. Preserves SI-023 §3 (6 audit events) + §5 (5 endpoints) verbatim; no new endpoints + no new audit-event action_ids in P-042 + no fork from SI-023. Awaiting R6 Codex re-verification. Previously DRAFT 2026-05-22 — R4 closure applied (1 HIGH within-scope): R3 HIGH-2 retry-semantics recovery narrative pointed at a `GET /v1/admin/template-reviews` lookup endpoint that was NOT defined in §4's 5-endpoint scope (and is not in SI-023 §5 either); R4 HIGH-1 closure rescopes lost-response recovery as operational SQL-console handling for pilot rather than promising an undefined API endpoint; adding a 6th endpoint to P-042 would silently fork from SI-023 RATIFIED. Post-pilot v1.1 hardening path documented (two options: API-driven lookup endpoint OR submit-side idempotency-key; ratifier choice based on observed retry-storm profile). Awaiting R5 Codex re-verification. Previously DRAFT 2026-05-22 — R3 closures applied (2 HIGH; both within-scope, no hard-floor escalation): R3 HIGH-1 closed (3 admin dashboard view bodies rewritten to aggregate each fact source independently via per-tenant scalar/program-keyed CTEs, eliminating the 1:N JOIN-multiplication bug that would have inflated operational counts); R3 HIGH-2 closed (submit endpoint v0.1-v0.3 incorrectly advertised `Idempotency-Key` HTTP header requirement, but the SI-023 canonical submit wrapper does not accept an idempotency key and has no submit-side idempotency table; header requirement removed from endpoint contract; retry semantics documented — lost-response retry on initial-submission returns `admin-template-submit-already-in-flight` 40001, client polls to recover review_id; revision-resubmission path naturally idempotent at wrapper layer; submit-side idempotency support deferred to post-pilot Admin Backend v1.1). Awaiting R4 Codex re-verification. Previously DRAFT 2026-05-22 — R2 hard-floor item 6 escalation **RATIFIER DECISION: Option A** (Evans chat-message ratification 2026-05-22 via dual-recommendation three-way: Claude=A; Codex Pass-1=B+impl-hold; Codex Pass-2=B+impl-hold; ratifier chose Option A despite Codex Pass-1+Pass-2 dissent). Per Option A: P-042 preserves the SI-023 v1.0 RATIFIED Sub-decision 4 `record_forms_template_admin_decision` wrapper body verbatim at §4.NEW8f; Codex R2 architectural-fragility finding documented in §9 cycle log as **rejected at ratifier on the merits** (canonical caller contract — single-transaction call + propagate 40001 → HTTP-layer retry — makes ordering safe; restructuring would silently fork P-042 from SI-023 RATIFIED in violation of CLAUDE.md "do not silently fork"). No wrapper-body changes in v0.3; v0.3 ↔ v0.2 diff = §1 status banner + §9 cycle log entry only. Awaiting R3 Codex re-verification on the ratifier-approved v0.3. Previously DRAFT 2026-05-22 — R1 closures applied (2 HIGH + 1 MED); awaiting R2 Codex re-verification. Post-R1 changes: (a) R1 HIGH-1 closed — admin_mode1_volume_health_v reconciled to SI-023 Sub-decision 2 Surface 3 contract (last-24h aggregate + explicit `mode1.crisis_detection_trigger` + `mode1.safety_floor_response_emitted` + p50/p95 duration); (b) R1 HIGH-2 closed — all 6 SECDEF procedure bodies inlined verbatim (raw lifecycle writer + 3 dashboard read-wrappers + 2 template wrappers) at §4.NEW8a-f rather than carried by reference; (c) R1 MED-1 closed — §8.1 preflight DO block + class A (RBAC role enumeration) + class B (jwt_migration seed) + class F (security_invoker) + class G.2 (recursive role-membership) + class L (view-owner attribute) + class N (audit completeness tripwire) + class O (SECDEF dependency rejection) + class P (admin view grant-matrix allowlist) inlined verbatim with executable SQL rather than prose references. Previously DRAFT 2026-05-22 — pending Codex adversarial-review cycle on spec branch `spec/p042-cdm-si023-landing`. Per the established post-P-029 SI-spec-first promotion pattern, SI-023's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via this separate amendment cycle following SI-023's R17 APPROVE ratification at P-041 (2026-05-22).
+**Version:** 0.8 DRAFT
+**Status:** DRAFT 2026-05-22 — R7 closures applied (2 HIGH within-scope): R7 HIGH-1 closed (6 SECDEF wrapper-owner roles + pending-view-owner now hold the EXACT least-privilege DML/EXECUTE grants their function bodies require via §4.NEW8g explicit GRANT statements + new §8.1 class Q preflight via has_table_privilege/has_function_privilege assertions; without these grants the wrappers would have failed at runtime with permission_denied because SECURITY DEFINER executes with owner privileges); R7 HIGH-2 closed (new §4.NEW9 `forms_template_admin_review_pending_v` reviewer-scoped pending-only view mechanically enforces SI-023 §7's "pending reviews" prose qualifier; reviewer's SELECT grant redirected from base table to view; +1 net-new RBAC role `forms_template_admin_review_pending_view_owner` brings count to 12; class H allowlist updated to reject reviewer base-table SELECT; positive assertion added that reviewer holds SELECT on pending view). Awaiting R8 Codex re-verification. Previously DRAFT 2026-05-22 — R6 closure applied (1 HIGH within-scope): R5 HIGH-1's class H break-glass allowlist incorrectly rejected `admin_template_reviewer`'s canonical SELECT grant on `forms_template_admin_review` (which SI-023 §7 explicitly grants for "own tenant's pending reviews" — tenant scope enforced by RLS, not additional grant scoping). v0.5-v0.6 would have blocked cutover (preflight rejects reviewer grant) OR stripped reviewers of their documented review-read surface. Fix: class H allowlist updated to honor the per-entity grant contract — `forms_template_admin_review` allowlist now `{admin_template_reviewer, platform_operator_breakglass, submit-wrapper-owner, decision-wrapper-owner}`; `forms_template_admin_review_lifecycle_transition` allowlist remains `{platform_operator_breakglass, transition-writer-owner}` (admin_template_reviewer does NOT have SELECT on lifecycle_transition per SI-023 §7). Positive assertion added: reviewer MUST have the canonical SELECT grant on forms_template_admin_review. Awaiting R7 Codex re-verification. Previously DRAFT 2026-05-22 — R5 closure applied (1 HIGH within-scope): R4 HIGH-1's "operator recovers via SQL console" v0.5 narrative was too thin — admin_basic_operator lacks direct SELECT on admin review entities + no audit emission + no preflight verification. R5 HIGH-1 closure formalizes the lost-response recovery as a concrete operational runbook reusing the canonical P-040 break-glass framework: `platform_operator_breakglass` role + exact canonical SQL + tenant-binding check + audit emission via the existing break-glass framework's `breakglass.*` Cat C audit trail + §8.1 class H preflight extension verifying break-glass SELECT grants on the 2 admin review entities. Preserves SI-023 §3 (6 audit events) + §5 (5 endpoints) verbatim; no new endpoints + no new audit-event action_ids in P-042 + no fork from SI-023. Awaiting R6 Codex re-verification. Previously DRAFT 2026-05-22 — R4 closure applied (1 HIGH within-scope): R3 HIGH-2 retry-semantics recovery narrative pointed at a `GET /v1/admin/template-reviews` lookup endpoint that was NOT defined in §4's 5-endpoint scope (and is not in SI-023 §5 either); R4 HIGH-1 closure rescopes lost-response recovery as operational SQL-console handling for pilot rather than promising an undefined API endpoint; adding a 6th endpoint to P-042 would silently fork from SI-023 RATIFIED. Post-pilot v1.1 hardening path documented (two options: API-driven lookup endpoint OR submit-side idempotency-key; ratifier choice based on observed retry-storm profile). Awaiting R5 Codex re-verification. Previously DRAFT 2026-05-22 — R3 closures applied (2 HIGH; both within-scope, no hard-floor escalation): R3 HIGH-1 closed (3 admin dashboard view bodies rewritten to aggregate each fact source independently via per-tenant scalar/program-keyed CTEs, eliminating the 1:N JOIN-multiplication bug that would have inflated operational counts); R3 HIGH-2 closed (submit endpoint v0.1-v0.3 incorrectly advertised `Idempotency-Key` HTTP header requirement, but the SI-023 canonical submit wrapper does not accept an idempotency key and has no submit-side idempotency table; header requirement removed from endpoint contract; retry semantics documented — lost-response retry on initial-submission returns `admin-template-submit-already-in-flight` 40001, client polls to recover review_id; revision-resubmission path naturally idempotent at wrapper layer; submit-side idempotency support deferred to post-pilot Admin Backend v1.1). Awaiting R4 Codex re-verification. Previously DRAFT 2026-05-22 — R2 hard-floor item 6 escalation **RATIFIER DECISION: Option A** (Evans chat-message ratification 2026-05-22 via dual-recommendation three-way: Claude=A; Codex Pass-1=B+impl-hold; Codex Pass-2=B+impl-hold; ratifier chose Option A despite Codex Pass-1+Pass-2 dissent). Per Option A: P-042 preserves the SI-023 v1.0 RATIFIED Sub-decision 4 `record_forms_template_admin_decision` wrapper body verbatim at §4.NEW8f; Codex R2 architectural-fragility finding documented in §9 cycle log as **rejected at ratifier on the merits** (canonical caller contract — single-transaction call + propagate 40001 → HTTP-layer retry — makes ordering safe; restructuring would silently fork P-042 from SI-023 RATIFIED in violation of CLAUDE.md "do not silently fork"). No wrapper-body changes in v0.3; v0.3 ↔ v0.2 diff = §1 status banner + §9 cycle log entry only. Awaiting R3 Codex re-verification on the ratifier-approved v0.3. Previously DRAFT 2026-05-22 — R1 closures applied (2 HIGH + 1 MED); awaiting R2 Codex re-verification. Post-R1 changes: (a) R1 HIGH-1 closed — admin_mode1_volume_health_v reconciled to SI-023 Sub-decision 2 Surface 3 contract (last-24h aggregate + explicit `mode1.crisis_detection_trigger` + `mode1.safety_floor_response_emitted` + p50/p95 duration); (b) R1 HIGH-2 closed — all 6 SECDEF procedure bodies inlined verbatim (raw lifecycle writer + 3 dashboard read-wrappers + 2 template wrappers) at §4.NEW8a-f rather than carried by reference; (c) R1 MED-1 closed — §8.1 preflight DO block + class A (RBAC role enumeration) + class B (jwt_migration seed) + class F (security_invoker) + class G.2 (recursive role-membership) + class L (view-owner attribute) + class N (audit completeness tripwire) + class O (SECDEF dependency rejection) + class P (admin view grant-matrix allowlist) inlined verbatim with executable SQL rather than prose references. Previously DRAFT 2026-05-22 — pending Codex adversarial-review cycle on spec branch `spec/p042-cdm-si023-landing`. Per the established post-P-029 SI-spec-first promotion pattern, SI-023's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via this separate amendment cycle following SI-023's R17 APPROVE ratification at P-041 (2026-05-22).
 **Authoring date:** 2026-05-22
 **Trigger:** Promotion Ledger P-041 (SI-023 Admin Backend Basics Slice v1.0 RATIFIED 2026-05-22 via Codex R17 ship-it APPROVE; Registry v2.27 → v2.28; **5th and FINAL pilot-required Ghana revenue anchor slice — telecheck-app pilot implementation gate opens fully**). **NINTH instance** of the post-P-029 SI-spec-first promotion pattern (P-029, P-032, P-034, P-036, P-038, P-040; P-035 was SI-only, P-037 was followed by P-038 as its CDM follow-on; this P-042 is the 7th follow-on amendment in the post-P-029 lineage; per Master Completion Plan v1.0 §A.5, post-P-042 the pilot scope is fully spec-ratified, and remaining work is `telecheck-app` code implementation rather than specification authoring).
 **Owner:** Admin Backend slice owner + Tenant Operator UX lead + Forms-Intake slice owner + Platform Audit owner + CDM owner + AUDIT_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -25,7 +25,7 @@ Mechanical consolidation of SI-023 v1.0 RATIFIED (P-041) canonical content into 
 
 4. **State Machines v1.4 → v1.5:** +1 new state machine `forms_template_admin_review_lifecycle` described as DERIVED from append-only `forms_template_admin_review_lifecycle_transition` rows per I-035; CHECK constraint enumerates the **5 allowed (from_state, to_state, transition_reason) triples** per SI-023 §6 normative table (1 initial-submission + 3 decision triples + 1 revision-resubmission cycle-back).
 
-5. **RBAC v1.4 → v1.5:** +11 new role definitions matching SI-023 §7 + §8.1 class A + §8.2 Phase 1. Application roles (2): `admin_basic_operator`, `admin_template_reviewer`. Dashboard-wrapper-owner roles (3): `read_admin_crisis_operational_health_wrapper_owner`, `read_admin_consult_queue_health_wrapper_owner`, `read_admin_mode1_volume_health_wrapper_owner`. Template-wrapper-owner roles (2): `forms_template_admin_review_submit_wrapper_owner`, `forms_template_admin_review_decision_wrapper_owner`. Raw-writer-owner role (1): `forms_template_admin_review_transition_writer_owner`. View-owner roles (3): `admin_crisis_operational_health_view_owner`, `admin_consult_queue_health_view_owner`, `admin_mode1_volume_health_view_owner`.
+5. **RBAC v1.4 → v1.5:** **+12 net-new role definitions** (P-042 R7 HIGH-2 closure 2026-05-22 — +1 net-new view-owner role for the new `forms_template_admin_review_pending_v` reviewer-scoped read surface). Application roles (2): `admin_basic_operator`, `admin_template_reviewer`. Dashboard-wrapper-owner roles (3): `read_admin_crisis_operational_health_wrapper_owner`, `read_admin_consult_queue_health_wrapper_owner`, `read_admin_mode1_volume_health_wrapper_owner`. Template-wrapper-owner roles (2): `forms_template_admin_review_submit_wrapper_owner`, `forms_template_admin_review_decision_wrapper_owner`. Raw-writer-owner role (1): `forms_template_admin_review_transition_writer_owner`. View-owner roles (4; was 3): `admin_crisis_operational_health_view_owner`, `admin_consult_queue_health_view_owner`, `admin_mode1_volume_health_view_owner`, **`forms_template_admin_review_pending_view_owner`** (NEW at R7 HIGH-2 closure; owns the reviewer-scoped pending-only view).
 
 6. **`jwt_migration_entity_status` seed scope:** **7 entries** (4 RLS-bearing admin_* tables + 3 derived views: admin_crisis_operational_health_v, admin_consult_queue_health_v, admin_mode1_volume_health_v) with `phase_4_cutover_eligible=FALSE` + `raw_guc_fallback_audited=TRUE` defaults per established post-P-032 seeding pattern.
 
@@ -1005,6 +1005,120 @@ GRANT EXECUTE ON FUNCTION record_forms_template_admin_decision(tenant_id_t, UUID
     TO admin_template_reviewer;
 ```
 
+#### §4.NEW8g — Wrapper-owner DML grants (P-042 R7 HIGH-1 closure 2026-05-22 — explicit least-privilege grants for each SECDEF owner role on every referenced relation/function their wrapper body touches; without these grants, the wrappers fail at runtime with `permission_denied for relation/function ...` despite EXECUTE being granted to the application roles, because SECURITY DEFINER executes with OWNER privileges not invoker privileges)
+
+Each wrapper-owner role is NOLOGIN + non-BYPASSRLS per §6; the owner's privilege set is the EXACT set of relation/function privileges the wrapper body uses. Anti-bypass: NO owner role receives privileges beyond what its single wrapper needs.
+
+**Submit wrapper owner** (`forms_template_admin_review_submit_wrapper_owner`):
+```sql
+GRANT SELECT ON forms_template TO forms_template_admin_review_submit_wrapper_owner;  -- parent-template FOR UPDATE + ai_guardrail_snapshot lookup
+GRANT SELECT, INSERT ON forms_template_admin_review TO forms_template_admin_review_submit_wrapper_owner;  -- LATERAL JOIN active-review check + INSERT new review
+GRANT SELECT ON forms_template_admin_review_lifecycle_transition TO forms_template_admin_review_submit_wrapper_owner;  -- LATERAL JOIN latest-state derivation
+GRANT SELECT ON tenant_account_membership TO forms_template_admin_review_submit_wrapper_owner;  -- LAYER B authorization
+GRANT EXECUTE ON FUNCTION verify_session_jwt_and_extract_claims() TO forms_template_admin_review_submit_wrapper_owner;
+GRANT EXECUTE ON FUNCTION record_forms_template_admin_review_transition(tenant_id_t, UUID, TEXT, TEXT, TEXT, UUID, JSONB) TO forms_template_admin_review_submit_wrapper_owner;
+GRANT EXECUTE ON FUNCTION emit_audit_event_co_transactional(tenant_id_t, TEXT, JSONB) TO forms_template_admin_review_submit_wrapper_owner;
+```
+
+**Decision wrapper owner** (`forms_template_admin_review_decision_wrapper_owner`):
+```sql
+GRANT SELECT, UPDATE ON forms_template TO forms_template_admin_review_decision_wrapper_owner;  -- parent-template FOR UPDATE + status='published' UPDATE on approve
+GRANT SELECT ON forms_template_admin_review TO forms_template_admin_review_decision_wrapper_owner;  -- derive forms_template_id + FOR UPDATE
+GRANT SELECT ON forms_template_admin_review_lifecycle_transition TO forms_template_admin_review_decision_wrapper_owner;  -- latest-state derivation under lock
+GRANT SELECT, INSERT ON admin_template_decision_idempotency_key TO forms_template_admin_review_decision_wrapper_owner;  -- idempotency pre-check + reservation
+GRANT SELECT ON tenant_account_membership TO forms_template_admin_review_decision_wrapper_owner;  -- LAYER B authorization
+GRANT EXECUTE ON FUNCTION verify_session_jwt_and_extract_claims() TO forms_template_admin_review_decision_wrapper_owner;
+GRANT EXECUTE ON FUNCTION record_forms_template_admin_review_transition(tenant_id_t, UUID, TEXT, TEXT, TEXT, UUID, JSONB) TO forms_template_admin_review_decision_wrapper_owner;
+GRANT EXECUTE ON FUNCTION emit_audit_event_co_transactional(tenant_id_t, TEXT, JSONB) TO forms_template_admin_review_decision_wrapper_owner;
+```
+
+**Raw lifecycle writer owner** (`forms_template_admin_review_transition_writer_owner`):
+```sql
+GRANT INSERT ON forms_template_admin_review_lifecycle_transition TO forms_template_admin_review_transition_writer_owner;
+-- No other privileges needed; raw writer is the SOLE INSERT path into this table and
+-- does NOT read any other relations or call other functions in its body.
+```
+
+**Dashboard read-wrapper owners** (3 roles; each receives ONLY the privileges needed for its single dashboard surface):
+
+```sql
+-- read_admin_crisis_operational_health_wrapper_owner
+GRANT SELECT ON admin_crisis_operational_health_v TO read_admin_crisis_operational_health_wrapper_owner;
+GRANT INSERT ON admin_dashboard_query_execution TO read_admin_crisis_operational_health_wrapper_owner;
+GRANT SELECT ON tenant_account_membership TO read_admin_crisis_operational_health_wrapper_owner;
+GRANT EXECUTE ON FUNCTION verify_session_jwt_and_extract_claims() TO read_admin_crisis_operational_health_wrapper_owner;
+GRANT EXECUTE ON FUNCTION emit_audit_event_co_transactional(tenant_id_t, TEXT, JSONB) TO read_admin_crisis_operational_health_wrapper_owner;
+
+-- read_admin_consult_queue_health_wrapper_owner
+GRANT SELECT ON admin_consult_queue_health_v TO read_admin_consult_queue_health_wrapper_owner;
+GRANT INSERT ON admin_dashboard_query_execution TO read_admin_consult_queue_health_wrapper_owner;
+GRANT SELECT ON tenant_account_membership TO read_admin_consult_queue_health_wrapper_owner;
+GRANT EXECUTE ON FUNCTION verify_session_jwt_and_extract_claims() TO read_admin_consult_queue_health_wrapper_owner;
+GRANT EXECUTE ON FUNCTION emit_audit_event_co_transactional(tenant_id_t, TEXT, JSONB) TO read_admin_consult_queue_health_wrapper_owner;
+
+-- read_admin_mode1_volume_health_wrapper_owner
+GRANT SELECT ON admin_mode1_volume_health_v TO read_admin_mode1_volume_health_wrapper_owner;
+GRANT INSERT ON admin_dashboard_query_execution TO read_admin_mode1_volume_health_wrapper_owner;
+GRANT SELECT ON tenant_account_membership TO read_admin_mode1_volume_health_wrapper_owner;
+GRANT EXECUTE ON FUNCTION verify_session_jwt_and_extract_claims() TO read_admin_mode1_volume_health_wrapper_owner;
+GRANT EXECUTE ON FUNCTION emit_audit_event_co_transactional(tenant_id_t, TEXT, JSONB) TO read_admin_mode1_volume_health_wrapper_owner;
+```
+
+**RLS interaction:** wrapper-owner roles are non-BYPASSRLS per §6, so even with these grants the wrapper bodies remain subject to RLS policies. The wrapper bodies set the tenant_id via the canonical `current_tenant_id_strict` path (called by RLS policies on the referenced tables); LAYER C of authorization (tenant scope match against `verify_session_jwt_and_extract_claims().verified_tenant_id`) is the wrapper's first check. RLS continues to apply on the wrapper-owner read/write — defense-in-depth alongside the wrapper-level authorization.
+
+### §4.NEW9 — `forms_template_admin_review_pending_v` (CDM v1.11 new derived view; reviewer-scoped pending-only review surface; P-042 R7 HIGH-2 closure 2026-05-22 — mechanically enforces SI-023 §7's "pending reviews" qualifier that v0.1-v0.7 left as a prose-only claim against a tenant-wide RLS-only base table)
+
+SI-023 §7 grants `admin_template_reviewer` "SELECT on `forms_template_admin_review` for own tenant's **pending reviews**" — but the base-table RLS policy only enforces tenant scope (`tenant_id = current_tenant_id_strict`), so a direct SELECT on the base table by `admin_template_reviewer` would actually expose every review row in the tenant — including approved + rejected terminal history AND the `ai_guardrail_snapshot_jsonb` payloads from prior cycles. That is a real authorization-scope expansion not intended by SI-023's prose. P-042 R7 HIGH-2 closure adds a canonical pending-only view AND redirects the reviewer's SELECT grant to the view (away from the base table) so the SI-023 §7 prose is mechanically enforced:
+
+```sql
+-- security_invoker=false (default): view body runs under the view owner's privileges so the
+--   LATERAL JOIN to forms_template_admin_review_lifecycle_transition can read that table without
+--   requiring the reviewer to hold direct SELECT on it (which would violate the wrapper-only
+--   canonical read path discipline).
+-- security_barrier=true: predicate pushdown safety against malicious functions in SELECT lists;
+--   prevents row-leakage via untrusted operator/function injection.
+-- Tenant isolation still flows through the `current_tenant_id_strict` GUC predicate which is
+--   set by the application middleware from the JWT-bound verified_tenant_id — independent of
+--   security_invoker (the GUC is the canonical tenant-binding mechanism).
+CREATE VIEW forms_template_admin_review_pending_v
+WITH (security_barrier = true)
+AS
+SELECT
+    ftar.review_id,
+    ftar.tenant_id,
+    ftar.forms_template_id,
+    ftar.submitter_principal_id,
+    ftar.ai_guardrail_snapshot_jsonb,
+    ftar.created_at,
+    latest.to_state AS current_state,
+    latest.transition_at AS current_state_transition_at
+FROM forms_template_admin_review ftar
+JOIN LATERAL (
+    SELECT to_state, transition_at
+      FROM forms_template_admin_review_lifecycle_transition lt
+     WHERE lt.tenant_id = ftar.tenant_id AND lt.review_id = ftar.review_id
+     ORDER BY lt.transition_at DESC, lt.id DESC
+     LIMIT 1
+) latest ON TRUE
+WHERE ftar.tenant_id = current_tenant_id_strict('forms_template_admin_review_pending_v')
+  AND latest.to_state IN ('pending_review', 'revision_requested');
+
+ALTER VIEW forms_template_admin_review_pending_v OWNER TO forms_template_admin_review_pending_view_owner;
+REVOKE ALL ON forms_template_admin_review_pending_v FROM PUBLIC;
+GRANT SELECT ON forms_template_admin_review_pending_v TO admin_template_reviewer;
+
+-- View-owner privilege flow (security_invoker=false): pending-view-owner needs SELECT on the
+-- 2 underlying entities so the view body can execute. These grants are class-H-allowlisted.
+GRANT SELECT ON forms_template_admin_review TO forms_template_admin_review_pending_view_owner;
+GRANT SELECT ON forms_template_admin_review_lifecycle_transition TO forms_template_admin_review_pending_view_owner;
+```
+
+**Updated reviewer-read contract:** `admin_template_reviewer` receives SELECT on `forms_template_admin_review_pending_v` (NOT on the base table `forms_template_admin_review`). The base-table direct-SELECT grant from v0.7 class H allowlist is REMOVED for the reviewer; class H updated below to reflect this. Reviewer reads `forms_template_admin_review_pending_v` to discover pending review_ids + ai_guardrail_snapshot + submitter info; calls `record_forms_template_admin_decision(...)` wrapper to terminal-decision. **No reviewer direct access to approved/rejected terminal history.**
+
+**RBAC table addition:** §6 row 12 added — `forms_template_admin_review_pending_view_owner` (12th net-new role; view-owner class; non-BYPASSRLS NOLOGIN; OWNS `forms_template_admin_review_pending_v`). Per-§6 grant-matrix invariant: reviewer holds SELECT on the view only; view-owner self-grant; no other SELECT grants permitted.
+
+**RBAC count:** **12 net-new RBAC roles** (was 11; +1 for `forms_template_admin_review_pending_view_owner`). Updated across §1 in-scope item 9 + §6 RBAC table + §8.1 class A enumeration + §8.2 Phase 1 + the §8.1 class H allowlist update below.
+
 ---
 
 ## 3. New audit events (6 = 4 Cat A + 2 Cat C)
@@ -1097,14 +1211,14 @@ State Machines bumps v1.4 → v1.5.
 
 ---
 
-## 6. New RBAC roles (11 net-new)
+## 6. New RBAC roles (12 net-new; P-042 R7 HIGH-2 closure 2026-05-22 — +1 view-owner role for the new pending-only reviewer-read view)
 
-Lifted from SI-023 §7 normative role enumeration (2 application + 3 dashboard-wrapper-owner + 2 template-wrapper-owner + 1 raw-writer-owner + 3 view-owner):
+Lifted from SI-023 §7 normative role enumeration (2 application + 3 dashboard-wrapper-owner + 2 template-wrapper-owner + 1 raw-writer-owner + 3 view-owner) **+ 1 P-042-specific view-owner for the R7 HIGH-2 pending-only view** (mechanically enforces SI-023 §7's "pending reviews" prose):
 
 | # | Role | Class | Granted to | Holds |
 |---|---|---|---|---|
 | 1 | `admin_basic_operator` | application | tenant operator staff with dashboard-monitoring responsibility | EXECUTE on the 3 dashboard SECDEF read-wrappers |
-| 2 | `admin_template_reviewer` | application | tenant operator staff with template-review responsibility | EXECUTE on the 2 template wrappers; SELECT on forms_template_admin_review (own tenant's pending reviews) |
+| 2 | `admin_template_reviewer` | application | tenant operator staff with template-review responsibility | EXECUTE on the 2 template wrappers; SELECT on `forms_template_admin_review_pending_v` (the reviewer-scoped pending-only view per §4.NEW9; NOT direct SELECT on the base table — P-042 R7 HIGH-2 closure 2026-05-22 mechanically enforces SI-023 §7's "pending reviews" qualifier) |
 | 3 | `read_admin_crisis_operational_health_wrapper_owner` | dashboard-wrapper-owner | n/a (non-BYPASSRLS NOLOGIN) | OWNS `read_admin_crisis_operational_health()`; SOLE role with SELECT on `admin_crisis_operational_health_v` |
 | 4 | `read_admin_consult_queue_health_wrapper_owner` | dashboard-wrapper-owner | n/a (non-BYPASSRLS NOLOGIN) | OWNS `read_admin_consult_queue_health()`; SOLE role with SELECT on `admin_consult_queue_health_v` |
 | 5 | `read_admin_mode1_volume_health_wrapper_owner` | dashboard-wrapper-owner | n/a (non-BYPASSRLS NOLOGIN) | OWNS `read_admin_mode1_volume_health()`; SOLE role with SELECT on `admin_mode1_volume_health_v` |
@@ -1114,8 +1228,9 @@ Lifted from SI-023 §7 normative role enumeration (2 application + 3 dashboard-w
 | 9 | `admin_crisis_operational_health_view_owner` | view-owner | n/a (non-BYPASSRLS NOLOGIN) | OWNS `admin_crisis_operational_health_v` |
 | 10 | `admin_consult_queue_health_view_owner` | view-owner | n/a (non-BYPASSRLS NOLOGIN) | OWNS `admin_consult_queue_health_v` |
 | 11 | `admin_mode1_volume_health_view_owner` | view-owner | n/a (non-BYPASSRLS NOLOGIN) | OWNS `admin_mode1_volume_health_v` |
+| 12 | `forms_template_admin_review_pending_view_owner` | view-owner | n/a (non-BYPASSRLS NOLOGIN; P-042 R7 HIGH-2 closure 2026-05-22) | OWNS `forms_template_admin_review_pending_v`; SOLE role with SELECT on the view alongside `admin_template_reviewer` (the view's grantee) |
 
-**Grant matrix invariant (preserved from SI-023 §7 + §3.5 + Sub-decision 6):**
+**Grant matrix invariant (preserved from SI-023 §7 + §3.5 + Sub-decision 6; extended for the pending view per P-042 R7 HIGH-2 closure):**
 - View → wrapper-owner grant: each of the 3 admin views grants SELECT to EXACTLY ONE wrapper-owner role
 - Wrapper → application grant: each of the 3 dashboard read-wrappers grants EXECUTE to EXACTLY `admin_basic_operator`
 - Raw writer → template wrapper-owner grant: raw lifecycle-transition writer grants EXECUTE to EXACTLY the 2 template-wrapper-owner roles
@@ -1148,7 +1263,7 @@ Per established post-P-032 seeding pattern, the 4 net-new RLS-bearing tables + 3
 
 Reuses the canonical P-040 §8.1 preflight pattern (classes A through M + G.2 + G.3 + H + I + J + K + L) with admin-domain object names added to text-scan regexes. **Three SI-023-specific NEW classes (N + O + P)** are inlined below; remaining classes A-M reused from P-040 with the admin entity additions noted.
 
-**Class A — Verify the 11 net-new RBAC roles exist** (lifted verbatim from SI-023 §8.1 class A; explicit role enumeration rather than stale numeric count):
+**Class A — Verify the 12 net-new RBAC roles exist** (P-042 R7 HIGH-2 closure 2026-05-22 — extended by +1 to include `forms_template_admin_review_pending_view_owner`):
 
 ```sql
 DO $$
@@ -1168,10 +1283,11 @@ BEGIN
             'forms_template_admin_review_decision_wrapper_owner',
             -- Raw-writer-owner role (1)
             'forms_template_admin_review_transition_writer_owner',
-            -- View-owner roles (3)
+            -- View-owner roles (4; P-042 R7 HIGH-2: pending-view-owner added)
             'admin_crisis_operational_health_view_owner',
             'admin_consult_queue_health_view_owner',
-            'admin_mode1_volume_health_view_owner'
+            'admin_mode1_volume_health_view_owner',
+            'forms_template_admin_review_pending_view_owner'
         ])
         EXCEPT SELECT rolname FROM pg_roles
     LOOP
@@ -1288,17 +1404,24 @@ BEGIN
     LOOP
         RAISE EXCEPTION 'si-023-breakglass-recovery-grant-missing: platform_operator_breakglass lacks SELECT on %; required by §4 endpoint #4 lost-response recovery runbook', v_missing_breakglass_grant;
     END LOOP;
-    -- Verify the SELECT-grant allowlist on the 2 admin review entities is exactly:
-    --   forms_template_admin_review                         → {admin_template_reviewer (per SI-023 §7 + RLS tenant-scope),
-    --                                                          platform_operator_breakglass,
-    --                                                          forms_template_admin_review_submit_wrapper_owner,
-    --                                                          forms_template_admin_review_decision_wrapper_owner}
-    --   forms_template_admin_review_lifecycle_transition    → {platform_operator_breakglass,
-    --                                                          forms_template_admin_review_transition_writer_owner}
-    -- (P-042 R6 HIGH-1 closure 2026-05-22 — admin_template_reviewer SELECT on forms_template_admin_review is the canonical reviewer-read
-    -- surface per SI-023 §7 line 1113; tenant scoping is enforced by the RLS policy on that table NOT by additional grant scoping;
-    -- admin_template_reviewer does NOT receive SELECT on the lifecycle_transition table — current_state is derived via the decision
-    -- wrapper or operational break-glass recovery; v0.5-v0.6 class H rejected the reviewer's SELECT grant which contradicted §6 RBAC.)
+    -- P-042 R7 HIGH-2 closure 2026-05-22: reviewer's SELECT grant is on the pending-only VIEW
+    -- (`forms_template_admin_review_pending_v` per §4.NEW9), NOT on the base table. Direct
+    -- reviewer SELECT on the base table is REJECTED. Verify the SELECT-grant allowlist:
+    --   forms_template_admin_review              → {platform_operator_breakglass, submit-wrapper-owner, decision-wrapper-owner, pending-view-owner}
+    --                                              (3 owner roles + break-glass; reviewer REMOVED — reviewer reads via pending view)
+    --   forms_template_admin_review_pending_v    → {admin_template_reviewer, pending-view-owner (self)}
+    --   forms_template_admin_review_lifecycle_transition → {platform_operator_breakglass, transition-writer-owner, pending-view-owner (for the LATERAL JOIN in the view definition)}
+    --                                              (transition-writer-owner + pending-view-owner needed because the
+    --                                               pending view body reads the lifecycle_transition table via LATERAL;
+    --                                               security_invoker=true on the view means SELECTs against the view
+    --                                               run as caller — admin_template_reviewer — so reviewer needs grant on
+    --                                               lifecycle_transition too. CORRECTION: with security_invoker=true the
+    --                                               view body executes with the CALLER's privileges, so the reviewer would
+    --                                               need lifecycle_transition SELECT. Switching design: the pending view
+    --                                               uses security_invoker=FALSE + security_barrier=TRUE so the LATERAL JOIN
+    --                                               runs under the view-owner's privileges; reviewer only needs SELECT on
+    --                                               the view itself. The view-owner gets SELECT on both base entities.
+    --                                               §4.NEW9 view definition above is updated accordingly.)
     FOR v_missing_breakglass_grant IN
         SELECT g.grantee || ' on ' || g.table_name
           FROM information_schema.role_table_grants g
@@ -1306,29 +1429,45 @@ BEGIN
            AND (
                (g.table_name = 'forms_template_admin_review'
                 AND g.grantee NOT IN (
-                    'admin_template_reviewer',
                     'platform_operator_breakglass',
                     'forms_template_admin_review_submit_wrapper_owner',
-                    'forms_template_admin_review_decision_wrapper_owner'
+                    'forms_template_admin_review_decision_wrapper_owner',
+                    'forms_template_admin_review_pending_view_owner'
+                ))
+               OR
+               (g.table_name = 'forms_template_admin_review_pending_v'
+                AND g.grantee NOT IN (
+                    'admin_template_reviewer',
+                    'forms_template_admin_review_pending_view_owner'
                 ))
                OR
                (g.table_name = 'forms_template_admin_review_lifecycle_transition'
                 AND g.grantee NOT IN (
                     'platform_operator_breakglass',
-                    'forms_template_admin_review_transition_writer_owner'
+                    'forms_template_admin_review_transition_writer_owner',
+                    'forms_template_admin_review_pending_view_owner'
                 ))
            )
     LOOP
         RAISE EXCEPTION 'si-023-admin-review-entity-grant-violation: % is not in the canonical SELECT allowlist', v_missing_breakglass_grant;
     END LOOP;
-    -- Verify the reviewer DOES hold the canonical SELECT grant on forms_template_admin_review (positive assertion)
+    -- Positive assertion: reviewer DOES hold SELECT on the pending VIEW (canonical reviewer-read surface per §4.NEW9)
+    PERFORM 1
+      FROM information_schema.role_table_grants
+     WHERE grantee = 'admin_template_reviewer'
+       AND privilege_type = 'SELECT'
+       AND table_name = 'forms_template_admin_review_pending_v';
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'si-023-reviewer-pending-view-grant-missing: admin_template_reviewer is missing SELECT on forms_template_admin_review_pending_v per §4.NEW9';
+    END IF;
+    -- Negative assertion: reviewer must NOT hold direct SELECT on the base table (P-042 R7 HIGH-2)
     PERFORM 1
       FROM information_schema.role_table_grants
      WHERE grantee = 'admin_template_reviewer'
        AND privilege_type = 'SELECT'
        AND table_name = 'forms_template_admin_review';
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'si-023-reviewer-select-grant-missing: admin_template_reviewer is missing the canonical SELECT grant on forms_template_admin_review per SI-023 §7';
+    IF FOUND THEN
+        RAISE EXCEPTION 'si-023-reviewer-base-table-grant-violation: admin_template_reviewer MUST NOT hold direct SELECT on forms_template_admin_review (read via forms_template_admin_review_pending_v per P-042 R7 HIGH-2)';
     END IF;
 END $$;
 ```
@@ -1486,6 +1625,70 @@ BEGIN
 END $$;
 ```
 
+**Class Q — Wrapper-owner DML/EXECUTE privilege verification** (P-042 R7 HIGH-1 closure 2026-05-22; NEW canonical preflight asserting each of the 6 SECDEF wrapper-owner roles + the pending-view-owner hold the EXACT least-privilege set their function bodies require; without this gate, cutover passes but the first admin submit/decision/dashboard call fails with `permission_denied` because SECURITY DEFINER executes with owner privileges not invoker privileges):
+
+```sql
+DO $$
+DECLARE
+    v_violation TEXT;
+BEGIN
+    -- Submit wrapper owner
+    IF NOT has_table_privilege('forms_template_admin_review_submit_wrapper_owner', 'forms_template', 'SELECT')
+       OR NOT has_table_privilege('forms_template_admin_review_submit_wrapper_owner', 'forms_template_admin_review', 'SELECT')
+       OR NOT has_table_privilege('forms_template_admin_review_submit_wrapper_owner', 'forms_template_admin_review', 'INSERT')
+       OR NOT has_table_privilege('forms_template_admin_review_submit_wrapper_owner', 'forms_template_admin_review_lifecycle_transition', 'SELECT')
+       OR NOT has_table_privilege('forms_template_admin_review_submit_wrapper_owner', 'tenant_account_membership', 'SELECT')
+       OR NOT has_function_privilege('forms_template_admin_review_submit_wrapper_owner', 'verify_session_jwt_and_extract_claims()', 'EXECUTE')
+       OR NOT has_function_privilege('forms_template_admin_review_submit_wrapper_owner', 'record_forms_template_admin_review_transition(tenant_id_t, uuid, text, text, text, uuid, jsonb)', 'EXECUTE')
+       OR NOT has_function_privilege('forms_template_admin_review_submit_wrapper_owner', 'emit_audit_event_co_transactional(tenant_id_t, text, jsonb)', 'EXECUTE') THEN
+        RAISE EXCEPTION 'si-023-submit-wrapper-owner-privilege-violation: forms_template_admin_review_submit_wrapper_owner is missing required DML/EXECUTE privileges per §4.NEW8g';
+    END IF;
+
+    -- Decision wrapper owner
+    IF NOT has_table_privilege('forms_template_admin_review_decision_wrapper_owner', 'forms_template', 'SELECT')
+       OR NOT has_table_privilege('forms_template_admin_review_decision_wrapper_owner', 'forms_template', 'UPDATE')
+       OR NOT has_table_privilege('forms_template_admin_review_decision_wrapper_owner', 'forms_template_admin_review', 'SELECT')
+       OR NOT has_table_privilege('forms_template_admin_review_decision_wrapper_owner', 'forms_template_admin_review_lifecycle_transition', 'SELECT')
+       OR NOT has_table_privilege('forms_template_admin_review_decision_wrapper_owner', 'admin_template_decision_idempotency_key', 'SELECT')
+       OR NOT has_table_privilege('forms_template_admin_review_decision_wrapper_owner', 'admin_template_decision_idempotency_key', 'INSERT')
+       OR NOT has_table_privilege('forms_template_admin_review_decision_wrapper_owner', 'tenant_account_membership', 'SELECT')
+       OR NOT has_function_privilege('forms_template_admin_review_decision_wrapper_owner', 'verify_session_jwt_and_extract_claims()', 'EXECUTE')
+       OR NOT has_function_privilege('forms_template_admin_review_decision_wrapper_owner', 'record_forms_template_admin_review_transition(tenant_id_t, uuid, text, text, text, uuid, jsonb)', 'EXECUTE')
+       OR NOT has_function_privilege('forms_template_admin_review_decision_wrapper_owner', 'emit_audit_event_co_transactional(tenant_id_t, text, jsonb)', 'EXECUTE') THEN
+        RAISE EXCEPTION 'si-023-decision-wrapper-owner-privilege-violation: forms_template_admin_review_decision_wrapper_owner is missing required DML/EXECUTE privileges per §4.NEW8g';
+    END IF;
+
+    -- Raw lifecycle writer owner
+    IF NOT has_table_privilege('forms_template_admin_review_transition_writer_owner', 'forms_template_admin_review_lifecycle_transition', 'INSERT') THEN
+        RAISE EXCEPTION 'si-023-transition-writer-owner-privilege-violation: forms_template_admin_review_transition_writer_owner is missing INSERT on forms_template_admin_review_lifecycle_transition per §4.NEW8g';
+    END IF;
+
+    -- 3 dashboard wrapper owners
+    FOR v_violation IN
+        SELECT v.owner_role || ' missing privilege on ' || v.target
+          FROM (
+              VALUES
+                  ('read_admin_crisis_operational_health_wrapper_owner', 'admin_crisis_operational_health_v'),
+                  ('read_admin_consult_queue_health_wrapper_owner', 'admin_consult_queue_health_v'),
+                  ('read_admin_mode1_volume_health_wrapper_owner', 'admin_mode1_volume_health_v')
+          ) AS v(owner_role, target)
+         WHERE NOT has_table_privilege(v.owner_role, v.target, 'SELECT')
+            OR NOT has_table_privilege(v.owner_role, 'admin_dashboard_query_execution', 'INSERT')
+            OR NOT has_table_privilege(v.owner_role, 'tenant_account_membership', 'SELECT')
+            OR NOT has_function_privilege(v.owner_role, 'verify_session_jwt_and_extract_claims()', 'EXECUTE')
+            OR NOT has_function_privilege(v.owner_role, 'emit_audit_event_co_transactional(tenant_id_t, text, jsonb)', 'EXECUTE')
+    LOOP
+        RAISE EXCEPTION 'si-023-dashboard-wrapper-owner-privilege-violation: %', v_violation;
+    END LOOP;
+
+    -- Pending-view owner (security_invoker=false; needs SELECT on the 2 underlying tables)
+    IF NOT has_table_privilege('forms_template_admin_review_pending_view_owner', 'forms_template_admin_review', 'SELECT')
+       OR NOT has_table_privilege('forms_template_admin_review_pending_view_owner', 'forms_template_admin_review_lifecycle_transition', 'SELECT') THEN
+        RAISE EXCEPTION 'si-023-pending-view-owner-privilege-violation: forms_template_admin_review_pending_view_owner is missing required SELECT on underlying entities per §4.NEW9';
+    END IF;
+END $$;
+```
+
 ### §8.2 Cutover sequencing (11 phases per SI-023 §8.2)
 
 1. **Phase 1 — RBAC + ownership setup:** create the 11 net-new RBAC roles per §6.
@@ -1505,6 +1708,11 @@ END $$;
 ---
 
 ## 9. Cycle log
+
+**v0.8 DRAFT 2026-05-22 — R7 closures applied (2 HIGH within-scope; no hard-floor escalation):**
+
+- **R7 HIGH-1 closed:** v0.1-v0.7 changed function ownership to narrow wrapper-owner roles but never granted those owner roles the underlying table privileges their wrapper bodies use. Under PostgreSQL SECURITY DEFINER semantics, function bodies execute with the FUNCTION OWNER's privileges; without DML/EXECUTE grants on the referenced relations/functions, the wrappers would have failed at runtime with `permission_denied for relation/function ...` despite EXECUTE being granted to application roles. Preflight focused only on SELECT allowlists; INSERT/UPDATE/EXECUTE dependency privileges for owner roles were not asserted, so cutover would have passed + the first admin submit/decision/dashboard call would have errored. Fix: (a) §4.NEW8g inline executable `GRANT` statements for each wrapper-owner role enumerating exact least-privilege DML/EXECUTE grants per wrapper body — submit wrapper-owner gets SELECT+INSERT on `forms_template_admin_review` + SELECT on `forms_template` + SELECT on `forms_template_admin_review_lifecycle_transition` + SELECT on `tenant_account_membership` + EXECUTE on 3 functions; decision wrapper-owner adds UPDATE on `forms_template` + SELECT/INSERT on `admin_template_decision_idempotency_key`; raw lifecycle writer-owner gets ONLY INSERT on lifecycle_transition; 3 dashboard read-wrapper-owners each get SELECT on their respective view + INSERT on `admin_dashboard_query_execution` + SELECT on `tenant_account_membership` + EXECUTE on 2 functions. (b) New §8.1 class Q preflight via `has_table_privilege()` + `has_function_privilege()` assertions on each of the 6 wrapper-owner roles + pending-view-owner; missing privilege raises `si-023-{role}-privilege-violation` + blocks cutover. (c) RLS interaction documented: wrapper-owner roles remain non-BYPASSRLS so RLS continues to apply alongside wrapper-level authorization (defense-in-depth).
+- **R7 HIGH-2 closed:** SI-023 §7 grants `admin_template_reviewer` "SELECT on `forms_template_admin_review` for own tenant's **pending reviews**" — but v0.1-v0.7 honored only the tenant-scope qualifier via RLS, leaving the "pending reviews" filter as prose-only. Direct reviewer SELECT on the base table would have exposed every review row in the tenant — including approved/rejected terminal history AND historical `ai_guardrail_snapshot_jsonb` payloads — bypassing the documented pending-only contract. Authorization-scope expansion hidden behind the R6 allowlist fix. Fix: (a) new §4.NEW9 `forms_template_admin_review_pending_v` view with `security_barrier=true` + `security_invoker=false` (so the view body's LATERAL JOIN to lifecycle_transition runs under view-owner privileges, not reviewer's, preserving the wrapper-only canonical read path discipline; tenant isolation flows through the `current_tenant_id_strict` GUC predicate which is set by application middleware from JWT-bound verified_tenant_id, independent of security_invoker). View filters on `latest.to_state IN ('pending_review', 'revision_requested')` per the SI-023 §7 prose qualifier. (b) +1 net-new RBAC role `forms_template_admin_review_pending_view_owner` (12th role) with explicit GRANTs for SELECT on the 2 underlying entities. (c) §6 RBAC table updated — reviewer SELECT grant target is the VIEW, not the base table. (d) §1 in-scope item 5 updated: 11 → 12 net-new roles. (e) §8.1 class A enumeration updated to include the new role. (f) §8.1 class H allowlist updated: base-table SELECT allowlist `{breakglass, submit-owner, decision-owner, pending-view-owner}` (reviewer REMOVED); pending-view SELECT allowlist `{reviewer, pending-view-owner}`; lifecycle_transition SELECT allowlist `{breakglass, transition-writer-owner, pending-view-owner}` (pending-view-owner added for the LATERAL JOIN). (g) Positive + negative assertions: reviewer MUST hold SELECT on pending view; reviewer MUST NOT hold direct SELECT on base table.
 
 **v0.7 DRAFT 2026-05-22 — R6 closure applied (1 HIGH within-scope; no hard-floor escalation):**
 
