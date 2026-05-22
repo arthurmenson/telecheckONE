@@ -466,9 +466,9 @@ END $$;
 
 ---
 
-## 7. `jwt_migration_entity_status` seed scope (R5 HIGH-2 closure pattern from P-034 + Mode 1 spec R5 HIGH-2)
+## 7. `jwt_migration_entity_status` seed scope (R5 HIGH-2 closure pattern from P-034 + Mode 1 spec R5 HIGH-2; **post-P-036 cross-slice consistency fix 2026-05-22 — Evans Option A**: extended seed scope from 5 → 6 entries to include `ai_mode1_conversation_state` view per the post-R7 plain-view design, matching the canonical pattern from SI-020 P-038 (9 entries / 2 views), SI-022 P-040 (5 entries / 2 views), SI-023 P-042 (7 entries / 3 views) — Mode 1 is no longer the outlier omitting its tenant-scoped view from migration tracking)
 
-**Seed 5 entity names** at amendment-apply time with `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` defaults (Phase B fail-closed-with-audit posture):
+**Seed 6 entity names** at amendment-apply time with `phase_4_cutover_eligible=FALSE` AND `raw_guc_fallback_audited=TRUE` defaults (Phase B fail-closed-with-audit posture):
 
 ```sql
 INSERT INTO jwt_migration_entity_status (entity_name, phase_4_cutover_eligible, raw_guc_fallback_audited)
@@ -477,12 +477,13 @@ VALUES
     ('ai_mode1_conversation_archival_event',           FALSE, TRUE),
     ('ai_mode1_conversation_turn_admission',           FALSE, TRUE),
     ('ai_mode1_conversation_turn_detector_result',     FALSE, TRUE),
-    ('ai_mode1_conversation_turn_result',              FALSE, TRUE);
+    ('ai_mode1_conversation_turn_result',              FALSE, TRUE),
+    ('ai_mode1_conversation_state',                    FALSE, TRUE);  -- post-P-036 cross-slice fix 2026-05-22 (Evans Option A): view is no longer security_invoker after R7 closure; uses current_tenant_id_strict('ai_mode1_conversation_state') predicate in body; tenant-scoped read surface tracked under migration scope per other-slice canonical pattern (P-038/P-040/P-042 all seed their tenant-scoped views)
 ```
 
-**cdm_owner sequencing guidance:** flip per-entity `phase_4_cutover_eligible=TRUE` as middleware migration to JWT-required posture completes; the `ai_mode1_conversation_state` view is RLS-derived through base tables via `security_invoker` semantics and does NOT require a separate seed entry (base-table policies evaluate against the invoking role).
+**cdm_owner sequencing guidance:** flip per-entity `phase_4_cutover_eligible=TRUE` as middleware migration to JWT-required posture completes. The `ai_mode1_conversation_state` view was historically NOT seeded because pre-R7 it was a `security_invoker` view that inherited RLS from base tables (no view-side tenant-binding to migrate). The R7 HIGH-1 closure replaced it with a plain view whose body explicitly calls `current_tenant_id_strict('ai_mode1_conversation_state')` — making the view itself a tenant-binding surface that should be tracked. The post-P-036 cross-slice consistency fix (Evans Option A 2026-05-22) brings Mode 1 into alignment with the other 4 pilot slices that all track their tenant-scoped views. **Stale prose note**: §1 in-scope item 5, §7 RBAC table row for `ai_mode1_reader`, and the §9 R5 MED-1 cycle-log entry still reference `security_invoker` semantics; these are doc-scrub items for the post-P-042 hygiene cycle (Finding 3 from the 2026-05-22 cross-slice audit) and do NOT affect the seed-scope fix.
 
-**Cross-reference:** SI-024.1 v0.8 §Sub-decision 9 (Phase B fallback gate); CDM v1.6 §4.NEW5 (jwt_migration_entity_status entity); P-034 R6 closure precedent (extended seed scope to include MV/view trust-anchor surfaces).
+**Cross-reference:** SI-024.1 v0.8 §Sub-decision 9 (Phase B fallback gate); CDM v1.6 §4.NEW5 (jwt_migration_entity_status entity); P-034 R6 closure precedent (extended seed scope to include MV/view trust-anchor surfaces); P-038 §3 (9-entry seed scope including 2 views); P-040 §1 in-scope item 6 (5-entry seed scope including 2 views); P-042 §7 (7-entry seed scope including 3 views).
 
 ---
 
