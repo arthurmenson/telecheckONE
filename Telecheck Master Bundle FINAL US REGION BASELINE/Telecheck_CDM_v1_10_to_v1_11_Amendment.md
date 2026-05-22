@@ -1,7 +1,7 @@
 # CDM v1.10 → v1.11 + AUDIT_EVENTS v5.12 → v5.13 + OpenAPI v0.5 → v0.6 + State Machines v1.4 → v1.5 + RBAC v1.4 → v1.5 Amendment (SI-023 Admin Backend Basics follow-on)
 
-**Version:** 0.3 DRAFT
-**Status:** DRAFT 2026-05-22 — R2 hard-floor item 6 escalation **RATIFIER DECISION: Option A** (Evans chat-message ratification 2026-05-22 via dual-recommendation three-way: Claude=A; Codex Pass-1=B+impl-hold; Codex Pass-2=B+impl-hold; ratifier chose Option A despite Codex Pass-1+Pass-2 dissent). Per Option A: P-042 preserves the SI-023 v1.0 RATIFIED Sub-decision 4 `record_forms_template_admin_decision` wrapper body verbatim at §4.NEW8f; Codex R2 architectural-fragility finding documented in §9 cycle log as **rejected at ratifier on the merits** (canonical caller contract — single-transaction call + propagate 40001 → HTTP-layer retry — makes ordering safe; restructuring would silently fork P-042 from SI-023 RATIFIED in violation of CLAUDE.md "do not silently fork"). No wrapper-body changes in v0.3; v0.3 ↔ v0.2 diff = §1 status banner + §9 cycle log entry only. Awaiting R3 Codex re-verification on the ratifier-approved v0.3. Previously DRAFT 2026-05-22 — R1 closures applied (2 HIGH + 1 MED); awaiting R2 Codex re-verification. Post-R1 changes: (a) R1 HIGH-1 closed — admin_mode1_volume_health_v reconciled to SI-023 Sub-decision 2 Surface 3 contract (last-24h aggregate + explicit `mode1.crisis_detection_trigger` + `mode1.safety_floor_response_emitted` + p50/p95 duration); (b) R1 HIGH-2 closed — all 6 SECDEF procedure bodies inlined verbatim (raw lifecycle writer + 3 dashboard read-wrappers + 2 template wrappers) at §4.NEW8a-f rather than carried by reference; (c) R1 MED-1 closed — §8.1 preflight DO block + class A (RBAC role enumeration) + class B (jwt_migration seed) + class F (security_invoker) + class G.2 (recursive role-membership) + class L (view-owner attribute) + class N (audit completeness tripwire) + class O (SECDEF dependency rejection) + class P (admin view grant-matrix allowlist) inlined verbatim with executable SQL rather than prose references. Previously DRAFT 2026-05-22 — pending Codex adversarial-review cycle on spec branch `spec/p042-cdm-si023-landing`. Per the established post-P-029 SI-spec-first promotion pattern, SI-023's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via this separate amendment cycle following SI-023's R17 APPROVE ratification at P-041 (2026-05-22).
+**Version:** 0.4 DRAFT
+**Status:** DRAFT 2026-05-22 — R3 closures applied (2 HIGH; both within-scope, no hard-floor escalation): R3 HIGH-1 closed (3 admin dashboard view bodies rewritten to aggregate each fact source independently via per-tenant scalar/program-keyed CTEs, eliminating the 1:N JOIN-multiplication bug that would have inflated operational counts); R3 HIGH-2 closed (submit endpoint v0.1-v0.3 incorrectly advertised `Idempotency-Key` HTTP header requirement, but the SI-023 canonical submit wrapper does not accept an idempotency key and has no submit-side idempotency table; header requirement removed from endpoint contract; retry semantics documented — lost-response retry on initial-submission returns `admin-template-submit-already-in-flight` 40001, client polls to recover review_id; revision-resubmission path naturally idempotent at wrapper layer; submit-side idempotency support deferred to post-pilot Admin Backend v1.1). Awaiting R4 Codex re-verification. Previously DRAFT 2026-05-22 — R2 hard-floor item 6 escalation **RATIFIER DECISION: Option A** (Evans chat-message ratification 2026-05-22 via dual-recommendation three-way: Claude=A; Codex Pass-1=B+impl-hold; Codex Pass-2=B+impl-hold; ratifier chose Option A despite Codex Pass-1+Pass-2 dissent). Per Option A: P-042 preserves the SI-023 v1.0 RATIFIED Sub-decision 4 `record_forms_template_admin_decision` wrapper body verbatim at §4.NEW8f; Codex R2 architectural-fragility finding documented in §9 cycle log as **rejected at ratifier on the merits** (canonical caller contract — single-transaction call + propagate 40001 → HTTP-layer retry — makes ordering safe; restructuring would silently fork P-042 from SI-023 RATIFIED in violation of CLAUDE.md "do not silently fork"). No wrapper-body changes in v0.3; v0.3 ↔ v0.2 diff = §1 status banner + §9 cycle log entry only. Awaiting R3 Codex re-verification on the ratifier-approved v0.3. Previously DRAFT 2026-05-22 — R1 closures applied (2 HIGH + 1 MED); awaiting R2 Codex re-verification. Post-R1 changes: (a) R1 HIGH-1 closed — admin_mode1_volume_health_v reconciled to SI-023 Sub-decision 2 Surface 3 contract (last-24h aggregate + explicit `mode1.crisis_detection_trigger` + `mode1.safety_floor_response_emitted` + p50/p95 duration); (b) R1 HIGH-2 closed — all 6 SECDEF procedure bodies inlined verbatim (raw lifecycle writer + 3 dashboard read-wrappers + 2 template wrappers) at §4.NEW8a-f rather than carried by reference; (c) R1 MED-1 closed — §8.1 preflight DO block + class A (RBAC role enumeration) + class B (jwt_migration seed) + class F (security_invoker) + class G.2 (recursive role-membership) + class L (view-owner attribute) + class N (audit completeness tripwire) + class O (SECDEF dependency rejection) + class P (admin view grant-matrix allowlist) inlined verbatim with executable SQL rather than prose references. Previously DRAFT 2026-05-22 — pending Codex adversarial-review cycle on spec branch `spec/p042-cdm-si023-landing`. Per the established post-P-029 SI-spec-first promotion pattern, SI-023's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via this separate amendment cycle following SI-023's R17 APPROVE ratification at P-041 (2026-05-22).
 **Authoring date:** 2026-05-22
 **Trigger:** Promotion Ledger P-041 (SI-023 Admin Backend Basics Slice v1.0 RATIFIED 2026-05-22 via Codex R17 ship-it APPROVE; Registry v2.27 → v2.28; **5th and FINAL pilot-required Ghana revenue anchor slice — telecheck-app pilot implementation gate opens fully**). **NINTH instance** of the post-P-029 SI-spec-first promotion pattern (P-029, P-032, P-034, P-036, P-038, P-040; P-035 was SI-only, P-037 was followed by P-038 as its CDM follow-on; this P-042 is the 7th follow-on amendment in the post-P-029 lineage; per Master Completion Plan v1.0 §A.5, post-P-042 the pilot scope is fully spec-ratified, and remaining work is `telecheck-app` code implementation rather than specification authoring).
 **Owner:** Admin Backend slice owner + Tenant Operator UX lead + Forms-Intake slice owner + Platform Audit owner + CDM owner + AUDIT_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -306,72 +306,136 @@ CREATE INDEX admin_template_decision_idempotency_review_idx
     ON admin_template_decision_idempotency_key (tenant_id, review_id, decided_at DESC);
 ```
 
-### §4.NEW5 — `admin_crisis_operational_health_v` (CDM v1.11 new derived view; tenant-scoped staff-summary reader)
+### §4.NEW5 — `admin_crisis_operational_health_v` (CDM v1.11 new derived view; tenant-scoped staff-summary reader; P-042 R3 HIGH-1 closure 2026-05-22 — view body rewritten to aggregate each fact source independently via per-tenant scalar subqueries, eliminating the JOIN-multiplication bug from v0.1-v0.3 that would have inflated counts by N×M×K cardinality)
 
-Tenant-scoped view aggregating canonical crisis-domain entities (P-027 §4.66-4.68 + P-040 §4.NEW1-3). `security_invoker=true + security_barrier=true`. SELECT REVOKEd FROM PUBLIC + GRANTed ONLY to `read_admin_crisis_operational_health_wrapper_owner` per §7 + §8.1 class P. Lifted from SI-023 Sub-decision 2 Surface 1:
+Tenant-scoped view aggregating canonical crisis-domain entities (P-027 §4.66-4.68 + P-040 §4.NEW1-3). `security_invoker=true + security_barrier=true`. SELECT REVOKEd FROM PUBLIC + GRANTed ONLY to `read_admin_crisis_operational_health_wrapper_owner` per §6 + §8.1 class P. Per-severity rollup; metrics decomposed into independent per-tenant scalar subqueries to avoid 1:N join multiplication corrupting operational counts:
 
 ```sql
 CREATE VIEW admin_crisis_operational_health_v
 WITH (security_invoker = true, security_barrier = true)
 AS
+WITH tenant_scope AS (
+    SELECT current_tenant_id_strict('admin_crisis_operational_health_v') AS tenant_id
+),
+active_events_by_severity AS (
+    SELECT ce.tenant_id, ce.severity,
+           COUNT(*) FILTER (WHERE latest.to_state IN ('detected', 'escalated', 'acknowledged', 'responded')) AS active_event_count
+      FROM public.crisis_event ce
+      JOIN tenant_scope ts ON ts.tenant_id = ce.tenant_id
+      LEFT JOIN LATERAL (
+          SELECT to_state FROM public.crisis_event_lifecycle_transition
+          WHERE tenant_id = ce.tenant_id AND crisis_event_id = ce.id
+          ORDER BY transition_at DESC, id DESC LIMIT 1
+      ) latest ON TRUE
+     GROUP BY ce.tenant_id, ce.severity
+),
+escalation_backlog AS (
+    SELECT nceo.tenant_id, COUNT(*) AS backlog_count, AVG(
+        CASE nceo.tier
+            WHEN 'care_team' THEN 1
+            WHEN 'clinical_on_call' THEN 2
+            WHEN 'regulatory' THEN 3
+            ELSE NULL END
+    )::NUMERIC(3,2) AS avg_tier
+      FROM public.notification_crisis_escalation_obligation nceo
+      JOIN tenant_scope ts ON ts.tenant_id = nceo.tenant_id
+     WHERE nceo.undeliverable_deadline < now()
+     GROUP BY nceo.tenant_id
+),
+stale_sweeps AS (
+    SELECT cse.tenant_id, COUNT(*) AS stale_count
+      FROM public.crisis_sweep_execution cse
+      JOIN tenant_scope ts ON ts.tenant_id = cse.tenant_id
+     WHERE cse.completed_at IS NULL AND cse.claim_expires_at < now()
+     GROUP BY cse.tenant_id
+),
+crisis_audit_24h AS (
+    SELECT ae.tenant_id, COUNT(*) AS audit_count
+      FROM public.audit_event ae
+      JOIN tenant_scope ts ON ts.tenant_id = ae.tenant_id
+     WHERE ae.action_id LIKE 'crisis.%'
+       AND ae.recorded_at > now() - INTERVAL '24 hours'
+     GROUP BY ae.tenant_id
+)
 SELECT
-    ce.tenant_id,
-    ce.severity,
-    COUNT(*) FILTER (WHERE celt.to_state IN ('detected', 'escalated', 'acknowledged', 'responded')) AS active_event_count,
-    COUNT(*) FILTER (WHERE nceo.undeliverable_deadline < now()) AS escalation_obligation_backlog_count,
-    COUNT(*) FILTER (WHERE cse.completed_at IS NULL AND cse.claim_expires_at < now()) AS stale_sweep_count,
-    AVG(CASE
-        WHEN nceo.tier = 'care_team' THEN 1
-        WHEN nceo.tier = 'clinical_on_call' THEN 2
-        WHEN nceo.tier = 'regulatory' THEN 3
-        ELSE NULL END
-    )::NUMERIC(3,2) AS active_obligation_avg_tier,
-    COUNT(DISTINCT ae.id) FILTER (WHERE ae.action_id LIKE 'crisis.%' AND ae.recorded_at > now() - INTERVAL '24 hours') AS crisis_audit_24h_count
-FROM public.crisis_event ce
-LEFT JOIN LATERAL (
-    SELECT to_state FROM public.crisis_event_lifecycle_transition
-    WHERE tenant_id = ce.tenant_id AND crisis_event_id = ce.id
-    ORDER BY transition_at DESC, id DESC LIMIT 1
-) celt ON TRUE
-LEFT JOIN public.notification_crisis_escalation_obligation nceo
-    ON nceo.tenant_id = ce.tenant_id AND nceo.crisis_event_id = ce.id
-LEFT JOIN public.crisis_sweep_execution cse
-    ON cse.tenant_id = ce.tenant_id AND cse.crisis_event_id = ce.id
-LEFT JOIN public.audit_event ae
-    ON ae.tenant_id = ce.tenant_id
-WHERE ce.tenant_id = current_tenant_id_strict('admin_crisis_operational_health_v')
-GROUP BY ce.tenant_id, ce.severity;
+    aes.tenant_id,
+    aes.severity,
+    aes.active_event_count,
+    COALESCE(eb.backlog_count, 0) AS escalation_obligation_backlog_count,
+    COALESCE(ss.stale_count, 0) AS stale_sweep_count,
+    eb.avg_tier AS active_obligation_avg_tier,
+    COALESCE(ca.audit_count, 0) AS crisis_audit_24h_count
+FROM active_events_by_severity aes
+LEFT JOIN escalation_backlog eb ON eb.tenant_id = aes.tenant_id
+LEFT JOIN stale_sweeps ss ON ss.tenant_id = aes.tenant_id
+LEFT JOIN crisis_audit_24h ca ON ca.tenant_id = aes.tenant_id;
 ```
 
-### §4.NEW6 — `admin_consult_queue_health_v` (CDM v1.11 new derived view; tenant-scoped consult-queue-summary reader)
+**Aggregation design note:** the CTEs `escalation_backlog`, `stale_sweeps`, `crisis_audit_24h` each aggregate their respective fact source per-tenant FIRST, then join into the per-severity rollup. Because the LEFT JOINs are tenant-keyed (not crisis_event_id-keyed) and the right-hand sides are already aggregated to a single row per tenant, the per-severity counts are NOT multiplied by 1:N child cardinality. Tenant scope is bound by the `tenant_scope` CTE wrapping `current_tenant_id_strict`. The avg_tier is computed at the tenant level (across all backlogged obligations regardless of severity) — this is intentional per the SI-023 Sub-decision 2 Surface 1 metric definition; if a future cycle wants per-severity avg_tier, the CTE can be re-keyed.
 
-Tenant-scoped view over P-038 `consult` + `consult_lifecycle_transition` + `consult_review_claim` entities. `security_invoker=true + security_barrier=true`. SELECT REVOKEd FROM PUBLIC + GRANTed ONLY to `read_admin_consult_queue_health_wrapper_owner` per §7 + §8.1 class P. Lifted from SI-023 Sub-decision 2 Surface 2:
+### §4.NEW6 — `admin_consult_queue_health_v` (CDM v1.11 new derived view; tenant-scoped consult-queue-summary reader; P-042 R3 HIGH-1 closure 2026-05-22 — view body rewritten to aggregate each fact source independently)
+
+Tenant-scoped view over P-038 `consult` + `consult_lifecycle_transition` + `consult_review_claim` entities. `security_invoker=true + security_barrier=true`. SELECT REVOKEd FROM PUBLIC + GRANTed ONLY to `read_admin_consult_queue_health_wrapper_owner` per §6 + §8.1 class P. Per-(program_id, current_state) rollup with metrics decomposed into independent per-tenant CTEs to avoid 1:N join multiplication corrupting consult_count and orphan_claim_backlog:
 
 ```sql
 CREATE VIEW admin_consult_queue_health_v
 WITH (security_invoker = true, security_barrier = true)
 AS
+WITH tenant_scope AS (
+    SELECT current_tenant_id_strict('admin_consult_queue_health_v') AS tenant_id
+),
+consult_state_rollup AS (
+    SELECT c.tenant_id, c.program_id, latest.to_state AS current_state,
+           COUNT(*) AS consult_count,
+           AVG(EXTRACT(EPOCH FROM (first_claim.claim_at - c.created_at)))::NUMERIC(10,2)
+               AS avg_time_to_first_claim_seconds
+      FROM public.consult c
+      JOIN tenant_scope ts ON ts.tenant_id = c.tenant_id
+      LEFT JOIN LATERAL (
+          SELECT to_state FROM public.consult_lifecycle_transition
+          WHERE tenant_id = c.tenant_id AND consult_id = c.id
+          ORDER BY transition_at DESC, id DESC LIMIT 1
+      ) latest ON TRUE
+      LEFT JOIN LATERAL (
+          SELECT claim_at FROM public.consult_review_claim
+          WHERE tenant_id = c.tenant_id AND consult_id = c.id
+          ORDER BY claim_at ASC LIMIT 1
+      ) first_claim ON TRUE
+     GROUP BY c.tenant_id, c.program_id, latest.to_state
+),
+orphan_claims_by_program AS (
+    SELECT c.tenant_id, c.program_id, COUNT(*) AS orphan_count
+      FROM public.consult_review_claim crc
+      JOIN public.consult c ON c.tenant_id = crc.tenant_id AND c.id = crc.consult_id
+      JOIN tenant_scope ts ON ts.tenant_id = crc.tenant_id
+     WHERE crc.claim_expires_at < now()
+       AND crc.released_at IS NULL
+     GROUP BY c.tenant_id, c.program_id
+),
+async_consult_audit_24h AS (
+    SELECT ae.tenant_id, COUNT(*) AS audit_count
+      FROM public.audit_event ae
+      JOIN tenant_scope ts ON ts.tenant_id = ae.tenant_id
+     WHERE ae.action_id LIKE 'async_consult.%'
+       AND ae.recorded_at > now() - INTERVAL '24 hours'
+     GROUP BY ae.tenant_id
+)
 SELECT
-    c.tenant_id,
-    c.program_id,
-    clt.to_state AS current_state,
-    COUNT(*) AS consult_count,
-    AVG(EXTRACT(EPOCH FROM (crc.claim_at - c.created_at)))::NUMERIC(10,2) AS avg_time_to_first_claim_seconds,
-    COUNT(*) FILTER (WHERE crc.claim_expires_at < now() AND crc.released_at IS NULL) AS orphan_claim_backlog_count,
-    COUNT(DISTINCT ae.id) FILTER (WHERE ae.action_id LIKE 'async_consult.%' AND ae.recorded_at > now() - INTERVAL '24 hours') AS async_consult_audit_24h_count
-FROM public.consult c
-LEFT JOIN LATERAL (
-    SELECT to_state FROM public.consult_lifecycle_transition
-    WHERE tenant_id = c.tenant_id AND consult_id = c.id
-    ORDER BY transition_at DESC, id DESC LIMIT 1
-) clt ON TRUE
-LEFT JOIN public.consult_review_claim crc
-    ON crc.tenant_id = c.tenant_id AND crc.consult_id = c.id
-LEFT JOIN public.audit_event ae
-    ON ae.tenant_id = c.tenant_id
-WHERE c.tenant_id = current_tenant_id_strict('admin_consult_queue_health_v')
-GROUP BY c.tenant_id, c.program_id, clt.to_state;
+    csr.tenant_id,
+    csr.program_id,
+    csr.current_state,
+    csr.consult_count,
+    csr.avg_time_to_first_claim_seconds,
+    COALESCE(ocp.orphan_count, 0) AS orphan_claim_backlog_count,
+    COALESCE(aca.audit_count, 0) AS async_consult_audit_24h_count
+FROM consult_state_rollup csr
+LEFT JOIN orphan_claims_by_program ocp
+    ON ocp.tenant_id = csr.tenant_id AND ocp.program_id IS NOT DISTINCT FROM csr.program_id
+LEFT JOIN async_consult_audit_24h aca
+    ON aca.tenant_id = csr.tenant_id;
 ```
+
+**Aggregation design note:** the LATERAL subquery for `first_claim` selects ONE row per consult (earliest claim_at) eliminating the prior 1:N consult_review_claim multiplication; `orphan_claims_by_program` aggregates per-(tenant, program) ahead of the rollup join; `async_consult_audit_24h` aggregates per-tenant. Tenant scope bound by the `tenant_scope` CTE.
 
 ### §4.NEW7 — `admin_mode1_volume_health_v` (CDM v1.11 new derived view; tenant-scoped Mode 1 volume + safety-floor reader; R1 HIGH-2 + R2 HIGH-1 closure; P-042 R1 HIGH-1 closure 2026-05-22 — reconciled view contract to match SI-023 Surface 3 exactly)
 
@@ -969,7 +1033,7 @@ Lifted from SI-023 §5 normative endpoint list:
 1. `GET /v1/admin/dashboards/crisis-operational-health` — calls `read_admin_crisis_operational_health` SECDEF wrapper reading `admin_crisis_operational_health_v`; requires admin_basic_operator role at LAYER B; emits `admin.dashboard_query_executed` Cat A audit co-transactionally with admin_dashboard_query_execution INSERT
 2. `GET /v1/admin/dashboards/consult-queue-health` — calls `read_admin_consult_queue_health` SECDEF wrapper reading `admin_consult_queue_health_v`; same role + audit pattern
 3. `GET /v1/admin/dashboards/mode1-volume-health` — calls `read_admin_mode1_volume_health` SECDEF wrapper reading `admin_mode1_volume_health_v`; same role + audit pattern (R2 HIGH-2 closure 2026-05-22 — canonical wrapper-only path matching surfaces 1+2; no in-process aggregation from ai_mode1_conversation; admin_basic_operator does NOT have read access to ai_mode1_conversation per R1 HIGH-2 + SI-023 Sub-decision 1)
-4. `POST /v1/admin/templates/{template_id}/submit-for-review` — calls `submit_forms_template_for_admin_review` wrapper; requires admin_basic_operator role ONLY at LAYER B (R6 HIGH-3 closure 2026-05-22; builder-role direct-submit deferred to post-pilot Admin Backend v1.1); emits `admin.template_submitted_for_review` Cat A audit + creates forms_template_admin_review row + initial `none → pending_review` lifecycle_transition row co-transactionally; requires `Idempotency-Key` HTTP header
+4. `POST /v1/admin/templates/{template_id}/submit-for-review` — calls `submit_forms_template_for_admin_review` wrapper; requires admin_basic_operator role ONLY at LAYER B (R6 HIGH-3 closure 2026-05-22; builder-role direct-submit deferred to post-pilot Admin Backend v1.1); emits `admin.template_submitted_for_review` Cat A audit + creates forms_template_admin_review row + initial `none → pending_review` lifecycle_transition row co-transactionally. **No `Idempotency-Key` HTTP header is required for this endpoint** (P-042 R3 HIGH-2 closure 2026-05-22 — corrected from v0.1-v0.3 which advertised the header but the canonical SI-023 `submit_forms_template_for_admin_review(tenant_id_t, UUID)` wrapper signature does not accept an idempotency key + there is no submit-side idempotency-key table; advertising the header would have been misleading because a lost-response retry with same advertised key cannot replay the original review_id — it would hit the active-review guard and return `admin-template-submit-already-in-flight` error). Retry semantics for this endpoint: a lost-response retry on the initial-submission path returns the `admin-template-submit-already-in-flight` error (40001 serialization_failure), which the HTTP layer surfaces to the client as 409 Conflict; the client polls `GET /v1/admin/template-reviews?forms_template_id={template_id}&latest_state=pending_review` to recover the review_id created by the original committed submit. The revision-resubmission path is naturally idempotent at the wrapper layer (re-submits use the existing review_id; concurrent re-submits serialize at the parent-template FOR UPDATE lock). Submit-side idempotency-key support is deferred to post-pilot Admin Backend v1.1 if/when observed retry-storm frequency justifies it.
 5. `POST /v1/admin/template-reviews/{review_id}/decision` — calls `record_forms_template_admin_decision` wrapper; requires admin_template_reviewer role at LAYER B; emits `admin.template_review_decision` Cat A + conditional `admin.template_published_via_review_workflow` Cat A (IFF p_decision='approve') + creates lifecycle_transition row + idempotency_key row co-transactionally; requires `Idempotency-Key` HTTP header (NOT NULL per R2 MED-1 + §4.NEW4 closure)
 
 OpenAPI bumps v0.5 → v0.6.
@@ -1343,6 +1407,11 @@ END $$;
 ---
 
 ## 9. Cycle log
+
+**v0.4 DRAFT 2026-05-22 — R3 closures applied (2 HIGH; both within-scope; no hard-floor escalation):**
+
+- **R3 HIGH-1 closed:** the 3 admin dashboard views (`admin_crisis_operational_health_v` + `admin_consult_queue_health_v` + `admin_mode1_volume_health_v`) had JOIN-multiplication bugs in v0.1-v0.3 that would have corrupted operational counts: tenant-only joins to `audit_event` (1:N) combined with multiple-LEFT-JOIN to child tables (consult_review_claim 1:N, notification_crisis_escalation_obligation 1:N, crisis_sweep_execution 1:N) would have inflated `COUNT(*)`-based metrics by N×M×K cardinality. Operators would have seen false crisis/queue backlog counts + made staffing/escalation decisions from corrupted numbers. Fix: rewrote each view body using CTEs that aggregate each fact source independently per-tenant FIRST, then join into the per-(severity / program_id, current_state) rollup at the outer SELECT. Tenant scope bound by a `tenant_scope` CTE wrapping `current_tenant_id_strict`. `admin_mode1_volume_health_v` was already redesigned at R1 HIGH-1 closure to use scalar subqueries (avoided this bug class structurally); R3 HIGH-1 retroactively confirms that pattern + applies it to the other 2 views.
+- **R3 HIGH-2 closed:** the submit-for-review endpoint contract in v0.1-v0.3 said "requires `Idempotency-Key` HTTP header" — but the canonical SI-023 `submit_forms_template_for_admin_review(tenant_id_t, UUID)` wrapper signature does NOT accept an idempotency_key parameter, and there is no submit-side idempotency-key table in the CDM. Advertising the header would have been misleading: clients sending it would expect canonical idempotent-replay semantics (lost-response retry returns the original review_id) but the wrapper has no way to deliver that — a retry would hit the active-review guard at the BEFORE INSERT trigger and return `admin-template-submit-already-in-flight` 40001 instead. Fix: removed the header requirement from §4 endpoint #4; added explicit retry-semantics documentation — lost-response retry on initial-submission path raises 40001 → HTTP layer surfaces 409 Conflict → client polls `GET /v1/admin/template-reviews?forms_template_id={template_id}&latest_state=pending_review` to recover the original review_id; revision-resubmission path is naturally idempotent at the wrapper layer (re-submits reuse existing review_id; concurrent re-submits serialize at the parent-template FOR UPDATE lock). Submit-side idempotency-key support deferred to post-pilot Admin Backend v1.1 if/when observed retry-storm frequency justifies it. Decision wrapper (record_forms_template_admin_decision) idempotency-key requirement preserved unchanged — endpoint #5 still requires the header (per the R1 HIGH-2 closure + R13 HIGH-2 SI-023 closure cascade).
 
 **v0.3 DRAFT 2026-05-22 — R2 hard-floor item 6 escalation RATIFIER DECISION: Option A (Evans chat-message ratification 2026-05-22):**
 
