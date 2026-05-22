@@ -1,7 +1,7 @@
 # SI-023 — Admin Backend Basics Slice (Operator Monitoring + Manual Template Review) Spec v1.0
 
-**Version:** 0.7 DRAFT
-**Status:** POST-R6 (3 HIGH closed inline: R6 HIGH-1 v0.6 Phase 6 (procedures) deployed SECDEF wrappers BEFORE Phase 7 (views) created the views the wrappers SELECT from — PostgreSQL CREATE FUNCTION validates static SQL bodies + would fail on missing relations; ordered cutover cannot complete as written. Workaround via dynamic SQL would weaken pg_depend-based class O/I anti-bypass safety checks. Fix: re-ordered Phase 6 ↔ Phase 7 — views FIRST (Phase 6; with owners + GRANT SELECT to corresponding wrapper-owner roles), then procedures (Phase 7; CREATE FUNCTION validation finds referenced relations + ownership is correct). Explicit prose acknowledging this is the inverse of the P-036 R6 "tables-first-views-last" pattern, deliberately so because the canonical read path is wrapper-only (admin_basic_operator has NO direct view SELECT). Class K CTAS provenance still operates correctly. R6 HIGH-2 Class O allowlist was "EMPTY at v1.0" — but the 6 canonical SECDEF wrappers (3 dashboard read-wrappers + 2 template wrappers + 1 raw lifecycle writer) DO depend on the admin views + review entities; correct implementation of the canonical wrappers would itself trigger Class O violation, blocking every valid deployment. Fix: populated the canonical SECDEF allowlist with the 6 wrappers + their expected owner roles + their dependency objects; Class O additionally verifies each allowlisted routine is owned by EXACTLY the expected owner role (ownership-drift attack defense); future SECDEF additions require ratifier-signed-off allowlist update. R6 HIGH-3 §5 endpoint #4 contract said "requires admin_basic_operator OR Forms-Intake builder role" but the canonical submit_forms_template_for_admin_review wrapper authorizes ONLY admin_basic_operator via LAYER B; legitimate builder-role callers would have hit 42501 at the DB boundary, creating an endpoint-vs-wrapper authorization mismatch. Fix: chose admin_basic_operator-only at the endpoint contract; explicit prose explaining the pilot scope rationale (operators mediate template submission; builder-role users author content but don't directly trigger admin-review submission for pilot); post-pilot Admin Backend v1.1 may extend if self-service builder review-submission becomes in scope. Previously POST-R5 (2 HIGH closed inline: R5 HIGH-1 Sub-decision 4 template wrappers (submit + decision) still used the old DB-role/session pattern from v0.2 — OQ7 had deferred the JWT-principal-to-role check to a future cycle, but Codex flagged this as not safe to treat as deferred OQ work because these wrappers mutate safety-critical review state (forms_template publish path). Fix: OQ7 RESOLVED 2026-05-22 inline; both `submit_forms_template_for_admin_review` and `record_forms_template_admin_decision` wrappers rewritten with the canonical 3-layer authorization defense from Sub-decision 3.5 — LAYER A (EXECUTE grant per §7) + LAYER B (schema-backed JOIN to tenant_account_membership verifying JWT-bound verified_principal_id has the required admin role via `tam.active=TRUE AND <role-name> = ANY(tam.assigned_role_names)`; admin_basic_operator for submit; admin_template_reviewer for decision) + LAYER C (vc.verified_tenant_id = p_tenant_id). Both wrappers now have full executable DDL with SECDEF + locked search_path + ownership + REVOKE PUBLIC + canonical GRANT EXECUTE. R5 HIGH-2 multiple normative sections were placeholders gating safety properties of the slice: §3 audit events preliminary, §4.NEW2 + §4.NEW3 DDL not defined, §6 contradicted itself ("4 transition triples" in prose vs "5 triples enumerated"), §8 only said "P-040 pattern reused". Without concrete DDL/CHECK constraints/preflight assertions/ordered phases, ratifier cannot verify the wrapper-only + state-machine guarantees survive implementation or migration drift. Fix: comprehensive flesh-out — §3 audit events: full normative table with 6 net-new action IDs (4 Cat A + 0 Cat B + 2 Cat C) including action_id + category + trigger + payload schema + sampling per AUDIT_EVENTS canonical pattern; §4.NEW2 + §4.NEW3 full executable DDL with composite tenant-scoped FKs + RLS policies + append-only triggers + CHECK constraints enforcing exactly the 5 transition triples from §6 + monotonic-ordering trigger per P-038/P-040 R2/R4 pattern; §6 state-machine triple count reconciled = **5 triples** (corrected the "4 triples" intro drift) with full normative table + terminal-state discipline; §8 fleshed out with §8.1 preflight DO block enumerating classes A-M + N + O + P (3 SI-023-specific NEW classes — N audit completeness; O SECDEF dependency rejection on admin views + review entities; P admin-view grant-matrix allowlist) + §8.2 11-phase cutover sequencing matching P-040 §8.2 shape with SI-023 entity additions (4 tables created in Phase 2; 4 invariant triggers in Phase 4; 4 SECDEF procedures in Phase 6; 3 admin views in Phase 7 with split owner/grant pairs; CTAS provenance event trigger REUSED from P-040 Phase 7.1) + §8.3 rollback discipline. Class N tolerance = 0% per OQ5; class O allowlist EMPTY at v1.0; class P enforces SECDEF-wrapper-only canonical read path. Document is now ratifier-ready with full executable text replacing prior stubs. Previously POST-R4 (1 HIGH closed inline: R4 HIGH-1 SECDEF wrapper authorization template's R3 closure used `pg_has_role(session_user, ...)` which proves the DB SESSION role has admin_basic_operator — but in canonical Telecheck deployment (service-account / pooled-connection per SI-024.1), session_user is the SERVICE-ACCOUNT DB login, NOT the JWT-authenticated end-user; service account typically holds EXECUTE-via-membership on the wrapper, so the LAYER B check passes regardless of whether the actual JWT-bound principal is an admin. Audit row would then falsely attribute the read to a non-admin JWT principal rather than rejecting the call. Genuine privilege-boundary defect — unauthorized access to all 3 dashboard surfaces possible. Fix: rewrote authorization template as 3-layer defense — LAYER A (EXECUTE grant on wrapper; primary DB privilege boundary), LAYER B (NEW per R4 — explicit schema-backed join to `tenant_account_membership` verifying JWT-bound `verified_principal_id` has `admin_basic_operator` role assignment via `tam.active = TRUE AND 'admin_basic_operator' = ANY(tam.assigned_role_names)`; matches P-038 R6 dissolution pattern — explicit schema-backed joins to already-ratified canonical entities, no net-new RBAC-helper function proposed), LAYER C (tenant scope match via `vc.verified_tenant_id = p_tenant_id`). All 3 layers MUST pass; any failing raises 42501. Added OQ6 for ratifier to confirm exact column names (`active`, `assigned_role_names TEXT[]`) on tenant_account_membership (column-name OQ; closeable in normal ratification). Added OQ7 to fold the same LAYER A+B+C pattern into Sub-decision 4 template wrappers (submit + decision) in v0.5+ cycle. Previously POST-R3 (2 HIGH closed inline: R3 HIGH-1 SECDEF wrapper authorization template used `pg_has_role(current_user, 'admin_basic_operator', 'MEMBER')` — identical defect class to P-040 R17 (under SECURITY DEFINER, `current_user` is the function OWNER not the invoking role); would either brick every dashboard wrapper (owner not in admin_basic_operator) OR make the role check meaningless (owner made member just to satisfy the check). Fix: replaced `current_user` with `session_user` in the role-membership check; session_user is unaffected by SECURITY DEFINER and reflects the actual session-authenticated role. Combined with EXECUTE grant on the wrapper (PRIMARY authorization boundary; only admin_basic_operator role members hold EXECUTE per §7) + SI-024.1 verify_session_jwt_and_extract_claims() tenant scope verification, this gives defense-in-depth catching accidental over-grants. Exception message also updated to reference session_user (matching the actual check). R3 HIGH-2 CDM entity count drifted across §1 ("3"), §4 heading ("3 active"), and §8 ("class A reconciliation note") — admin_template_decision_idempotency_key (added at R2 MED-1) was treated as a "later reconciliation" rather than a first-class v1.0 entity. Migration/preflight derived from §1/§4 could omit the table. Fix: reconciled count to **4 net-new CDM entities** across §1 (full enumeration with all 4 listed explicitly) + §4 heading + §4 reconciliation note + §8.2 Phase 2 statement (all 4 tables created in same deployment phase; admin_template_decision_idempotency_key deployed alongside forms_template_admin_review since the decision wrapper depends on it for retry safety). Previously POST-R2 (3 HIGH + 1 MED closed inline: R2 HIGH-1 §4.NEW1 DDL CHECK constraint had `'admin_mode1_volume_health'` (old in-process label) instead of `'admin_mode1_volume_health_v'` (canonical view name) — Mode 1 wrapper audit INSERT would fail every call → fail-closed wrapper returns no data for every Mode 1 dashboard read. Fix: corrected CHECK enum to `'admin_mode1_volume_health_v'`. R2 HIGH-2 §5 endpoint #3 still said "in-process aggregation from ai_mode1_conversation" + OQ2 still recommended deferring view to v1.1 — contradicted R1 HIGH-2 closure; reintroduced over-broad access pattern. Fix: rewrote endpoint #3 to call `read_admin_mode1_volume_health` SECDEF wrapper reading `admin_mode1_volume_health_v` (canonical wrapper-only path matching surfaces 1+2); OQ2 marked RESOLVED with v1.0 canonical-view decision + rationale. R2 HIGH-3 §7 RBAC enumeration had only 1 generic `admin_dashboard_query_wrapper_owner` + 2 view-owner roles, but Sub-decision 3.5 requires 3 distinct dashboard-wrapper owners (one per surface) + Sub-decision 2 Surface 3 requires `admin_mode1_volume_health_view_owner` (3 total view owners). If §7 drives grants, `read_admin_mode1_volume_health_wrapper_owner` would not exist OR would not receive SELECT on the Mode 1 view → grant-matrix preflight cannot consistently allow the 3+3 wrapper-owner/view relationships → SECDEF-wrapper-only canonical read path breaks at the privilege boundary. Fix: rewrote §7 to enumerate 11 net-new roles (2 application + 3 dashboard-wrapper-owner + 2 template-wrapper-owner + 1 raw-writer-owner + 3 view-owner) with explicit grant-matrix invariant; updated §1 in-scope from "8" → "11"; added §8.1 class P (NEW) enforcement reference. R2 MED-1 record_forms_template_admin_decision wrapper relied on `p_idempotency_key` for retry suppression but the spec did not declare `p_idempotency_key NOT NULL` AND the `admin_template_decision_idempotency_key` entity was only mentioned in prose, not defined as a schema entity with UNIQUE (tenant_id, review_id, idempotency_key) constraint. NULL-key retries + concurrent same-key calls underspecified. Fix: added §4.NEW4 admin_template_decision_idempotency_key entity DDL with NOT NULL + UNIQUE constraint per-(tenant_id, review_id, idempotency_key); wrapper signature MUST declare `p_idempotency_key TEXT NOT NULL` (no DEFAULT NULL); API endpoint MUST reject calls without `Idempotency-Key` HTTP header (400); double-layered (database + API) prevents NULL-key retries. Net-new CDM entity count adjusted "3" → "4". Previously POST-R1 (3 HIGH + 1 MED closed inline: R1 HIGH-1 dashboard audit was application-convention only — direct SELECT on admin views by admin_basic_operator could bypass the record-only audit wrapper; class N preflight comparison was after-the-fact. Fix: restructured to SECDEF-wrapper-only canonical read path — 3 dashboard surfaces exposed via 3 SECDEF read-wrappers (read_admin_crisis_operational_health + read_admin_consult_queue_health + read_admin_mode1_volume_health); direct SELECT on the 3 views REVOKEd from admin_basic_operator; views GRANT SELECT only to the corresponding wrapper-owner role; wrapper body INSERTs audit row + emits Cat A audit + reads view in SAME tx with FLOOR-020 fail-closed pattern. Class N becomes defensive database-integrity tripwire, not primary enforcement. R1 HIGH-2 Mode 1 dashboard Surface 3 deferred canonical view + granted admin_basic_operator membership in ai_mode1_reader (over-broad). Fix: landed canonical admin_mode1_volume_health_v view NOW (not deferred to v1.1); minimized columns (aggregate counts + Cat A emission counts; NO raw conversation text / patient_id); admin_basic_operator NOT made member of ai_mode1_reader. R1 HIGH-3 record_forms_template_admin_decision wrapper lacked latest-state lock — concurrent reviewers could append conflicting terminal transitions + dual-publish forms_template.status. Fix: wrapper now performs SELECT...FOR UPDATE on review row + idempotency-key check + latest-state derivation under lock + rejects non-pending latest state + idempotency for repeated identical decision requests. Added admin_template_decision_idempotency_key entity (canonical IDEMPOTENCY contract per P-027). R1 MED-1 OQ5 1% production tolerance for Cat A dashboard audit-completeness undermined FLOOR-020 fail-closed. Fix: tightened to 0% production AND staging — post-R1 HIGH-1 the SECDEF wrapper is canonical read path so audit-row creation is structurally co-transactional; drift can ONLY occur via database-integrity defects.)
+**Version:** 0.8 DRAFT
+**Status:** POST-R7 (2 HIGH closed inline: R7 HIGH-1 submit wrapper always INSERTed new review_id + always emitted none→pending_review — contradicted §6 state machine triple #5 (revision_resubmission: revision_requested→pending_review reusing existing review_id); §4.NEW2 UNIQUE constraints both included review_id so they were non-enforcing (every row had distinct review_id by PRIMARY KEY default); request_revision decisions could not safely resubmit through declared canonical path + retries created parallel review rows. Fix: rewrote submit_forms_template_for_admin_review to (a) LATERAL JOIN derive latest state of existing reviews for the (tenant_id, forms_template_id) pair under SELECT FOR UPDATE lock; (b) if existing latest-state = 'revision_requested', reuse review_id + emit revision_resubmission transition (triple #5); (c) if NO in-flight review exists, INSERT new review + emit initial_submission (triple #1); (d) explicit pre-INSERT check rejects parallel in-flight reviews with serialization_failure errcode. Replaced non-enforcing UNIQUE constraints with partial UNIQUE INDEX on lifecycle_transition + BEFORE INSERT trigger `enforce_one_active_review_per_template` on forms_template_admin_review rejecting duplicate active reviews via LATERAL-derived latest state. Audit payload extended with `path` field distinguishing initial_submission vs revision_resubmission for forensics. R7 HIGH-2 Sub-decision 5 still said Class O allowlist "EMPTY at v1.0" + scanned only 2 admin views + covered only 4 SECDEF procedures — directly contradicted §8.1 Class O table that correctly enumerates 6 SECDEF routines + 3 admin views; same failure class R6 HIGH-2 was supposed to close (drift between two normative statements of the same allowlist). Fix: rewrote Sub-decision 5 to enumerate **6 SECDEF procedures** (1 raw + 3 dashboard + 2 template) + **3 admin views** + 3 admin review entities matching §8.1 Class O exactly; raw writer EXECUTE grant clarified as restricted to EXACTLY the **2 template wrapper-owner roles** (not 3 — dashboard wrappers don't write lifecycle transitions); Class O allowlist explicitly described as "NOT empty at v1.0; populated with the 6 SI-023 wrappers". Sub-decision 5 + §8.1 Class O now mutually consistent. Previously POST-R6 (3 HIGH closed inline: R6 HIGH-1 v0.6 Phase 6 (procedures) deployed SECDEF wrappers BEFORE Phase 7 (views) created the views the wrappers SELECT from — PostgreSQL CREATE FUNCTION validates static SQL bodies + would fail on missing relations; ordered cutover cannot complete as written. Workaround via dynamic SQL would weaken pg_depend-based class O/I anti-bypass safety checks. Fix: re-ordered Phase 6 ↔ Phase 7 — views FIRST (Phase 6; with owners + GRANT SELECT to corresponding wrapper-owner roles), then procedures (Phase 7; CREATE FUNCTION validation finds referenced relations + ownership is correct). Explicit prose acknowledging this is the inverse of the P-036 R6 "tables-first-views-last" pattern, deliberately so because the canonical read path is wrapper-only (admin_basic_operator has NO direct view SELECT). Class K CTAS provenance still operates correctly. R6 HIGH-2 Class O allowlist was "EMPTY at v1.0" — but the 6 canonical SECDEF wrappers (3 dashboard read-wrappers + 2 template wrappers + 1 raw lifecycle writer) DO depend on the admin views + review entities; correct implementation of the canonical wrappers would itself trigger Class O violation, blocking every valid deployment. Fix: populated the canonical SECDEF allowlist with the 6 wrappers + their expected owner roles + their dependency objects; Class O additionally verifies each allowlisted routine is owned by EXACTLY the expected owner role (ownership-drift attack defense); future SECDEF additions require ratifier-signed-off allowlist update. R6 HIGH-3 §5 endpoint #4 contract said "requires admin_basic_operator OR Forms-Intake builder role" but the canonical submit_forms_template_for_admin_review wrapper authorizes ONLY admin_basic_operator via LAYER B; legitimate builder-role callers would have hit 42501 at the DB boundary, creating an endpoint-vs-wrapper authorization mismatch. Fix: chose admin_basic_operator-only at the endpoint contract; explicit prose explaining the pilot scope rationale (operators mediate template submission; builder-role users author content but don't directly trigger admin-review submission for pilot); post-pilot Admin Backend v1.1 may extend if self-service builder review-submission becomes in scope. Previously POST-R5 (2 HIGH closed inline: R5 HIGH-1 Sub-decision 4 template wrappers (submit + decision) still used the old DB-role/session pattern from v0.2 — OQ7 had deferred the JWT-principal-to-role check to a future cycle, but Codex flagged this as not safe to treat as deferred OQ work because these wrappers mutate safety-critical review state (forms_template publish path). Fix: OQ7 RESOLVED 2026-05-22 inline; both `submit_forms_template_for_admin_review` and `record_forms_template_admin_decision` wrappers rewritten with the canonical 3-layer authorization defense from Sub-decision 3.5 — LAYER A (EXECUTE grant per §7) + LAYER B (schema-backed JOIN to tenant_account_membership verifying JWT-bound verified_principal_id has the required admin role via `tam.active=TRUE AND <role-name> = ANY(tam.assigned_role_names)`; admin_basic_operator for submit; admin_template_reviewer for decision) + LAYER C (vc.verified_tenant_id = p_tenant_id). Both wrappers now have full executable DDL with SECDEF + locked search_path + ownership + REVOKE PUBLIC + canonical GRANT EXECUTE. R5 HIGH-2 multiple normative sections were placeholders gating safety properties of the slice: §3 audit events preliminary, §4.NEW2 + §4.NEW3 DDL not defined, §6 contradicted itself ("4 transition triples" in prose vs "5 triples enumerated"), §8 only said "P-040 pattern reused". Without concrete DDL/CHECK constraints/preflight assertions/ordered phases, ratifier cannot verify the wrapper-only + state-machine guarantees survive implementation or migration drift. Fix: comprehensive flesh-out — §3 audit events: full normative table with 6 net-new action IDs (4 Cat A + 0 Cat B + 2 Cat C) including action_id + category + trigger + payload schema + sampling per AUDIT_EVENTS canonical pattern; §4.NEW2 + §4.NEW3 full executable DDL with composite tenant-scoped FKs + RLS policies + append-only triggers + CHECK constraints enforcing exactly the 5 transition triples from §6 + monotonic-ordering trigger per P-038/P-040 R2/R4 pattern; §6 state-machine triple count reconciled = **5 triples** (corrected the "4 triples" intro drift) with full normative table + terminal-state discipline; §8 fleshed out with §8.1 preflight DO block enumerating classes A-M + N + O + P (3 SI-023-specific NEW classes — N audit completeness; O SECDEF dependency rejection on admin views + review entities; P admin-view grant-matrix allowlist) + §8.2 11-phase cutover sequencing matching P-040 §8.2 shape with SI-023 entity additions (4 tables created in Phase 2; 4 invariant triggers in Phase 4; 4 SECDEF procedures in Phase 6; 3 admin views in Phase 7 with split owner/grant pairs; CTAS provenance event trigger REUSED from P-040 Phase 7.1) + §8.3 rollback discipline. Class N tolerance = 0% per OQ5; class O allowlist EMPTY at v1.0; class P enforces SECDEF-wrapper-only canonical read path. Document is now ratifier-ready with full executable text replacing prior stubs. Previously POST-R4 (1 HIGH closed inline: R4 HIGH-1 SECDEF wrapper authorization template's R3 closure used `pg_has_role(session_user, ...)` which proves the DB SESSION role has admin_basic_operator — but in canonical Telecheck deployment (service-account / pooled-connection per SI-024.1), session_user is the SERVICE-ACCOUNT DB login, NOT the JWT-authenticated end-user; service account typically holds EXECUTE-via-membership on the wrapper, so the LAYER B check passes regardless of whether the actual JWT-bound principal is an admin. Audit row would then falsely attribute the read to a non-admin JWT principal rather than rejecting the call. Genuine privilege-boundary defect — unauthorized access to all 3 dashboard surfaces possible. Fix: rewrote authorization template as 3-layer defense — LAYER A (EXECUTE grant on wrapper; primary DB privilege boundary), LAYER B (NEW per R4 — explicit schema-backed join to `tenant_account_membership` verifying JWT-bound `verified_principal_id` has `admin_basic_operator` role assignment via `tam.active = TRUE AND 'admin_basic_operator' = ANY(tam.assigned_role_names)`; matches P-038 R6 dissolution pattern — explicit schema-backed joins to already-ratified canonical entities, no net-new RBAC-helper function proposed), LAYER C (tenant scope match via `vc.verified_tenant_id = p_tenant_id`). All 3 layers MUST pass; any failing raises 42501. Added OQ6 for ratifier to confirm exact column names (`active`, `assigned_role_names TEXT[]`) on tenant_account_membership (column-name OQ; closeable in normal ratification). Added OQ7 to fold the same LAYER A+B+C pattern into Sub-decision 4 template wrappers (submit + decision) in v0.5+ cycle. Previously POST-R3 (2 HIGH closed inline: R3 HIGH-1 SECDEF wrapper authorization template used `pg_has_role(current_user, 'admin_basic_operator', 'MEMBER')` — identical defect class to P-040 R17 (under SECURITY DEFINER, `current_user` is the function OWNER not the invoking role); would either brick every dashboard wrapper (owner not in admin_basic_operator) OR make the role check meaningless (owner made member just to satisfy the check). Fix: replaced `current_user` with `session_user` in the role-membership check; session_user is unaffected by SECURITY DEFINER and reflects the actual session-authenticated role. Combined with EXECUTE grant on the wrapper (PRIMARY authorization boundary; only admin_basic_operator role members hold EXECUTE per §7) + SI-024.1 verify_session_jwt_and_extract_claims() tenant scope verification, this gives defense-in-depth catching accidental over-grants. Exception message also updated to reference session_user (matching the actual check). R3 HIGH-2 CDM entity count drifted across §1 ("3"), §4 heading ("3 active"), and §8 ("class A reconciliation note") — admin_template_decision_idempotency_key (added at R2 MED-1) was treated as a "later reconciliation" rather than a first-class v1.0 entity. Migration/preflight derived from §1/§4 could omit the table. Fix: reconciled count to **4 net-new CDM entities** across §1 (full enumeration with all 4 listed explicitly) + §4 heading + §4 reconciliation note + §8.2 Phase 2 statement (all 4 tables created in same deployment phase; admin_template_decision_idempotency_key deployed alongside forms_template_admin_review since the decision wrapper depends on it for retry safety). Previously POST-R2 (3 HIGH + 1 MED closed inline: R2 HIGH-1 §4.NEW1 DDL CHECK constraint had `'admin_mode1_volume_health'` (old in-process label) instead of `'admin_mode1_volume_health_v'` (canonical view name) — Mode 1 wrapper audit INSERT would fail every call → fail-closed wrapper returns no data for every Mode 1 dashboard read. Fix: corrected CHECK enum to `'admin_mode1_volume_health_v'`. R2 HIGH-2 §5 endpoint #3 still said "in-process aggregation from ai_mode1_conversation" + OQ2 still recommended deferring view to v1.1 — contradicted R1 HIGH-2 closure; reintroduced over-broad access pattern. Fix: rewrote endpoint #3 to call `read_admin_mode1_volume_health` SECDEF wrapper reading `admin_mode1_volume_health_v` (canonical wrapper-only path matching surfaces 1+2); OQ2 marked RESOLVED with v1.0 canonical-view decision + rationale. R2 HIGH-3 §7 RBAC enumeration had only 1 generic `admin_dashboard_query_wrapper_owner` + 2 view-owner roles, but Sub-decision 3.5 requires 3 distinct dashboard-wrapper owners (one per surface) + Sub-decision 2 Surface 3 requires `admin_mode1_volume_health_view_owner` (3 total view owners). If §7 drives grants, `read_admin_mode1_volume_health_wrapper_owner` would not exist OR would not receive SELECT on the Mode 1 view → grant-matrix preflight cannot consistently allow the 3+3 wrapper-owner/view relationships → SECDEF-wrapper-only canonical read path breaks at the privilege boundary. Fix: rewrote §7 to enumerate 11 net-new roles (2 application + 3 dashboard-wrapper-owner + 2 template-wrapper-owner + 1 raw-writer-owner + 3 view-owner) with explicit grant-matrix invariant; updated §1 in-scope from "8" → "11"; added §8.1 class P (NEW) enforcement reference. R2 MED-1 record_forms_template_admin_decision wrapper relied on `p_idempotency_key` for retry suppression but the spec did not declare `p_idempotency_key NOT NULL` AND the `admin_template_decision_idempotency_key` entity was only mentioned in prose, not defined as a schema entity with UNIQUE (tenant_id, review_id, idempotency_key) constraint. NULL-key retries + concurrent same-key calls underspecified. Fix: added §4.NEW4 admin_template_decision_idempotency_key entity DDL with NOT NULL + UNIQUE constraint per-(tenant_id, review_id, idempotency_key); wrapper signature MUST declare `p_idempotency_key TEXT NOT NULL` (no DEFAULT NULL); API endpoint MUST reject calls without `Idempotency-Key` HTTP header (400); double-layered (database + API) prevents NULL-key retries. Net-new CDM entity count adjusted "3" → "4". Previously POST-R1 (3 HIGH + 1 MED closed inline: R1 HIGH-1 dashboard audit was application-convention only — direct SELECT on admin views by admin_basic_operator could bypass the record-only audit wrapper; class N preflight comparison was after-the-fact. Fix: restructured to SECDEF-wrapper-only canonical read path — 3 dashboard surfaces exposed via 3 SECDEF read-wrappers (read_admin_crisis_operational_health + read_admin_consult_queue_health + read_admin_mode1_volume_health); direct SELECT on the 3 views REVOKEd from admin_basic_operator; views GRANT SELECT only to the corresponding wrapper-owner role; wrapper body INSERTs audit row + emits Cat A audit + reads view in SAME tx with FLOOR-020 fail-closed pattern. Class N becomes defensive database-integrity tripwire, not primary enforcement. R1 HIGH-2 Mode 1 dashboard Surface 3 deferred canonical view + granted admin_basic_operator membership in ai_mode1_reader (over-broad). Fix: landed canonical admin_mode1_volume_health_v view NOW (not deferred to v1.1); minimized columns (aggregate counts + Cat A emission counts; NO raw conversation text / patient_id); admin_basic_operator NOT made member of ai_mode1_reader. R1 HIGH-3 record_forms_template_admin_decision wrapper lacked latest-state lock — concurrent reviewers could append conflicting terminal transitions + dual-publish forms_template.status. Fix: wrapper now performs SELECT...FOR UPDATE on review row + idempotency-key check + latest-state derivation under lock + rejects non-pending latest state + idempotency for repeated identical decision requests. Added admin_template_decision_idempotency_key entity (canonical IDEMPOTENCY contract per P-027). R1 MED-1 OQ5 1% production tolerance for Cat A dashboard audit-completeness undermined FLOOR-020 fail-closed. Fix: tightened to 0% production AND staging — post-R1 HIGH-1 the SECDEF wrapper is canonical read path so audit-row creation is structurally co-transactional; drift can ONLY occur via database-integrity defects.)
 **Authoring date:** 2026-05-22
 **Trigger:** Master Completion Plan v1.0 pilot-viable scope item 5 of 5 (Admin Backend basics — operator monitoring + manual template review). FIFTH and FINAL pilot-required slice; once ratified the telecheck-app pilot implementation gate opens fully (4 of 5 already FULLY RATIFIED at P-034/P-036/P-038/P-040 SI+CDM landings).
 **Owner:** Admin Backend slice owner + Tenant Operator UX lead + Forms-Intake slice owner + Platform Audit owner + CDM owner + RBAC owner.
@@ -224,7 +224,7 @@ The remaining 2 wrappers (`read_admin_consult_queue_health` + `read_admin_mode1_
 
 Forms-Intake Engine `forms_template` entities (canonical from P-026 batched ratification) enter SI-023's review workflow via `submit_forms_template_for_admin_review` SECDEF wrapper; admin reviewers terminal-decision the review via `record_forms_template_admin_decision` SECDEF wrapper. Both wrappers use the canonical 3-layer authorization pattern from Sub-decision 3.5 (R5 HIGH-1 closure 2026-05-22 / OQ7 RESOLVED — same LAYER A + B + C defense as dashboard wrappers).
 
-**`submit_forms_template_for_admin_review(p_tenant_id tenant_id_t, p_template_id UUID) RETURNS UUID` (canonical wrapper body):**
+**`submit_forms_template_for_admin_review(p_tenant_id tenant_id_t, p_template_id UUID) RETURNS UUID` (canonical wrapper body; R7 HIGH-1 closure 2026-05-22 — handles both initial-submission AND revision-resubmission paths per §6 state machine triples #1 + #5):**
 
 ```sql
 CREATE OR REPLACE FUNCTION submit_forms_template_for_admin_review(
@@ -238,10 +238,9 @@ AS $$
 DECLARE
     v_review_id UUID;
     v_submitter_principal_id UUID;
+    v_existing_revision_requested_review_id UUID;
 BEGIN
-    -- LAYER A: EXECUTE grant (only admin_basic_operator role members per §7)
-    -- LAYER B: JWT-principal-to-role check (R4 HIGH-1 pattern; P-038 R6 dissolution)
-    -- LAYER C: tenant scope match (via vc.verified_tenant_id = p_tenant_id)
+    -- LAYER A+B+C authorization (R4 HIGH-1 + R5 HIGH-1 / OQ7 RESOLVED pattern)
     PERFORM 1
       FROM verify_session_jwt_and_extract_claims() vc
       JOIN tenant_account_membership tam
@@ -258,26 +257,85 @@ BEGIN
     SELECT verified_principal_id INTO v_submitter_principal_id
       FROM verify_session_jwt_and_extract_claims();
 
-    -- Create forms_template_admin_review row (state derived from latest lifecycle_transition; initial state = pending_review)
-    INSERT INTO forms_template_admin_review
-        (tenant_id, forms_template_id, submitter_principal_id, ai_guardrail_snapshot_jsonb)
-    SELECT p_tenant_id, p_template_id, v_submitter_principal_id, ai_guardrail_snapshot_jsonb
-      FROM forms_template ft
-      WHERE ft.tenant_id = p_tenant_id AND ft.id = p_template_id
-    RETURNING review_id INTO v_review_id;
+    -- R7 HIGH-1 closure: look for an existing IN-FLIGHT review for this template
+    -- whose latest state is revision_requested. If one exists, lock it and emit the
+    -- revision_resubmission transition (triple #5: revision_requested -> pending_review).
+    -- If NO in-flight revision-requested review exists, create a new review_id
+    -- (triple #1: none -> pending_review / initial_submission).
+    --
+    -- "In-flight revision-requested review" defined as: forms_template_admin_review row
+    -- where the LATEST lifecycle_transition has to_state='revision_requested'. We use
+    -- a LATERAL JOIN to derive the latest state under lock.
+    --
+    -- The R7 HIGH-1 enforcement against PARALLEL in-flight reviews is the partial
+    -- UNIQUE constraint on the lifecycle_transition table: only ONE
+    -- (tenant_id, forms_template_id) can have a non-terminal latest state at any time.
+    -- See §4.NEW2 + §4.NEW3 DDL updates below for the canonical enforcement.
+    SELECT ftar.review_id INTO v_existing_revision_requested_review_id
+      FROM forms_template_admin_review ftar
+      JOIN LATERAL (
+          SELECT to_state
+            FROM forms_template_admin_review_lifecycle_transition lt
+           WHERE lt.tenant_id = ftar.tenant_id AND lt.review_id = ftar.review_id
+           ORDER BY lt.transition_at DESC, lt.id DESC
+           LIMIT 1
+      ) latest ON TRUE
+     WHERE ftar.tenant_id = p_tenant_id
+       AND ftar.forms_template_id = p_template_id
+       AND latest.to_state = 'revision_requested'
+       FOR UPDATE OF ftar;  -- lock the row so concurrent submit attempts serialize
 
-    -- INSERT initial lifecycle transition (none → pending_review / initial_submission)
-    PERFORM record_forms_template_admin_review_transition(
-        p_tenant_id, v_review_id,
-        'none', 'pending_review', 'initial_submission',
-        v_submitter_principal_id, NULL
-    );
+    IF v_existing_revision_requested_review_id IS NOT NULL THEN
+        -- REVISION RESUBMISSION PATH (triple #5)
+        v_review_id := v_existing_revision_requested_review_id;
+        PERFORM record_forms_template_admin_review_transition(
+            p_tenant_id, v_review_id,
+            'revision_requested', 'pending_review', 'revision_resubmission',
+            v_submitter_principal_id, NULL
+        );
+    ELSE
+        -- INITIAL SUBMISSION PATH (triple #1)
+        -- Verify no other in-flight (non-terminal-latest-state) review exists for
+        -- this template. The partial UNIQUE constraint at §4.NEW3 will reject
+        -- concurrent attempts; this explicit check produces a clearer error.
+        PERFORM 1
+          FROM forms_template_admin_review ftar
+          JOIN LATERAL (
+              SELECT to_state
+                FROM forms_template_admin_review_lifecycle_transition lt
+               WHERE lt.tenant_id = ftar.tenant_id AND lt.review_id = ftar.review_id
+               ORDER BY lt.transition_at DESC, lt.id DESC
+               LIMIT 1
+          ) latest ON TRUE
+         WHERE ftar.tenant_id = p_tenant_id
+           AND ftar.forms_template_id = p_template_id
+           AND latest.to_state IN ('pending_review', 'revision_requested');
+        IF FOUND THEN
+            RAISE EXCEPTION 'admin-template-submit-already-in-flight: template % already has an in-flight admin review; resolve or cancel it before re-submitting', p_template_id
+                USING ERRCODE = '40001';  -- serialization_failure
+        END IF;
 
-    -- Emit Cat A audit co-transactionally per FLOOR-020
+        INSERT INTO forms_template_admin_review
+            (tenant_id, forms_template_id, submitter_principal_id, ai_guardrail_snapshot_jsonb)
+        SELECT p_tenant_id, p_template_id, v_submitter_principal_id, ai_guardrail_snapshot_jsonb
+          FROM forms_template ft
+          WHERE ft.tenant_id = p_tenant_id AND ft.id = p_template_id
+        RETURNING review_id INTO v_review_id;
+
+        PERFORM record_forms_template_admin_review_transition(
+            p_tenant_id, v_review_id,
+            'none', 'pending_review', 'initial_submission',
+            v_submitter_principal_id, NULL
+        );
+    END IF;
+
+    -- Cat A audit co-transactional per FLOOR-020 (payload distinguishes paths)
     PERFORM emit_audit_event_co_transactional(
         p_tenant_id, 'admin.template_submitted_for_review',
         jsonb_build_object('review_id', v_review_id, 'forms_template_id', p_template_id,
-                           'submitter_principal_id', v_submitter_principal_id)
+                           'submitter_principal_id', v_submitter_principal_id,
+                           'path', CASE WHEN v_existing_revision_requested_review_id IS NOT NULL
+                                        THEN 'revision_resubmission' ELSE 'initial_submission' END)
     );
 
     RETURN v_review_id;
@@ -432,13 +490,15 @@ GRANT EXECUTE ON FUNCTION record_forms_template_admin_decision(tenant_id_t, UUID
 
 State machine `forms_template_admin_review_lifecycle` (DERIVED from append-only transitions per I-035; R5 HIGH-2 triple-count drift corrected — was "4 triples" in v0.2 prose vs "5 triples enumerated in §6"; canonical answer = **5 triples**): 5 states (none / pending_review / approved / rejected / revision_requested); 5 transition triples (see §6 for normative table).
 
-### Sub-decision 5 — Anti-bypass discipline (SECDEF wrapper EXECUTE allowlists)
+### Sub-decision 5 — Anti-bypass discipline (SECDEF wrapper EXECUTE allowlists; R7 HIGH-2 closure 2026-05-22 — reconciled with §8.1 Class O exact enumeration)
 
-The 4 SECURITY DEFINER procedures (1 raw + 3 wrappers) follow the canonical anti-bypass discipline established at P-034 §3 + P-038 §3 + P-040 §3:
-- Raw writer `record_forms_template_admin_review_transition()` owned by `forms_template_admin_review_transition_writer_owner`; EXECUTE granted to EXACTLY the 3 wrapper-owner roles (no other roles)
-- 3 wrappers granted EXECUTE only to canonical caller-class roles per §7
+The **6 SECURITY DEFINER procedures** (1 raw lifecycle writer + 3 dashboard read-wrappers + 2 template wrappers; see §3 for wrapper count + §7 RBAC for owner roles) follow the canonical anti-bypass discipline established at P-034 §3 + P-038 §3 + P-040 §3:
 
-§8.1 preflight class O (NEW assertion symmetric to P-040 class I): rejects any SECDEF routine that depends on the 2 admin views OR the forms_template_admin_review entities unless on canonical allowlist (which is EMPTY at v1.0 — the 4 §3 wrappers operate on base tables, not on the views).
+- Raw writer `record_forms_template_admin_review_transition()` owned by `forms_template_admin_review_transition_writer_owner`; EXECUTE granted to EXACTLY the **2 template wrapper-owner roles** (`forms_template_admin_review_submit_wrapper_owner` + `forms_template_admin_review_decision_wrapper_owner`) — NOT to the 3 dashboard wrapper-owner roles (they don't write lifecycle transitions). No other roles receive EXECUTE on the raw writer.
+- 3 dashboard read-wrappers: each owned by its respective dashboard wrapper-owner role per §7; EXECUTE granted ONLY to `admin_basic_operator`.
+- 2 template wrappers (submit + decision): each owned by its respective template wrapper-owner role per §7; EXECUTE granted ONLY to canonical caller-class role per §7 (`admin_basic_operator` for submit; `admin_template_reviewer` for decision).
+
+**§8.1 preflight class O** (NEW assertion symmetric to P-040 class I; per R5 HIGH-2 + R6 HIGH-2 + R7 HIGH-2 closures): pg_depend + prosrc text-scan rejecting any SECDEF routine that depends on the **3 admin views** (`admin_crisis_operational_health_v` / `admin_consult_queue_health_v` / `admin_mode1_volume_health_v`) OR on the **3 admin review entities** (`forms_template_admin_review` / `forms_template_admin_review_lifecycle_transition` / `admin_template_decision_idempotency_key`) UNLESS the routine is on the canonical allowlist enumerated at §8.1 Class O (the 6 SI-023 SECDEF wrappers above with their expected owner roles). The Class O allowlist is **NOT empty at v1.0**; it is populated with the 6 canonical wrappers (correcting prior v0.2-v0.6 drift). Any non-allowlisted SECDEF routine touching these entities raises `admin-template-review-anti-bypass-violation` Cat C audit (per §3 row 6) + blocks cutover. Future SECDEF additions (e.g., a v1.1 bulk-operator action or analytics function) require ratifier-signed-off allowlist update.
 
 ### Sub-decision 6 — Data-minimization split + tenant-scoped read enforcement
 
@@ -531,12 +591,65 @@ CREATE TABLE forms_template_admin_review (
         FOREIGN KEY (tenant_id, forms_template_id) REFERENCES forms_template(tenant_id, id),
     CONSTRAINT forms_template_admin_review_submitter_principal_tenant_fk
         FOREIGN KEY (tenant_id, submitter_principal_id) REFERENCES principal(tenant_id, id),
-    -- Per-template UNIQUE constraint: at most ONE in-flight review per forms_template at a time
-    -- (enforced as partial UNIQUE; completed reviews can coexist; new submissions allowed after
-    -- prior review reaches terminal state). NOT NULL on tenant_id + review_id implied by PRIMARY KEY.
-    CONSTRAINT forms_template_admin_review_tenant_id_unique UNIQUE (tenant_id, review_id),
-    CONSTRAINT forms_template_admin_review_tenant_id_template_id_unique UNIQUE (tenant_id, forms_template_id, review_id)
+    -- Composite UNIQUE needed for tenant-scoped FK targets to this table
+    CONSTRAINT forms_template_admin_review_tenant_id_unique UNIQUE (tenant_id, review_id)
 );
+
+-- R7 HIGH-1 closure 2026-05-22: enforceable one-active-review-per-template partial UNIQUE
+-- INDEX. Prior v0.2-v0.6 UNIQUE constraints both included review_id which made them
+-- non-enforcing (every row has a distinct review_id by PRIMARY KEY default; the
+-- constraint trivially holds). Real enforcement requires a partial UNIQUE on
+-- (tenant_id, forms_template_id) scoped to rows whose latest lifecycle_transition has
+-- a non-terminal to_state. PostgreSQL partial UNIQUE INDEX cannot directly reference
+-- joined columns, so we materialize the latest-state via a generated derived column on
+-- forms_template_admin_review_lifecycle_transition (canonical pattern: a per-template
+-- partial UNIQUE INDEX on the lifecycle_transition table scoped to non-terminal-latest):
+--
+CREATE UNIQUE INDEX forms_template_admin_review_one_active_per_template_uk
+    ON forms_template_admin_review_lifecycle_transition (tenant_id, review_id)
+    INCLUDE (transition_at, to_state)
+    WHERE to_state IN ('pending_review', 'revision_requested');
+--
+-- This index ensures any (tenant_id, review_id) can have AT MOST ONE active-state
+-- transition row at a time, but doesn't directly enforce per-template uniqueness.
+-- The PER-TEMPLATE enforcement is done in the submit wrapper via explicit pre-INSERT
+-- FOR UPDATE check (see Sub-decision 4 wrapper body) combined with the BEFORE INSERT
+-- trigger on forms_template_admin_review that rejects creating a second review for
+-- the same (tenant_id, forms_template_id) when an existing review has a non-terminal
+-- latest state:
+CREATE OR REPLACE FUNCTION enforce_one_active_review_per_template()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_existing_active_review_id UUID;
+BEGIN
+    SELECT ftar.review_id INTO v_existing_active_review_id
+      FROM public.forms_template_admin_review ftar
+      JOIN LATERAL (
+          SELECT to_state
+            FROM public.forms_template_admin_review_lifecycle_transition lt
+           WHERE lt.tenant_id = ftar.tenant_id AND lt.review_id = ftar.review_id
+           ORDER BY lt.transition_at DESC, lt.id DESC
+           LIMIT 1
+      ) latest ON TRUE
+     WHERE ftar.tenant_id = NEW.tenant_id
+       AND ftar.forms_template_id = NEW.forms_template_id
+       AND latest.to_state IN ('pending_review', 'revision_requested')
+       AND ftar.review_id IS DISTINCT FROM NEW.review_id;
+    IF FOUND THEN
+        RAISE EXCEPTION 'admin-template-review-duplicate-active: template % already has an active admin review %', NEW.forms_template_id, v_existing_active_review_id
+            USING ERRCODE = '23505';  -- unique_violation
+    END IF;
+    RETURN NEW;
+END;
+$$;
+ALTER FUNCTION enforce_one_active_review_per_template() OWNER TO cdm_owner;
+SET search_path = pg_catalog, public;  -- ALTER FUNCTION ... SET search_path applied at deploy time
+
+CREATE TRIGGER forms_template_admin_review_one_active_check
+    BEFORE INSERT ON forms_template_admin_review
+    FOR EACH ROW EXECUTE FUNCTION enforce_one_active_review_per_template();
 
 ALTER TABLE forms_template_admin_review ENABLE ROW LEVEL SECURITY;
 ALTER TABLE forms_template_admin_review FORCE ROW LEVEL SECURITY;
@@ -769,6 +882,10 @@ On any Phase N failure during cutover, rollback discards Phase N's changes via t
 ---
 
 ## 9. Cycle log
+
+**v0.8 DRAFT 2026-05-22 — R7 closures applied (2 HIGH):**
+- **R7 HIGH-1 closed:** submit wrapper rewritten to handle both initial-submission (triple #1) AND revision-resubmission (triple #5) paths via LATERAL-derived latest-state lookup under FOR UPDATE lock; reuses existing review_id when revision_requested. Replaced non-enforcing UNIQUE constraints (both included review_id) with partial UNIQUE INDEX on lifecycle_transition + BEFORE INSERT trigger `enforce_one_active_review_per_template` rejecting duplicate active reviews. Audit payload extended with `path` field.
+- **R7 HIGH-2 closed:** Sub-decision 5 rewritten to enumerate 6 SECDEF procedures + 3 admin views + 3 admin review entities matching §8.1 Class O exactly. Raw writer EXECUTE grant clarified as restricted to 2 template wrapper-owner roles (not 3). Class O allowlist explicitly stated as populated with the 6 wrappers (NOT empty).
 
 **v0.7 DRAFT 2026-05-22 — R6 closures applied (3 HIGH):**
 - **R6 HIGH-1 closed:** Phase 6 ↔ Phase 7 reordered — views FIRST (Phase 6), procedures SECOND (Phase 7). Static SQL function bodies validate against existing relations; canonical wrapper-only design forces inverse of P-036 R6.
