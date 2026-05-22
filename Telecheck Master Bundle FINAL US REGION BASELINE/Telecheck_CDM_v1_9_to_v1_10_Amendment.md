@@ -1,7 +1,7 @@
 # CDM v1.9 → v1.10 + AUDIT_EVENTS v5.11 → v5.12 + OpenAPI v0.4 → v0.5 + State Machines v1.3 → v1.4 + RBAC v1.3 → v1.4 Amendment (SI-022 Crisis Response follow-on)
 
-**Version:** 0.6 DRAFT
-**Status:** POST-R3 (2 HIGH closed inline: R3 HIGH-1 §8.1 assertion class (G) only checked 5 specific cases — PUBLIC or any other arbitrary role with a manual `GRANT SELECT ON crisis_event_current_state_v TO PUBLIC` would pass class G while giving patient/delegate sessions or broad SQL clients access to the tenant-wide staff view. Bypass-shape preserved through grantees not enumerated. Fix: replaced the 5 point checks with a TRUE ALLOWLIST query over `information_schema.role_table_grants` — any SELECT grant on either crisis view OUTSIDE the exact allowed grantee pair (staff_reader + staff_view_owner for staff view; patient_reader + patient_summary_view_owner for patient view) causes preflight to fail with explicit `crisis-view-grant-allowlist-violation` message. PUBLIC, legacy/application roles, and ad-hoc manual grants are ALL caught. Both intended positives (the 2 canonical grant pairs) preserved as separate assertions so the allowlist isn't satisfied vacuously by zero-grants. R3 HIGH-2 §8.2 Phase 1 still said "Create the 13 net-new RBAC roles" — stale count from before R1 HIGH-2 reader-role split; a migration following the sequencing could omit one of the split roles and either fail late or compensate by reusing the retired/single-reader pattern. Phase 1 is the AUTHORITATIVE create step — count drift here is a deploy defect, not cosmetic. Fix: rewrote Phase 1 to require all 15 net-new roles, enumerated explicitly (1) crisis_initiator through (15) crisis_event_patient_summary_view_owner, with cross-reference to §7 + §8.1 class A; explicit assertion that retired crisis_event_reader role MUST NOT be created (§8.1 class G allowlist would reject). Previously POST-R2 (2 HIGH closed inline: R2 HIGH-1 §5 OpenAPI table still routed `/v1/crisis/mine` to the tenant-wide staff view `crisis_event_current_state_v` with endpoint-side JWT predicate — that is the EXACT v0.3 R1 HIGH-2 vulnerability shape; any implementation following §5 could bind patient/delegate traffic to the tenant-wide view instead of the predicate-restricted DB view, making R1 HIGH-2 closure incomplete and dependent on application filtering rather than the documented RBAC+view+RLS split. Fix: rewrote endpoint 2 row in §5 to read `crisis_event_patient_summary_v` EXCLUSIVELY + require `crisis_event_patient_reader` role + explicit prose that DB privilege boundary prevents accidental cross-grant; rewrote endpoint 1 row to enforce `crisis_event_staff_reader` role requirement. R2 HIGH-2 §8.2 Phase 7 still created only `crisis_event_current_state_v` + granted to retired `crisis_event_reader` role; migration would fail (role not among 15 required) or worse recreate the broad-reader exposure pattern. Fix: rewrote Phase 7 to create BOTH views with `security_invoker=true, security_barrier=true`, set both view owners, REVOKE ALL FROM PUBLIC, GRANT crisis_event_current_state_v to crisis_event_staff_reader ONLY, GRANT crisis_event_patient_summary_v to crisis_event_patient_reader ONLY; explicit DO NOT grant to retired role. Added §8.1 preflight assertion class (G) verifying actual SELECT grants on both views match the split-reader model — 5 grant-matrix checks: 2 negative (patient_reader MUST NOT hold staff view grant; staff_reader MUST NOT hold patient view grant) + 1 retired-role negative (crisis_event_reader MUST NOT have grants on either view) + 2 positive (staff_reader MUST have grant on staff view; patient_reader MUST have grant on patient view). Previously POST-R1 (3 HIGH closed inline: R1 HIGH-1 backfill path could not satisfy NOT NULL FK on existing P-027 rows — added explicit legacy-row migration coverage preflight assertion class (E0a/b/c) checking dispatch_ledger + provider_attempt + escalation_obligation orphan-row resolvability via (tenant_id, server_signal_id) → crisis_event.id lookup before Phase 3 NOT NULL ALTER; if any orphan row lacks resolvable match, deploy MUST author legacy-source synthesis migration first. For day-1 pilot tenants Telecheck-US (Heros-US greenfield) + Telecheck-Ghana, the assertion passes trivially because there are zero existing notification_crisis_* rows; the assertion exists as defense for any future environment migration. R1 HIGH-2 crisis_event_reader role was over-broadly granted to both clinicians AND patients/delegates — DB-level grant didn't enforce the patient/delegate predicate, so any SQL client or future endpoint using the role could read tenant-wide crisis state with only tenant RLS protection. Fix: split reader-view pair per P-038 R5 HIGH-1 pattern. Added §4.NEW4a crisis_event_patient_summary_v patient/delegate self-scoped view with verify_session_jwt_and_extract_claims() + consent_grant predicate enforcing per-row visibility to caller's own patient_id OR delegated patient_ids only. Roles: crisis_event_staff_reader (clinician + care-team + admin; tenant-wide view) and crisis_event_patient_reader (patient + delegate; predicate-restricted view). 3-layer enforcement: RBAC + view predicate + RLS. RBAC count 13 → 15 net-new roles. R1 HIGH-3 view DDL had WITH (security_barrier=true) but missing security_invoker=true — only in prose. Without security_invoker the view would run under owner privileges, bypassing caller-scoped RLS on underlying tables. Fix: corrected DDL to WITH (security_invoker = true, security_barrier = true) on both views (current_state_v + patient_summary_v); added §8.1 preflight assertion class (F) verifying both views have security_invoker=true in pg_class.reloptions after CREATE VIEW.)
+**Version:** 0.7 DRAFT
+**Status:** POST-R4 (3 HIGH closed inline: R4 HIGH-1 grant allowlist (G.1) only scanned direct SELECT rows in role_table_grants — any role made a MEMBER of crisis_event_staff_reader or crisis_event_patient_reader inherits view privilege via pg_auth_members WITHOUT appearing in role_table_grants; same bypass shape as R3 HIGH-1 but through role inheritance. Fix: added (G.2) role-membership closure assertion validating canonical-member sets resolved from `tenant_role_resolution` row; rejects any non-canonical member of either reader role + rejects cross-membership (a role member of BOTH readers would inherit both views, defeating the R1 HIGH-2 split); added (G.3) grant-option/admin-option rejection — WITH GRANT OPTION on view SELECT grants would let canonical reader role re-grant SELECT downstream, defeating allowlist; ADMIN OPTION on reader-role membership would let a member grant reader-role membership to arbitrary downstream roles, defeating the membership-closure allowlist. R4 HIGH-2 §1 RBAC scope summary still said "13 new role definitions" with retired single crisis_event_reader + only one view owner — top-level scope contract drift; implementer following §1 could recreate the single-view/single-reader v0.3 vulnerability. Fix: rewrote §1 RBAC scope clause to enumerate all 15 net-new roles explicitly matching §7 + §8.2 Phase 1 + §8.1 class A; retired crisis_event_reader explicitly removed from scope. R4 HIGH-3 jwt_migration_entity_status seed scope listed only 4 entries (3 tables + staff view) — patient-summary view absent despite being a JWT-bound boundary via verify_session_jwt_and_extract_claims() predicate; absent from seed creates version-skew risk during JWT migration on the more sensitive self-scoped read path. Fix: §1 + §8.1 class B + §8.2 Phase 8 all updated from "4 entries" to "5 entries" including `crisis_event_patient_summary_v` with same `phase_4_cutover_eligible=FALSE + raw_guc_fallback_audited=TRUE` defaults. Previously POST-R3 (2 HIGH closed inline: R3 HIGH-1 §8.1 assertion class (G) only checked 5 specific cases — PUBLIC or any other arbitrary role with a manual `GRANT SELECT ON crisis_event_current_state_v TO PUBLIC` would pass class G while giving patient/delegate sessions or broad SQL clients access to the tenant-wide staff view. Bypass-shape preserved through grantees not enumerated. Fix: replaced the 5 point checks with a TRUE ALLOWLIST query over `information_schema.role_table_grants` — any SELECT grant on either crisis view OUTSIDE the exact allowed grantee pair (staff_reader + staff_view_owner for staff view; patient_reader + patient_summary_view_owner for patient view) causes preflight to fail with explicit `crisis-view-grant-allowlist-violation` message. PUBLIC, legacy/application roles, and ad-hoc manual grants are ALL caught. Both intended positives (the 2 canonical grant pairs) preserved as separate assertions so the allowlist isn't satisfied vacuously by zero-grants. R3 HIGH-2 §8.2 Phase 1 still said "Create the 13 net-new RBAC roles" — stale count from before R1 HIGH-2 reader-role split; a migration following the sequencing could omit one of the split roles and either fail late or compensate by reusing the retired/single-reader pattern. Phase 1 is the AUTHORITATIVE create step — count drift here is a deploy defect, not cosmetic. Fix: rewrote Phase 1 to require all 15 net-new roles, enumerated explicitly (1) crisis_initiator through (15) crisis_event_patient_summary_view_owner, with cross-reference to §7 + §8.1 class A; explicit assertion that retired crisis_event_reader role MUST NOT be created (§8.1 class G allowlist would reject). Previously POST-R2 (2 HIGH closed inline: R2 HIGH-1 §5 OpenAPI table still routed `/v1/crisis/mine` to the tenant-wide staff view `crisis_event_current_state_v` with endpoint-side JWT predicate — that is the EXACT v0.3 R1 HIGH-2 vulnerability shape; any implementation following §5 could bind patient/delegate traffic to the tenant-wide view instead of the predicate-restricted DB view, making R1 HIGH-2 closure incomplete and dependent on application filtering rather than the documented RBAC+view+RLS split. Fix: rewrote endpoint 2 row in §5 to read `crisis_event_patient_summary_v` EXCLUSIVELY + require `crisis_event_patient_reader` role + explicit prose that DB privilege boundary prevents accidental cross-grant; rewrote endpoint 1 row to enforce `crisis_event_staff_reader` role requirement. R2 HIGH-2 §8.2 Phase 7 still created only `crisis_event_current_state_v` + granted to retired `crisis_event_reader` role; migration would fail (role not among 15 required) or worse recreate the broad-reader exposure pattern. Fix: rewrote Phase 7 to create BOTH views with `security_invoker=true, security_barrier=true`, set both view owners, REVOKE ALL FROM PUBLIC, GRANT crisis_event_current_state_v to crisis_event_staff_reader ONLY, GRANT crisis_event_patient_summary_v to crisis_event_patient_reader ONLY; explicit DO NOT grant to retired role. Added §8.1 preflight assertion class (G) verifying actual SELECT grants on both views match the split-reader model — 5 grant-matrix checks: 2 negative (patient_reader MUST NOT hold staff view grant; staff_reader MUST NOT hold patient view grant) + 1 retired-role negative (crisis_event_reader MUST NOT have grants on either view) + 2 positive (staff_reader MUST have grant on staff view; patient_reader MUST have grant on patient view). Previously POST-R1 (3 HIGH closed inline: R1 HIGH-1 backfill path could not satisfy NOT NULL FK on existing P-027 rows — added explicit legacy-row migration coverage preflight assertion class (E0a/b/c) checking dispatch_ledger + provider_attempt + escalation_obligation orphan-row resolvability via (tenant_id, server_signal_id) → crisis_event.id lookup before Phase 3 NOT NULL ALTER; if any orphan row lacks resolvable match, deploy MUST author legacy-source synthesis migration first. For day-1 pilot tenants Telecheck-US (Heros-US greenfield) + Telecheck-Ghana, the assertion passes trivially because there are zero existing notification_crisis_* rows; the assertion exists as defense for any future environment migration. R1 HIGH-2 crisis_event_reader role was over-broadly granted to both clinicians AND patients/delegates — DB-level grant didn't enforce the patient/delegate predicate, so any SQL client or future endpoint using the role could read tenant-wide crisis state with only tenant RLS protection. Fix: split reader-view pair per P-038 R5 HIGH-1 pattern. Added §4.NEW4a crisis_event_patient_summary_v patient/delegate self-scoped view with verify_session_jwt_and_extract_claims() + consent_grant predicate enforcing per-row visibility to caller's own patient_id OR delegated patient_ids only. Roles: crisis_event_staff_reader (clinician + care-team + admin; tenant-wide view) and crisis_event_patient_reader (patient + delegate; predicate-restricted view). 3-layer enforcement: RBAC + view predicate + RLS. RBAC count 13 → 15 net-new roles. R1 HIGH-3 view DDL had WITH (security_barrier=true) but missing security_invoker=true — only in prose. Without security_invoker the view would run under owner privileges, bypassing caller-scoped RLS on underlying tables. Fix: corrected DDL to WITH (security_invoker = true, security_barrier = true) on both views (current_state_v + patient_summary_v); added §8.1 preflight assertion class (F) verifying both views have security_invoker=true in pg_class.reloptions after CREATE VIEW.)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-039 (SI-022 Crisis Response Slice v1.0 RATIFIED 2026-05-21 via Codex R67 ship-it APPROVE; Registry v2.25 → v2.26). Per the established post-P-029 SI-spec-first promotion pattern, SI-022's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification. **EIGHTH instance** of the SI-spec-first promotion pattern (P-029, P-032, P-034, P-036, P-038, P-040 — note P-035 was SI-only, and P-037 was followed by P-038 as its CDM follow-on; this P-040 is the 6th follow-on amendment in the post-P-029 lineage).
 **Owner:** Crisis Response slice owner + Platform AI Safety + Mode 1 AI Service owner + Notification slice owner + Adverse-Event slice owner + Audit owner + CDM owner + AUDIT_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -21,8 +21,8 @@ Mechanical consolidation of SI-022 v1.0 RATIFIED (P-039) canonical content into 
 2. **AUDIT_EVENTS v5.11 → v5.12:** +12 new action IDs under `crisis.*` namespace per SI-022 v1.0 §3 normative table. **Authoritative per-row category labels: 7 Cat A + 0 Cat B + 5 Cat C** (see §4 of this amendment for the full per-row table). **Tally-drift reconciliation note:** SI-022 v1.0 §3 summary line says "8 Cat A + 0 Cat B + 4 Cat C" — this is a 1-row off-by-one tally vs the per-row labels in the SI's own §3 table (the row labels are authoritative). The per-row count (7A + 5C) governs this amendment's normative content; the SI's summary tally drift will be patched in a downstream prose-correction PR after P-040 lands. Cat A: `crisis.detected`, `crisis.acknowledged`, `crisis.responded`, `crisis.resolved`, `crisis.no_acknowledgement_escalation`, `crisis.regulatory_threshold_reached`, `crisis.final_tier_reached`. Cat C: `crisis.dispatch_attempt_failed`, `crisis.sweep_replay_after_commit_ack_loss`, `crisis.sweep_claim_recovery_with_committed_cycle`, `crisis.delivery_fence_mismatch_dropped`, `crisis.sweep_stale_eligibility_dropped`. **Existing audits preserved unchanged**: `crisis_detection_trigger` Cat A (FLOOR-020 platform-floor at P-035 — distinct from the new lifecycle-bound `crisis.detected` Cat A; the trigger is emitted by the Mode 1 handler at FLOOR-020 BEFORE the crisis_event INSERT; `crisis.detected` is emitted by `record_crisis_initiation()` AFTER crisis_event INSERT completes the same atomic transaction); `crisis.escalation_destination_resolved` Cat B from P-025 (CCR resolver outcome).
 3. **OpenAPI v0.4 → v0.5:** +5-10 new endpoints under `/v1/crisis-events/*` (initiation surface OAuth-bound; acknowledge/respond/resolve wrappers; unauthenticated-emergency fallback per Sub-decision 3 logical recipient 1). Exact endpoint count TBD against SI's §5 normative endpoint list.
 4. **State Machines v1.3 → v1.4:** +1 new state machine `crisis_event_lifecycle` described as DERIVED from append-only `crisis_event_lifecycle_transition` rows per I-035; CHECK constraint enumerates 11 allowed `(from_state, to_state, transition_reason)` triples per SI-022 Sub-decision 4 + §6 normative table (post-R8+R11 expansion: 9 → 11 triples).
-5. **RBAC v1.3 → v1.4:** +13 new role definitions (estimated; reconcile against SI's §7+§8 enumeration): application roles (crisis_initiator, crisis_acknowledger, crisis_responder, crisis_resolver, crisis_sweep_scheduler, crisis_event_reader) + 5 wrapper-owner roles enumerated in §1 above + 1 raw writer owner + view owner (crisis_event_current_state_view_owner) + sweep-worker role.
-6. **`jwt_migration_entity_status` seed scope:** 4 entries (3 RLS-bearing crisis_* tables + 1 derived view `crisis_event_current_state_v`) with `phase_4_cutover_eligible=FALSE` + `raw_guc_fallback_audited=TRUE` defaults per established post-P-032 seeding pattern.
+5. **RBAC v1.3 → v1.4 (R4 HIGH-2 closure 2026-05-21: 15 net-new roles, NOT 13; the prior count was stale from before R1 HIGH-2 reader-role split + R1 HIGH-2 view-owner split):** +15 new role definitions matching §7 + §8.2 Phase 1 + §8.1 class A. Application roles (7): crisis_initiator, crisis_acknowledger, crisis_responder, crisis_resolver, crisis_sweep_scheduler, **crisis_event_staff_reader** (R1 HIGH-2 split — tenant-wide; clinician + care-team + admin), **crisis_event_patient_reader** (R1 HIGH-2 split — self-scoped via predicate-restricted view; patient + delegate). Wrapper-owner roles (5): crisis_initiation_wrapper_owner + crisis_acknowledgement_wrapper_owner + crisis_response_wrapper_owner + crisis_resolution_wrapper_owner + crisis_sweep_wrapper_owner. Raw-writer-owner role (1): crisis_event_lifecycle_transition_writer_owner. View-owner roles (2; R1 HIGH-2 split): **crisis_event_current_state_view_owner** + **crisis_event_patient_summary_view_owner**. The retired `crisis_event_reader` role is NOT created (§8.1 class G allowlist rejects it).
+6. **`jwt_migration_entity_status` seed scope (R4 HIGH-3 closure 2026-05-21: 5 entries, NOT 4 — the patient-summary view is itself a JWT-bound boundary via its verify_session_jwt_and_extract_claims() predicate and MUST be tracked under the same raw_guc_fallback_audited/phase_4_cutover_eligible discipline as the staff view):** 5 entries (3 RLS-bearing crisis_* tables + 2 derived views: `crisis_event_current_state_v` + `crisis_event_patient_summary_v`) with `phase_4_cutover_eligible=FALSE` + `raw_guc_fallback_audited=TRUE` defaults per established post-P-032 seeding pattern.
 
 **Out of scope:**
 
@@ -640,11 +640,17 @@ BEGIN
         RAISE EXCEPTION 'crisis-rbac-role-missing: %', v_role_missing;
     END LOOP;
 
-    -- (B) Verify the 4 jwt_migration_entity_status seed rows exist with the canonical defaults
+    -- (B) Verify the 5 jwt_migration_entity_status seed rows exist with the canonical defaults
+    -- (R4 HIGH-3 closure 2026-05-21: added crisis_event_patient_summary_v — it's a JWT-bound
+    -- boundary via its verify_session_jwt_and_extract_claims() predicate and must be tracked
+    -- under the same raw_guc_fallback_audited/phase_4_cutover_eligible discipline as the
+    -- staff view; absent from seed scope would create version-skew risk during JWT migration
+    -- on the more sensitive self-scoped patient/delegate read path)
     FOR v_entity_seed_missing IN
         SELECT unnest(ARRAY[
             'crisis_event', 'crisis_event_lifecycle_transition',
-            'crisis_sweep_execution', 'crisis_event_current_state_v'
+            'crisis_sweep_execution',
+            'crisis_event_current_state_v', 'crisis_event_patient_summary_v'
         ])
         EXCEPT SELECT entity_name FROM public.jwt_migration_entity_status
         WHERE phase_4_cutover_eligible = FALSE AND raw_guc_fallback_audited = TRUE
@@ -832,6 +838,103 @@ BEGIN
         RAISE EXCEPTION 'crisis-view-grant-missing: crisis_event_patient_reader lacks SELECT on crisis_event_patient_summary_v';
     END IF;
 
+    -- (G.2) R4 HIGH-1 closure 2026-05-21 — role-membership closure assertion.
+    -- The grant allowlist (G.1 above) verifies direct SELECT grants in
+    -- information_schema.role_table_grants. But any role made a MEMBER of
+    -- crisis_event_staff_reader or crisis_event_patient_reader inherits the view
+    -- privilege via pg_auth_members WITHOUT appearing in role_table_grants — the
+    -- same bypass shape as R3 HIGH-1 but through role inheritance instead of
+    -- direct GRANT. Same impact: patient/delegate/legacy/ad-hoc roles can obtain
+    -- tenant-wide staff-view access without tripping G.1.
+    --
+    -- This assertion validates membership closure: ONLY the canonical caller-class
+    -- application roles may be members of the canonical reader roles. Per §7:
+    --   crisis_event_staff_reader members allowed: <tenant-clinician-role>,
+    --     <tenant-care-team-member-role>, <tenant-admin-role>
+    --   crisis_event_patient_reader members allowed: <tenant-patient-role>,
+    --     <tenant-delegate-role>
+    -- The exact canonical-member names are tenant-bind-time tenant_role variables
+    -- (resolved via tenant.canonical_*_role_name CCR keys in production); the
+    -- assertion below treats anything not in the canonical-member set as a
+    -- violation. Cross-membership (a patient role member of staff_reader) is
+    -- explicitly rejected.
+    DECLARE
+        v_offending_member TEXT;
+        v_canonical_staff_members TEXT[];
+        v_canonical_patient_members TEXT[];
+    BEGIN
+        -- Canonical-member sets resolved from tenant_role config (or hard-coded
+        -- per-deploy if the tenant_role variables haven't landed yet — the
+        -- assertion fails-closed in the unresolved case).
+        SELECT canonical_staff_reader_members, canonical_patient_reader_members
+          INTO v_canonical_staff_members, v_canonical_patient_members
+          FROM public.tenant_role_resolution
+         WHERE entity = 'crisis_views'
+         LIMIT 1;
+        IF v_canonical_staff_members IS NULL OR v_canonical_patient_members IS NULL THEN
+            RAISE EXCEPTION 'crisis-view-membership-resolution-missing: tenant_role_resolution row for crisis_views is not seeded; cannot validate membership closure';
+        END IF;
+
+        -- Check crisis_event_staff_reader members (excluding the reader role itself
+        -- and pg-internal pseudo-roles):
+        SELECT pg_get_userbyid(m.member) || ' is member of crisis_event_staff_reader'
+          INTO v_offending_member
+          FROM pg_auth_members m
+          JOIN pg_roles r ON r.oid = m.roleid
+         WHERE r.rolname = 'crisis_event_staff_reader'
+           AND pg_get_userbyid(m.member) <> ALL(v_canonical_staff_members)
+         LIMIT 1;
+        IF v_offending_member IS NOT NULL THEN
+            RAISE EXCEPTION 'crisis-view-membership-closure-violation (staff_reader): %; only canonical staff-reader members are permitted; reject before cutover', v_offending_member;
+        END IF;
+
+        -- Check crisis_event_patient_reader members:
+        SELECT pg_get_userbyid(m.member) || ' is member of crisis_event_patient_reader'
+          INTO v_offending_member
+          FROM pg_auth_members m
+          JOIN pg_roles r ON r.oid = m.roleid
+         WHERE r.rolname = 'crisis_event_patient_reader'
+           AND pg_get_userbyid(m.member) <> ALL(v_canonical_patient_members)
+         LIMIT 1;
+        IF v_offending_member IS NOT NULL THEN
+            RAISE EXCEPTION 'crisis-view-membership-closure-violation (patient_reader): %; only canonical patient-reader members are permitted; reject before cutover', v_offending_member;
+        END IF;
+
+        -- Cross-membership check: a patient_reader member MUST NOT also be a staff_reader
+        -- member (would be the inheritance-based equivalent of granting staff view to
+        -- patient principal):
+        PERFORM 1
+          FROM pg_auth_members staff_m
+          JOIN pg_roles staff_r ON staff_r.oid = staff_m.roleid
+          JOIN pg_auth_members patient_m ON patient_m.member = staff_m.member
+          JOIN pg_roles patient_r ON patient_r.oid = patient_m.roleid
+         WHERE staff_r.rolname = 'crisis_event_staff_reader'
+           AND patient_r.rolname = 'crisis_event_patient_reader';
+        IF FOUND THEN
+            RAISE EXCEPTION 'crisis-view-cross-membership-violation: a role is member of both crisis_event_staff_reader AND crisis_event_patient_reader — that role would inherit BOTH tenant-wide staff view + patient self-scoped view access, defeating the R1 HIGH-2 split';
+        END IF;
+    END;
+
+    -- (G.3) R4 HIGH-1 closure 2026-05-21 — grant-option/admin-option rejection on view grants.
+    -- A canonical reader role MUST NOT be granted WITH GRANT OPTION (would let it re-grant
+    -- SELECT to arbitrary downstream roles, defeating the allowlist). Same for ADMIN OPTION
+    -- on reader roles (would let it grant MEMBERSHIP to arbitrary downstream roles).
+    PERFORM 1 FROM information_schema.role_table_grants g
+    WHERE g.table_schema = 'public'
+      AND g.table_name IN ('crisis_event_current_state_v', 'crisis_event_patient_summary_v')
+      AND g.privilege_type = 'SELECT'
+      AND g.is_grantable = 'YES';
+    IF FOUND THEN
+        RAISE EXCEPTION 'crisis-view-grant-option-violation: a SELECT grant on a crisis view has WITH GRANT OPTION; reject (would defeat the allowlist by allowing re-grants); use GRANT SELECT ... TO <role> (no WITH GRANT OPTION)';
+    END IF;
+    PERFORM 1 FROM pg_auth_members m
+    JOIN pg_roles r ON r.oid = m.roleid
+    WHERE r.rolname IN ('crisis_event_staff_reader', 'crisis_event_patient_reader')
+      AND m.admin_option = TRUE;
+    IF FOUND THEN
+        RAISE EXCEPTION 'crisis-view-admin-option-violation: a canonical reader role has a member with ADMIN OPTION; reject (would allow that member to grant reader-role membership to arbitrary downstream roles, defeating the membership-closure allowlist)';
+    END IF;
+
     -- (E) Tenant config Part C (emergency_contact_consent_enabled=true only; R31+R32):
     SELECT jsonb_agg(jsonb_build_object('tenant_id', tenant_id, 'missing', missing_keys))
     INTO v_tenant_config_missing
@@ -864,7 +967,7 @@ $$;
 5. **Phase 5 — RLS policies:** Enable RLS + create policies on the 3 net-new tables (per §4.NEW1/NEW2/NEW3 above).
 6. **Phase 6 — Procedures:** Deploy the 6 SECURITY DEFINER procedures via the canonical procedure-deploy gate (verify SECURITY DEFINER + locked search_path on each); set ownership; grant EXECUTE per §3.1-3.6.
 7. **Phase 7 — Views (LAST per P-036 R6; R2 HIGH-2 closure 2026-05-21: create BOTH split views with their respective owner/grant pairs):** Create `crisis_event_current_state_v` (staff tenant-wide reader) with `security_invoker=true, security_barrier=true`; set ownership to `crisis_event_current_state_view_owner`; `REVOKE ALL ON crisis_event_current_state_v FROM PUBLIC`; `GRANT SELECT ON crisis_event_current_state_v TO crisis_event_staff_reader`. Create `crisis_event_patient_summary_v` (patient/delegate self-scoped reader) with `security_invoker=true, security_barrier=true`; set ownership to `crisis_event_patient_summary_view_owner`; `REVOKE ALL ON crisis_event_patient_summary_v FROM PUBLIC`; `GRANT SELECT ON crisis_event_patient_summary_v TO crisis_event_patient_reader`. **DO NOT grant the retired `crisis_event_reader` role** (it does not exist post-R1 HIGH-2 split per §7); **DO NOT grant the staff view to patient/delegate principals**. The §8.1 preflight DO block (assertion classes A + F + G) verifies the resulting roles, view security_invoker flags, AND the SELECT grants on the views match the split-reader model (NOT just role/reloption existence — actual grant matrix verified).
-8. **Phase 8 — JWT migration entity seed:** INSERT 4 rows into `jwt_migration_entity_status` for the 3 net-new tables + 1 derived view with `phase_4_cutover_eligible=FALSE` + `raw_guc_fallback_audited=TRUE` defaults.
+8. **Phase 8 — JWT migration entity seed (R4 HIGH-3 closure 2026-05-21: 5 rows, NOT 4 — both derived views are JWT-bound boundaries):** INSERT 5 rows into `jwt_migration_entity_status` for the 3 net-new tables + 2 derived views (`crisis_event_current_state_v` + `crisis_event_patient_summary_v`) with `phase_4_cutover_eligible=FALSE` + `raw_guc_fallback_audited=TRUE` defaults.
 9. **Phase 9 — Audit events registration:** Insert the 12 new `crisis.*` action IDs into the canonical `audit_events_action_definition` table per AUDIT_EVENTS v5.12 schema; verify CHECK constraint accepts the new action IDs (no schema CHECK enumeration change required if AUDIT_EVENTS v5.11→v5.12 was an additive enum extension, which is the established pattern).
 10. **Phase 10 — Deployment preflight gate:** Run the §8.1 DO block. Any FAILED assertion BLOCKS cutover. Roll back via `BEGIN; <undo>; COMMIT;` on a per-phase basis if any assertion fails; do NOT proceed to Phase 11.
 11. **Phase 11 — OpenAPI endpoint deployment:** Deploy the 6 net-new endpoints under `/v1/crisis/*` via the canonical route-deploy gate. Endpoint 6 (`/v1/crisis/resources`) MUST be registered with the canonical IP-rate-limit middleware at 60 req/min on the unauthenticated path; do NOT register the unauthenticated path without the rate-limit middleware.
@@ -880,6 +983,11 @@ On any Phase N failure during cutover, rollback discards Phase N's changes via t
 **v0.1 DRAFT 2026-05-21:** pre-Codex-review skeleton. Contains §1 purpose + scope + §2 new entities (3 net-new + 3 additive column extensions to P-027 §4.66-4.68 + 1 OPTIONAL derived view) with executable DDL. §3-8 are stubs to be filled in v0.2 against SI-022 §3/§5/§7 normative content. Authored on `spec/P-040-cdm-v1.10-si-022-follow-on-2026-05-21` branch off main at `520565a` (post-P-039 merge). Commit `2f88322`.
 
 **v0.2 DRAFT 2026-05-21:** §4 audit events normative table filled in vs SI-022 v1.0 §3 normative content; §5 OpenAPI 6 endpoints filled in vs SI-022 v1.0 §5; §6 state machine 11 transition triples filled in vs SI-022 v1.0 §6 (post-R8+R11 expansion). §1 AUDIT_EVENTS scope reconciled: per-row category labels (7 Cat A + 0 Cat B + 5 Cat C; total 12) are authoritative; SI-022 v1.0 §3 summary tally drift ("8 Cat A + 4 Cat C") flagged for downstream prose-correction PR after P-040 lands. §3 (procedures), §7 (RBAC), §8 (preflight) remain stubs to be filled in v0.3. Commit `90d8387`.
+
+**v0.7 DRAFT 2026-05-21 — R4 closures applied (3 HIGH):**
+- **R4 HIGH-1 closed:** grant allowlist (G.1) missed role-membership inheritance bypass — any role made MEMBER of crisis_event_staff_reader or crisis_event_patient_reader inherits view privilege via pg_auth_members without appearing in role_table_grants. Fix: added (G.2) role-membership closure assertion validating canonical-member sets resolved from `tenant_role_resolution`; rejects non-canonical members + cross-membership (a role member of both readers would inherit both views). Added (G.3) WITH GRANT OPTION rejection on view SELECT grants + ADMIN OPTION rejection on reader-role membership (would let downstream re-grant defeating allowlist).
+- **R4 HIGH-2 closed:** §1 RBAC scope summary still said "13 new role definitions" with retired crisis_event_reader + 1 view owner — top-level scope contract drift; implementer following §1 could recreate the v0.3 vulnerability. Fix: rewrote §1 RBAC scope to enumerate all 15 net-new roles explicitly matching §7 + §8.2 Phase 1 + §8.1 class A; retired crisis_event_reader explicitly removed.
+- **R4 HIGH-3 closed:** jwt_migration_entity_status seed scope listed only 4 entries (3 tables + staff view); patient-summary view absent despite being JWT-bound via verify_session_jwt_and_extract_claims() predicate — version-skew risk on the more sensitive self-scoped read path. Fix: §1 + §8.1 class B + §8.2 Phase 8 all updated from "4 entries" → "5 entries" including `crisis_event_patient_summary_v` with canonical defaults.
 
 **v0.6 DRAFT 2026-05-21 — R3 closures applied (2 HIGH):**
 - **R3 HIGH-1 closed:** §8.1 assertion class (G) was a 5-point check (2 cross-grant negatives + 1 retired-role negative + 2 positive) that missed PUBLIC or any other arbitrary role grant — a manual `GRANT SELECT ON crisis_event_current_state_v TO PUBLIC` would pass while exposing the staff view to all callers. Fix: replaced point checks with a TRUE ALLOWLIST query — any SELECT grant on either crisis view outside the canonical grantee pair (staff_reader + staff_view_owner for staff view; patient_reader + patient_summary_view_owner for patient view) raises `crisis-view-grant-allowlist-violation`. PUBLIC, legacy roles, application roles, ad-hoc manual grants all caught. Both intended positives preserved as separate positive assertions so allowlist isn't satisfied vacuously by zero-grants.
