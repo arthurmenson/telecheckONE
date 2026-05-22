@@ -14,7 +14,7 @@
 
 This amendment promotes the canonical content of Mode 1 Handler Spec v0.4 RATIFIED into:
 
-- **CDM v1.7 → v1.8** (5 new entities + 1 SECURITY INVOKER derived view; all 5 entities strict append-only per I-035 + I-027)
+- **CDM v1.7 → v1.8** (5 new entities + 1 derived view; all 5 entities strict append-only per I-035 + I-027). Post-P-042 cross-slice audit Finding 3 closure 2026-05-22: derived view is a PLAIN view (no `security_invoker` clause) per R7 HIGH-1 closure — see §2.NEW6 + §9 R7 entry. The "SECURITY INVOKER" descriptor that previously appeared here was stale prose from the pre-R7 design.
 - **AUDIT_EVENTS v5.9 → v5.10** (R1 MED-1 closure 2026-05-21: normalized count): **11 new action IDs total** = 9 under `ai.mode1.*` namespace (**3 Cat A + 1 Cat B + 5 Cat C**) + 1 cross-cutting `audit.cat_c_drop_observed` Cat B aggregate emitted by audit-pipeline subsystem + 1 new `ccr.ai_provider_updated` Cat B (R1 MED-2 closure for CCR update event)
 - **DOMAIN_EVENTS additive** (no version bump; 0 new event types — Mode 1 audit emission is via the canonical AUDIT_EVENTS path; cross-mode handoff is a Cat B audit event NOT a domain event)
 - **CCR_RUNTIME v5.3 → v5.4** (1 new CCR key: `tenant.ai_provider` registered with allowed values + dual-control update path)
@@ -40,7 +40,7 @@ The amendment is **mechanical consolidation** of already-Codex-converged canonic
 
 ---
 
-## 2. New CDM entities (5 active + 1 SECURITY INVOKER derived view)
+## 2. New CDM entities (5 active + 1 derived view; post-P-042 audit Finding 3 closure 2026-05-22 — "SECURITY INVOKER" descriptor replaced with plain "derived view"; the view is a plain PostgreSQL view per R7 HIGH-1 closure with explicit `current_tenant_id_strict('ai_mode1_conversation_state')` predicate in body + non-BYPASSRLS view-owner privileges for base-table reads)
 
 All 5 active entities are **P1 patient-bound** entities (per SI-018 partition rule). All carry `tenant_id` per I-023 three-layer tenant isolation; all carry strict append-only triggers per I-035 invariant; all RLS policies use `current_tenant_id_strict('<entity_name>')` per the SI-024.1 v0.8 canonical pattern.
 
@@ -334,7 +334,7 @@ GRANT SELECT (tenant_id, conversation_id, archived_at) ON ai_mode1_conversation_
 
 **Deployment prerequisite (per Mode 1 spec R7 HIGH-1 closure):** `ai_mode1_view_owner` role MUST be pre-existing at amendment-apply time + MUST NOT have BYPASSRLS attribute. Preflight assertion in §4.5 below.
 
-**Cross-references:** Mode 1 spec §6.1 derived view + R7 HIGH-1 closure (security_invoker + non-BYPASSRLS owner).
+**Cross-references:** Mode 1 spec §6.1 derived view + R7 HIGH-1 closure (post-R7 PLAIN VIEW with explicit `current_tenant_id_strict()` predicate + non-BYPASSRLS owner; Mode 1 spec's R7 HIGH-1 originally specified `security_invoker` but this CDM implementation R7 supersedes that with plain-view + explicit-WHERE form per the data-minimization-priority trade-off documented in §9 R7 entry; post-P-042 audit Finding 3 closure 2026-05-22 reconciled scope text + RBAC row to match the post-R7 design).
 
 ---
 
@@ -442,7 +442,7 @@ tenant.ai_provider:
 | Role | Purpose | Granted to |
 |---|---|---|
 | `ai_mode1_view_owner` | Owns the `ai_mode1_conversation_state` derived view (non-BYPASSRLS per R7 HIGH-1) | Created by migration; not granted to humans; held by service-account-owner pattern |
-| `ai_mode1_reader` | Read access to `ai_mode1_conversation_state` view via SECURITY INVOKER semantics (RLS evaluates against calling role) | Mode 1 service account; clinician dashboard role; pharmacy portal role; admin role |
+| `ai_mode1_reader` | Read access to `ai_mode1_conversation_state` view via plain-view + view-owner privileges; tenant isolation enforced explicitly inside the view body via `current_tenant_id_strict('ai_mode1_conversation_state')` per the post-R7 design. **Post-P-042 audit Finding 3 closure 2026-05-22 — "SECURITY INVOKER semantics" descriptor REMOVED; the post-R7 design uses a plain view (no security_invoker clause). `ai_mode1_reader` has SELECT on the VIEW ONLY — cannot query base tables directly + cannot bypass aggregation + cannot see message-bearing columns even indirectly.** | Mode 1 service account; clinician dashboard role; pharmacy portal role; admin role |
 
 **Preflight assertion (per Mode 1 spec R7 HIGH-1 closure):**
 
@@ -450,7 +450,7 @@ tenant.ai_provider:
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ai_mode1_view_owner') THEN
-        RAISE EXCEPTION 'ai_mode1_view_owner role missing (required for Mode 1 derived view ownership per security_invoker discipline)'
+        RAISE EXCEPTION 'ai_mode1_view_owner role missing (required for Mode 1 derived view ownership per the post-R7 plain-view design: view-owner-privileged base-table reads + explicit current_tenant_id_strict() predicate in view body; post-P-042 audit Finding 3 closure 2026-05-22 — "security_invoker discipline" descriptor REMOVED to match post-R7 design)'
             USING ERRCODE = 'undefined_object';
     END IF;
     IF (SELECT rolbypassrls FROM pg_roles WHERE rolname = 'ai_mode1_view_owner') THEN
@@ -481,7 +481,7 @@ VALUES
     ('ai_mode1_conversation_state',                    FALSE, TRUE);  -- post-P-036 cross-slice fix 2026-05-22 (Evans Option A): view is no longer security_invoker after R7 closure; uses current_tenant_id_strict('ai_mode1_conversation_state') predicate in body; tenant-scoped read surface tracked under migration scope per other-slice canonical pattern (P-038/P-040/P-042 all seed their tenant-scoped views)
 ```
 
-**cdm_owner sequencing guidance:** flip per-entity `phase_4_cutover_eligible=TRUE` as middleware migration to JWT-required posture completes. The `ai_mode1_conversation_state` view was historically NOT seeded because pre-R7 it was a `security_invoker` view that inherited RLS from base tables (no view-side tenant-binding to migrate). The R7 HIGH-1 closure replaced it with a plain view whose body explicitly calls `current_tenant_id_strict('ai_mode1_conversation_state')` — making the view itself a tenant-binding surface that should be tracked. The post-P-036 cross-slice consistency fix (Evans Option A 2026-05-22) brings Mode 1 into alignment with the other 4 pilot slices that all track their tenant-scoped views. **Stale prose note**: §1 in-scope item 5, §7 RBAC table row for `ai_mode1_reader`, and the §9 R5 MED-1 cycle-log entry still reference `security_invoker` semantics; these are doc-scrub items for the post-P-042 hygiene cycle (Finding 3 from the 2026-05-22 cross-slice audit) and do NOT affect the seed-scope fix.
+**cdm_owner sequencing guidance:** flip per-entity `phase_4_cutover_eligible=TRUE` as middleware migration to JWT-required posture completes. The `ai_mode1_conversation_state` view was historically NOT seeded because pre-R7 it was a `security_invoker` view that inherited RLS from base tables (no view-side tenant-binding to migrate). The R7 HIGH-1 closure replaced it with a plain view whose body explicitly calls `current_tenant_id_strict('ai_mode1_conversation_state')` — making the view itself a tenant-binding surface that should be tracked. The post-P-036 cross-slice consistency fix (Evans Option A 2026-05-22) brings Mode 1 into alignment with the other 4 pilot slices that all track their tenant-scoped views. **Post-P-042 cross-slice audit Finding 3 closure 2026-05-22**: stale `security_invoker` references in §1 in-scope item 5 + §2 header + §7 RBAC table row for `ai_mode1_reader` + Cross-references prose + §8 preflight error message have all been scrubbed to match the post-R7 plain-view design (audit Finding 3 closed via hygiene cycle Phase 1; historical R5 MED-1 + R7 cycle-log entries preserved unchanged in §9 as documentation of the closure path).
 
 **Cross-reference:** SI-024.1 v0.8 §Sub-decision 9 (Phase B fallback gate); CDM v1.6 §4.NEW5 (jwt_migration_entity_status entity); P-034 R6 closure precedent (extended seed scope to include MV/view trust-anchor surfaces); P-038 §3 (9-entry seed scope including 2 views); P-040 §1 in-scope item 6 (5-entry seed scope including 2 views); P-042 §7 (7-entry seed scope including 3 views).
 
