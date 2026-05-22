@@ -1,7 +1,7 @@
 # CDM v1.9 → v1.10 + AUDIT_EVENTS v5.11 → v5.12 + OpenAPI v0.4 → v0.5 + State Machines v1.3 → v1.4 + RBAC v1.3 → v1.4 Amendment (SI-022 Crisis Response follow-on)
 
-**Version:** 0.3 DRAFT
-**Status:** pre-Codex-review (sections 3 + 4 + 5 + 6 + 7 + 8 all filled in vs SI-022 v1.0 normative content; document complete and ready for first Codex adversarial review round)
+**Version:** 0.4 DRAFT
+**Status:** POST-R1 (3 HIGH closed inline: R1 HIGH-1 backfill path could not satisfy NOT NULL FK on existing P-027 rows — added explicit legacy-row migration coverage preflight assertion class (E0a/b/c) checking dispatch_ledger + provider_attempt + escalation_obligation orphan-row resolvability via (tenant_id, server_signal_id) → crisis_event.id lookup before Phase 3 NOT NULL ALTER; if any orphan row lacks resolvable match, deploy MUST author legacy-source synthesis migration first. For day-1 pilot tenants Telecheck-US (Heros-US greenfield) + Telecheck-Ghana, the assertion passes trivially because there are zero existing notification_crisis_* rows; the assertion exists as defense for any future environment migration. R1 HIGH-2 crisis_event_reader role was over-broadly granted to both clinicians AND patients/delegates — DB-level grant didn't enforce the patient/delegate predicate, so any SQL client or future endpoint using the role could read tenant-wide crisis state with only tenant RLS protection. Fix: split reader-view pair per P-038 R5 HIGH-1 pattern. Added §4.NEW4a crisis_event_patient_summary_v patient/delegate self-scoped view with verify_session_jwt_and_extract_claims() + consent_grant predicate enforcing per-row visibility to caller's own patient_id OR delegated patient_ids only. Roles: crisis_event_staff_reader (clinician + care-team + admin; tenant-wide view) and crisis_event_patient_reader (patient + delegate; predicate-restricted view). 3-layer enforcement: RBAC + view predicate + RLS. RBAC count 13 → 15 net-new roles. R1 HIGH-3 view DDL had WITH (security_barrier=true) but missing security_invoker=true — only in prose. Without security_invoker the view would run under owner privileges, bypassing caller-scoped RLS on underlying tables. Fix: corrected DDL to WITH (security_invoker = true, security_barrier = true) on both views (current_state_v + patient_summary_v); added §8.1 preflight assertion class (F) verifying both views have security_invoker=true in pg_class.reloptions after CREATE VIEW.)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-039 (SI-022 Crisis Response Slice v1.0 RATIFIED 2026-05-21 via Codex R67 ship-it APPROVE; Registry v2.25 → v2.26). Per the established post-P-029 SI-spec-first promotion pattern, SI-022's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification. **EIGHTH instance** of the SI-spec-first promotion pattern (P-029, P-032, P-034, P-036, P-038, P-040 — note P-035 was SI-only, and P-037 was followed by P-038 as its CDM follow-on; this P-040 is the 6th follow-on amendment in the post-P-029 lineage).
 **Owner:** Crisis Response slice owner + Platform AI Safety + Mode 1 AI Service owner + Notification slice owner + Adverse-Event slice owner + Audit owner + CDM owner + AUDIT_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -17,7 +17,7 @@ Mechanical consolidation of SI-022 v1.0 RATIFIED (P-039) canonical content into 
 
 **In scope:**
 
-1. **CDM v1.9 → v1.10:** +3 new entities (`crisis_event`, `crisis_event_lifecycle_transition`, `crisis_sweep_execution`) + additive column extensions to 3 P-027 §4.66-4.68 entities (`notification_crisis_dispatch_ledger`, `notification_crisis_provider_attempt`, `notification_crisis_escalation_obligation`) + 1 OPTIONAL canonical view (`crisis_event_current_state_v` — DERIVED from append-only lifecycle transitions) + **6 SECURITY DEFINER procedures owned by 5 distinct owner roles**: the 7 procedures are (1) raw `record_crisis_event_lifecycle_transition()` owned by `crisis_event_lifecycle_transition_writer_owner`; (2)–(6) five wrapper procedures owned by 4 wrapper-owner roles: `record_crisis_initiation()` (crisis_initiation_wrapper_owner), `record_crisis_acknowledgement_claim()` (crisis_acknowledgement_wrapper_owner), `record_crisis_response()` (crisis_response_wrapper_owner), `record_crisis_resolution()` (crisis_resolution_wrapper_owner), and `execute_crisis_no_acknowledgement_sweep()` (crisis_sweep_wrapper_owner). Total: 1 raw procedure + 5 wrapper procedures = 6 procedures; 1 raw owner + 4 wrapper owners = 5 procedure-owner roles. Continuing CDM numbering from v1.9's 96 active entities + 7 derived views + 1 optional MV; v1.10 target: 99 active entities + 8 derived views + 1 optional MV.
+1. **CDM v1.9 → v1.10:** +3 new entities (`crisis_event`, `crisis_event_lifecycle_transition`, `crisis_sweep_execution`) + additive column extensions to 3 P-027 §4.66-4.68 entities (`notification_crisis_dispatch_ledger`, `notification_crisis_provider_attempt`, `notification_crisis_escalation_obligation`) + 2 OPTIONAL canonical views per R1 HIGH-2 closure 2026-05-21 data-minimization split (`crisis_event_current_state_v` staff tenant-wide reader + `crisis_event_patient_summary_v` patient/delegate self-scoped reader — DERIVED from append-only lifecycle transitions) + **6 SECURITY DEFINER procedures owned by 5 distinct owner roles**: the 7 procedures are (1) raw `record_crisis_event_lifecycle_transition()` owned by `crisis_event_lifecycle_transition_writer_owner`; (2)–(6) five wrapper procedures owned by 4 wrapper-owner roles: `record_crisis_initiation()` (crisis_initiation_wrapper_owner), `record_crisis_acknowledgement_claim()` (crisis_acknowledgement_wrapper_owner), `record_crisis_response()` (crisis_response_wrapper_owner), `record_crisis_resolution()` (crisis_resolution_wrapper_owner), and `execute_crisis_no_acknowledgement_sweep()` (crisis_sweep_wrapper_owner). Total: 1 raw procedure + 5 wrapper procedures = 6 procedures; 1 raw owner + 4 wrapper owners = 5 procedure-owner roles. Continuing CDM numbering from v1.9's 96 active entities + 7 derived views + 1 optional MV; v1.10 target: 99 active entities + 8 derived views + 1 optional MV.
 2. **AUDIT_EVENTS v5.11 → v5.12:** +12 new action IDs under `crisis.*` namespace per SI-022 v1.0 §3 normative table. **Authoritative per-row category labels: 7 Cat A + 0 Cat B + 5 Cat C** (see §4 of this amendment for the full per-row table). **Tally-drift reconciliation note:** SI-022 v1.0 §3 summary line says "8 Cat A + 0 Cat B + 4 Cat C" — this is a 1-row off-by-one tally vs the per-row labels in the SI's own §3 table (the row labels are authoritative). The per-row count (7A + 5C) governs this amendment's normative content; the SI's summary tally drift will be patched in a downstream prose-correction PR after P-040 lands. Cat A: `crisis.detected`, `crisis.acknowledged`, `crisis.responded`, `crisis.resolved`, `crisis.no_acknowledgement_escalation`, `crisis.regulatory_threshold_reached`, `crisis.final_tier_reached`. Cat C: `crisis.dispatch_attempt_failed`, `crisis.sweep_replay_after_commit_ack_loss`, `crisis.sweep_claim_recovery_with_committed_cycle`, `crisis.delivery_fence_mismatch_dropped`, `crisis.sweep_stale_eligibility_dropped`. **Existing audits preserved unchanged**: `crisis_detection_trigger` Cat A (FLOOR-020 platform-floor at P-035 — distinct from the new lifecycle-bound `crisis.detected` Cat A; the trigger is emitted by the Mode 1 handler at FLOOR-020 BEFORE the crisis_event INSERT; `crisis.detected` is emitted by `record_crisis_initiation()` AFTER crisis_event INSERT completes the same atomic transaction); `crisis.escalation_destination_resolved` Cat B from P-025 (CCR resolver outcome).
 3. **OpenAPI v0.4 → v0.5:** +5-10 new endpoints under `/v1/crisis-events/*` (initiation surface OAuth-bound; acknowledge/respond/resolve wrappers; unauthenticated-emergency fallback per Sub-decision 3 logical recipient 1). Exact endpoint count TBD against SI's §5 normative endpoint list.
 4. **State Machines v1.3 → v1.4:** +1 new state machine `crisis_event_lifecycle` described as DERIVED from append-only `crisis_event_lifecycle_transition` rows per I-035; CHECK constraint enumerates 11 allowed `(from_state, to_state, transition_reason)` triples per SI-022 Sub-decision 4 + §6 normative table (post-R8+R11 expansion: 9 → 11 triples).
@@ -281,7 +281,7 @@ CREATE TRIGGER notification_crisis_escalation_obligation_mutation_discipline
 
 ```sql
 CREATE VIEW crisis_event_current_state_v
-WITH (security_barrier = true) AS
+WITH (security_invoker = true, security_barrier = true) AS
 SELECT
     ce.tenant_id,
     ce.id AS crisis_event_id,
@@ -308,11 +308,82 @@ LEFT JOIN LATERAL (
 ) latest ON TRUE
 LEFT JOIN notification_crisis_escalation_obligation obligation
     ON obligation.tenant_id = ce.tenant_id AND obligation.crisis_event_id = ce.id;
--- View executes with security_invoker=true (caller's privileges); tenant isolation enforced
--- by RLS on underlying crisis_event + crisis_event_lifecycle_transition +
--- notification_crisis_escalation_obligation tables. View owner is crisis_event_current_state_view_owner
--- (non-BYPASSRLS); GRANT SELECT to crisis_event_reader role only.
+-- R1 HIGH-3 closure 2026-05-21: `security_invoker = true` is now in the executable DDL above
+-- (NOT just prose). Without it the view would run under the owner's privileges and bypass
+-- caller-scoped RLS on the underlying tables. The §8.1 deployment preflight DO block asserts
+-- the view has security_invoker=true after creation (see §8.1 assertion class F).
+-- View owner is crisis_event_current_state_view_owner (non-BYPASSRLS).
+-- R1 HIGH-2 closure 2026-05-21: GRANT SELECT split between two distinct reader roles —
+-- `crisis_event_staff_reader` for tenant-wide clinician/care-team access, and
+-- `crisis_event_patient_reader` for predicate-restricted patient/delegate access via a
+-- SEPARATE patient-summary view (`crisis_event_patient_summary_v`, see §4.NEW4a). Patient/delegate
+-- principals do NOT receive SELECT on this tenant-wide view; they receive SELECT only on the
+-- predicate-restricted view. Same data-minimization split pattern as P-038 R5 HIGH-1.
 ```
+
+### §4.NEW4a — `crisis_event_patient_summary_v` (CDM v1.10 NEW per R1 HIGH-2 closure 2026-05-21; patient/delegate self-scoped view)
+
+```sql
+CREATE VIEW crisis_event_patient_summary_v
+WITH (security_invoker = true, security_barrier = true) AS
+WITH vc AS (
+    SELECT verified_tenant_id, verified_patient_id, verified_delegate_id
+    FROM verify_session_jwt_and_extract_claims()
+)
+SELECT
+    ce.tenant_id,
+    ce.id AS crisis_event_id,
+    ce.patient_id,
+    ce.server_signal_id,
+    ce.crisis_type,
+    ce.severity,
+    ce.regulatory_reporting_enabled,
+    ce.detected_at,
+    latest.to_state AS current_state,
+    latest.transition_at AS current_state_at,
+    obligation.escalation_tier,
+    obligation.sweep_cycle_counter,
+    obligation.final_tier_exhausted_at,
+    obligation.undeliverable_deadline
+FROM crisis_event ce
+JOIN vc ON ce.tenant_id = vc.verified_tenant_id
+LEFT JOIN LATERAL (
+    SELECT to_state, transition_at
+    FROM crisis_event_lifecycle_transition lt
+    WHERE lt.tenant_id = ce.tenant_id AND lt.crisis_event_id = ce.id
+    ORDER BY lt.transition_at DESC, lt.id DESC
+    LIMIT 1
+) latest ON TRUE
+LEFT JOIN notification_crisis_escalation_obligation obligation
+    ON obligation.tenant_id = ce.tenant_id AND obligation.crisis_event_id = ce.id
+WHERE
+    -- Patient principal path: caller IS the patient
+    ce.patient_id = vc.verified_patient_id
+    -- Delegate principal path: caller IS a delegate WITH active emergency_contact_share consent
+    OR (vc.verified_delegate_id IS NOT NULL
+        AND EXISTS (
+            SELECT 1 FROM consent_grant cg
+            WHERE cg.tenant_id = ce.tenant_id
+              AND cg.delegate_principal_id = vc.verified_delegate_id
+              AND cg.patient_id = ce.patient_id
+              AND cg.scope_name = 'emergency_contact_share'
+              AND cg.status = 'active'
+              AND (cg.expires_at IS NULL OR cg.expires_at > now())
+        ));
+
+ALTER VIEW crisis_event_patient_summary_v OWNER TO crisis_event_patient_summary_view_owner;
+REVOKE ALL ON crisis_event_patient_summary_v FROM PUBLIC;
+GRANT SELECT ON crisis_event_patient_summary_v TO crisis_event_patient_reader;
+```
+
+**R1 HIGH-2 closure 2026-05-21 (data-minimization split per P-038 R5 HIGH-1 pattern):** the two reader-view pairs are:
+
+| View | Owner role | Reader role | Caller-class | Visibility |
+|---|---|---|---|---|
+| `crisis_event_current_state_v` | `crisis_event_current_state_view_owner` | `crisis_event_staff_reader` | clinician + care-team-member + admin | tenant-wide (clinical triage queue) |
+| `crisis_event_patient_summary_v` | `crisis_event_patient_summary_view_owner` | `crisis_event_patient_reader` | patient + delegate (IFF active emergency_contact_share consent) | self-scoped — caller's own patient_id OR delegated patient_ids only, enforced in view predicate via verify_session_jwt_and_extract_claims() + consent_grant join |
+
+Patient/delegate principals do NOT receive `crisis_event_staff_reader` membership; staff principals do NOT receive `crisis_event_patient_reader` membership. The endpoint dispatch table is updated: `/v1/crisis/active` reads `crisis_event_current_state_v` (staff reader role required); `/v1/crisis/mine` reads `crisis_event_patient_summary_v` (patient reader role required). DB-level grants enforce the role-class boundary; the view predicate enforces the per-row patient/delegate scope; tenant RLS on underlying tables enforces tenant isolation. Three layers of enforcement (RBAC + view predicate + RLS) — no single-layer bypass can leak crisis state across patients.
 
 ---
 
@@ -508,7 +579,8 @@ Final enumeration reconciled against §3 procedure spec + §8 deployment preflig
 | `crisis_responder` | clinician role + care-team-member role | EXECUTE on `record_crisis_response()` |
 | `crisis_resolver` | clinician role + care-team-member role | EXECUTE on `record_crisis_resolution()` |
 | `crisis_sweep_scheduler` | scheduled-job service account | EXECUTE on `execute_crisis_no_acknowledgement_sweep()` + INSERT on `crisis_sweep_execution` (for scheduling new sweep work items) + UPDATE on `crisis_sweep_execution` columns `(claimed_by_worker_id, claim_expires_at, fencing_token, heartbeat_at)` ONLY (NOT on `completed_at` or `sweep_cycle_id_committed` — those are set by the sweep wrapper itself under SECURITY DEFINER context) |
-| `crisis_event_reader` | clinician + care-team-member + patient + delegate (last two with predicate-restricted view) | SELECT on `crisis_event_current_state_v` |
+| `crisis_event_staff_reader` | clinician + care-team-member + admin | SELECT on `crisis_event_current_state_v` (tenant-wide; clinical triage queue) — R1 HIGH-2 closure 2026-05-21 split |
+| `crisis_event_patient_reader` | patient + delegate (latter IFF active emergency_contact_share consent grant) | SELECT on `crisis_event_patient_summary_v` (self-scoped predicate-restricted view) — R1 HIGH-2 closure 2026-05-21 split |
 
 ### Wrapper-owner roles (5; non-application)
 
@@ -526,13 +598,14 @@ Final enumeration reconciled against §3 procedure spec + §8 deployment preflig
 |---|---|---|
 | `crisis_event_lifecycle_transition_writer_owner` | `record_crisis_event_lifecycle_transition()` raw writer | Non-BYPASSRLS; the writer itself runs SECURITY DEFINER so the writer's tenant-context binding is the JWT-verified context of the caller, not the role's own. EXECUTE granted to exactly the 5 wrapper-owner roles above — no other roles. |
 
-### View-owner role (1)
+### View-owner roles (2; per R1 HIGH-2 closure 2026-05-21 split)
 
 | Role | Owns | Notes |
 |---|---|---|
-| `crisis_event_current_state_view_owner` | `crisis_event_current_state_v` derived view | Non-BYPASSRLS; view uses `security_invoker=true` so RLS on underlying tables is enforced against the caller's privileges. GRANT SELECT on the view to `crisis_event_reader` role only. |
+| `crisis_event_current_state_view_owner` | `crisis_event_current_state_v` (staff tenant-wide) | Non-BYPASSRLS; view uses `security_invoker=true` + `security_barrier=true` so RLS on underlying tables is enforced against the caller's privileges. GRANT SELECT only to `crisis_event_staff_reader`. |
+| `crisis_event_patient_summary_view_owner` | `crisis_event_patient_summary_v` (patient/delegate self-scoped) | Non-BYPASSRLS; same security_invoker+security_barrier flags; view body uses verify_session_jwt_and_extract_claims() + consent_grant predicate to restrict per-row visibility to caller's own patient_id OR delegated patient_ids only. GRANT SELECT only to `crisis_event_patient_reader`. |
 
-**Total: 13 net-new roles** (6 application + 5 wrapper-owner + 1 raw-writer-owner + 1 view-owner). Matches §1 enumeration. RBAC v1.3 → v1.4 count: prior 13 cycle baseline (P-038) + 13 net-new = bundle RBAC v1.4 total to be reconciled at §8 deployment preflight against canonical RBAC v1.3 enumeration.
+**Total: 15 net-new roles** (7 application + 5 wrapper-owner + 1 raw-writer-owner + 2 view-owner; per R1 HIGH-2 closure 2026-05-21 the 6-application count becomes 7 because `crisis_event_reader` is split into `crisis_event_staff_reader` + `crisis_event_patient_reader`, AND the 1-view-owner count becomes 2 because the views are split). Matches §1 enumeration (updated). RBAC v1.3 → v1.4 count: prior 13 cycle baseline (P-038) + 15 net-new = bundle RBAC v1.4 total to be reconciled at §8 deployment preflight against canonical RBAC v1.3 enumeration.
 
 ---
 
@@ -549,15 +622,18 @@ DECLARE
     v_entity_seed_missing TEXT;
     v_tenant_config_missing JSONB;
 BEGIN
-    -- (A) Verify the 13 net-new RBAC roles exist
+    -- (A) Verify the 15 net-new RBAC roles exist (R1 HIGH-2 closure 2026-05-21:
+    -- crisis_event_reader split into crisis_event_staff_reader + crisis_event_patient_reader;
+    -- 1 view-owner becomes 2: crisis_event_current_state_view_owner + crisis_event_patient_summary_view_owner)
     FOR v_role_missing IN
         SELECT unnest(ARRAY[
             'crisis_initiator', 'crisis_acknowledger', 'crisis_responder', 'crisis_resolver',
-            'crisis_sweep_scheduler', 'crisis_event_reader',
+            'crisis_sweep_scheduler',
+            'crisis_event_staff_reader', 'crisis_event_patient_reader',
             'crisis_initiation_wrapper_owner', 'crisis_acknowledgement_wrapper_owner',
             'crisis_response_wrapper_owner', 'crisis_resolution_wrapper_owner',
             'crisis_sweep_wrapper_owner', 'crisis_event_lifecycle_transition_writer_owner',
-            'crisis_event_current_state_view_owner'
+            'crisis_event_current_state_view_owner', 'crisis_event_patient_summary_view_owner'
         ])
         EXCEPT SELECT rolname FROM pg_roles
     LOOP
@@ -632,6 +708,66 @@ BEGIN
         RAISE EXCEPTION 'crisis-tenant-config-part-b-violations: %', v_tenant_config_missing::TEXT;
     END IF;
 
+    -- (R1 HIGH-1 closure 2026-05-21 — legacy-row migration coverage assertion):
+    -- This amendment's Phase 3 backfills `crisis_event_id` onto P-027 §4.66-4.68 rows via
+    -- (tenant_id, server_signal_id) -> crisis_event.id lookup BEFORE the NOT NULL ALTER.
+    -- For the day-1 pilot tenants (Telecheck-US / Heros-US greenfield + Telecheck-Ghana),
+    -- there are ZERO existing notification_crisis_* rows. If any environment ever attempts
+    -- this cutover with pre-existing rows lacking corresponding crisis_event rows, the
+    -- NOT NULL ALTER would either fail (column null) or strand orphaned rows (column
+    -- backfilled to placeholder uuid). Preflight asserts coverage:
+    -- (E0a) all dispatch_ledger rows have either crisis_event_id set OR can resolve via
+    --       (tenant_id, server_signal_id) -> crisis_event.id;
+    -- (E0b) same for provider_attempt;
+    -- (E0c) same for escalation_obligation.
+    -- If coverage is incomplete, the deploy MUST author legacy-source synthesis migration
+    -- creating audited crisis_event rows for each orphan BEFORE proceeding to Phase 3.
+    PERFORM 1 FROM public.notification_crisis_dispatch_ledger d
+    WHERE d.crisis_event_id IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM public.crisis_event ce
+          WHERE ce.tenant_id = d.tenant_id AND ce.server_signal_id = d.server_signal_id
+      )
+    LIMIT 1;
+    IF FOUND THEN
+        RAISE EXCEPTION 'crisis-backfill-coverage-violation: dispatch_ledger has orphan rows with no resolvable crisis_event match — author legacy-source synthesis migration before Phase 3 NOT NULL ALTER';
+    END IF;
+    PERFORM 1 FROM public.notification_crisis_provider_attempt p
+    WHERE p.crisis_event_id IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM public.crisis_event ce
+          WHERE ce.tenant_id = p.tenant_id AND ce.server_signal_id = p.server_signal_id
+      )
+    LIMIT 1;
+    IF FOUND THEN
+        RAISE EXCEPTION 'crisis-backfill-coverage-violation: provider_attempt has orphan rows with no resolvable crisis_event match';
+    END IF;
+    PERFORM 1 FROM public.notification_crisis_escalation_obligation o
+    WHERE o.crisis_event_id IS NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM public.crisis_event ce
+          WHERE ce.tenant_id = o.tenant_id AND ce.server_signal_id = o.server_signal_id
+      )
+    LIMIT 1;
+    IF FOUND THEN
+        RAISE EXCEPTION 'crisis-backfill-coverage-violation: escalation_obligation has orphan rows with no resolvable crisis_event match';
+    END IF;
+
+    -- (F) R1 HIGH-3 closure 2026-05-21 — view security_invoker assertion. The DDL specifies
+    -- WITH (security_invoker = true, security_barrier = true); verify the reloptions actually
+    -- materialized that way after CREATE VIEW. Without security_invoker=true the view would
+    -- run under owner privileges and bypass caller-scoped RLS on underlying crisis_event +
+    -- crisis_event_lifecycle_transition + notification_crisis_escalation_obligation tables.
+    PERFORM 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname IN ('crisis_event_current_state_v', 'crisis_event_patient_summary_v')
+      AND c.relkind = 'v'
+      AND NOT ('security_invoker=true' = ANY(c.reloptions));
+    IF FOUND THEN
+        RAISE EXCEPTION 'crisis-view-security-invoker-missing: at least one of {crisis_event_current_state_v, crisis_event_patient_summary_v} is missing security_invoker=true; re-create the view with WITH (security_invoker = true, security_barrier = true)';
+    END IF;
+
     -- (E) Tenant config Part C (emergency_contact_consent_enabled=true only; R31+R32):
     SELECT jsonb_agg(jsonb_build_object('tenant_id', tenant_id, 'missing', missing_keys))
     INTO v_tenant_config_missing
@@ -680,5 +816,10 @@ On any Phase N failure during cutover, rollback discards Phase N's changes via t
 **v0.1 DRAFT 2026-05-21:** pre-Codex-review skeleton. Contains §1 purpose + scope + §2 new entities (3 net-new + 3 additive column extensions to P-027 §4.66-4.68 + 1 OPTIONAL derived view) with executable DDL. §3-8 are stubs to be filled in v0.2 against SI-022 §3/§5/§7 normative content. Authored on `spec/P-040-cdm-v1.10-si-022-follow-on-2026-05-21` branch off main at `520565a` (post-P-039 merge). Commit `2f88322`.
 
 **v0.2 DRAFT 2026-05-21:** §4 audit events normative table filled in vs SI-022 v1.0 §3 normative content; §5 OpenAPI 6 endpoints filled in vs SI-022 v1.0 §5; §6 state machine 11 transition triples filled in vs SI-022 v1.0 §6 (post-R8+R11 expansion). §1 AUDIT_EVENTS scope reconciled: per-row category labels (7 Cat A + 0 Cat B + 5 Cat C; total 12) are authoritative; SI-022 v1.0 §3 summary tally drift ("8 Cat A + 4 Cat C") flagged for downstream prose-correction PR after P-040 lands. §3 (procedures), §7 (RBAC), §8 (preflight) remain stubs to be filled in v0.3. Commit `90d8387`.
+
+**v0.4 DRAFT 2026-05-21 — R1 closures applied (3 HIGH):**
+- **R1 HIGH-1 closed:** added §8.1 preflight assertion class (E0a/b/c) checking that all existing P-027 dispatch_ledger + provider_attempt + escalation_obligation rows have either crisis_event_id set OR resolvable via (tenant_id, server_signal_id) → crisis_event.id lookup BEFORE Phase 3 NOT NULL ALTER; deploy MUST author legacy-source synthesis migration if any orphan rows exist. Day-1 pilot tenants pass trivially (zero existing rows); assertion is defense-in-depth for future environment migrations.
+- **R1 HIGH-2 closed:** split crisis_event_reader role into crisis_event_staff_reader (tenant-wide; clinician/care-team/admin) + crisis_event_patient_reader (self-scoped; patient/delegate); added §4.NEW4a crisis_event_patient_summary_v view with verify_session_jwt_and_extract_claims() + consent_grant predicate enforcing per-row visibility to caller's own patient_id OR delegated patient_ids only. Three-layer enforcement (RBAC role split + view predicate + tenant RLS). RBAC net-new count 13 → 15. P-038 R5 HIGH-1 pattern application.
+- **R1 HIGH-3 closed:** corrected view DDL from WITH (security_barrier=true) to WITH (security_invoker = true, security_barrier = true) on both views; added §8.1 preflight assertion class (F) verifying both views have security_invoker=true in pg_class.reloptions after CREATE VIEW. Without security_invoker the view would have bypassed caller-scoped RLS by running under owner privileges.
 
 **v0.3 DRAFT 2026-05-21:** §3 procedures fully detailed: 6 SECURITY DEFINER procedures (1 raw `record_crisis_event_lifecycle_transition()` writer + 5 wrapper procedures `record_crisis_initiation` / `_acknowledgement_claim` / `_response` / `_resolution` / `execute_crisis_no_acknowledgement_sweep`); raw writer DDL with explicit EXECUTE-grants restricted to exactly the 5 wrapper-owner roles (anti-bypass discipline per P-034 + P-038); wrapper signatures + behavior contracts referencing SI-022 R34/R35/R36/R10/R11/R13 + R28/R39/R46/R47/R51/R53/R60/R63/R64 closure points. §7 RBAC fully enumerated: 13 net-new roles split as 6 application + 5 wrapper-owner + 1 raw-writer-owner + 1 view-owner. §8 deployment preflight contains a complete `DO $$ ... $$;` block with 5 assertion classes (RBAC roles exist + JWT migration seed rows + Part A every-tenant config + Part B regulatory_reporting=true config + Part C emergency_contact_consent_enabled=true config); §8.2 cutover sequencing enumerates 11 phases (RBAC → tables → backfill → triggers → RLS → procedures → views LAST per P-036 R6 → JWT seed → audit events → preflight DO block → OpenAPI endpoints last); §8.3 rollback discipline. Document is now complete and ready for first Codex adversarial review round.
