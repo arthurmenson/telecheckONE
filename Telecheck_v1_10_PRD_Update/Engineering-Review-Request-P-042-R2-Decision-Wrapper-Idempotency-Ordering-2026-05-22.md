@@ -116,14 +116,28 @@ Recommendation: **Option A** to close R2 with verbatim SI-023 body + documented 
 
 ## 6. Ratifier decision
 
-**[ ] Option A** — Close P-042 R2 with verbatim body; preserve SI-023 ratified architecture; document Codex R2 rejection in cycle log.
+**[X] Option A** — Close P-042 R2 with verbatim body; preserve SI-023 ratified architecture; document Codex R2 rejection in cycle log.
 
 **[ ] Option B** — Close P-042 R2 with verbatim body; open Track 6 follow-on hygiene cycle for SI-023 v1.0 → v1.1 amendment.
 
 **[ ] Option C** — Block P-042 + hot-fix SI-023 RATIFIED in place; novel P-041a supplemental ratification.
 
-**Ratifier decision date:** ________________
-**Ratifier signature(s):** ________________
+**Ratifier decision date:** 2026-05-22
+**Ratifier signature(s):** Evans (workstream lead) — chat-message ratification 2026-05-22: "We go with A"
+
+**Three-way recommendation summary at decision time:**
+- Claude: Option A (CLAUDE.md "do not silently fork"; SI-023 R1-R17 convergence already settled ordering; canonical caller contract makes ordering safe; Promotion Ledger immutability disfavors C)
+- Codex Pass-1 (source-first independent): Option B + explicit implementation hold
+- Codex Pass-2 (contrast-and-synthesize): Option B + explicit implementation hold
+
+**Disagreement at ratifier decision time:** Claude=A vs Codex Pass-2=B (per CLAUDE.md auto-proceed rule, disagreement → surface three-way to ratifier rather than auto-proceeding). Evans's plain-English question to Claude "what do we accomplish if we go with Claude's recommendation?" elicited a comparative scenario walkthrough; Evans then ratified Option A in chat.
+
+**Rationale (as recorded in P-042 §9 cycle log):**
+- Preserves SI-023 v1.0 RATIFIED architecture (matches CLAUDE.md "do not silently fork" discipline).
+- Honors the R1-R17 SI-023 Codex convergence + P-041 ratification on the wrapper-body shape.
+- Ships P-042 this week; opens the telecheck-app pilot implementation gate without 1-2 weeks of additional hygiene-cycle delay.
+- Trusts the canonical caller contract (single-tx call + propagate 40001 → HTTP-layer retry); pilot scope catches caller-contract violations via code review + integration tests.
+- If observed defect data later justifies the architectural concern, a future Track 6 / SI-023 v1.1 hygiene cycle remains available — but P-042 ships now on the ratified shape.
 
 ---
 
