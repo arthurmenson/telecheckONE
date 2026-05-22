@@ -5253,3 +5253,69 @@ The concurrency thread is intrinsic to the manual-template-review workflow (mult
 Cumulative: **~334 findings closed inline across 15 cycles; 1 CORRECT hard-floor item 6 STOP-to-ratifier (P-033 R1); 3 DISSOLVED hard-floor item 6 invocations (P-038 R6 + P-039 R6 + P-040 R15); 0 ERR escalations beyond ratifier consults.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines continue to scale.
 
 — Claude (Opus 4.7, 1M context), P-041 SI-023 Admin Backend Basics Slice v1.0 cycle close-out 2026-05-22 via auto-proceed. Registry v2.28. P-041 appended. **15th successive Q2 2026 auto-proceed ratification.** **🎉 5/5 PILOT-REQUIRED SLICES NOW SI-RATIFIED.** **TELECHECK-APP PILOT IMPLEMENTATION GATE OPENS FULLY.** Next deliverable per auto-proceed continuation: P-042 CDM v1.10 -> v1.11 follow-on amendment cycle for SI-023 canonical entity landing.
+
+---
+
+## Addendum 70 — P-042 ratification ceremony close-out (2026-05-22; 5/5 pilot-required Ghana revenue anchor slice CDM landings COMPLETE)
+
+**Trigger:** Codex R25 APPROVE on P-042 CDM v1.10 → v1.11 + AUDIT_EVENTS v5.12 → v5.13 + OpenAPI v0.5 → v0.6 + State Machines v1.4 → v1.5 + RBAC v1.4 → v1.5 (SI-023 Admin Backend Basics follow-on amendment); auto-proceed ratification via Codex APPROVE + Claude READY agreement.
+
+**Cycle metrics:**
+- **25 Codex adversarial-review rounds** (long-tail; class N convergence was cycle's biggest pivot)
+- **~28 findings closed inline**: ~26 within-scope HIGH/MED + 2 ratifier-decision hard-floor-class closures (R2 Option A "We go with A" 2026-05-22 + R20 Path-1 "1" 2026-05-22, both via Evans's chat-message decisions)
+- **0 ERR escalations** in P-042 cycle (R2 + R20 ratifier decisions surfaced via 3-option chat-message pattern; parallel to R2 closure ceremony)
+
+**Class N convergence trajectory** (cycle's longest sub-thread, 7 rounds of demotion-iteration + ratifier revert + 4 mechanical refinements):
+- R14: class N demoted from blocking → operational (noisy global comparison)
+- R15: tenant-attribution rewrite (GUC dependency)
+- R16: input-contract precondition split (silent observability regression)
+- R17: deployable SECDEF function + 13th RBAC role (inline-DO not deployable)
+- R18: monitor-owner BYPASSRLS + scheduler EXECUTE assertions (RLS + grant gaps)
+- R19: scheduler-registration verification gap (chicken-and-egg)
+- R20: observability proxy watches wrong signal (admin.dashboard_query_executed is user-emitted, not monitor-emitted)
+- **R20 Path-1 ratifier revert** ("1" 2026-05-22): collapse 7 rounds of patches into single revert to SI-023's literal blocking-preflight design; delete 13th RBAC role; delete monitor function; delete scheduler dependency
+- R21: rollback-sensitive Cat C emissions (two-DO-block + COMMIT pattern)
+- R22: stale-sentinel hazard (run_id scoping via session setting)
+- R23: transactional-wrapping hazard (Phase 10 autocommit contract)
+- R24: wrong probe execution context (DO-block-internal COMMIT probe)
+- **R25 APPROVE**
+
+**Content landed:**
+- 4 net-new CDM entities (admin_dashboard_query_execution + forms_template_admin_review + forms_template_admin_review_lifecycle_transition + admin_template_decision_idempotency_key)
+- 4 OPTIONAL canonical views (admin_crisis_operational_health_v + admin_consult_queue_health_v + admin_mode1_volume_health_v per SI-023 Sub-decision 2 + forms_template_admin_review_pending_v per P-042 R7 HIGH-2 mechanically enforcing SI-023 §7 "pending reviews" qualifier)
+- 6 SECDEF procedures (1 raw lifecycle writer + 3 dashboard read-wrappers + 2 template wrappers; 3-layer authorization defense LAYER A+B+C per P-038 R6 dissolution pattern)
+- 6 audit events under admin.* namespace (4 Cat A + 2 Cat C)
+- 5 OpenAPI endpoints under /v1/admin/*
+- 1 new state machine forms_template_admin_review_lifecycle (5 states / 5 transition triples)
+- 12 net-new RBAC roles
+- Class N two-DO-block design + run_id scoping + Phase 10 autocommit contract + DO-block-internal COMMIT probe
+- Class Q wrapper-owner DML/EXECUTE privilege preflight (including UPDATE-for-FOR-UPDATE per R8 HIGH-1)
+- Class H per-entity allowlist for admin review entities (R13 HIGH-1 reconciliation)
+- §4.NEW8g executable GRANT statements for each wrapper-owner role
+
+**🎉🎉 5 OF 5 PILOT-REQUIRED GHANA REVENUE ANCHOR SLICE CDM LANDINGS NOW COMPLETE:**
+
+| # | Slice | SI Ratification | CDM Follow-on Ratification | Status |
+|---|---|---|---|---|
+| 1 | SI-019 Medication Interaction | P-033 | P-034 | **FULLY SPEC-RATIFIED** |
+| 2 | SI-020 Async Consult | P-037 | P-038 | **FULLY SPEC-RATIFIED** |
+| 3 | SI-021 Mode 1 Conversational Floor | P-035 | P-036 | **FULLY SPEC-RATIFIED** |
+| 4 | SI-022 Crisis Response | P-039 | P-040 | **FULLY SPEC-RATIFIED** |
+| 5 | SI-023 Admin Backend Basics | P-041 | **P-042 (THIS ADDENDUM)** | **FULLY SPEC-RATIFIED** |
+
+Master Completion Plan v1.0 §A.5 pilot-viable scope item 5 of 5 spec-corpus deliverable RATIFIED. Pilot scope is now **FULLY spec-ratified**; Telecheck-app implementation can proceed across all 5 anchor slices unblocked.
+
+**Cumulative cycle statistics through P-042:**
+- 16th successive Q2 2026 auto-proceed ratification (P-026 → … → P-042)
+- ~362 findings closed inline across 16 cycles (~334 prior + ~28 in P-042)
+- 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP-to-ratifier)
+- 2 DISSOLVED hard-floor item 6 invocations (P-038 R6 + P-040 R15)
+- 2 ratifier-decision-driven closures (P-042 R2 Option A + P-042 R20 Path-1)
+- 0 ERR escalations in P-042 cycle
+
+**Commits:**
+- Spec branch: `1a02a04` (v1.0 RATIFIED on `spec/p042-cdm-si023-landing`)
+- Main RATIFY commit: `7fc1868` (Promotion Ledger P-042 + Artifact Registry v2.28 → v2.29)
+- Main merge commit: `eb79ae3` (--no-ff merge of `spec/p042-cdm-si023-landing` into main)
+
+**Next deliverable:** post-P-042 the pilot scope is fully spec-ratified. Remaining Master Completion Plan v1.0 work is telecheck-app code implementation across all 5 anchor slices, NOT specification authoring. The cockpit (status doc + Promotion Ledger + Artifact Registry + progress.json) is now in steady-state pending implementation milestones.
