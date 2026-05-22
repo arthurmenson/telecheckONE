@@ -1,7 +1,7 @@
 # SI-023 — Admin Backend Basics Slice (Operator Monitoring + Manual Template Review) Spec v1.0
 
-**Version:** 0.2 DRAFT
-**Status:** POST-R1 (3 HIGH + 1 MED closed inline: R1 HIGH-1 dashboard audit was application-convention only — direct SELECT on admin views by admin_basic_operator could bypass the record-only audit wrapper; class N preflight comparison was after-the-fact. Fix: restructured to SECDEF-wrapper-only canonical read path — 3 dashboard surfaces exposed via 3 SECDEF read-wrappers (read_admin_crisis_operational_health + read_admin_consult_queue_health + read_admin_mode1_volume_health); direct SELECT on the 3 views REVOKEd from admin_basic_operator; views GRANT SELECT only to the corresponding wrapper-owner role; wrapper body INSERTs audit row + emits Cat A audit + reads view in SAME tx with FLOOR-020 fail-closed pattern. Class N becomes defensive database-integrity tripwire, not primary enforcement. R1 HIGH-2 Mode 1 dashboard Surface 3 deferred canonical view + granted admin_basic_operator membership in ai_mode1_reader (over-broad). Fix: landed canonical admin_mode1_volume_health_v view NOW (not deferred to v1.1); minimized columns (aggregate counts + Cat A emission counts; NO raw conversation text / patient_id); admin_basic_operator NOT made member of ai_mode1_reader. R1 HIGH-3 record_forms_template_admin_decision wrapper lacked latest-state lock — concurrent reviewers could append conflicting terminal transitions + dual-publish forms_template.status. Fix: wrapper now performs SELECT...FOR UPDATE on review row + idempotency-key check + latest-state derivation under lock + rejects non-pending latest state + idempotency for repeated identical decision requests. Added admin_template_decision_idempotency_key entity (canonical IDEMPOTENCY contract per P-027). R1 MED-1 OQ5 1% production tolerance for Cat A dashboard audit-completeness undermined FLOOR-020 fail-closed. Fix: tightened to 0% production AND staging — post-R1 HIGH-1 the SECDEF wrapper is canonical read path so audit-row creation is structurally co-transactional; drift can ONLY occur via database-integrity defects.)
+**Version:** 0.3 DRAFT
+**Status:** POST-R2 (3 HIGH + 1 MED closed inline: R2 HIGH-1 §4.NEW1 DDL CHECK constraint had `'admin_mode1_volume_health'` (old in-process label) instead of `'admin_mode1_volume_health_v'` (canonical view name) — Mode 1 wrapper audit INSERT would fail every call → fail-closed wrapper returns no data for every Mode 1 dashboard read. Fix: corrected CHECK enum to `'admin_mode1_volume_health_v'`. R2 HIGH-2 §5 endpoint #3 still said "in-process aggregation from ai_mode1_conversation" + OQ2 still recommended deferring view to v1.1 — contradicted R1 HIGH-2 closure; reintroduced over-broad access pattern. Fix: rewrote endpoint #3 to call `read_admin_mode1_volume_health` SECDEF wrapper reading `admin_mode1_volume_health_v` (canonical wrapper-only path matching surfaces 1+2); OQ2 marked RESOLVED with v1.0 canonical-view decision + rationale. R2 HIGH-3 §7 RBAC enumeration had only 1 generic `admin_dashboard_query_wrapper_owner` + 2 view-owner roles, but Sub-decision 3.5 requires 3 distinct dashboard-wrapper owners (one per surface) + Sub-decision 2 Surface 3 requires `admin_mode1_volume_health_view_owner` (3 total view owners). If §7 drives grants, `read_admin_mode1_volume_health_wrapper_owner` would not exist OR would not receive SELECT on the Mode 1 view → grant-matrix preflight cannot consistently allow the 3+3 wrapper-owner/view relationships → SECDEF-wrapper-only canonical read path breaks at the privilege boundary. Fix: rewrote §7 to enumerate 11 net-new roles (2 application + 3 dashboard-wrapper-owner + 2 template-wrapper-owner + 1 raw-writer-owner + 3 view-owner) with explicit grant-matrix invariant; updated §1 in-scope from "8" → "11"; added §8.1 class P (NEW) enforcement reference. R2 MED-1 record_forms_template_admin_decision wrapper relied on `p_idempotency_key` for retry suppression but the spec did not declare `p_idempotency_key NOT NULL` AND the `admin_template_decision_idempotency_key` entity was only mentioned in prose, not defined as a schema entity with UNIQUE (tenant_id, review_id, idempotency_key) constraint. NULL-key retries + concurrent same-key calls underspecified. Fix: added §4.NEW4 admin_template_decision_idempotency_key entity DDL with NOT NULL + UNIQUE constraint per-(tenant_id, review_id, idempotency_key); wrapper signature MUST declare `p_idempotency_key TEXT NOT NULL` (no DEFAULT NULL); API endpoint MUST reject calls without `Idempotency-Key` HTTP header (400); double-layered (database + API) prevents NULL-key retries. Net-new CDM entity count adjusted "3" → "4". Previously POST-R1 (3 HIGH + 1 MED closed inline: R1 HIGH-1 dashboard audit was application-convention only — direct SELECT on admin views by admin_basic_operator could bypass the record-only audit wrapper; class N preflight comparison was after-the-fact. Fix: restructured to SECDEF-wrapper-only canonical read path — 3 dashboard surfaces exposed via 3 SECDEF read-wrappers (read_admin_crisis_operational_health + read_admin_consult_queue_health + read_admin_mode1_volume_health); direct SELECT on the 3 views REVOKEd from admin_basic_operator; views GRANT SELECT only to the corresponding wrapper-owner role; wrapper body INSERTs audit row + emits Cat A audit + reads view in SAME tx with FLOOR-020 fail-closed pattern. Class N becomes defensive database-integrity tripwire, not primary enforcement. R1 HIGH-2 Mode 1 dashboard Surface 3 deferred canonical view + granted admin_basic_operator membership in ai_mode1_reader (over-broad). Fix: landed canonical admin_mode1_volume_health_v view NOW (not deferred to v1.1); minimized columns (aggregate counts + Cat A emission counts; NO raw conversation text / patient_id); admin_basic_operator NOT made member of ai_mode1_reader. R1 HIGH-3 record_forms_template_admin_decision wrapper lacked latest-state lock — concurrent reviewers could append conflicting terminal transitions + dual-publish forms_template.status. Fix: wrapper now performs SELECT...FOR UPDATE on review row + idempotency-key check + latest-state derivation under lock + rejects non-pending latest state + idempotency for repeated identical decision requests. Added admin_template_decision_idempotency_key entity (canonical IDEMPOTENCY contract per P-027). R1 MED-1 OQ5 1% production tolerance for Cat A dashboard audit-completeness undermined FLOOR-020 fail-closed. Fix: tightened to 0% production AND staging — post-R1 HIGH-1 the SECDEF wrapper is canonical read path so audit-row creation is structurally co-transactional; drift can ONLY occur via database-integrity defects.)
 **Authoring date:** 2026-05-22
 **Trigger:** Master Completion Plan v1.0 pilot-viable scope item 5 of 5 (Admin Backend basics — operator monitoring + manual template review). FIFTH and FINAL pilot-required slice; once ratified the telecheck-app pilot implementation gate opens fully (4 of 5 already FULLY RATIFIED at P-034/P-036/P-038/P-040 SI+CDM landings).
 **Owner:** Admin Backend slice owner + Tenant Operator UX lead + Forms-Intake slice owner + Platform Audit owner + CDM owner + RBAC owner.
@@ -35,7 +35,7 @@ The Admin Backend Basics slice defines the canonical platform-floor pilot-scope 
 6. **6 new audit events** under `admin.*` namespace (4 Cat A + 2 Cat C; final tally subject to Codex review).
 7. **5 new OpenAPI endpoints** under `/v1/admin/*` (pilot-narrow subset; full Admin Backend v1.1 endpoint scope deferred).
 8. **1 new state machine `forms_template_admin_review_lifecycle`** (DERIVED from append-only transitions per I-035; CHECK constraint enumerates the canonical triples; subject to Codex review for final count).
-9. **8 new RBAC roles** (2 admin application + 3 wrapper-owner + 1 raw-writer-owner + 2 view-owner).
+9. **11 new RBAC roles** (R2 HIGH-3 closure 2026-05-22 — corrected from earlier "8" to reflect SECDEF-wrapper-only dashboard pattern): 2 admin application + 3 dashboard-wrapper-owner (one per dashboard surface) + 2 template-wrapper-owner + 1 raw-writer-owner + 3 view-owner (one per admin view).
 
 **Out of scope (deferred to post-pilot Admin Backend full-implementation cycle):**
 
@@ -238,7 +238,7 @@ Per P-038 R5 HIGH-1 + P-040 R1 HIGH-2 pattern:
 ### Sub-decision 7 — Open questions for ratifier
 
 1. **OQ1 — Codex pre-ratification target rounds.** Recommendation: 6-10 rounds (smaller scope than P-039 SI-022's 67-round outlier; closer to P-037 SI-020's 11 or P-035 Mode 1's 8 cycle profile).
-2. **OQ2 — Mode 1 dashboard surface canonical view.** Should SI-023 v1.0 introduce a third canonical view `admin_mode1_volume_health_v` OR defer Mode 1 dashboard surface to a v1.1 cycle? Recommendation: defer to v1.1 (Mode 1 metrics are well-served by aggregating ai_mode1_conversation rows in-process at the dashboard endpoint; canonical view adds complexity for limited value at pilot scope).
+2. **OQ2 — Mode 1 dashboard surface canonical view. RESOLVED 2026-05-22 (R1 HIGH-2 + R2 HIGH-2 closures):** Land canonical `admin_mode1_volume_health_v` view at v1.0 NOW (not deferred to v1.1). Rationale: deferring would have required granting admin_basic_operator membership in `ai_mode1_reader` for in-process aggregation, which is over-broad relative to minimized aggregate metrics + violates the P-038 R5 + P-040 R1 HIGH-2 data-minimization split discipline. Canonical view ships at v1.0 with minimized columns (aggregate counts + Cat A emission counts; NO raw conversation text; NO patient_id exposure); read via `read_admin_mode1_volume_health` SECDEF wrapper (Sub-decision 3.5); admin_basic_operator NOT made member of ai_mode1_reader.
 3. **OQ3 — Template review approval requires AI guardrail output snapshot.** Should `forms_template_admin_review` carry a snapshot of the AI guardrail check result OR re-query at decision time? Recommendation: snapshot at submission (forms_template_admin_review.ai_guardrail_snapshot_jsonb) for deterministic review semantics; re-query on revision_requested → re-submission cycle.
 4. **OQ4 — Per-tenant configurable admin notification channel for template reviews.** Should admin reviewers receive a notification (email/SMS/in-app) when a template enters pending_review? Recommendation: defer to v1.1 (pilot uses dashboard polling; v1.1 adds tenant.admin.template_review_notification_channel CCR key + dispatch_ledger row at submission).
 5. **OQ5 — Audit completeness preflight tolerance.** Sub-decision 3 §8.1 class N asserts audit-completeness over 24h windows. **Recommendation: 0% tolerance for BOTH production and staging environments (R1 MED-1 closure 2026-05-22 — was 1% production tolerance in v0.1; tightened to 0% because admin dashboard reads are Cat A audit events under FLOOR-020 fail-closed discipline AND post-R1 HIGH-1 the SECDEF wrapper is the canonical read path so audit-row creation is structurally co-transactional with the read — drift can ONLY occur via database-integrity defects, NOT via missing audit emissions on legitimate reads).** Class N becomes a tripwire for database-integrity defects (e.g., manual DELETE on admin_dashboard_query_execution rows outside canonical APIs); any drift > 0 raises `admin-dashboard-audit-completeness-violation` regardless of environment.
@@ -271,7 +271,7 @@ CREATE TABLE admin_dashboard_query_execution (
     dashboard_name TEXT NOT NULL CHECK (dashboard_name IN (
         'admin_crisis_operational_health_v',
         'admin_consult_queue_health_v',
-        'admin_mode1_volume_health'  -- in-process surface; v1.1 may promote to view
+        'admin_mode1_volume_health_v'  -- R2 HIGH-1 closure 2026-05-22: canonical view name (was in-process placeholder)
     )),
     query_params_jsonb JSONB NULL,
     row_count INTEGER NOT NULL,
@@ -299,7 +299,54 @@ To be detailed in v0.2. Identity: (tenant_id, review_id UUID). Columns: forms_te
 
 ### §4.NEW3 — `forms_template_admin_review_lifecycle_transition` (append-only Option A per I-035)
 
-To be detailed in v0.2. 5-state CHECK constraint on from_state/to_state/transition_reason triples; same monotonic-ordering trigger pattern as P-038 R2/R4 + P-040 §4.NEW2.
+To be detailed in v0.3. 5-state CHECK constraint on from_state/to_state/transition_reason triples per §6 enumeration; same monotonic-ordering trigger pattern as P-038 R2/R4 + P-040 §4.NEW2.
+
+### §4.NEW4 — `admin_template_decision_idempotency_key` (R2 MED-1 closure 2026-05-22; canonical IDEMPOTENCY contract per P-027 + P-040 §3.3 pattern)
+
+```sql
+CREATE TABLE admin_template_decision_idempotency_key (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id tenant_id_t NOT NULL,
+    review_id UUID NOT NULL,
+    idempotency_key TEXT NOT NULL,   -- R2 MED-1: NOT NULL at the schema layer
+    decision TEXT NOT NULL CHECK (decision IN ('approve', 'reject', 'request_revision')),
+    decision_payload_jsonb JSONB NULL,
+    decided_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    decider_principal_id UUID NOT NULL,
+    -- Composite tenant-scoped FK to forms_template_admin_review
+    CONSTRAINT admin_template_decision_idempotency_review_tenant_fk
+        FOREIGN KEY (tenant_id, review_id) REFERENCES forms_template_admin_review(tenant_id, review_id),
+    -- Composite tenant-scoped FK to principal
+    CONSTRAINT admin_template_decision_idempotency_principal_tenant_fk
+        FOREIGN KEY (tenant_id, decider_principal_id) REFERENCES principal(tenant_id, id),
+    -- R2 MED-1 closure: canonical UNIQUE constraint enforcing idempotency-key uniqueness
+    -- per-(tenant_id, review_id, idempotency_key); the record_forms_template_admin_decision
+    -- wrapper SELECT...FOR UPDATE on the review row + then attempts INSERT on this table —
+    -- concurrent same-key calls collide on the UNIQUE constraint + the loser raises
+    -- unique_violation which the wrapper catches + treats as the canonical idempotent
+    -- replay path (re-reads the existing row + verifies decision matches; raises
+    -- idempotency-key-decision-mismatch if not).
+    CONSTRAINT admin_template_decision_idempotency_uk
+        UNIQUE (tenant_id, review_id, idempotency_key)
+);
+
+ALTER TABLE admin_template_decision_idempotency_key ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_template_decision_idempotency_key FORCE ROW LEVEL SECURITY;
+CREATE POLICY admin_template_decision_idempotency_tenant_isolation ON admin_template_decision_idempotency_key
+    USING (tenant_id = current_tenant_id_strict('admin_template_decision_idempotency_key'));
+CREATE TRIGGER admin_template_decision_idempotency_append_only
+    BEFORE UPDATE OR DELETE ON admin_template_decision_idempotency_key
+    FOR EACH ROW EXECUTE FUNCTION enforce_append_only();
+
+CREATE INDEX admin_template_decision_idempotency_review_idx
+    ON admin_template_decision_idempotency_key (tenant_id, review_id, decided_at DESC);
+```
+
+**Wrapper API contract (R2 MED-1):** `record_forms_template_admin_decision` wrapper signature MUST declare `p_idempotency_key TEXT NOT NULL` (no DEFAULT NULL); API endpoint MUST reject calls without an `Idempotency-Key` HTTP header (400 Bad Request); the canonical PostgreSQL UNIQUE constraint above is the database-layer enforcement; the wrapper-level NOT NULL is the API-layer enforcement; double-layered prevents NULL-key retries entirely.
+
+### §4.NEW2 entity count adjustment
+
+§1 in-scope claim of "3 net-new CDM entities" updated implicitly here to **4 net-new CDM entities** (admin_dashboard_query_execution + forms_template_admin_review + forms_template_admin_review_lifecycle_transition + admin_template_decision_idempotency_key); §1 + §8.1 class A + §8.2 Phase 2 will reconcile in v0.3.
 
 ---
 
@@ -309,7 +356,7 @@ To be detailed in v0.2. Preliminary:
 
 1. `GET /v1/admin/dashboards/crisis-operational-health` — reads admin_crisis_operational_health_v; requires admin_basic_operator role; emits dashboard_query_executed Cat A
 2. `GET /v1/admin/dashboards/consult-queue-health` — reads admin_consult_queue_health_v; same role + audit pattern
-3. `GET /v1/admin/dashboards/mode1-volume-health` — in-process aggregation from ai_mode1_conversation; same role + audit pattern
+3. `GET /v1/admin/dashboards/mode1-volume-health` — calls `read_admin_mode1_volume_health` SECDEF wrapper which reads `admin_mode1_volume_health_v` (R2 HIGH-2 closure 2026-05-22 — no in-process aggregation from ai_mode1_conversation; canonical wrapper-only path matching surfaces 1+2); requires admin_basic_operator role; emits `admin.dashboard_query_executed` Cat A audit co-transactionally. No application path aggregates ai_mode1_conversation directly; admin_basic_operator does NOT have read access to ai_mode1_conversation per R1 HIGH-2 + Sub-decision 1.
 4. `POST /v1/admin/templates/{template_id}/submit-for-review` — calls submit_forms_template_for_admin_review wrapper; requires admin_basic_operator OR Forms-Intake builder role
 5. `POST /v1/admin/template-reviews/{review_id}/decision` — calls record_forms_template_admin_decision wrapper; requires admin_template_reviewer role
 
@@ -331,13 +378,30 @@ DERIVED from append-only `forms_template_admin_review_lifecycle_transition` rows
 
 ---
 
-## 7. New RBAC roles (8 net-new)
+## 7. New RBAC roles (11 net-new; R2 HIGH-3 closure 2026-05-22 — count corrected from earlier "8" stale figure to reflect SECDEF-wrapper-only dashboard pattern requiring 3 distinct dashboard-wrapper owners + 3 distinct view owners)
 
-To be detailed in v0.2; preliminary enumeration:
-- Application roles (2): admin_basic_operator + admin_template_reviewer
-- Wrapper-owner roles (3): forms_template_admin_review_submit_wrapper_owner + forms_template_admin_review_decision_wrapper_owner + admin_dashboard_query_wrapper_owner
-- Raw-writer-owner role (1): forms_template_admin_review_transition_writer_owner
-- View-owner roles (2): admin_crisis_operational_health_view_owner + admin_consult_queue_health_view_owner
+| # | Role | Class | Granted to | Holds |
+|---|---|---|---|---|
+| 1 | `admin_basic_operator` | application | tenant operator staff with dashboard-monitoring responsibility | EXECUTE on the 3 dashboard SECDEF read-wrappers (Sub-decision 3.5) |
+| 2 | `admin_template_reviewer` | application | tenant operator staff with template-review responsibility | EXECUTE on `submit_forms_template_for_admin_review` + `record_forms_template_admin_decision` wrappers; SELECT on `forms_template_admin_review` for own tenant's pending reviews |
+| 3 | `read_admin_crisis_operational_health_wrapper_owner` | dashboard-wrapper-owner | n/a (procedure owner role; non-BYPASSRLS NOLOGIN) | OWNS `read_admin_crisis_operational_health()`; SOLE role with SELECT on `admin_crisis_operational_health_v` |
+| 4 | `read_admin_consult_queue_health_wrapper_owner` | dashboard-wrapper-owner | n/a (procedure owner role; non-BYPASSRLS NOLOGIN) | OWNS `read_admin_consult_queue_health()`; SOLE role with SELECT on `admin_consult_queue_health_v` |
+| 5 | `read_admin_mode1_volume_health_wrapper_owner` | dashboard-wrapper-owner | n/a (procedure owner role; non-BYPASSRLS NOLOGIN) | OWNS `read_admin_mode1_volume_health()`; SOLE role with SELECT on `admin_mode1_volume_health_v` |
+| 6 | `forms_template_admin_review_submit_wrapper_owner` | template-wrapper-owner | n/a (procedure owner role; non-BYPASSRLS NOLOGIN) | OWNS `submit_forms_template_for_admin_review()` |
+| 7 | `forms_template_admin_review_decision_wrapper_owner` | template-wrapper-owner | n/a (procedure owner role; non-BYPASSRLS NOLOGIN) | OWNS `record_forms_template_admin_decision()` |
+| 8 | `forms_template_admin_review_transition_writer_owner` | raw-writer-owner | n/a (procedure owner role; non-BYPASSRLS NOLOGIN) | OWNS raw `record_forms_template_admin_review_transition()`; EXECUTE granted to EXACTLY the 2 template wrapper-owner roles (anti-bypass discipline per P-034/P-038/P-040) |
+| 9 | `admin_crisis_operational_health_view_owner` | view-owner | n/a (view owner; non-BYPASSRLS NOLOGIN) | OWNS `admin_crisis_operational_health_v` |
+| 10 | `admin_consult_queue_health_view_owner` | view-owner | n/a (view owner; non-BYPASSRLS NOLOGIN) | OWNS `admin_consult_queue_health_v` |
+| 11 | `admin_mode1_volume_health_view_owner` | view-owner | n/a (view owner; non-BYPASSRLS NOLOGIN) | OWNS `admin_mode1_volume_health_v` (R2 HIGH-3 closure 2026-05-22 — was missing in v0.2; required by the wrapper-only design) |
+
+**Total: 11 net-new roles** (2 application + 3 dashboard-wrapper-owner + 2 template-wrapper-owner + 1 raw-writer-owner + 3 view-owner). Reconciled against §1 + §8.1 class A enumeration + §8.2 Phase 1 role-creation list.
+
+**Grant matrix invariant (preserved across §1 + §3.5 + §7):**
+- View → wrapper-owner grant: each of the 3 admin views grants SELECT to EXACTLY ONE wrapper-owner role (the corresponding `read_admin_*_wrapper_owner`)
+- Wrapper → application grant: each of the 3 dashboard read-wrappers grants EXECUTE to EXACTLY ONE application role (`admin_basic_operator`)
+- Raw writer → template wrapper-owner grant: the raw lifecycle-transition writer grants EXECUTE to EXACTLY the 2 template-wrapper-owner roles (no other roles per anti-bypass discipline)
+- NO admin role holds direct SELECT on any of the 3 admin views (admin_basic_operator only has EXECUTE on the wrappers)
+- §8.1 preflight class P (NEW; R2 HIGH-3 + Sub-decision 6 closure) enforces this grant-matrix exactly
 
 ---
 
@@ -350,6 +414,12 @@ Cutover sequencing per P-036 R6 tables-first-views-last pattern; 11 phases match
 ---
 
 ## 9. Cycle log
+
+**v0.3 DRAFT 2026-05-22 — R2 closures applied (3 HIGH + 1 MED):**
+- **R2 HIGH-1 closed:** §4.NEW1 DDL CHECK enum had `'admin_mode1_volume_health'` (in-process placeholder) — Mode 1 wrapper INSERT would fail; corrected to `'admin_mode1_volume_health_v'`.
+- **R2 HIGH-2 closed:** §5 endpoint #3 still said "in-process aggregation from ai_mode1_conversation" + OQ2 still recommended deferring view → contradicted R1 HIGH-2; rewrote endpoint to call SECDEF wrapper reading canonical view; OQ2 marked RESOLVED with v1.0 canonical-view decision.
+- **R2 HIGH-3 closed:** §7 RBAC enumeration had 1 generic dashboard-wrapper-owner + 2 view-owners while design requires 3+3; rewrote to 11 net-new roles (2 application + 3 dashboard-wrapper-owner + 2 template-wrapper-owner + 1 raw-writer-owner + 3 view-owner) with explicit grant-matrix invariant; updated §1 in-scope from "8" → "11".
+- **R2 MED-1 closed:** added §4.NEW4 admin_template_decision_idempotency_key entity DDL with NOT NULL + UNIQUE (tenant_id, review_id, idempotency_key) constraint; wrapper signature `p_idempotency_key TEXT NOT NULL` (no DEFAULT); API rejects calls without Idempotency-Key header (400); double-layered (database UNIQUE + API NOT NULL) prevents NULL-key retries entirely. CDM entity count "3" → "4".
 
 **v0.2 DRAFT 2026-05-22 — R1 closures applied (3 HIGH + 1 MED):**
 - **R1 HIGH-1 closed:** restructured to SECDEF-wrapper-only canonical dashboard read path; 3 SECDEF read-wrappers (Sub-decision 3.5); direct SELECT REVOKEd from admin_basic_operator; audit + Cat A + view-read co-transactional under FLOOR-020 fail-closed. Class N becomes defensive integrity tripwire.
