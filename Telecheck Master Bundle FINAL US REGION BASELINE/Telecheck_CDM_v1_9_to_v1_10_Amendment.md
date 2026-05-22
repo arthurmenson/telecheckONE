@@ -1,7 +1,7 @@
 # CDM v1.9 → v1.10 + AUDIT_EVENTS v5.11 → v5.12 + OpenAPI v0.4 → v0.5 + State Machines v1.3 → v1.4 + RBAC v1.3 → v1.4 Amendment (SI-022 Crisis Response follow-on)
 
-**Version:** 0.2 DRAFT
-**Status:** pre-Codex-review (sections 4 + 5 + 6 filled in vs SI normative content; §3 procedures and §7-8 RBAC/preflight still stubs to be filled in v0.3)
+**Version:** 0.3 DRAFT
+**Status:** pre-Codex-review (sections 3 + 4 + 5 + 6 + 7 + 8 all filled in vs SI-022 v1.0 normative content; document complete and ready for first Codex adversarial review round)
 **Authoring date:** 2026-05-21
 **Trigger:** Promotion Ledger P-039 (SI-022 Crisis Response Slice v1.0 RATIFIED 2026-05-21 via Codex R67 ship-it APPROVE; Registry v2.25 → v2.26). Per the established post-P-029 SI-spec-first promotion pattern, SI-022's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via a separate amendment cycle following SI ratification. **EIGHTH instance** of the SI-spec-first promotion pattern (P-029, P-032, P-034, P-036, P-038, P-040 — note P-035 was SI-only, and P-037 was followed by P-038 as its CDM follow-on; this P-040 is the 6th follow-on amendment in the post-P-029 lineage).
 **Owner:** Crisis Response slice owner + Platform AI Safety + Mode 1 AI Service owner + Notification slice owner + Adverse-Event slice owner + Audit owner + CDM owner + AUDIT_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -318,7 +318,100 @@ LEFT JOIN notification_crisis_escalation_obligation obligation
 
 ## 3. New SECURITY DEFINER procedures (6 procedures owned by 5 owner roles)
 
-To be detailed in v0.2: (1) raw `record_crisis_event_lifecycle_transition()` writer (owner: `crisis_event_lifecycle_transition_writer_owner`; EXECUTE granted to exactly the 4 wrapper-owner roles below + crisis_sweep_wrapper_owner — no other roles); (2) `record_crisis_initiation()` (owner: crisis_initiation_wrapper_owner; called by Mode 1 handler after FLOOR-020 emit + crisis_event INSERT; enforces 3-layer tenant config validation Part A+B+C per R63/R65); (3) `record_crisis_acknowledgement_claim()` (owner: crisis_acknowledgement_wrapper_owner; tier-derived-from-JWT-principal per R35+R36; resets deadline + escalation_tier = GREATEST(current, acknowledging_tier) per R34); (4) `record_crisis_response()` (owner: crisis_response_wrapper_owner); (5) `record_crisis_resolution()` (owner: crisis_resolution_wrapper_owner; SOLE terminalization path per R11); (6) `execute_crisis_no_acknowledgement_sweep()` (owner: crisis_sweep_wrapper_owner; STEP A→F atomic transaction with R53 guarded UPDATE + STEP F triple-guard).
+Six SECURITY DEFINER procedures land at v1.10 — one raw append-only writer to `crisis_event_lifecycle_transition` plus five caller-class wrappers. All procedures are schema-qualified + locked search_path per the canonical P-034 R7 hardening pattern + the canonical P-038 R4 invariant-trigger hardening pattern. EXECUTE grants on the raw writer are restricted exclusively to the 5 wrapper-owner roles enumerated below — no other roles receive EXECUTE on the raw writer (anti-bypass enforcement; matches the canonical anti-bypass discipline established at P-034 §3 + P-038 §3 R9 MED-1 closure).
+
+### §3.1 — `record_crisis_event_lifecycle_transition()` (RAW writer; owner: `crisis_event_lifecycle_transition_writer_owner`)
+
+```sql
+CREATE FUNCTION record_crisis_event_lifecycle_transition(
+    p_tenant_id tenant_id_t,
+    p_crisis_event_id UUID,
+    p_from_state TEXT,
+    p_to_state TEXT,
+    p_transition_reason TEXT,
+    p_actor_principal_id UUID,
+    p_transition_payload JSONB
+) RETURNS BIGINT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_transition_id BIGINT;
+BEGIN
+    INSERT INTO public.crisis_event_lifecycle_transition (
+        tenant_id, crisis_event_id, from_state, to_state, transition_reason,
+        transition_at, actor_principal_id, transition_payload
+    ) VALUES (
+        p_tenant_id, p_crisis_event_id, p_from_state, p_to_state, p_transition_reason,
+        now(), p_actor_principal_id, p_transition_payload
+    )
+    RETURNING id INTO v_transition_id;
+    RETURN v_transition_id;
+END;
+$$;
+
+ALTER FUNCTION record_crisis_event_lifecycle_transition(
+    tenant_id_t, UUID, TEXT, TEXT, TEXT, UUID, JSONB
+) OWNER TO crisis_event_lifecycle_transition_writer_owner;
+
+REVOKE EXECUTE ON FUNCTION record_crisis_event_lifecycle_transition(
+    tenant_id_t, UUID, TEXT, TEXT, TEXT, UUID, JSONB
+) FROM PUBLIC;
+
+-- EXECUTE granted to EXACTLY the 5 wrapper-owner roles enumerated below.
+-- No other roles receive EXECUTE on the raw writer (P-034 + P-038 anti-bypass discipline).
+GRANT EXECUTE ON FUNCTION record_crisis_event_lifecycle_transition(
+    tenant_id_t, UUID, TEXT, TEXT, TEXT, UUID, JSONB
+) TO crisis_initiation_wrapper_owner,
+     crisis_acknowledgement_wrapper_owner,
+     crisis_response_wrapper_owner,
+     crisis_resolution_wrapper_owner,
+     crisis_sweep_wrapper_owner;
+```
+
+The raw writer is the canonical append-only state-transition boundary. The 11-triple CHECK constraint (per §4.NEW2) + the BEFORE INSERT continuity/monotonic trigger together enforce that no invalid or backdated transition can land regardless of caller. The raw writer is therefore the SOLE INSERT path into `crisis_event_lifecycle_transition`; direct INSERTs by application roles are rejected at the privilege boundary (no role other than these 5 wrapper owners has INSERT privilege via the writer; base-table INSERTs are also revoked from PUBLIC).
+
+### §3.2 — `record_crisis_initiation()` (wrapper; owner: `crisis_initiation_wrapper_owner`)
+
+Called by Mode 1 handler in the same atomic transaction as the FLOOR-020 `crisis_detection_trigger` Cat A emit + the `crisis_event` INSERT + the `(none → detected / initial_detection)` lifecycle transition + the `crisis.detected` Cat A emit. Enforces 3-layer tenant config validation per R63/R65: asserts fanout_channels[] non-empty + clinical_on_call_channel/recipient/principal_id non-null + (IFF regulatory_reporting=true) operator_escalation_channel/recipient/principal_id non-null + (IFF emergency_contact_consent_enabled=true) emergency_contact_channel non-null; fail-closed emits `crisis.dispatch_attempt_failed` Cat C with payload `runtime_validation_failed=true` + the specific missing key list. Allocates the `notification_crisis_escalation_obligation` row with `sweep_cycle_counter = 1` + `escalation_tier = 'care_team'` + the initial `undeliverable_deadline`. Returns the new `crisis_event_id`.
+
+Signature: `record_crisis_initiation(p_tenant_id, p_patient_id, p_server_signal_id, p_crisis_type, p_severity, p_regulatory_reporting_enabled, p_intake_payload_envelope) RETURNS UUID`.
+
+### §3.3 — `record_crisis_acknowledgement_claim()` (wrapper; owner: `crisis_acknowledgement_wrapper_owner`)
+
+Caller MUST pass `Idempotency-Key` per IDEMPOTENCY contract. Tier-derived-from-JWT-principal per SI-022 R35+R36: NO caller-supplied tier parameter — the wrapper looks up the caller's `recipient_role` by joining `notification_crisis_provider_attempt` on `recipient_principal_id = (verify_session_jwt_and_extract_claims()).principal_id`, derives `acknowledging_tier` from recipient_role per the canonical mapping (care_team → 'care_team' tier; clinical_on_call → 'clinical_on_call' tier; operator_escalation → 'regulatory' tier), and rejects (raises `tier_ownership_unauthorized`) if no eligible provider_attempt row exists. Additional R36 HIGH-1 guard: rejects (raises `tier_ownership_below_current_tier`) if `acknowledging_tier < current_escalation_tier` (prevents lower-tier acknowledgement from repeatedly resetting deadlines + suppressing escalation pressure). On success: (a) INSERTs `crisis_event_lifecycle_transition` via raw writer with reason `clinician_acknowledgement` (from_state derived from current state); (b) UPDATEs `notification_crisis_escalation_obligation` resetting `undeliverable_deadline = now() + INTERVAL_for_severity_response_window` + `escalation_tier = GREATEST(current, acknowledging_tier)` per R34 HIGH-2; (c) emits `crisis.acknowledged` Cat A audit in same tx.
+
+Signature: `record_crisis_acknowledgement_claim(p_tenant_id, p_crisis_event_id, p_idempotency_key) RETURNS VOID`.
+
+### §3.4 — `record_crisis_response()` (wrapper; owner: `crisis_response_wrapper_owner`)
+
+Same tier-derivation discipline as §3.3. Idempotent. INSERTs lifecycle transition with reason `clinician_response` (from `acknowledged → responded`); resets `undeliverable_deadline = now() + INTERVAL_for_severity_resolution_window`; sets `escalation_tier = GREATEST(current, responding_tier)`. Emits `crisis.responded` Cat A audit.
+
+Signature: `record_crisis_response(p_tenant_id, p_crisis_event_id, p_response_type, p_response_payload, p_idempotency_key) RETURNS VOID`.
+
+### §3.5 — `record_crisis_resolution()` (wrapper; owner: `crisis_resolution_wrapper_owner`)
+
+**SOLE terminalization path** per SI-022 R11 closure. Same tier-derivation discipline. Idempotent. INSERTs lifecycle transition with reason `clinician_resolution` (from `responded → resolved` OR `escalated → resolved`); atomically sets `notification_crisis_escalation_obligation.escalation_tier = NULL` to drop the row from sweep eligibility (R10 BACKSTOP). Emits `crisis.resolved` Cat A audit.
+
+Signature: `record_crisis_resolution(p_tenant_id, p_crisis_event_id, p_resolution_outcome, p_resolution_payload, p_idempotency_key) RETURNS VOID`.
+
+### §3.6 — `execute_crisis_no_acknowledgement_sweep()` (wrapper; owner: `crisis_sweep_wrapper_owner`)
+
+Per-row STEP A→F atomic transaction per SI-022 Sub-decision 6 canonical contract:
+
+- **STEP A** (R53 guarded UPDATE): atomic eligibility-revalidation + sweep_cycle_counter increment via UPDATE-RETURNING on `notification_crisis_escalation_obligation`. Predicates: `now() > undeliverable_deadline AND escalation_key IS NULL AND escalation_tier IS NOT NULL AND lifecycle.current_state IN (4 valid states) AND sweep_cycle_counter+1 = $execution.scheduled_for_obligation_generation`. ROW_COUNT=0 → ROLLBACK + emit `crisis.sweep_stale_eligibility_dropped` Cat C in separate autocommit tx + mark execution completed-as-stale-no-op + EXIT.
+- **STEP B**: INSERT `crisis_event_lifecycle_transition` via raw writer with 4-way reason mapping from current_state (R12 HIGH-2).
+- **STEP C**: INSERT `notification_crisis_provider_attempt` rows via `INSERT...SELECT...FROM compute_crisis_recipient_mapping(crisis_event_id, severity, target_tier) ON CONFLICT ON CONSTRAINT notification_crisis_provider_attempt_idempotency_uk DO NOTHING` (R28+R39+R64). Then EXISTENCE invariant verification: `SELECT COUNT(*) FROM provider_attempt WHERE tenant_id+crisis_event_id+sweep_cycle_id matches` MUST equal mapping cardinality (R60 HIGH-1). Zero-recipients fail-closed for target_tier ∈ {care_team, clinical_on_call, regulatory} per R63 HIGH-2 + R64 HIGH-2: ROLLBACK + `crisis.dispatch_attempt_failed` Cat C with `zero_recipients_for_required_tier=true`.
+- **STEP D**: emit `crisis.no_acknowledgement_escalation` Cat A audit co-transactional.
+- **STEP E**: tier ADVANCE UPDATE on `notification_crisis_escalation_obligation`: `escalation_tier = next_tier(current_tier, severity, regulatory_reporting)`; reschedule `undeliverable_deadline = now() + INTERVAL_for_severity_and_tier(next, severity)`; on `next_tier(...) IS NULL` (terminal), preserve escalation_tier + set `final_tier_exhausted_at = now()` (R13 HIGH-1) + emit `crisis.final_tier_reached` Cat A once.
+- **STEP F**: final guarded UPDATE on `crisis_sweep_execution`: sets `completed_at = now()` + `sweep_cycle_id_committed = v_sweep_cycle_id` atomically; predicate `WHERE sweep_execution_id=$ AND claimed_by_worker_id=$ AND fencing_token=$captured AND completed_at IS NULL AND claim_expires_at > now()` (triple-guard per R46 + R47 + R51). 0 rows → takeover occurred mid-tx → raise `sweep_fencing_token_mismatch_at_commit` + ROLLBACK.
+
+Signature: `execute_crisis_no_acknowledgement_sweep(p_sweep_execution_id, p_worker_id, p_captured_fencing_token) RETURNS VOID`.
+
+**Anti-bypass discipline:** the 5 wrapper-owner roles + the 1 raw-writer-owner role = exactly 6 distinct owner roles. No other procedure-owner roles receive EXECUTE on `record_crisis_event_lifecycle_transition()`. Application roles (crisis_initiator, crisis_acknowledger, crisis_responder, crisis_resolver, crisis_sweep_scheduler) receive EXECUTE on the corresponding wrapper procedure ONLY (NOT on the raw writer). The wrapper procedures are the SOLE entry points into the crisis state machine; the CHECK constraint on `crisis_event_lifecycle_transition` (11 triples) provides defense-in-depth at the schema layer even if a privilege boundary is bypassed.
+
+---
 
 ---
 
@@ -402,15 +495,183 @@ Normative landing of the SI-022 v1.0 §5 normative endpoint list into OpenAPI v0
 
 ---
 
-## 7. New RBAC roles
+## 7. New RBAC roles (v1.3 → v1.4: +13 net-new roles)
 
-To be detailed in v0.2; preliminary enumeration: 6 application roles + 4 wrapper-owner roles + 1 raw writer owner + 1 view owner + 1 sweep-worker role = 13 net-new roles. Reconcile against §10 deployment preflight after §3 procedure-spec close-out.
+Final enumeration reconciled against §3 procedure spec + §8 deployment preflight:
+
+### Application roles (6)
+
+| Role | Granted to | Permissions |
+|---|---|---|
+| `crisis_initiator` | Mode 1 AI Service handler service account | EXECUTE on `record_crisis_initiation()` |
+| `crisis_acknowledger` | clinician role + care-team-member role | EXECUTE on `record_crisis_acknowledgement_claim()` |
+| `crisis_responder` | clinician role + care-team-member role | EXECUTE on `record_crisis_response()` |
+| `crisis_resolver` | clinician role + care-team-member role | EXECUTE on `record_crisis_resolution()` |
+| `crisis_sweep_scheduler` | scheduled-job service account | EXECUTE on `execute_crisis_no_acknowledgement_sweep()` + INSERT on `crisis_sweep_execution` (for scheduling new sweep work items) + UPDATE on `crisis_sweep_execution` columns `(claimed_by_worker_id, claim_expires_at, fencing_token, heartbeat_at)` ONLY (NOT on `completed_at` or `sweep_cycle_id_committed` — those are set by the sweep wrapper itself under SECURITY DEFINER context) |
+| `crisis_event_reader` | clinician + care-team-member + patient + delegate (last two with predicate-restricted view) | SELECT on `crisis_event_current_state_v` |
+
+### Wrapper-owner roles (5; non-application)
+
+| Role | Owns procedure | Holds EXECUTE on raw writer |
+|---|---|---|
+| `crisis_initiation_wrapper_owner` | `record_crisis_initiation()` | YES |
+| `crisis_acknowledgement_wrapper_owner` | `record_crisis_acknowledgement_claim()` | YES |
+| `crisis_response_wrapper_owner` | `record_crisis_response()` | YES |
+| `crisis_resolution_wrapper_owner` | `record_crisis_resolution()` | YES |
+| `crisis_sweep_wrapper_owner` | `execute_crisis_no_acknowledgement_sweep()` | YES |
+
+### Raw-writer-owner role (1)
+
+| Role | Owns | Notes |
+|---|---|---|
+| `crisis_event_lifecycle_transition_writer_owner` | `record_crisis_event_lifecycle_transition()` raw writer | Non-BYPASSRLS; the writer itself runs SECURITY DEFINER so the writer's tenant-context binding is the JWT-verified context of the caller, not the role's own. EXECUTE granted to exactly the 5 wrapper-owner roles above — no other roles. |
+
+### View-owner role (1)
+
+| Role | Owns | Notes |
+|---|---|---|
+| `crisis_event_current_state_view_owner` | `crisis_event_current_state_v` derived view | Non-BYPASSRLS; view uses `security_invoker=true` so RLS on underlying tables is enforced against the caller's privileges. GRANT SELECT on the view to `crisis_event_reader` role only. |
+
+**Total: 13 net-new roles** (6 application + 5 wrapper-owner + 1 raw-writer-owner + 1 view-owner). Matches §1 enumeration. RBAC v1.3 → v1.4 count: prior 13 cycle baseline (P-038) + 13 net-new = bundle RBAC v1.4 total to be reconciled at §8 deployment preflight against canonical RBAC v1.3 enumeration.
 
 ---
 
 ## 8. Deployment preflight + cutover sequencing
 
-To be detailed in v0.2; will reuse the post-P-034 R7 SECURITY DEFINER hardening pattern (schema-qualified table refs + locked search_path on all invariant-enforcing trigger functions) + the post-P-036 R6 tables-first-views-last cdm_owner seeding pattern.
+### §8.1 — Deployment preflight DO block
+
+Fail-closed assertions at deployment time per the canonical post-P-034 R7 SECURITY DEFINER hardening pattern + the SI-022 §7 Part A + Part B + Part C enforcement contract (per R63 + R65 closures). Implementer MUST run the following DO block as part of the deploy gate; any FAILED assertion blocks the deploy:
+
+```sql
+DO $$
+DECLARE
+    v_role_missing TEXT;
+    v_entity_seed_missing TEXT;
+    v_tenant_config_missing JSONB;
+BEGIN
+    -- (A) Verify the 13 net-new RBAC roles exist
+    FOR v_role_missing IN
+        SELECT unnest(ARRAY[
+            'crisis_initiator', 'crisis_acknowledger', 'crisis_responder', 'crisis_resolver',
+            'crisis_sweep_scheduler', 'crisis_event_reader',
+            'crisis_initiation_wrapper_owner', 'crisis_acknowledgement_wrapper_owner',
+            'crisis_response_wrapper_owner', 'crisis_resolution_wrapper_owner',
+            'crisis_sweep_wrapper_owner', 'crisis_event_lifecycle_transition_writer_owner',
+            'crisis_event_current_state_view_owner'
+        ])
+        EXCEPT SELECT rolname FROM pg_roles
+    LOOP
+        RAISE EXCEPTION 'crisis-rbac-role-missing: %', v_role_missing;
+    END LOOP;
+
+    -- (B) Verify the 4 jwt_migration_entity_status seed rows exist with the canonical defaults
+    FOR v_entity_seed_missing IN
+        SELECT unnest(ARRAY[
+            'crisis_event', 'crisis_event_lifecycle_transition',
+            'crisis_sweep_execution', 'crisis_event_current_state_v'
+        ])
+        EXCEPT SELECT entity_name FROM public.jwt_migration_entity_status
+        WHERE phase_4_cutover_eligible = FALSE AND raw_guc_fallback_audited = TRUE
+    LOOP
+        RAISE EXCEPTION 'crisis-jwt-migration-seed-missing-or-incorrect: %', v_entity_seed_missing;
+    END LOOP;
+
+    -- (C) Tenant config Part A (every tenant; R22+R63 every-tenant rule):
+    SELECT jsonb_agg(jsonb_build_object('tenant_id', tenant_id, 'missing', missing_keys))
+    INTO v_tenant_config_missing
+    FROM (
+        SELECT tenant_id,
+               array_remove(ARRAY[
+                   CASE WHEN cardinality(crisis_fanout_channels) = 0 THEN 'crisis.fanout_channels[]' END,
+                   CASE WHEN crisis_clinical_on_call_channel IS NULL THEN 'crisis.clinical_on_call_channel' END,
+                   CASE WHEN NOT (crisis_clinical_on_call_channel = ANY(crisis_fanout_channels))
+                        THEN 'crisis.clinical_on_call_channel-not-in-fanout' END,
+                   CASE WHEN crisis_clinical_on_call_recipient IS NULL
+                        THEN 'crisis.clinical_on_call_recipient' END,
+                   CASE WHEN crisis_clinical_on_call_principal_id IS NULL
+                        THEN 'crisis.clinical_on_call_principal_id' END,
+                   CASE WHEN crisis_clinical_on_call_principal_id IS NOT NULL
+                        AND NOT EXISTS (SELECT 1 FROM principal p
+                                        WHERE p.tenant_id = t.tenant_id
+                                          AND p.id = crisis_clinical_on_call_principal_id)
+                        THEN 'crisis.clinical_on_call_principal_id-no-principal' END
+               ], NULL) AS missing_keys
+        FROM tenant_config t
+    ) per_tenant
+    WHERE cardinality(missing_keys) > 0;
+    IF v_tenant_config_missing IS NOT NULL THEN
+        RAISE EXCEPTION 'crisis-tenant-config-part-a-violations: %', v_tenant_config_missing::TEXT;
+    END IF;
+
+    -- (D) Tenant config Part B (regulatory_reporting=true only; R19+R65):
+    SELECT jsonb_agg(jsonb_build_object('tenant_id', tenant_id, 'missing', missing_keys))
+    INTO v_tenant_config_missing
+    FROM (
+        SELECT tenant_id,
+               array_remove(ARRAY[
+                   CASE WHEN crisis_operator_escalation_channel IS NULL
+                        THEN 'crisis.operator_escalation_channel' END,
+                   CASE WHEN crisis_operator_escalation_recipient IS NULL
+                        THEN 'crisis.operator_escalation_recipient' END,
+                   CASE WHEN crisis_operator_escalation_principal_id IS NULL
+                        THEN 'crisis.operator_escalation_principal_id' END,
+                   CASE WHEN crisis_operator_escalation_channel IS NOT NULL
+                        AND NOT (crisis_operator_escalation_channel = ANY(crisis_fanout_channels))
+                        THEN 'crisis.operator_escalation_channel-not-in-fanout' END,
+                   CASE WHEN crisis_operator_escalation_principal_id IS NOT NULL
+                        AND NOT EXISTS (SELECT 1 FROM principal p
+                                        WHERE p.tenant_id = t.tenant_id
+                                          AND p.id = crisis_operator_escalation_principal_id)
+                        THEN 'crisis.operator_escalation_principal_id-no-principal' END
+               ], NULL) AS missing_keys
+        FROM tenant_config t
+        WHERE regulatory_reporting_enabled = TRUE
+    ) per_tenant
+    WHERE cardinality(missing_keys) > 0;
+    IF v_tenant_config_missing IS NOT NULL THEN
+        RAISE EXCEPTION 'crisis-tenant-config-part-b-violations: %', v_tenant_config_missing::TEXT;
+    END IF;
+
+    -- (E) Tenant config Part C (emergency_contact_consent_enabled=true only; R31+R32):
+    SELECT jsonb_agg(jsonb_build_object('tenant_id', tenant_id, 'missing', missing_keys))
+    INTO v_tenant_config_missing
+    FROM (
+        SELECT tenant_id,
+               array_remove(ARRAY[
+                   CASE WHEN crisis_emergency_contact_channel IS NULL
+                        THEN 'crisis.emergency_contact_channel' END,
+                   CASE WHEN crisis_emergency_contact_channel IS NOT NULL
+                        AND NOT (crisis_emergency_contact_channel = ANY(crisis_fanout_channels))
+                        THEN 'crisis.emergency_contact_channel-not-in-fanout' END
+               ], NULL) AS missing_keys
+        FROM tenant_config t
+        WHERE emergency_contact_consent_enabled = TRUE
+    ) per_tenant
+    WHERE cardinality(missing_keys) > 0;
+    IF v_tenant_config_missing IS NOT NULL THEN
+        RAISE EXCEPTION 'crisis-tenant-config-part-c-violations: %', v_tenant_config_missing::TEXT;
+    END IF;
+END;
+$$;
+```
+
+### §8.2 — Cutover sequencing (per P-036 R6 tables-first-views-last cdm_owner seeding pattern)
+
+1. **Phase 1 — RBAC + ownership setup:** Create the 13 net-new RBAC roles via the canonical migration framework. Set role passwords via the canonical KMS-bound credential vault (no plaintext role passwords in migration scripts).
+2. **Phase 2 — Tables first:** Create `crisis_event` + `crisis_event_lifecycle_transition` + `crisis_sweep_execution` tables. ALTER existing `notification_crisis_dispatch_ledger` + `notification_crisis_provider_attempt` + `notification_crisis_escalation_obligation` with the additive column extensions (nullable initially per §4.EXT1/EXT2/EXT3).
+3. **Phase 3 — Backfill:** For each existing P-027 row (dispatch_ledger / provider_attempt / escalation_obligation), backfill `crisis_event_id` via the per-row `(tenant_id, server_signal_id)` → `crisis_event.id` lookup. (Backfill is a no-op on a greenfield deploy with zero pre-existing crisis_event rows.) After backfill verifies 100% coverage, ALTER `crisis_event_id` columns to `NOT NULL`.
+4. **Phase 4 — Triggers:** Create the 2 invariant triggers (`crisis_event_append_only`, `crisis_event_lifecycle_transition_continuity` + monotonic-ordering trigger). All trigger functions schema-qualified + locked search_path per P-034 R7. crisis_sweep_execution's `enforce_terminal_row_immutable` trigger.
+5. **Phase 5 — RLS policies:** Enable RLS + create policies on the 3 net-new tables (per §4.NEW1/NEW2/NEW3 above).
+6. **Phase 6 — Procedures:** Deploy the 6 SECURITY DEFINER procedures via the canonical procedure-deploy gate (verify SECURITY DEFINER + locked search_path on each); set ownership; grant EXECUTE per §3.1-3.6.
+7. **Phase 7 — Views (LAST per P-036 R6):** Create `crisis_event_current_state_v` with `security_invoker=true` + `security_barrier=true`. Set ownership to `crisis_event_current_state_view_owner`. Grant SELECT to `crisis_event_reader`.
+8. **Phase 8 — JWT migration entity seed:** INSERT 4 rows into `jwt_migration_entity_status` for the 3 net-new tables + 1 derived view with `phase_4_cutover_eligible=FALSE` + `raw_guc_fallback_audited=TRUE` defaults.
+9. **Phase 9 — Audit events registration:** Insert the 12 new `crisis.*` action IDs into the canonical `audit_events_action_definition` table per AUDIT_EVENTS v5.12 schema; verify CHECK constraint accepts the new action IDs (no schema CHECK enumeration change required if AUDIT_EVENTS v5.11→v5.12 was an additive enum extension, which is the established pattern).
+10. **Phase 10 — Deployment preflight gate:** Run the §8.1 DO block. Any FAILED assertion BLOCKS cutover. Roll back via `BEGIN; <undo>; COMMIT;` on a per-phase basis if any assertion fails; do NOT proceed to Phase 11.
+11. **Phase 11 — OpenAPI endpoint deployment:** Deploy the 6 net-new endpoints under `/v1/crisis/*` via the canonical route-deploy gate. Endpoint 6 (`/v1/crisis/resources`) MUST be registered with the canonical IP-rate-limit middleware at 60 req/min on the unauthenticated path; do NOT register the unauthenticated path without the rate-limit middleware.
+
+### §8.3 — Rollback discipline
+
+On any Phase N failure during cutover, rollback discards Phase N's changes via the transaction context; Phases 1–(N–1) remain. If post-deploy a Phase ≤ 10 defect is detected, a fresh hygiene-cycle PR (P-040.1 pattern matching P-009 v1.10.1 hygiene cycle) closes the defect via additive correction; do NOT attempt destructive rollback of canonical schema once Phase 11 has completed (the OpenAPI endpoints may have served production traffic; rollback would require coordinated data-migration + audit-trail preservation).
 
 ---
 
@@ -418,4 +679,6 @@ To be detailed in v0.2; will reuse the post-P-034 R7 SECURITY DEFINER hardening 
 
 **v0.1 DRAFT 2026-05-21:** pre-Codex-review skeleton. Contains §1 purpose + scope + §2 new entities (3 net-new + 3 additive column extensions to P-027 §4.66-4.68 + 1 OPTIONAL derived view) with executable DDL. §3-8 are stubs to be filled in v0.2 against SI-022 §3/§5/§7 normative content. Authored on `spec/P-040-cdm-v1.10-si-022-follow-on-2026-05-21` branch off main at `520565a` (post-P-039 merge). Commit `2f88322`.
 
-**v0.2 DRAFT 2026-05-21:** §4 audit events normative table filled in vs SI-022 v1.0 §3 normative content; §5 OpenAPI 6 endpoints filled in vs SI-022 v1.0 §5; §6 state machine 11 transition triples filled in vs SI-022 v1.0 §6 (post-R8+R11 expansion). §1 AUDIT_EVENTS scope reconciled: per-row category labels (7 Cat A + 0 Cat B + 5 Cat C; total 12) are authoritative; SI-022 v1.0 §3 summary tally drift ("8 Cat A + 4 Cat C") flagged for downstream prose-correction PR after P-040 lands. §3 (procedures), §7 (RBAC), §8 (preflight) remain stubs to be filled in v0.3.
+**v0.2 DRAFT 2026-05-21:** §4 audit events normative table filled in vs SI-022 v1.0 §3 normative content; §5 OpenAPI 6 endpoints filled in vs SI-022 v1.0 §5; §6 state machine 11 transition triples filled in vs SI-022 v1.0 §6 (post-R8+R11 expansion). §1 AUDIT_EVENTS scope reconciled: per-row category labels (7 Cat A + 0 Cat B + 5 Cat C; total 12) are authoritative; SI-022 v1.0 §3 summary tally drift ("8 Cat A + 4 Cat C") flagged for downstream prose-correction PR after P-040 lands. §3 (procedures), §7 (RBAC), §8 (preflight) remain stubs to be filled in v0.3. Commit `90d8387`.
+
+**v0.3 DRAFT 2026-05-21:** §3 procedures fully detailed: 6 SECURITY DEFINER procedures (1 raw `record_crisis_event_lifecycle_transition()` writer + 5 wrapper procedures `record_crisis_initiation` / `_acknowledgement_claim` / `_response` / `_resolution` / `execute_crisis_no_acknowledgement_sweep`); raw writer DDL with explicit EXECUTE-grants restricted to exactly the 5 wrapper-owner roles (anti-bypass discipline per P-034 + P-038); wrapper signatures + behavior contracts referencing SI-022 R34/R35/R36/R10/R11/R13 + R28/R39/R46/R47/R51/R53/R60/R63/R64 closure points. §7 RBAC fully enumerated: 13 net-new roles split as 6 application + 5 wrapper-owner + 1 raw-writer-owner + 1 view-owner. §8 deployment preflight contains a complete `DO $$ ... $$;` block with 5 assertion classes (RBAC roles exist + JWT migration seed rows + Part A every-tenant config + Part B regulatory_reporting=true config + Part C emergency_contact_consent_enabled=true config); §8.2 cutover sequencing enumerates 11 phases (RBAC → tables → backfill → triggers → RLS → procedures → views LAST per P-036 R6 → JWT seed → audit events → preflight DO block → OpenAPI endpoints last); §8.3 rollback discipline. Document is now complete and ready for first Codex adversarial review round.
