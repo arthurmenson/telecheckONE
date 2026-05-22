@@ -5021,3 +5021,125 @@ P-030 was previously the longest at 17 rounds (SI-024 v1.0 trust-anchor architec
 Cumulative: **~275 findings closed inline across 13 cycles; 1 CORRECT hard-floor item 6 invocation (P-033 R1 STOP-to-ratifier); 2 DISSOLVED hard-floor item 6 invocations (P-038 R6 + P-039 R6); 0 ERR escalations.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines + SI-spec-first promotion pattern + fresh-review-post-major-cycles pattern + derived-view-data-minimization pattern + hybrid-persistence-with-one-way-release pattern + hard-floor-item-6-dissolution-via-Codex-recommended-Option-B pattern + **NEW: extreme-long-tail-incomplete-propagation-cascade pattern (P-039 R62-R67)** continue to scale.
 
 — Claude (Opus 4.7, 1M context), SI-022 Crisis Response Slice v1.0 cycle close-out 2026-05-21 via auto-proceed. Registry v2.26. P-039 appended. **13th successive Q2 2026 auto-proceed ratification.** 4 of 5 pilot-required Ghana revenue anchor slices SI-RATIFIED. Next deliverable per auto-proceed continuation: Admin Backend basics SI (5 of 5 pilot-required; final pilot prerequisite) OR P-040 CDM v1.9 -> v1.10 follow-on amendment cycle for SI-022 canonical entity landing.
+
+---
+
+## Addendum 68 — CDM v1.9 -> v1.10 + AUDIT_EVENTS v5.11 -> v5.12 + OpenAPI v0.4 -> v0.5 + State Machines v1.3 -> v1.4 + RBAC v1.3 -> v1.4 (SI-022 Crisis Response follow-on amendment) RATIFIED via auto-proceed (Codex R19 ship-it APPROVE; 1 hard-floor item 6 DISSOLUTION at R15 via Evans's Option B ratification); merge a09d576; Registry v2.26 -> v2.27; NINTH instance of SI-spec-first promotion pattern; 4 of 5 pilot-required slices NOW FULLY RATIFIED (SI + CDM both landed); 14th successive Q2 2026 auto-proceed ratification
+
+**Date:** 2026-05-21
+**Trigger:** Promotion Ledger P-039 (SI-022 Crisis Response Slice v1.0 RATIFIED 2026-05-21). Per established post-P-029 SI-spec-first promotion pattern, SI-022's canonical content lands in CDM + AUDIT + OpenAPI + State Machines + RBAC via this separate amendment cycle.
+
+**Spec branch HEAD:** `2cc5b929` (P-040 v0.21 -> v1.0 RATIFIED commit on `spec/P-040-cdm-v1.10-si-022-follow-on-2026-05-21` branch)
+
+**Ratification commit on main:** `03ba88a` (P-040 RATIFY: Promotion Ledger entry + Registry v2.26 -> v2.27)
+
+**Merge commit on main:** `a09d576` (Merge P-040 spec branch with --no-ff)
+
+**Codex R19 verdict:** APPROVE / ship-it. Verbatim: "Phase 7.1 executable DDL, Phase 7.1 prose, Phase 7.1.a sequencing text, Phase 7.2 grant, and class K now consistently describe SECURITY INVOKER, DDL-issuing current_user semantics, owner-for-control-only, and CR022 as the behavioral signal. The accepted SECDEF wrapper indirection remains documented as ratified residual Option B, and I do not see a hard-floor item 6 trigger reintroduced." Codex session ID `019e4d93-bc7d-7051-b25e-527d1c9f5c7f`.
+
+### What landed canonical at P-040
+
+| Artifact | Before | After |
+|---|---|---|
+| Telecheck_CDM_v1_9_to_v1_10_Amendment.md | n/a (new) | v1.0 RATIFIED (1632 lines amendment doc) |
+| Telecheck_Artifact_Registry_v2_10.md | v2.26 | v2.27 |
+| Telecheck_Promotion_Ledger.md | P-039 | P-040 appended |
+
+### Canonical P-040 substantive content
+
+- **3 net-new CDM entities** with executable DDL + RLS + composite tenant-scoped FKs + append-only triggers:
+  - `crisis_event` (with 8-column KMS envelope for intake_payload PHI per P-021 pattern)
+  - `crisis_event_lifecycle_transition` (append-only Option A per I-035; 11-triple CHECK constraint)
+  - `crisis_sweep_execution` (durable per-sweep table with fencing-token + lease-takeover + scheduled_for_obligation_generation per-generation UNIQUE constraint per SI-022 R44/R52)
+- **Additive column extensions to 3 P-027 §4.66-4.68 entities** with backfill-coverage preflight assertion (R1 HIGH-1):
+  - notification_crisis_dispatch_ledger: +crisis_event_id FK
+  - notification_crisis_provider_attempt: +crisis_event_id + recipient_principal_id + sweep_cycle_id + UNIQUE idempotency constraint
+  - notification_crisis_escalation_obligation: +crisis_event_id + severity + escalation_tier + sweep_cycle_counter + final_tier_exhausted_at + mutation-discipline trigger
+- **2 OPTIONAL canonical views with R1 HIGH-2 data-minimization split** (P-038 R5 pattern):
+  - crisis_event_current_state_v (staff tenant-wide; security_invoker=true + security_barrier=true; granted to crisis_event_staff_reader only)
+  - crisis_event_patient_summary_v (patient/delegate self-scoped via verify_session_jwt_and_extract_claims + consent_grant predicate; granted to crisis_event_patient_reader only)
+- **6 SECURITY DEFINER procedures (1 raw + 5 wrappers; 5 owner roles)** with anti-bypass EXECUTE-grant discipline (raw writer EXECUTE granted to exactly the 5 wrapper-owner roles; PUBLIC EXECUTE rejected on all 6 canonical procedures per class I).
+- **12 net-new audit events** (7 Cat A + 0 Cat B + 5 Cat C per §4 per-row labels; SI-022 v1.0 §3 summary tally drift `8 Cat A + 4 Cat C` reconciled at R2 MED-1 closure).
+- **6 net-new OpenAPI endpoints** under `/v1/crisis/*` (endpoint 6 unauthenticated-emergency posture as deliberate I-019 carve-out per SI-022 OQ2; endpoint 1 reads staff view requiring crisis_event_staff_reader; endpoint 2 reads patient view requiring crisis_event_patient_reader per R2 HIGH-1 closure).
+- **1 net-new state machine `crisis_event_lifecycle`** (DERIVED from append-only `crisis_event_lifecycle_transition` per I-035; 11 CHECK-enforced transition triples matching SI-022 Sub-decision 4 + §6 post-R8+R11 expansion).
+- **15 net-new RBAC roles** (R1 HIGH-2 + R4 HIGH-2 reconciled count): 7 application (incl split crisis_event_staff_reader + crisis_event_patient_reader) + 5 wrapper-owner + 1 raw-writer-owner + 2 view-owner.
+- **§8.1 deployment preflight DO block with 13 assertion classes** (A + B + C + D + E + E0a/b/c + F + G.1 + G.2 + G.3 + H + I + J + K + L + M) covering:
+  - RBAC roles + JWT migration seed + tenant config Part A/B/C
+  - Backfill coverage (legacy P-027 rows resolvable via (tenant_id, server_signal_id))
+  - View security_invoker reloption
+  - Grant matrix allowlist (no PUBLIC; no non-canonical grantees)
+  - Recursive role-membership closure via WITH RECURSIVE pg_auth_members
+  - Grant-option + admin-option rejection
+  - pg_read_all_data + BYPASSRLS predefined-role bypass rejection
+  - SECDEF pg_depend + prosrc text-scan rejection (covers static + dynamic SQL + dblink + postgres_fdw)
+  - Derived persistent-copy rejection via pg_depend catalog-correct traversal
+  - View-owner relowner exact-match + NOLOGIN + non-BYPASSRLS attribute assertion
+  - View-definition integrity text scan
+  - CTAS event trigger existence + enabled + behavioral verification (synthetic test role + scratch schema + SET ROLE precondition + dedicated CR022 SQLSTATE)
+- **§8.2 11-phase cutover sequencing** with explicit Phase 7.1 + 7.1.a + 7.2 CTAS provenance infrastructure (tables-first-views-last per P-036 R6 pattern).
+- **5 jwt_migration_entity_status seed entries** (3 tables + 2 views; phase_4_cutover_eligible=FALSE + raw_guc_fallback_audited=TRUE defaults).
+
+### Cycle metrics
+
+| Metric | Value |
+|---|---|
+| Codex adversarial-review rounds | 19 (privilege-bypass closure thread + R15 hard-floor escalation + post-R15 prose-correctness cleanups) |
+| Findings closed inline | ~25 (24 HIGH + 1 MED) |
+| Hard-floor item 6 escalations | 1 at R15 |
+| Hard-floor item 6 DISSOLUTIONS | 1 at R15 via Evans's Option B ratification |
+| ERR escalations beyond R15 consult | 0 |
+| Ratifier consult shape | dual-recommendation + two-pass (Claude=B, Pass-1=B-prime, Pass-2=B-prime; Evans=plain B) |
+| Cycle duration | ~6h continuous autonomous execution (post-P-039 close-out through P-040 R19 APPROVE) |
+| Average commits per round | 1 spec commit + 1 push per round + 2 ratifier-ceremony commits |
+
+### Hard-floor item 6 R15 escalation + DISSOLUTION pattern
+
+R15 = Codex flagged the v0.17 R14 categorical CTAS block as a database-wide DDL policy change exceeding P-040 SI-022-follow-on scope (would have introduced a net-new platform-floor invariant via a P-040 amendment that explicitly stated INVARIANTS bump was out of scope). Per CLAUDE.md autonomous-work-authorization hard-floor item 6 + PR #11 SI-010 R1 STOP-to-ratifier precedent + the codified dual-recommendation two-pass discipline:
+
+1. STOPPED inline closure at v0.17 (commit 0d0cdcc).
+2. Authored ERR at `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-P-040-R15-CTAS-Categorical-Block-Scope-2026-05-21.md` (commit ee1bab5) with 3 options:
+   - Option A: ratify R14 categorical as platform-floor invariant I-036
+   - Option B: walk back to v0.16 dual-detection + accept residual SECDEF wrapper indirection
+   - Option C: move trigger to ddl_command_end + pg_depend-based detection
+3. Codex Pass-1 source-first independent consult (blind to Claude's recommendation): recommended Option B-prime (refinement of B with mandatory Track 6 + future-SECDEF-wrapper allowlist rule).
+4. Codex Pass-2 contrast-and-synthesize (with Claude's recommendation + Pass-1 as inputs): confirmed B-prime as ratification-hardened form of Claude's plain Option B.
+5. Surfaced three-way to Evans (Claude=B, Pass-1=B-prime, Pass-2=B-prime).
+6. Evans chat-message ratification 2026-05-21 = "B" (plain Option B, lighter-weight; residual SECDEF wrapper indirection accepted as bounded at v1.10 because 6 §3 canonical wrappers all return VOID/uuid + EXECUTE-restricted).
+7. Implementation per ratified plain B: v0.18 reverted trigger body + RAISE message + documented residual.
+
+R15 = second instance of hard-floor item 6 DISSOLUTION in Q2 2026 (P-038 R6 + P-040 R15; both via Codex Option B recommendation adoption; both closure paths REMOVED the architectural-judgment trigger condition rather than escalating a net-new platform-floor primitive).
+
+### Pilot-required slices status after P-040
+
+| # | Slice | Status |
+|---|---|---|
+| 1 | Med-Interaction (SI-019) | RATIFIED P-033 SI + P-034 CDM follow-on |
+| 2 | Async-Consult (SI-020) | RATIFIED P-037 SI + P-038 CDM follow-on |
+| 3 | Mode 1 AI Service Handler | RATIFIED P-035 SI + P-036 CDM follow-on |
+| 4 | Crisis Response (SI-022) | **RATIFIED P-039 SI + P-040 CDM follow-on (BOTH LANDED — THIS ENTRY)** |
+| 5 | Admin Backend basics | NOT YET AUTHORED |
+
+**4 of 5 pilot-required Ghana revenue anchor slices NOW FULLY RATIFIED (SI + CDM both landed).** Remaining: Admin Backend basics SI (final pilot prerequisite). Once Admin Backend SI ratified, the telecheck-app pilot implementation gate opens fully. Master Completion Plan v1.0 Track 1 (Clinical Care) + Track 2 (AI Service) crisis-detection foundation is now ratifier-complete at CDM level.
+
+### Cumulative auto-proceed ratification statistics
+
+| Cycle | Slice / amendment | Findings closed | Rounds | Codex final verdict | Hard-floor item 6 |
+|---|---|---|---|---|---|
+| P-026 | Sprint 1-20 batched | 0 | 0 (umbrella) | n/a | n/a |
+| P-028 | SI-021 SIEM Hash-Chain Archival | 8 | 5 | Codex R5 ship-it APPROVE | 0 |
+| P-029 | SI-021 CDM v1.4 -> v1.5 follow-on | 13 | 9 | Codex R5 + consults | 0 |
+| P-030 | SI-024 v1.0 Tenant/Platform RLS | 17 | 7 | Pass-2 B+ synthesis | 0 |
+| P-031 | SI-024.1 v0.8 JWT-Binding | 19 | 8 | Codex R4 APPROVE | 0 |
+| P-032 | CDM v1.5 -> v1.6 SI-024.1 follow-on | 15 | 12 | Codex Pass-2 R12 ship-it APPROVE | 0 |
+| P-033 | SI-019 Med-Interaction v2.0 | 11 | 7 | Codex R7 ship-it APPROVE | 1 CORRECT STOP (R1 OQ7) |
+| P-034 | CDM v1.6 -> v1.7 SI-019 follow-on | 11 | 8 | Codex R8 ship-it APPROVE | 0 |
+| P-035 | AI Service Mode 1 Handler v0.4 | 16 | 8 | Codex R8 ship-it APPROVE | 0 |
+| P-036 | CDM v1.7 -> v1.8 Mode 1 follow-on | 11 | 8 | Codex R8 ship-it APPROVE | 0 |
+| P-037 | SI-020 Async Consult v2.0 | 11 | 11 | Codex R11 ship-it APPROVE | 0 |
+| P-038 | CDM v1.8 -> v1.9 SI-020 follow-on | 15 | 10 | Codex R10 ship-it APPROVE | 1 DISSOLVED (R6 -> R7) |
+| P-039 | SI-022 Crisis Response Slice v1.0 | ~89 | 67 | Codex R67 ship-it APPROVE | 1 DISSOLVED (R6) |
+| **P-040** | **CDM v1.9 -> v1.10 SI-022 follow-on** | **~25** | **19** | **Codex R19 ship-it APPROVE** | **1 DISSOLVED (R15 via Evans's Option B)** |
+
+Cumulative: **~300 findings closed inline across 14 cycles; 1 CORRECT hard-floor item 6 STOP-to-ratifier (P-033 R1); 3 DISSOLVED hard-floor item 6 invocations (P-038 R6 + P-039 R6 + P-040 R15); 0 ERR escalations beyond ratifier consults.** The dual-recommendation + two-pass + auto-proceed + hard-floor item 6 disciplines continue to scale.
+
+— Claude (Opus 4.7, 1M context), P-040 CDM v1.9 -> v1.10 cycle close-out 2026-05-21 via auto-proceed + Evans's Option B ratification at R15. Registry v2.27. P-040 appended. **14th successive Q2 2026 auto-proceed ratification.** 4 of 5 pilot-required Ghana revenue anchor slices NOW FULLY RATIFIED (SI + CDM both landed). Next deliverable per auto-proceed continuation: Admin Backend basics SI (5 of 5 pilot-required; final pilot prerequisite to unblock telecheck-app pilot implementation gate fully).
