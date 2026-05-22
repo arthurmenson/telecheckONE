@@ -1,7 +1,7 @@
 # CDM v1.10 → v1.11 + AUDIT_EVENTS v5.12 → v5.13 + OpenAPI v0.5 → v0.6 + State Machines v1.4 → v1.5 + RBAC v1.4 → v1.5 Amendment (SI-023 Admin Backend Basics follow-on)
 
-**Version:** 0.1 DRAFT
-**Status:** DRAFT 2026-05-22 — pending Codex adversarial-review cycle on spec branch `spec/p042-cdm-si023-landing`. Per the established post-P-029 SI-spec-first promotion pattern, SI-023's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via this separate amendment cycle following SI-023's R17 APPROVE ratification at P-041 (2026-05-22).
+**Version:** 0.2 DRAFT
+**Status:** DRAFT 2026-05-22 — R1 closures applied (2 HIGH + 1 MED); awaiting R2 Codex re-verification. Post-R1 changes: (a) R1 HIGH-1 closed — admin_mode1_volume_health_v reconciled to SI-023 Sub-decision 2 Surface 3 contract (last-24h aggregate + explicit `mode1.crisis_detection_trigger` + `mode1.safety_floor_response_emitted` + p50/p95 duration); (b) R1 HIGH-2 closed — all 6 SECDEF procedure bodies inlined verbatim (raw lifecycle writer + 3 dashboard read-wrappers + 2 template wrappers) at §4.NEW8a-f rather than carried by reference; (c) R1 MED-1 closed — §8.1 preflight DO block + class A (RBAC role enumeration) + class B (jwt_migration seed) + class F (security_invoker) + class G.2 (recursive role-membership) + class L (view-owner attribute) + class N (audit completeness tripwire) + class O (SECDEF dependency rejection) + class P (admin view grant-matrix allowlist) inlined verbatim with executable SQL rather than prose references. Previously DRAFT 2026-05-22 — pending Codex adversarial-review cycle on spec branch `spec/p042-cdm-si023-landing`. Per the established post-P-029 SI-spec-first promotion pattern, SI-023's canonical content lands in CDM + AUDIT_EVENTS + OpenAPI + State Machines + RBAC via this separate amendment cycle following SI-023's R17 APPROVE ratification at P-041 (2026-05-22).
 **Authoring date:** 2026-05-22
 **Trigger:** Promotion Ledger P-041 (SI-023 Admin Backend Basics Slice v1.0 RATIFIED 2026-05-22 via Codex R17 ship-it APPROVE; Registry v2.27 → v2.28; **5th and FINAL pilot-required Ghana revenue anchor slice — telecheck-app pilot implementation gate opens fully**). **NINTH instance** of the post-P-029 SI-spec-first promotion pattern (P-029, P-032, P-034, P-036, P-038, P-040; P-035 was SI-only, P-037 was followed by P-038 as its CDM follow-on; this P-042 is the 7th follow-on amendment in the post-P-029 lineage; per Master Completion Plan v1.0 §A.5, post-P-042 the pilot scope is fully spec-ratified, and remaining work is `telecheck-app` code implementation rather than specification authoring).
 **Owner:** Admin Backend slice owner + Tenant Operator UX lead + Forms-Intake slice owner + Platform Audit owner + CDM owner + AUDIT_EVENTS owner + OpenAPI owner + State Machines owner + RBAC owner.
@@ -373,9 +373,9 @@ WHERE c.tenant_id = current_tenant_id_strict('admin_consult_queue_health_v')
 GROUP BY c.tenant_id, c.program_id, clt.to_state;
 ```
 
-### §4.NEW7 — `admin_mode1_volume_health_v` (CDM v1.11 new derived view; tenant-scoped Mode 1 volume + safety-floor reader; R1 HIGH-2 + R2 HIGH-1 closure)
+### §4.NEW7 — `admin_mode1_volume_health_v` (CDM v1.11 new derived view; tenant-scoped Mode 1 volume + safety-floor reader; R1 HIGH-2 + R2 HIGH-1 closure; P-042 R1 HIGH-1 closure 2026-05-22 — reconciled view contract to match SI-023 Surface 3 exactly)
 
-Tenant-scoped view over P-036 `ai_mode1_conversation` + audit-event Cat A counts. Minimized columns (aggregate counts + Cat A emission counts; NO raw conversation text / NO patient_id). `security_invoker=true + security_barrier=true`. SELECT REVOKEd FROM PUBLIC + GRANTed ONLY to `read_admin_mode1_volume_health_wrapper_owner` per §7 + §8.1 class P. admin_basic_operator is NOT made member of ai_mode1_reader (R1 HIGH-2 closure). Lifted from SI-023 Sub-decision 2 Surface 3:
+Tenant-scoped view over P-036 `ai_mode1_conversation` + P-035 FLOOR-020 audit emissions. **P-042 R1 HIGH-1 closure 2026-05-22:** v0.1 had drifted from SI-023 Sub-decision 2 Surface 3 contract — used 30-day hourly buckets + unqualified `crisis_detection_trigger` + broad `ai_mode1.%` audit counting + omitted `mode1.safety_floor_response_emitted` AND omitted p50/p95 duration. SI-023 Surface 3 normative contract is: **last-24h aggregate** (NOT 30-day hourly) + **explicit `mode1.crisis_detection_trigger` Cat A audit count** + **explicit `mode1.safety_floor_response_emitted` Cat A audit count** + **tenant-scoped p50/p95 conversation duration**. View reconciled to canonical Surface 3 columns. Minimized columns (aggregate counts + Cat A emission counts + duration percentiles; NO raw conversation_text exposed; NO patient_id exposure beyond aggregate counts). `security_invoker=true + security_barrier=true`. SELECT REVOKEd FROM PUBLIC + GRANTed ONLY to `read_admin_mode1_volume_health_wrapper_owner` per §6 + §8.1 class P. admin_basic_operator is NOT made member of ai_mode1_reader (R1 HIGH-2 closure preserved):
 
 ```sql
 CREATE VIEW admin_mode1_volume_health_v
@@ -383,22 +383,563 @@ WITH (security_invoker = true, security_barrier = true)
 AS
 SELECT
     amc.tenant_id,
-    DATE_TRUNC('hour', amc.created_at) AS hour_bucket,
-    COUNT(*) AS conversation_count,
-    COUNT(DISTINCT ae.id) FILTER (WHERE ae.action_id = 'crisis_detection_trigger') AS floor020_emission_count,
-    COUNT(DISTINCT ae.id) FILTER (WHERE ae.action_id LIKE 'ai_mode1.%') AS mode1_audit_count
+    COUNT(*) FILTER (WHERE amc.created_at > now() - INTERVAL '24 hours') AS active_conversation_count_24h,
+    (
+        SELECT COUNT(*)
+          FROM public.audit_event ae
+         WHERE ae.tenant_id = amc.tenant_id
+           AND ae.action_id = 'mode1.crisis_detection_trigger'
+           AND ae.recorded_at > now() - INTERVAL '24 hours'
+    ) AS crisis_detection_trigger_count_24h,
+    (
+        SELECT COUNT(*)
+          FROM public.audit_event ae
+         WHERE ae.tenant_id = amc.tenant_id
+           AND ae.action_id = 'mode1.safety_floor_response_emitted'
+           AND ae.recorded_at > now() - INTERVAL '24 hours'
+    ) AS safety_floor_response_emitted_count_24h,
+    percentile_cont(0.50) WITHIN GROUP (
+        ORDER BY EXTRACT(EPOCH FROM (amc.ended_at - amc.created_at))
+    ) FILTER (WHERE amc.ended_at IS NOT NULL
+              AND amc.created_at > now() - INTERVAL '24 hours')::NUMERIC(10,2)
+    AS conversation_duration_p50_seconds_24h,
+    percentile_cont(0.95) WITHIN GROUP (
+        ORDER BY EXTRACT(EPOCH FROM (amc.ended_at - amc.created_at))
+    ) FILTER (WHERE amc.ended_at IS NOT NULL
+              AND amc.created_at > now() - INTERVAL '24 hours')::NUMERIC(10,2)
+    AS conversation_duration_p95_seconds_24h
 FROM public.ai_mode1_conversation amc
-LEFT JOIN public.audit_event ae
-    ON ae.tenant_id = amc.tenant_id
-    AND ae.recorded_at BETWEEN amc.created_at AND amc.created_at + INTERVAL '1 hour'
 WHERE amc.tenant_id = current_tenant_id_strict('admin_mode1_volume_health_v')
-  AND amc.created_at > now() - INTERVAL '30 days'
-GROUP BY amc.tenant_id, DATE_TRUNC('hour', amc.created_at);
+GROUP BY amc.tenant_id;
 ```
 
-### §4.NEW8 — SECURITY DEFINER procedures (6 procedures owned by 6 distinct owner roles)
+### §4.NEW8 — SECURITY DEFINER procedures (6 procedures owned by 6 distinct owner roles; P-042 R1 HIGH-2 closure 2026-05-22 — full executable DDL inlined verbatim from SI-023 Sub-decisions 3.5 + 4 + 4.5; prior v0.1 carried procedures by reference, which regressed from the P-040 pattern + left the amendment without self-contained deployable wrapper text)
 
-Full executable DDL for the 6 procedures lifted from SI-023 Sub-decision 3.5 (3 dashboard read-wrappers) + Sub-decision 4 (2 template wrappers) + Sub-decision 4.5 (1 raw lifecycle writer). All 6 procedures are SECURITY DEFINER + locked search_path + schema-qualified + REVOKE EXECUTE FROM PUBLIC; ownership set per §7; EXECUTE granted per the canonical 3-layer authorization defense (LAYER A EXECUTE grant + LAYER B JWT-principal-to-role join via tenant_account_membership + LAYER C tenant scope from SI-024.1 verify_session_jwt_and_extract_claims). **Cross-reference:** the executable bodies are reproduced in SI-023 Sub-decision 3.5 + 4 + 4.5 verbatim; this amendment carries them by reference rather than duplicating ~600 lines. Cutover Phase 7 (§8.2 below) deploys all 6 procedures after the views are created in Phase 6.
+All 6 procedures are SECURITY DEFINER + locked search_path (`SET search_path = pg_catalog, public`) + schema-qualified + REVOKE EXECUTE FROM PUBLIC; ownership set per §6 RBAC; EXECUTE granted per the canonical 3-layer authorization defense (LAYER A EXECUTE grant + LAYER B JWT-principal-to-role join via `tenant_account_membership` per P-038 R6 dissolution pattern + LAYER C tenant scope from SI-024.1 `verify_session_jwt_and_extract_claims`). Cutover Phase 7 (§8 below) deploys all 6 procedures after the views are created in Phase 6.
+
+#### §4.NEW8a — Raw lifecycle writer `record_forms_template_admin_review_transition()` (Sub-decision 4.5)
+
+```sql
+CREATE OR REPLACE FUNCTION record_forms_template_admin_review_transition(
+    p_tenant_id tenant_id_t,
+    p_review_id UUID,
+    p_from_state TEXT,
+    p_to_state TEXT,
+    p_transition_reason TEXT,
+    p_actor_principal_id UUID,
+    p_transition_payload JSONB
+) RETURNS BIGINT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_transition_id BIGINT;
+BEGIN
+    -- CHECK constraint at §4.NEW3 enforces the 5 valid triples; the unified lifecycle-invariants
+    -- trigger (also at §4.NEW3) enforces non-backdated transition_at + state-continuity + isolation
+    -- precondition. This raw writer is the SOLE INSERT path into the lifecycle_transition table;
+    -- EXECUTE granted to the 2 template wrapper-owner roles only (anti-bypass).
+    INSERT INTO public.forms_template_admin_review_lifecycle_transition (
+        tenant_id, review_id, from_state, to_state, transition_reason,
+        transition_at, actor_principal_id, transition_payload
+    ) VALUES (
+        p_tenant_id, p_review_id, p_from_state, p_to_state, p_transition_reason,
+        now(), p_actor_principal_id, p_transition_payload
+    )
+    RETURNING id INTO v_transition_id;
+    RETURN v_transition_id;
+END;
+$$;
+
+ALTER FUNCTION record_forms_template_admin_review_transition(
+    tenant_id_t, UUID, TEXT, TEXT, TEXT, UUID, JSONB
+) OWNER TO forms_template_admin_review_transition_writer_owner;
+
+REVOKE EXECUTE ON FUNCTION record_forms_template_admin_review_transition(
+    tenant_id_t, UUID, TEXT, TEXT, TEXT, UUID, JSONB
+) FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION record_forms_template_admin_review_transition(
+    tenant_id_t, UUID, TEXT, TEXT, TEXT, UUID, JSONB
+) TO forms_template_admin_review_submit_wrapper_owner,
+     forms_template_admin_review_decision_wrapper_owner;
+```
+
+#### §4.NEW8b — Dashboard read-wrapper `read_admin_crisis_operational_health()` (Sub-decision 3.5)
+
+```sql
+CREATE OR REPLACE FUNCTION read_admin_crisis_operational_health(
+    p_tenant_id tenant_id_t,
+    p_query_params_jsonb JSONB
+) RETURNS TABLE (
+    tenant_id tenant_id_t,
+    severity TEXT,
+    active_event_count BIGINT,
+    escalation_obligation_backlog_count BIGINT,
+    stale_sweep_count BIGINT,
+    active_obligation_avg_tier NUMERIC,
+    crisis_audit_24h_count BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_row_count INTEGER;
+BEGIN
+    -- LAYER A (EXECUTE grant; primary DB privilege boundary; admin_basic_operator only)
+    -- LAYER B (JWT-principal-to-role check via tenant_account_membership; P-038 R6 dissolution pattern)
+    -- LAYER C (tenant scope match against verify_session_jwt_and_extract_claims)
+    PERFORM 1
+      FROM verify_session_jwt_and_extract_claims() vc
+      JOIN tenant_account_membership tam
+        ON tam.tenant_id = vc.verified_tenant_id
+       AND tam.principal_id = vc.verified_principal_id
+     WHERE vc.verified_tenant_id = p_tenant_id
+       AND tam.active = TRUE
+       AND 'admin_basic_operator' = ANY(tam.assigned_role_names);
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'admin-dashboard-unauthorized: JWT principal % does NOT hold admin_basic_operator for tenant % OR JWT tenant binding mismatch', (SELECT verified_principal_id FROM verify_session_jwt_and_extract_claims()), p_tenant_id
+            USING ERRCODE = '42501';
+    END IF;
+
+    -- Read the view + capture row count (atomic with audit emission below; FLOOR-020 fail-closed)
+    CREATE TEMP TABLE _admin_crisis_query_result ON COMMIT DROP AS
+        SELECT * FROM admin_crisis_operational_health_v
+        WHERE tenant_id = p_tenant_id;
+    GET DIAGNOSTICS v_row_count = ROW_COUNT;
+
+    -- Insert audit row + emit Cat A audit event in same transaction
+    INSERT INTO admin_dashboard_query_execution
+        (tenant_id, executor_principal_id, dashboard_name, query_params_jsonb, row_count)
+    SELECT p_tenant_id, vc.verified_principal_id, 'admin_crisis_operational_health_v',
+           p_query_params_jsonb, v_row_count
+    FROM verify_session_jwt_and_extract_claims() vc;
+
+    PERFORM emit_audit_event_co_transactional(
+        p_tenant_id,
+        'admin.dashboard_query_executed',
+        jsonb_build_object(
+            'dashboard_name', 'admin_crisis_operational_health_v',
+            'row_count', v_row_count,
+            'query_params', p_query_params_jsonb
+        )
+    );
+
+    RETURN QUERY SELECT * FROM _admin_crisis_query_result;
+END;
+$$;
+
+ALTER FUNCTION read_admin_crisis_operational_health(tenant_id_t, JSONB)
+    OWNER TO read_admin_crisis_operational_health_wrapper_owner;
+REVOKE EXECUTE ON FUNCTION read_admin_crisis_operational_health(tenant_id_t, JSONB) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION read_admin_crisis_operational_health(tenant_id_t, JSONB)
+    TO admin_basic_operator;
+```
+
+#### §4.NEW8c — Dashboard read-wrapper `read_admin_consult_queue_health()` (Sub-decision 3.5)
+
+```sql
+CREATE OR REPLACE FUNCTION read_admin_consult_queue_health(
+    p_tenant_id tenant_id_t,
+    p_query_params_jsonb JSONB
+) RETURNS TABLE (
+    tenant_id tenant_id_t,
+    program_id UUID,
+    current_state TEXT,
+    consult_count BIGINT,
+    avg_time_to_first_claim_seconds NUMERIC,
+    orphan_claim_backlog_count BIGINT,
+    async_consult_audit_24h_count BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_row_count INTEGER;
+BEGIN
+    PERFORM 1
+      FROM verify_session_jwt_and_extract_claims() vc
+      JOIN tenant_account_membership tam
+        ON tam.tenant_id = vc.verified_tenant_id
+       AND tam.principal_id = vc.verified_principal_id
+     WHERE vc.verified_tenant_id = p_tenant_id
+       AND tam.active = TRUE
+       AND 'admin_basic_operator' = ANY(tam.assigned_role_names);
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'admin-dashboard-unauthorized: JWT principal % does NOT hold admin_basic_operator for tenant % OR JWT tenant binding mismatch', (SELECT verified_principal_id FROM verify_session_jwt_and_extract_claims()), p_tenant_id
+            USING ERRCODE = '42501';
+    END IF;
+
+    CREATE TEMP TABLE _admin_consult_query_result ON COMMIT DROP AS
+        SELECT * FROM admin_consult_queue_health_v
+        WHERE tenant_id = p_tenant_id;
+    GET DIAGNOSTICS v_row_count = ROW_COUNT;
+
+    INSERT INTO admin_dashboard_query_execution
+        (tenant_id, executor_principal_id, dashboard_name, query_params_jsonb, row_count)
+    SELECT p_tenant_id, vc.verified_principal_id, 'admin_consult_queue_health_v',
+           p_query_params_jsonb, v_row_count
+    FROM verify_session_jwt_and_extract_claims() vc;
+
+    PERFORM emit_audit_event_co_transactional(
+        p_tenant_id,
+        'admin.dashboard_query_executed',
+        jsonb_build_object(
+            'dashboard_name', 'admin_consult_queue_health_v',
+            'row_count', v_row_count,
+            'query_params', p_query_params_jsonb
+        )
+    );
+
+    RETURN QUERY SELECT * FROM _admin_consult_query_result;
+END;
+$$;
+
+ALTER FUNCTION read_admin_consult_queue_health(tenant_id_t, JSONB)
+    OWNER TO read_admin_consult_queue_health_wrapper_owner;
+REVOKE EXECUTE ON FUNCTION read_admin_consult_queue_health(tenant_id_t, JSONB) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION read_admin_consult_queue_health(tenant_id_t, JSONB)
+    TO admin_basic_operator;
+```
+
+#### §4.NEW8d — Dashboard read-wrapper `read_admin_mode1_volume_health()` (Sub-decision 3.5)
+
+```sql
+CREATE OR REPLACE FUNCTION read_admin_mode1_volume_health(
+    p_tenant_id tenant_id_t,
+    p_query_params_jsonb JSONB
+) RETURNS TABLE (
+    tenant_id tenant_id_t,
+    active_conversation_count_24h BIGINT,
+    crisis_detection_trigger_count_24h BIGINT,
+    safety_floor_response_emitted_count_24h BIGINT,
+    conversation_duration_p50_seconds_24h NUMERIC,
+    conversation_duration_p95_seconds_24h NUMERIC
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_row_count INTEGER;
+BEGIN
+    PERFORM 1
+      FROM verify_session_jwt_and_extract_claims() vc
+      JOIN tenant_account_membership tam
+        ON tam.tenant_id = vc.verified_tenant_id
+       AND tam.principal_id = vc.verified_principal_id
+     WHERE vc.verified_tenant_id = p_tenant_id
+       AND tam.active = TRUE
+       AND 'admin_basic_operator' = ANY(tam.assigned_role_names);
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'admin-dashboard-unauthorized: JWT principal % does NOT hold admin_basic_operator for tenant % OR JWT tenant binding mismatch', (SELECT verified_principal_id FROM verify_session_jwt_and_extract_claims()), p_tenant_id
+            USING ERRCODE = '42501';
+    END IF;
+
+    CREATE TEMP TABLE _admin_mode1_query_result ON COMMIT DROP AS
+        SELECT * FROM admin_mode1_volume_health_v
+        WHERE tenant_id = p_tenant_id;
+    GET DIAGNOSTICS v_row_count = ROW_COUNT;
+
+    INSERT INTO admin_dashboard_query_execution
+        (tenant_id, executor_principal_id, dashboard_name, query_params_jsonb, row_count)
+    SELECT p_tenant_id, vc.verified_principal_id, 'admin_mode1_volume_health_v',
+           p_query_params_jsonb, v_row_count
+    FROM verify_session_jwt_and_extract_claims() vc;
+
+    PERFORM emit_audit_event_co_transactional(
+        p_tenant_id,
+        'admin.dashboard_query_executed',
+        jsonb_build_object(
+            'dashboard_name', 'admin_mode1_volume_health_v',
+            'row_count', v_row_count,
+            'query_params', p_query_params_jsonb
+        )
+    );
+
+    RETURN QUERY SELECT * FROM _admin_mode1_query_result;
+END;
+$$;
+
+ALTER FUNCTION read_admin_mode1_volume_health(tenant_id_t, JSONB)
+    OWNER TO read_admin_mode1_volume_health_wrapper_owner;
+REVOKE EXECUTE ON FUNCTION read_admin_mode1_volume_health(tenant_id_t, JSONB) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION read_admin_mode1_volume_health(tenant_id_t, JSONB)
+    TO admin_basic_operator;
+```
+
+#### §4.NEW8e — Template submit wrapper `submit_forms_template_for_admin_review()` (Sub-decision 4; R7+R8+R11 closure pattern preserved)
+
+```sql
+CREATE OR REPLACE FUNCTION submit_forms_template_for_admin_review(
+    p_tenant_id tenant_id_t,
+    p_template_id UUID
+) RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_review_id UUID;
+    v_submitter_principal_id UUID;
+    v_existing_revision_requested_review_id UUID;
+BEGIN
+    -- LAYER A+B+C authorization
+    PERFORM 1
+      FROM verify_session_jwt_and_extract_claims() vc
+      JOIN tenant_account_membership tam
+        ON tam.tenant_id = vc.verified_tenant_id
+       AND tam.principal_id = vc.verified_principal_id
+     WHERE vc.verified_tenant_id = p_tenant_id
+       AND tam.active = TRUE
+       AND 'admin_basic_operator' = ANY(tam.assigned_role_names);
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'admin-template-submit-unauthorized: JWT principal does NOT hold admin_basic_operator for tenant %', p_tenant_id
+            USING ERRCODE = '42501';
+    END IF;
+
+    SELECT verified_principal_id INTO v_submitter_principal_id
+      FROM verify_session_jwt_and_extract_claims();
+
+    -- R8 HIGH-1: shared parent-template FOR UPDATE serialization point
+    PERFORM 1 FROM forms_template
+     WHERE tenant_id = p_tenant_id AND id = p_template_id
+       FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'admin-template-submit-template-not-found: forms_template id % not found for tenant %', p_template_id, p_tenant_id
+            USING ERRCODE = '02000';
+    END IF;
+
+    -- R7 HIGH-1: derive existing in-flight revision_requested review (if any) under lock
+    SELECT ftar.review_id INTO v_existing_revision_requested_review_id
+      FROM forms_template_admin_review ftar
+      JOIN LATERAL (
+          SELECT to_state
+            FROM forms_template_admin_review_lifecycle_transition lt
+           WHERE lt.tenant_id = ftar.tenant_id AND lt.review_id = ftar.review_id
+           ORDER BY lt.transition_at DESC, lt.id DESC
+           LIMIT 1
+      ) latest ON TRUE
+     WHERE ftar.tenant_id = p_tenant_id
+       AND ftar.forms_template_id = p_template_id
+       AND latest.to_state = 'revision_requested'
+       FOR UPDATE OF ftar;
+
+    IF v_existing_revision_requested_review_id IS NOT NULL THEN
+        -- REVISION RESUBMISSION PATH (triple #5)
+        v_review_id := v_existing_revision_requested_review_id;
+        PERFORM record_forms_template_admin_review_transition(
+            p_tenant_id, v_review_id,
+            'revision_requested', 'pending_review', 'revision_resubmission',
+            v_submitter_principal_id, NULL
+        );
+    ELSE
+        -- INITIAL SUBMISSION PATH (triple #1)
+        PERFORM 1
+          FROM forms_template_admin_review ftar
+          JOIN LATERAL (
+              SELECT to_state
+                FROM forms_template_admin_review_lifecycle_transition lt
+               WHERE lt.tenant_id = ftar.tenant_id AND lt.review_id = ftar.review_id
+               ORDER BY lt.transition_at DESC, lt.id DESC
+               LIMIT 1
+          ) latest ON TRUE
+         WHERE ftar.tenant_id = p_tenant_id
+           AND ftar.forms_template_id = p_template_id
+           AND latest.to_state IN ('pending_review', 'revision_requested');
+        IF FOUND THEN
+            RAISE EXCEPTION 'admin-template-submit-already-in-flight: template % already has an in-flight admin review; resolve or cancel it before re-submitting', p_template_id
+                USING ERRCODE = '40001';
+        END IF;
+
+        INSERT INTO forms_template_admin_review
+            (tenant_id, forms_template_id, submitter_principal_id, ai_guardrail_snapshot_jsonb)
+        SELECT p_tenant_id, p_template_id, v_submitter_principal_id, ai_guardrail_snapshot_jsonb
+          FROM forms_template ft
+          WHERE ft.tenant_id = p_tenant_id AND ft.id = p_template_id
+        RETURNING review_id INTO v_review_id;
+
+        PERFORM record_forms_template_admin_review_transition(
+            p_tenant_id, v_review_id,
+            'none', 'pending_review', 'initial_submission',
+            v_submitter_principal_id, NULL
+        );
+    END IF;
+
+    PERFORM emit_audit_event_co_transactional(
+        p_tenant_id, 'admin.template_submitted_for_review',
+        jsonb_build_object('review_id', v_review_id, 'forms_template_id', p_template_id,
+                           'submitter_principal_id', v_submitter_principal_id,
+                           'path', CASE WHEN v_existing_revision_requested_review_id IS NOT NULL
+                                        THEN 'revision_resubmission' ELSE 'initial_submission' END)
+    );
+
+    RETURN v_review_id;
+END;
+$$;
+
+ALTER FUNCTION submit_forms_template_for_admin_review(tenant_id_t, UUID)
+    OWNER TO forms_template_admin_review_submit_wrapper_owner;
+REVOKE EXECUTE ON FUNCTION submit_forms_template_for_admin_review(tenant_id_t, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION submit_forms_template_for_admin_review(tenant_id_t, UUID)
+    TO admin_basic_operator;
+```
+
+#### §4.NEW8f — Template decision wrapper `record_forms_template_admin_decision()` (Sub-decision 4; R1 HIGH-3 + R2 MED-1 + R11 + R13 HIGH-2 closure pattern preserved)
+
+```sql
+CREATE OR REPLACE FUNCTION record_forms_template_admin_decision(
+    p_tenant_id tenant_id_t,
+    p_review_id UUID,
+    p_decision TEXT,
+    p_decision_payload JSONB,
+    p_idempotency_key TEXT
+) RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+    v_decider_principal_id UUID;
+    v_existing_decision TEXT;
+    v_latest_state TEXT;
+    v_review_forms_template_id UUID;
+BEGIN
+    IF p_decision NOT IN ('approve', 'reject', 'request_revision') THEN
+        RAISE EXCEPTION 'admin-template-decision-invalid-decision-value: % is not a valid decision', p_decision
+            USING ERRCODE = '22023';
+    END IF;
+
+    IF p_idempotency_key IS NULL THEN
+        RAISE EXCEPTION 'admin-template-decision-null-idempotency-key: p_idempotency_key MUST be non-null per R2 MED-1 IDEMPOTENCY contract'
+            USING ERRCODE = '23502';
+    END IF;
+
+    -- LAYER A+B+C authorization (admin_template_reviewer)
+    PERFORM 1
+      FROM verify_session_jwt_and_extract_claims() vc
+      JOIN tenant_account_membership tam
+        ON tam.tenant_id = vc.verified_tenant_id
+       AND tam.principal_id = vc.verified_principal_id
+     WHERE vc.verified_tenant_id = p_tenant_id
+       AND tam.active = TRUE
+       AND 'admin_template_reviewer' = ANY(tam.assigned_role_names);
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'admin-template-decision-unauthorized: JWT principal does NOT hold admin_template_reviewer for tenant %', p_tenant_id
+            USING ERRCODE = '42501';
+    END IF;
+
+    SELECT verified_principal_id INTO v_decider_principal_id
+      FROM verify_session_jwt_and_extract_claims();
+
+    -- R11 HIGH-1: shared parent-template serialization point. Step 0 read template_id without lock;
+    -- Step 1 parent forms_template FOR UPDATE (matches submit wrapper); Step 2 review row FOR UPDATE
+    -- under parent lock. Consistent template→review acquisition order prevents deadlock.
+    SELECT forms_template_id INTO v_review_forms_template_id
+      FROM forms_template_admin_review
+     WHERE tenant_id = p_tenant_id AND review_id = p_review_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'admin-template-decision-review-not-found: review_id % not found for tenant %', p_review_id, p_tenant_id
+            USING ERRCODE = '02000';
+    END IF;
+
+    PERFORM 1 FROM forms_template
+     WHERE tenant_id = p_tenant_id AND id = v_review_forms_template_id
+       FOR UPDATE;
+
+    PERFORM 1 FROM forms_template_admin_review
+     WHERE tenant_id = p_tenant_id AND review_id = p_review_id
+       FOR UPDATE;
+
+    -- R2 MED-1 idempotency check (under lock)
+    SELECT decision INTO v_existing_decision
+      FROM admin_template_decision_idempotency_key
+     WHERE tenant_id = p_tenant_id AND review_id = p_review_id AND idempotency_key = p_idempotency_key;
+    IF FOUND THEN
+        IF v_existing_decision = p_decision THEN
+            RETURN;  -- idempotent replay
+        ELSE
+            RAISE EXCEPTION 'idempotency-key-decision-mismatch: existing key has decision=% but request has decision=%; not safe to retry', v_existing_decision, p_decision
+                USING ERRCODE = '40001';
+        END IF;
+    END IF;
+
+    -- R1 HIGH-3 latest-state derivation under lock
+    SELECT to_state INTO v_latest_state
+      FROM forms_template_admin_review_lifecycle_transition
+     WHERE tenant_id = p_tenant_id AND review_id = p_review_id
+     ORDER BY transition_at DESC, id DESC
+     LIMIT 1;
+    IF v_latest_state IS DISTINCT FROM 'pending_review' THEN
+        RAISE EXCEPTION 'admin-template-decision-non-pending-latest-state: latest state is %; only pending_review accepts decision', COALESCE(v_latest_state, '<NULL/no-transitions>')
+            USING ERRCODE = '40001';
+    END IF;
+
+    PERFORM record_forms_template_admin_review_transition(
+        p_tenant_id, p_review_id,
+        'pending_review',
+        CASE p_decision
+            WHEN 'approve' THEN 'approved'
+            WHEN 'reject' THEN 'rejected'
+            WHEN 'request_revision' THEN 'revision_requested'
+        END,
+        CASE p_decision
+            WHEN 'approve' THEN 'clinician_decision_approve'
+            WHEN 'reject' THEN 'clinician_decision_reject'
+            WHEN 'request_revision' THEN 'clinician_decision_request_revision'
+        END,
+        v_decider_principal_id, p_decision_payload
+    );
+
+    IF p_decision = 'approve' THEN
+        UPDATE forms_template SET status = 'published'
+         WHERE tenant_id = p_tenant_id AND id = v_review_forms_template_id;
+        PERFORM emit_audit_event_co_transactional(
+            p_tenant_id, 'admin.template_published_via_review_workflow',
+            jsonb_build_object('review_id', p_review_id, 'forms_template_id', v_review_forms_template_id,
+                               'decider_principal_id', v_decider_principal_id)
+        );
+    END IF;
+
+    -- R13 HIGH-2: explicit unique_violation handler for concurrent same-key race
+    BEGIN
+        INSERT INTO admin_template_decision_idempotency_key
+            (tenant_id, review_id, idempotency_key, decision, decision_payload_jsonb, decider_principal_id)
+        VALUES
+            (p_tenant_id, p_review_id, p_idempotency_key, p_decision, p_decision_payload, v_decider_principal_id);
+    EXCEPTION
+        WHEN unique_violation THEN
+            SELECT decision INTO v_existing_decision
+              FROM admin_template_decision_idempotency_key
+             WHERE tenant_id = p_tenant_id AND review_id = p_review_id
+               AND idempotency_key = p_idempotency_key;
+            IF v_existing_decision = p_decision THEN
+                RAISE EXCEPTION 'admin-template-decision-concurrent-same-key-retry-safe: concurrent identical-key call already committed decision %; retry on the client side', v_existing_decision
+                    USING ERRCODE = '40001';
+            ELSE
+                RAISE EXCEPTION 'idempotency-key-decision-mismatch: concurrent call committed decision % but this request had decision %', v_existing_decision, p_decision
+                    USING ERRCODE = '40001';
+            END IF;
+    END;
+
+    PERFORM emit_audit_event_co_transactional(
+        p_tenant_id, 'admin.template_review_decision',
+        jsonb_build_object('review_id', p_review_id, 'decision', p_decision,
+                           'decider_principal_id', v_decider_principal_id,
+                           'forms_template_id', v_review_forms_template_id)
+    );
+END;
+$$;
+
+ALTER FUNCTION record_forms_template_admin_decision(tenant_id_t, UUID, TEXT, JSONB, TEXT)
+    OWNER TO forms_template_admin_review_decision_wrapper_owner;
+REVOKE EXECUTE ON FUNCTION record_forms_template_admin_decision(tenant_id_t, UUID, TEXT, JSONB, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION record_forms_template_admin_decision(tenant_id_t, UUID, TEXT, JSONB, TEXT)
+    TO admin_template_reviewer;
+```
 
 ---
 
@@ -502,17 +1043,288 @@ Per established post-P-032 seeding pattern, the 4 net-new RLS-bearing tables + 3
 
 ---
 
-## 8. Deployment preflight + cutover sequencing
+## 8. Deployment preflight + cutover sequencing (P-042 R1 MED-1 closure 2026-05-22 — preflight DO block + class definitions inlined verbatim from SI-023 §8.1)
 
-Reuses the canonical P-040 §8.1 preflight + §8.2 11-phase cutover shape with SI-023 entity additions. See SI-023 §8.1 + §8.2 for the authoritative class definitions; this amendment carries them by reference (classes A-M + G.2 + G.3 + H + I + J + K + L preserved unchanged from P-040 with admin-domain object names added to text-scan regex; classes N + O + P are SI-023-specific NEW).
+### §8.1 Deployment preflight DO block
 
-**Class N — Admin dashboard audit completeness tripwire** (0% tolerance per SI-023 OQ5): scan `admin_dashboard_query_execution` over the last 24h window + compare against count of distinct dashboard-endpoint requests aggregated from application access logs (via canonical preflight-input view `admin_dashboard_request_log_v`). Drift > 0 raises `admin.dashboard_query_audit_completeness_violation` Cat C audit + blocks cutover.
+Reuses the canonical P-040 §8.1 preflight pattern (classes A through M + G.2 + G.3 + H + I + J + K + L) with admin-domain object names added to text-scan regexes. **Three SI-023-specific NEW classes (N + O + P)** are inlined below; remaining classes A-M reused from P-040 with the admin entity additions noted.
 
-**Class O — SECDEF dependency rejection on admin views + forms_template_admin_review entities**: pg_depend + prosrc text-scan rejecting any SECDEF routine that depends on the 3 admin views OR on the 3 admin review entities UNLESS the routine is on the canonical SECDEF allowlist (populated with the 6 SI-023 wrappers per SI-023 §8.1 class O table — each routine + expected owner + dependency objects). Verifies each allowlisted routine is owned by EXACTLY the expected owner role (ownership-drift attack defense). Any violation raises `admin.template_review_anti_bypass_violation` Cat C audit + blocks cutover.
+**Class A — Verify the 11 net-new RBAC roles exist** (lifted verbatim from SI-023 §8.1 class A; explicit role enumeration rather than stale numeric count):
 
-**Class P — Admin view + dashboard wrapper grant-matrix allowlist**: explicit allowlist query over `information_schema.role_table_grants` enforcing that the SELECT grant matrix on the 3 admin views is exactly { (view → corresponding wrapper-owner role only) + (view-owner self) }; ALL admin_basic_operator grants on these views REJECTED (must use SECDEF wrappers); ALL PUBLIC grants REJECTED; ALL other-role grants REJECTED unless on the canonical pair. Any violation raises `admin-view-grant-allowlist-violation` exception + blocks cutover.
+```sql
+DO $$
+DECLARE
+    v_role_missing TEXT;
+BEGIN
+    FOR v_role_missing IN
+        SELECT unnest(ARRAY[
+            -- Application roles (2)
+            'admin_basic_operator', 'admin_template_reviewer',
+            -- Dashboard-wrapper-owner roles (3)
+            'read_admin_crisis_operational_health_wrapper_owner',
+            'read_admin_consult_queue_health_wrapper_owner',
+            'read_admin_mode1_volume_health_wrapper_owner',
+            -- Template-wrapper-owner roles (2)
+            'forms_template_admin_review_submit_wrapper_owner',
+            'forms_template_admin_review_decision_wrapper_owner',
+            -- Raw-writer-owner role (1)
+            'forms_template_admin_review_transition_writer_owner',
+            -- View-owner roles (3)
+            'admin_crisis_operational_health_view_owner',
+            'admin_consult_queue_health_view_owner',
+            'admin_mode1_volume_health_view_owner'
+        ])
+        EXCEPT SELECT rolname FROM pg_roles
+    LOOP
+        RAISE EXCEPTION 'si-023-rbac-role-missing: %', v_role_missing;
+    END LOOP;
+END $$;
+```
 
-**Cutover sequencing (11 phases per SI-023 §8.2):**
+**Class B — jwt_migration_entity_status seed scope = 7 entries** (4 RLS-bearing tables + 3 derived views; phase_4_cutover_eligible=FALSE + raw_guc_fallback_audited=TRUE):
+
+```sql
+DO $$
+DECLARE
+    v_missing_entity TEXT;
+BEGIN
+    FOR v_missing_entity IN
+        SELECT unnest(ARRAY[
+            'admin_dashboard_query_execution',
+            'forms_template_admin_review',
+            'forms_template_admin_review_lifecycle_transition',
+            'admin_template_decision_idempotency_key',
+            'admin_crisis_operational_health_v',
+            'admin_consult_queue_health_v',
+            'admin_mode1_volume_health_v'
+        ])
+        EXCEPT SELECT entity_name FROM jwt_migration_entity_status
+              WHERE phase_4_cutover_eligible = FALSE
+                AND raw_guc_fallback_audited = TRUE
+    LOOP
+        RAISE EXCEPTION 'si-023-jwt-migration-seed-missing: % (expected phase_4_cutover_eligible=FALSE + raw_guc_fallback_audited=TRUE)', v_missing_entity;
+    END LOOP;
+END $$;
+```
+
+**Class C/D/E — Tenant config seed parts A/B/C** (reused from P-040; no SI-023-specific overrides; tenant.admin.* CCR keys deferred to v1.1 per SI-023 OQ4 — for v1.0 the admin slice does not introduce new tenant config rows).
+
+**Class E0a/b/c — Legacy-row migration coverage** (vacuous for SI-023 greenfield deploy; no pre-existing admin_* rows; preflight passes trivially on day-0 cutover).
+
+**Class F — View security_invoker=true on the 3 admin views**:
+
+```sql
+DO $$
+DECLARE
+    v_view_missing_security_invoker TEXT;
+BEGIN
+    FOR v_view_missing_security_invoker IN
+        SELECT c.relname
+          FROM pg_class c
+         WHERE c.relname IN ('admin_crisis_operational_health_v',
+                             'admin_consult_queue_health_v',
+                             'admin_mode1_volume_health_v')
+           AND c.relkind = 'v'
+           AND NOT (c.reloptions @> ARRAY['security_invoker=true'])
+    LOOP
+        RAISE EXCEPTION 'si-023-view-missing-security-invoker: %', v_view_missing_security_invoker;
+    END LOOP;
+END $$;
+```
+
+**Class G.1 — View-grant allowlist** (subsumed by class P below with broader admin-specific scope; classical class G.1 from P-040 applied to crisis views remains in effect under its P-040 scope).
+
+**Class G.2 — Recursive role-membership closure for the 2 admin application roles** (no role outside the canonical pair `admin_basic_operator` + `admin_template_reviewer` may be an effective member of either reader role through pg_auth_members recursion):
+
+```sql
+DO $$
+DECLARE
+    v_violator TEXT;
+BEGIN
+    FOR v_violator IN
+        WITH RECURSIVE effective_members AS (
+            SELECT m.member, r.rolname AS reader_role
+              FROM pg_auth_members m
+              JOIN pg_roles r ON r.oid = m.roleid
+             WHERE r.rolname IN ('admin_basic_operator', 'admin_template_reviewer')
+            UNION ALL
+            SELECT m.member, em.reader_role
+              FROM pg_auth_members m
+              JOIN effective_members em ON em.member = m.roleid
+        )
+        SELECT pg_roles.rolname || ' (effective member of ' || em.reader_role || ')'
+          FROM effective_members em
+          JOIN pg_roles ON pg_roles.oid = em.member
+         WHERE pg_roles.rolname NOT IN (
+             -- canonical end-user grantees set; tenant operator staff principals would be
+             -- assigned via tenant_account_membership joined to verify_session_jwt_and_extract_claims
+             -- rather than direct DB role membership, so this list is intentionally minimal
+             'admin_basic_operator', 'admin_template_reviewer'
+         )
+    LOOP
+        RAISE EXCEPTION 'si-023-admin-role-membership-violator: %', v_violator;
+    END LOOP;
+END $$;
+```
+
+**Class G.3 — Grant-option / admin-option rejection** (reused from P-040; no GRANT OPTION on SELECT grants for any admin view + no ADMIN OPTION on the 2 admin application roles).
+
+**Class H — pg_read_all_data + BYPASSRLS check** (reused from P-040; admin views inherit the same canonical break-glass-admin allowlist; application runtime roles MUST NOT hold either).
+
+**Class I — SECDEF pg_depend on admin views** (subsumed by class O below with broader scope covering admin review entities; classical class I from P-040 applied to crisis views remains in effect).
+
+**Class J — SECDEF prosrc text-scan** (reused from P-040 with admin-domain object names added to the regex: `admin_crisis_operational_health_v|admin_consult_queue_health_v|admin_mode1_volume_health_v|forms_template_admin_review|forms_template_admin_review_lifecycle_transition|admin_template_decision_idempotency_key|admin_dashboard_query_execution`; rejects any SECDEF routine outside the class O allowlist that statically references any of these objects).
+
+**Class K — Derived-relation (CTAS / MV) rejection** (reused from P-040 §8.1 class K + Phase 7.1 event trigger `crisis_view_ctas_provenance_block`; admin views become new dependents in class K allowlist — admin views and admin review entities cannot be the source of any non-allowlisted CREATE TABLE AS / SELECT INTO / CREATE MATERIALIZED VIEW DDL except via canonical break-glass-admin roles).
+
+**Class L — View-owner relowner + non-BYPASSRLS attribute** (reused from P-040; applied to the 3 admin view owners — each owns EXACTLY its respective view; each is NOLOGIN + non-BYPASSRLS):
+
+```sql
+DO $$
+DECLARE
+    v_view_record RECORD;
+BEGIN
+    FOR v_view_record IN
+        VALUES
+            ('admin_crisis_operational_health_v', 'admin_crisis_operational_health_view_owner'),
+            ('admin_consult_queue_health_v', 'admin_consult_queue_health_view_owner'),
+            ('admin_mode1_volume_health_v', 'admin_mode1_volume_health_view_owner')
+    LOOP
+        PERFORM 1
+          FROM pg_class c
+          JOIN pg_roles r ON r.oid = c.relowner
+         WHERE c.relname = v_view_record.column1
+           AND r.rolname = v_view_record.column2
+           AND r.rolcanlogin = FALSE
+           AND r.rolbypassrls = FALSE;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'si-023-view-owner-violation: % expected owner % (NOLOGIN + non-BYPASSRLS)',
+                v_view_record.column1, v_view_record.column2;
+        END IF;
+    END LOOP;
+END $$;
+```
+
+**Class M — View-definition integrity text scan** (reused from P-040 pattern; verifies each admin view body references `current_tenant_id_strict('<view_name>')` predicate; positive assertion: view body MUST contain the canonical tenant-scope predicate fragment).
+
+**Class N — Admin dashboard audit completeness tripwire** (0% tolerance per SI-023 OQ5; canonical preflight-input view `admin_dashboard_request_log_v` populated from APM logs):
+
+```sql
+DO $$
+DECLARE
+    v_drift INTEGER;
+    v_expected_count INTEGER;
+    v_actual_count INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO v_expected_count
+      FROM admin_dashboard_request_log_v
+     WHERE request_at > now() - INTERVAL '24 hours';
+    SELECT COUNT(*) INTO v_actual_count
+      FROM admin_dashboard_query_execution
+     WHERE executed_at > now() - INTERVAL '24 hours';
+    v_drift := v_expected_count - v_actual_count;
+    IF v_drift <> 0 THEN
+        PERFORM emit_audit_event_co_transactional(
+            current_tenant_id_strict('preflight_admin_dashboard_audit_completeness'),
+            'admin.dashboard_query_audit_completeness_violation',
+            jsonb_build_object(
+                'window_start', now() - INTERVAL '24 hours',
+                'window_end', now(),
+                'expected_count', v_expected_count,
+                'actual_count', v_actual_count,
+                'drift', v_drift
+            )
+        );
+        RAISE EXCEPTION 'si-023-admin-dashboard-audit-completeness-violation: 24h drift=% (expected=%, actual=%)',
+            v_drift, v_expected_count, v_actual_count;
+    END IF;
+END $$;
+```
+
+**Class O — SECDEF dependency rejection on admin views + forms_template_admin_review entities** (allowlist populated with the 6 canonical SI-023 SECDEF wrappers per SI-023 §8.1 class O table):
+
+```sql
+DO $$
+DECLARE
+    v_violator RECORD;
+BEGIN
+    -- pg_depend-based check: any SECDEF routine that depends on admin views OR admin review entities
+    -- must be on the canonical 6-wrapper allowlist with the expected owner role.
+    FOR v_violator IN
+        SELECT p.proname AS routine_name,
+               o.rolname AS routine_owner,
+               c.relname AS referenced_entity
+          FROM pg_proc p
+          JOIN pg_roles o ON o.oid = p.proowner
+          JOIN pg_depend d ON d.objid = p.oid AND d.classid = 'pg_proc'::regclass
+          JOIN pg_class c ON c.oid = d.refobjid
+                          AND c.relname IN (
+                              'admin_crisis_operational_health_v',
+                              'admin_consult_queue_health_v',
+                              'admin_mode1_volume_health_v',
+                              'forms_template_admin_review',
+                              'forms_template_admin_review_lifecycle_transition',
+                              'admin_template_decision_idempotency_key'
+                          )
+         WHERE p.prosecdef = TRUE
+           AND NOT (
+               (p.proname, o.rolname) IN (
+                   ('read_admin_crisis_operational_health', 'read_admin_crisis_operational_health_wrapper_owner'),
+                   ('read_admin_consult_queue_health', 'read_admin_consult_queue_health_wrapper_owner'),
+                   ('read_admin_mode1_volume_health', 'read_admin_mode1_volume_health_wrapper_owner'),
+                   ('submit_forms_template_for_admin_review', 'forms_template_admin_review_submit_wrapper_owner'),
+                   ('record_forms_template_admin_decision', 'forms_template_admin_review_decision_wrapper_owner'),
+                   ('record_forms_template_admin_review_transition', 'forms_template_admin_review_transition_writer_owner')
+               )
+           )
+    LOOP
+        PERFORM emit_audit_event_co_transactional(
+            current_tenant_id_strict('preflight_admin_secdef_dependency'),
+            'admin.template_review_anti_bypass_violation',
+            jsonb_build_object(
+                'routine_name', v_violator.routine_name,
+                'routine_owner', v_violator.routine_owner,
+                'referenced_entity', v_violator.referenced_entity
+            )
+        );
+        RAISE EXCEPTION 'si-023-admin-secdef-anti-bypass-violation: routine % (owner=%) references % outside the canonical 6-wrapper allowlist',
+            v_violator.routine_name, v_violator.routine_owner, v_violator.referenced_entity;
+    END LOOP;
+END $$;
+```
+
+**Class P — Admin view + dashboard wrapper grant-matrix allowlist** (explicit allowlist over information_schema.role_table_grants; admin_basic_operator MUST NOT hold direct SELECT on any of the 3 admin views; ALL PUBLIC grants REJECTED):
+
+```sql
+DO $$
+DECLARE
+    v_violator RECORD;
+BEGIN
+    FOR v_violator IN
+        SELECT g.table_name, g.grantee
+          FROM information_schema.role_table_grants g
+         WHERE g.table_name IN ('admin_crisis_operational_health_v',
+                                'admin_consult_queue_health_v',
+                                'admin_mode1_volume_health_v')
+           AND g.privilege_type = 'SELECT'
+           AND NOT (
+               (g.table_name, g.grantee) IN (
+                   ('admin_crisis_operational_health_v', 'read_admin_crisis_operational_health_wrapper_owner'),
+                   ('admin_crisis_operational_health_v', 'admin_crisis_operational_health_view_owner'),
+                   ('admin_consult_queue_health_v', 'read_admin_consult_queue_health_wrapper_owner'),
+                   ('admin_consult_queue_health_v', 'admin_consult_queue_health_view_owner'),
+                   ('admin_mode1_volume_health_v', 'read_admin_mode1_volume_health_wrapper_owner'),
+                   ('admin_mode1_volume_health_v', 'admin_mode1_volume_health_view_owner')
+               )
+           )
+    LOOP
+        RAISE EXCEPTION 'si-023-admin-view-grant-allowlist-violation: view % has SELECT grant to non-canonical role %',
+            v_violator.table_name, v_violator.grantee;
+    END LOOP;
+END $$;
+```
+
+### §8.2 Cutover sequencing (11 phases per SI-023 §8.2)
 
 1. **Phase 1 — RBAC + ownership setup:** create the 11 net-new RBAC roles per §6.
 2. **Phase 2 — Tables + indexes + triggers:** execute §4.NEW1 → NEW2 → NEW3 → NEW4 DDL blocks in dependency order (each block creates table + RLS + append-only trigger + invariant triggers + indexes inline).
@@ -531,6 +1343,11 @@ Reuses the canonical P-040 §8.1 preflight + §8.2 11-phase cutover shape with S
 ---
 
 ## 9. Cycle log
+
+**v0.2 DRAFT 2026-05-22 — R1 closures applied (2 HIGH + 1 MED):**
+- **R1 HIGH-1 closed:** `admin_mode1_volume_health_v` (§4.NEW7) drifted from SI-023 Sub-decision 2 Surface 3 contract — v0.1 used 30-day hourly buckets + unqualified `crisis_detection_trigger` + broad `ai_mode1.%` audit counting AND omitted `mode1.safety_floor_response_emitted` AND p50/p95 conversation duration. Operators would have shipped a dashboard reporting wrong safety-floor signals. Fix: reconciled view to SI-023 canonical Surface 3 columns — `active_conversation_count_24h` + `crisis_detection_trigger_count_24h` (explicit `mode1.` namespace) + `safety_floor_response_emitted_count_24h` + `conversation_duration_p50_seconds_24h` + `conversation_duration_p95_seconds_24h`. Last-24h aggregate (matches Surface 3 normative contract); aggregate counts only (NO raw conversation_text; NO patient_id exposure).
+- **R1 HIGH-2 closed:** §4.NEW8 v0.1 carried all 6 SECDEF procedure bodies by reference, regressing from the P-040 inline pattern. Implementers following the amendment would have no self-contained deployable wrapper text + could miss JWT principal role checks, raw-writer grants, or decision retry handling. Fix: inlined full executable DDL for all 6 procedures verbatim at §4.NEW8a (raw lifecycle writer) + §4.NEW8b/c/d (3 dashboard read-wrappers) + §4.NEW8e (submit template wrapper) + §4.NEW8f (decision template wrapper). Each includes SECURITY DEFINER + locked search_path + ownership + REVOKE/GRANT + LAYER A/B/C authorization + audit emission + parent-template locking + idempotency handling per the SI-023 R1-R17 closure cascade.
+- **R1 MED-1 closed:** §8.1 preflight non-executable by reference; regression from P-040 explicit + executable preflight pattern. Drift could pass review because the exact role enumeration, grant matrix, SECDEF allowlist, view reloptions, CTAS provenance checks, + seed checks would not be mechanically present in the bundle being promoted. Fix: inlined executable DO blocks for class A (11-role enumeration) + class B (7-entry jwt_migration seed scope) + class F (security_invoker on 3 views) + class G.2 (recursive admin role-membership closure) + class L (view-owner relowner + NOLOGIN + non-BYPASSRLS) + class N (admin dashboard audit completeness tripwire) + class O (SECDEF dependency rejection with 6-wrapper allowlist + expected owner) + class P (admin view grant-matrix allowlist with admin_basic_operator rejection). Remaining classes C/D/E/E0a-c/G.1/G.3/H/I/J/K/M documented with admin-domain entity additions; reused from P-040 with admin entity additions to text-scan regex.
 
 **v0.1 DRAFT 2026-05-22 — Initial authoring:**
 - Authored from SI-023 v1.0 RATIFIED canonical content per the established post-P-029 SI-spec-first promotion pattern.
