@@ -278,9 +278,9 @@ CREATE TRIGGER ai_mode1_conversation_turn_result_append_only
 
 **Cross-references:** Mode 1 spec §6.1 entity 5 + R2/R3/R4 closures (split-table model + append-only invariant + outcome correlation).
 
-### §4.NEW6 — `ai_mode1_conversation_state` (CDM v1.8 new derived view; Mode 1 spec §6.1 view; R7 HIGH-1 closure)
+### §4.NEW6 — `ai_mode1_conversation_state` (CDM v1.8 new derived view; Mode 1 spec §6.1 view; R7 HIGH-1 closure; post-P-042 audit Finding 3 closure 2026-05-22)
 
-SECURITY INVOKER derived view computing `last_turn_at` + `is_archived` + `archived_at` from base tables.
+**Plain** derived view computing `last_turn_at` + `is_archived` + `archived_at` from base tables. Tenant isolation enforced via explicit `WHERE c.tenant_id = current_tenant_id_strict('ai_mode1_conversation_state')` predicate in the view body (SI-024.1 JWT-binding canonical helper); base-table reads run under the view-owner's privileges (`ai_mode1_view_owner`, non-BYPASSRLS). NOT a `security_invoker` view — the post-R7 design intentionally REPLACED security_invoker with plain-view + explicit-predicate + view-owner privileges to enforce data-minimization on per-turn timestamps (see §9 R7 entry for the trade-off rationale).
 
 ```sql
 -- R7 HIGH-1 closure 2026-05-21: SECURITY INVOKER view forced invoking role to have
