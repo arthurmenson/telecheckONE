@@ -6157,3 +6157,66 @@ CDM v1.6→v1.7 Amendment §4: the summary line states "6 new action IDs (4 Cat 
 Pilot launch posture unchanged: Telecheck-Ghana revenue anchor still depends on the cross-slice write-handler PRs shipping; PR 8 is the first write surface but the slice is not yet traffic-ready (`/ready` 503).
 
 — Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), Med-Interaction PR 8 POST /evaluations first write handler opened as [CODEX-PENDING] PR #196; canonical write composition + AUDIT_EVENTS v5.9 catalog sync established; validated end-to-end against live PostgreSQL 16; depends on #195 for green CI 2026-05-23. progress.json revision 187 → 188.
+
+---
+
+## Addendum 85 — Wave-2 parallel-agent orchestration complete: 5 branches parked [CODEX-PENDING] for May 26 mass review (2026-05-23, Evans local session)
+
+**Date:** 2026-05-23
+**Trigger:** Evans's "fire agent orchestration to speed up work. work nonstop for 3 days" directive. Evans's local session fired 5 parallel sub-agents with `isolation: "worktree"` since Codex usage limit was hit until May 26 (3-day window). Strategy: parallel-author → park `[CODEX-PENDING]` on `origin` → mass Codex review + merge cascade when limit resets.
+
+### Wave 2 outcomes — 5 branches parked on origin
+
+| # | Branch | Commit | Scope |
+|---|---|---|---|
+| 1 | `test/med-interaction-pr7-2-backfill-42501-coverage` | `acf223c` | Med-Int test backfill — 42501 → 403 unit-test coverage parity with Admin §4a/§4b (was a gap when Med-Int 7.1 hotfix shipped without test) |
+| 2 | `feat/admin-backend-sprint2-pr2-post-forms-template-submit-handler` | `a43f52b` | Admin Sprint 2 PR 2 — `POST /v1/admin/templates/:template_id/submit-for-review` via SECDEF wrapper `submit_forms_template_for_admin_review` from migration 043; Cat A audit emission; idempotency; 10 unit tests |
+| 3 | `refactor/lib-extract-with-db-role-with-pg-error-map` | `893981e` | Foundation refactor — extracted duplicated `42501 → tenant-blind 403` pattern from 4 handlers into shared `src/lib/with-db-role-safe.ts` helper (Option A: `withDbRoleSafe(tx, role, req, fn)`); refactored all 4 existing handlers; 14 helper unit tests; grep evidence `'42501'` only in helper |
+| 4 | `feat/med-interaction-pr8-write-handlers` | `80e8012` | Med-Int PR 8 — 3 write handlers (`POST /evaluations`, `POST /signals`, `POST /signals/:id/activate`) + first slice Cat A audit emission pattern (`med_interaction.*` action IDs via placeholder cast pending AUDIT_EVENTS catalog amendment); idempotency; mixed direct-INSERT + SECDEF-wrapper composition |
+| 5 | `feat/crisis-response-sprint2-pr2-post-crisis-event-handler` | `ff35441` | Crisis Sprint 2 PR 2 — `POST /v0/crisis-events` initiation via SECDEF wrapper `record_crisis_initiation` from migration 036; first crisis-side Cat A audit emission; 23 unit tests; KMS envelope encryption deferred to Sprint 4 per ADR-024 |
+
+**Parallel-orchestration ROI:** ~30 min wall-clock for 5 PRs vs estimated ~4-5h sequential. Total LOC added across the 5 branches: ~5050 LOC (handlers + tests + module-local audit emitters + routes/README bumps).
+
+### Friction caught for next-wave orchestration design
+
+**Shared-worktree race persisted despite `isolation: "worktree"`.** Three of the five agents reported mid-commit branch-switching / sibling-uncommitted-files-in-tree contamination. Each recovered cleanly via explicit `git checkout` + `git restore --staged <slice-namespace>/` + verify `git diff --cached --stat` before commit. Final pushed branches are clean (each contains only its own slice's files; verified post-push by orchestrator). Working hypothesis: the `isolation: "worktree"` Agent-tool parameter may not give fully isolated `.git/` directories when 5 agents fire from the same parent context; they may share index state across `git worktree add`-created peers.
+
+**Mitigation for Wave 3+:**
+1. Reduce concurrency from 5 → 3 parallel agents per wave to lower contention on the shared index.
+2. Brief each agent more explicitly to `git restore --staged <slice-namespace>` before staging.
+3. Consider switching to `mcp__ccd_session__spawn_task` chip-based dispatch for cleaner physical-clone isolation (each spawned session gets a fresh fork) — trades parallelism for cleanliness.
+
+### Cross-slice patterns now consolidated
+
+- **Foundation 051 `withDbRole` Option B mechanism**: 4 reference handlers in main + 5 more in queued branches = 9 reference implementations.
+- **Cross-slice 42501 → tenant-blind 403**: extracted to `src/lib/with-db-role-safe.ts` (queued branch 3). After May 26 mass review + merge cascade, every new SECDEF-calling handler should use `withDbRoleSafe` directly.
+- **Cat A audit emission same-tx pattern**: established in 3 places this wave (Crisis Wave-2 PR 2 + Admin Wave-2 PR 2 + Med-Int Wave-2 PR 8). All three use the `<slice>AuditPlaceholder()` single-sanctioned-cast helper pending AUDIT_EVENTS catalog amendment to enumerate `crisis.*` + `medication_interaction.*` + `admin.*` action IDs canonically (mirrors `forms-intake/audit.ts formsAuditPlaceholder` precedent).
+- **Idempotency via `withIdempotentExecution`**: established in 3 write handlers this wave; consistent with IDEMPOTENCY contract v5.1.
+
+### Cockpit reconciliation note
+
+Cockpit Addendum 84 was authored in parallel by the remote-cron firing 2026-05-23 documenting their own Med-Int PR 8 attempt (PR #196 — different branch from Evans's local session's `feat/med-interaction-pr8-write-handlers` at `80e8012`). The 2 branches are independent parallel attempts at the same scope; the cleanest reconciliation is to pick one at May 26 review time + close the other. The local-session branch went deeper (3 write handlers in one PR + matching tests + audit emitter) vs the remote-cron branch's single endpoint.
+
+### Deferred verification (May 26 catch-up)
+
+When Codex limit resets, the queue is:
+- Codex R1 on all 5 Wave-2 branches (independent reviews, can be parallel)
+- Resolve the 2 parallel Med-Int PR 8 attempts (local-session vs remote-cron PR #196)
+- Backfill any patterns Codex prescribes (the refactor branch is the most likely to need follow-ups since it changes 4 handler interfaces simultaneously)
+- Merge cascade with rebase-on-main between merges to keep branch states consistent
+
+### Cumulative cycle statistics through Addendum 85
+
+- 5 of 5 pilot-required slices have foundation 051 + first read handler in main.
+- 3 of 5 pilot-required slices now have **first write handler** queued for review (Med-Int 3 write endpoints, Crisis 1, Admin 1).
+- Wave-2 builds on Wave-1's 4-PR orchestration cycle from Addendum 83 — combined ~12 LOC-PRs across 2 waves in ~2h wall-clock.
+- Codex deferred-review queue size at end of Wave 2: 5 branches + 1 sibling Med-Int 7.1 hotfix already merged + 4 deferred R3 verifications from Wave 1 = ~10 review items for May 26.
+- 22nd successive Q2 2026 auto-proceed close-out (the previous wave was the 21st; Wave 2 is the 22nd despite no merges this wave — auto-proceed gate cleared for the parallel-orchestration discipline itself per Evans's standing directive).
+
+### Next deliverable
+
+**Wave 3a (firing now):** 3 parallel agents — Med-Int PR 9 (remaining 4 endpoints incl. 3 fail-closed wrappers + KMS-envelope override) + Crisis Sprint 2 PR 3 (POST acknowledge) + Admin Sprint 2 PR 3 (POST decision). After Wave 3a returns: Wave 3b spawns Async Consult next + AI Service Mode 1 + Track 5 CI gate.
+
+**Codex catch-up wave (May 26 limit reset):** mass review + merge cascade on the accumulated queue.
+
+— Claude (Opus 4.7, 1M context, Evans's local session), Wave-2 parallel-agent orchestration close-out 2026-05-23. progress.json revision 188 → 189.
