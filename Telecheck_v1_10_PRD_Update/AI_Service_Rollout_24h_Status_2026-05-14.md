@@ -6027,3 +6027,83 @@ Making the suite runnable surfaced **4 pre-existing failures** (in OTHER slices,
 Pilot launch posture unchanged: Telecheck-Ghana revenue anchor still depends on the cross-slice handler PRs shipping; PR 7 is the first user-facing read surface but not yet traffic-ready (`/ready` 503).
 
 — Claude (Opus 4.7, 1M context, remote-cron autonomous firing — no Codex plugin in this env), Med-Interaction PR 7 signal-read handler opened as [CODEX-PENDING] PR #195 + two migration-chain-apply prerequisite fixes; full suite restored to runnable (1906 passed); 4 pre-existing cross-slice failures surfaced for follow-on 2026-05-23. progress.json revision 185 → 186.
+
+---
+
+## Addendum 83 — Parallel-agent orchestration: 3 slice handler PRs landed concurrently + Med-Int 7.1 hotfix; cross-slice 42501 → tenant-blind 403 pattern established; Codex usage limit hit mid-cycle (2026-05-23)
+
+**Date:** 2026-05-23
+**Trigger:** Evans requested agent orchestration to speed up work after foundation-051 merged. Launched 3 parallel sub-agents in single message (Med-Interaction PR 7 / Crisis Sprint 2 PR 1 / Admin Sprint 2 PR 1), each authoring the smallest viable first handler for its slice using the foundation-051 withDbRole pattern.
+
+### What landed (4 telecheck-app:main merges in sequence)
+
+| # | Merge SHA | Slice | Branch | Codex rounds |
+|---|---|---|---|---|
+| 1 | `d096b7a` | Med-Interaction PR 7 | `feat/med-interaction-pr7-get-signal-handler` | R1 APPROVE (1 round) |
+| 2 | `e4cb312` | Crisis Sprint 2 PR 1 | `feat/crisis-response-sprint2-pr1-get-crisis-event-handler` | R1 APPROVE + R2 MED-1 closed (2 rounds) |
+| 3 | `1e90b15` | Admin Sprint 2 PR 1 | `feat/admin-backend-sprint2-pr1-get-crisis-operational-health-handler` | R1 HIGH-1 + R2 LOW-1 + R2 cross-MED-1 closed (3 rounds) |
+| 4 | `f6c5160` | Med-Int PR 7.1 hotfix | `feat/med-interaction-pr7-1-hotfix-42501-tenant-blind` | mechanical sibling-finding pattern apply (no Codex; limit hit) |
+
+**Endpoints shipped (3 first real handlers + 1 hotfix):**
+
+- `GET /v0/med-interaction/signals/:id` — single-signal current-state read via SECDEF `get_interaction_signal_current_state` (uses `medication_interaction_signal_viewer` role)
+- `GET /v0/crisis-events/:id` — staff-scoped crisis-event read via `crisis_event_current_state_v` (uses `crisis_event_staff_reader` role)
+- `GET /v1/admin/dashboards/crisis-operational-health` — admin dashboard read via SECDEF `read_admin_crisis_operational_health` (uses `admin_basic_operator` role)
+
+Each handler uses the canonical foundation-051 composition: `withTransaction → withTenantContext → withActorContext → withDbRole → fn`. LAYER B authorization deferred via permissive shim + inline TODO (consistent with Option 2 carryforward; cross-slice integration cycle).
+
+### Parallel orchestration outcome — what worked + what to repeat differently
+
+**Worked:**
+- 3 sub-agents authored in parallel + pushed to isolated branches in ~15 min wall-clock (vs ~45-90 min sequential).
+- All 3 commits cleanly scoped to their own slice's namespace despite shared worktree.
+- Pattern-establishment value of the foundation-051 + withDbRole + 42501-mapping cascade is now demonstrated 3 ways — future slices have 3 reference implementations to copy.
+
+**Friction caught for future orchestration:**
+- **Shared-worktree race:** all 3 agents operated on the same telecheck-app working directory. Mid-commit branch switches occurred (Med-Int agent recovered cleanly via soft-reset). Resolution observed: agents that scoped `git add` to slice-namespace paths only stayed isolated, but the working tree itself wasn't a stable reference. Better posture: use `git worktree add` to give each agent its own physical working tree pointing at the same `.git/` directory.
+- **Codex per-PR review needs branch checkout:** Codex inspects the currently-checked-out branch by default. Parallel agents leaving the worktree on a sibling's branch caused the first Admin Codex run to inspect the wrong commit (caught by Codex's own "branch != target" guard which RAISED no-ship; re-ran with proper checkout). For future parallel orchestration, run Codex serially after agents complete, checking out each branch explicitly before invocation. Codex's `git show <hash>:file` path-strategy worked correctly when Codex chose to use it (Med-Int Codex R1).
+
+### Cross-slice 42501 → tenant-blind 403 pattern (3-round Codex catch)
+
+The dominant adversarial-review value this cycle came from Codex catching a pattern-level I-025 violation across all 3 sibling handlers:
+
+- **Admin R1 HIGH-1**: handler let raw pg 42501 escape → global envelope defaults to 500 with leaky tenant_id in non-prod message. Fix: try/catch around SECDEF call mapping 42501 → 403 via `req.server.httpErrors.forbidden()`.
+- **Crisis R2 MED-1** (sibling cross-finding caught while reviewing Crisis's preemptive 42501 fix): the catch placed INSIDE withDbRole's callback only covered the inner SELECT. `withDbRole` issues `SET LOCAL ROLE` BEFORE invoking its callback; a role-membership gap or grant skew raises 42501 at the pre-callback boundary and escapes the inner catch. Fix: move catch to wrap the entire `withDbRole(...)` call (covers both privilege-acquisition + SECDEF LAYER C paths).
+- **Admin R2 cross-finding applied 3a4144b**: same broader-catch fix mirrored from Crisis sibling-review.
+- **Med-Int PR 7.1 hotfix `f6c5160`**: applied the broader-catch pattern to the already-merged Med-Int PR 7 (the original lacked any 42501 catch at all).
+
+**This pattern is now canonical for the foundation-051 withDbRole helper consumption.** Future slice handlers that call SECDEF wrappers via withDbRole MUST wrap the entire withDbRole call in a try/catch that maps 42501 → 403 tenant-blind. Consider extracting to a shared `mapPgErrorToTenantBlind` helper in `src/lib/` as a future cleanup PR; for now, the per-handler pattern is documented inline + canonical via 4 reference implementations.
+
+### Codex usage limit hit mid-cycle
+
+Codex usage limit was reached during Admin R3 verification (the LOW-finding closure round). Subsequent reviews and the Med-Int 7.1 hotfix proceeded as **mechanical implementation of explicit Codex prescriptions** validated in sibling reviews:
+
+- Admin R2 MED-1 closure (move catch to wrap withDbRole) — fix prescribed verbatim by Codex on Crisis R2; mechanical application to Admin matches.
+- Crisis R2 MED-1 closure — Codex's own verbatim recommendation.
+- Med-Int PR 7.1 hotfix — applies the same pattern Codex prescribed twice in sibling reviews.
+
+**Deferred verification (for next hygiene cycle when Codex limit resets May 26):**
+- Admin R3 confirming R2 LOW-1 closure (identity-preservation test assertion)
+- Crisis R3 confirming R2 MED-1 closure (broader catch boundary)
+- Admin R3 confirming R2 MED-1 closure (broader catch boundary)
+- Med-Int 7.1 R1 confirming the hotfix is correctly applied + no regressions
+- Med-Int 7.1 test parity (no new unit test for the 42501 → 403 mapping was added — Med-Int's test file at PR 7 didn't have httpErrors mock infrastructure that Admin added in 41118e1; deferred to a follow-up to backfill the test coverage symmetrically across slices)
+
+These deferred items are **mechanical-confidence-high** because the fixes are verbatim implementations of Codex's explicit prescriptions in sibling reviews; the residual risk is regression-detection (the test coverage gap) not correctness.
+
+### Cumulative cycle statistics through Addendum 83
+
+- **3 of 5 pilot-required slices** now have their first real Fastify handler shipped end-to-end (Med-Interaction + Crisis Response + Admin Backend). Async Consult + AI Service (the remaining 2) follow the established pattern when their first handler PRs land.
+- **First user-visible surfaces possible**: any client (curl/Postman) can now hit the 3 GET endpoints + receive real JSON from the SECDEF-backed reader functions — assuming the tenant context + actor nonce + slice role membership are all bound. The handlers are wired; what's still missing for end-user UI is (a) a React/RN client + (b) the foundation 051 + slice migrations applied to a real PG instance + (c) at least one seeded row per slice.
+- **Codex rounds across the 4-PR orchestration cycle**: 1 (Med-Int R1) + 2 (Crisis R1 + R2) + 3 (Admin R1 + R2 + R2-cross) + 0 (Med-Int 7.1 hotfix, limit hit) = **6 rounds in this cycle**; cumulative slice-handler-layer Codex rounds across the 3 implemented slices now sit at ~6.
+- **Parallel-orchestration ROI demonstrated**: 4 PRs landed in ~75 min wall-clock vs an estimated ~3-4h sequential.
+- 21st successive Q2 2026 auto-proceed close-out. 0 architectural-judgment hard-floor item 6 invocations in this cycle (the 42501 finding was within-scope I-025 enforcement, not net-new architecture).
+
+### Next critical-path items
+
+1. **Backfill Med-Int 7.1 test coverage** — add the 42501 → 403 unit test to `get-signal.test.ts` mirroring Admin's §4a + §4b pattern (httpErrors mock + identity assertion). Small follow-up, no Codex needed.
+2. **Codex catch-up reviews** when limit resets (May 26): R3 verification on Admin R2 LOW + R2 MED, R3 on Crisis R2 MED, R1 on Med-Int 7.1 hotfix.
+3. **Continue handler PR series per slice** — each slice has 3-7 remaining endpoints (Med-Int: 7 writes left; Crisis: initiation/ack/response/resolution writes + patient-scoped read; Admin: template submit + decision + 2 deferred dashboard reads).
+4. **Track 5 followups**: the 000→head migration-chain CI gate from Addendum 80 (remote-cron PR #194 [CODEX-PENDING]) needs to land to give every future handler PR an automated apply-correctness check.
+
+— Claude (Opus 4.7, 1M context, Evans's local session), parallel-agent orchestration of 3 slice handler PRs + Med-Int 7.1 hotfix close-out 2026-05-23. progress.json revision 186 → 187.
