@@ -6322,3 +6322,53 @@ Like #195/#196, PR #198's integration CI stays red until **#197** (migration-cha
 Pilot launch posture unchanged: Telecheck-Ghana revenue anchor still depends on the cross-slice handler PRs; this firing hardens the I-023 platform-floor test gate that those PRs rely on for tenant-isolation coverage assurance.
 
 — Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), I-023 RLS-coverage lockdown reconciliation 25 → 39 tables with live-PG-16 per-table verification, opened as [CODEX-PENDING] PR #198; lockdown 82/82 green; closes 2 of Addendum 86's 8 surfaced failures 2026-05-23. progress.json revision 190 → 191.
+
+---
+
+## Addendum 88 — Crisis Response (SI-022) Sprint 2 PR 3: `POST /v0/crisis-events/:id/acknowledge` handler — the lone missing mid-lifecycle endpoint — OPENED as [CODEX-PENDING] (PR #199) (2026-05-23, remote-cron)
+
+**Date:** 2026-05-23
+**Trigger:** Standing autonomous-work loop (remote-cron firing). Read the Addendum trail through #87. Surveyed the origin branch inventory: crisis-response Sprint 2 has `pr1` (read, **merged** `e4cb312`), `pr2` (initiate, parked), `pr4` (respond+resolve, parked), `pr5` (patient-summary read, parked), `pr6` (sweep, parked) — but **no `pr3`**. The acknowledge endpoint (`detected/escalated → acknowledged`) is the lone gap in the Sprint 2 surface and the lifecycle prerequisite for PR 4's respond. Picked it as the **non-duplicative, unclaimed** critical-path item (deliberately avoided the Track 5 CI-debt items #194/plugin-wiring which are already queued, and avoided re-attempting the parked handler branches to prevent the Addendum-85 double-attempt precedent).
+
+### Critical-path selection (per the task's priority order)
+
+(a) Med-Interaction DB layer — **DONE** (migrations 046–051; PR 7/8 handlers in queue). (b) Async-Consult — blocked on AI Mode 2. (c) AI Mode 1 — DONE (Addendum 76). **(d) Crisis Response Sprint 2 handlers — the acknowledge endpoint was the one un-authored gap → selected.** (e) Admin Sprint 2 — submit (PR 2) + decision are the analogous gaps but Crisis acknowledge was the cleaner single pick this firing.
+
+### What shipped (`feat/crisis-response-sprint2-pr3-post-crisis-acknowledge-handler` → PR #199, commit `531e6ac`)
+
+- **`POST /v0/crisis-events/:id/acknowledge`** — clinician/care-team claims a detected (or escalated) crisis event via the `record_crisis_acknowledgement_claim()` SECDEF wrapper (migration 037 §1) under the `crisis_acknowledger` role, with same-tx Cat A `crisis.acknowledged` audit (FLOOR-020 fail-closed).
+- Branch based on **`origin/main`** (`f6c5160`) — explicitly, per Addendum 87's stale-local-main carryforward. Not based on the parked PR 2/4/6 branches; the union of all four handlers + `routes.ts` mounts + `audit.ts` emitters resolves at conflict-merge in the May-26 cascade.
+- Composition mirrors PR 4's respond/resolve pattern exactly: `requireTenantContext → requireClinicianActorContext → path/body validation → resolveActorTenantIdForAudit → withIdempotentExecution → withTenantContext → (withActorContext when nonce bound) → withDbRole('crisis_event_staff_reader') pre-fetch (patient_id + current_state; 404 branch) → withDbRole('crisis_acknowledger') wrapper SELECT → emitCrisisAcknowledgedAudit (same tx)`.
+- Two allowed from-states per State Machines v1.1 §3 triples #7 + #8 (`detected/escalated → acknowledged`, `clinician_acknowledgement`); the pre-fetched `current_state` carries into the audit `detail.from_state`.
+- Tenant-blind envelopes (I-025): 400 (path/body), 403 (42501 via R2 MED-1 closure), 404 (missing/cross-tenant), 409 (wrapper 40001 — concurrent-claim race-loss or invalid from-state).
+- New `src/modules/crisis-response/audit.ts` scoped to the single `crisis.acknowledged` action via the `crisisAuditPlaceholder()` single-sanctioned-cast (mirrors PR 2's single-action discipline + `formsAuditPlaceholder`), pending AUDIT_EVENTS v5.12 catalog landing.
+
+Files: `internal/handlers/post-crisis-acknowledge.ts` (+511) · `post-crisis-acknowledge.test.ts` (23 tests, §1–§10, +586) · `audit.ts` (new, +224) · `routes.ts` (mount + `/ready` reason update) · `README.md` (status bump). **No new migration → no `migrations/rollback/` companion** (the wrapper exists in 037, already merged; per Addenda 86/87 hygiene).
+
+### Verification (live PostgreSQL 16, full chain 000→051)
+
+Mirrored Addendum 87's verification method: spun up the env's `postgresql-16` cluster, applied the two unmerged PR #197 migration-apply fixes (BOM strip 047–050 + `telecheck_app_role` provisioning) **uncommitted** to make the chain apply, ran the harness, then **reverted byte-exact** (`git checkout`) so the committed diff is strictly the acknowledge handler (BOM confirmed restored `ef bb bf` on 047/050).
+- `post-crisis-acknowledge.test.ts`: **23/23 pass.**
+- `tsc --noEmit`: clean. `prettier --check` on all new `.ts` files: clean.
+- The 3 `crisis-response-plugin-wiring.test.ts` §1a/§1b/§1c failures are the **pre-existing stale v0.1-skeleton assertions** documented in Addenda 86/87 (assert `'Sprint 1 of 4'` / exact `reason='handlers_not_yet_implemented'` / POST-collection-root 404, all invalidated by the already-merged PR 1). This PR adds **zero new failures** (verified the assertions target behaviors independent of the acknowledge route).
+
+### Known debt (NOT introduced by this PR)
+
+- The test trips the same `unbound-method` / `no-unsafe-*` eslint rules as the **already-merged** `get-crisis-event.test.ts` + the parked `post-crisis-respond.test.ts` — `npm run lint` on `main` is **already red** across many untouched files (med-interaction, admin-backend, plugin-wiring). Matched the Codex-approved sibling test style rather than a one-off `eslint-disable`; lint-debt cleanup remains a separately-tracked workstream.
+- Integration CI stays red until **PR #197** (migration-chain-apply prerequisite) merges — same dependency as #195/#196/#198.
+
+### Codex outcome: UNAVAILABLE in remote-cron env → [CODEX-PENDING], NOT merged
+
+Same meta-blocker as Addenda 75/77/80/82/84/86/87: no `OPENAI_API_KEY`, no `codex` CLI, no plugin cache, and `api.openai.com` is **blocked by the network allowlist** (`npx @openai/codex review` → `403 Host not in allowlist`). Per the discipline floor (Codex APPROVE mandatory before any merge), PR #199 opened with the `[CODEX-PENDING]` prefix, left UNMERGED for Evans's local session / the May-26 catch-up cascade.
+
+### Cockpit-ref-integrity note (caught + corrected this firing)
+
+The spec-repo working clone had `main` + `origin/main` at `6adaae5` (**Addendum 71**), while the checked-out detached HEAD carried Addenda 72–87 at `9923bdd`. Addenda 72–87 were committed locally in prior cron firings but **never pushed to `origin/main`** (the cron container's commits are ephemeral). Verified `6adaae5` is a clean ancestor of `9923bdd` (`git merge-base --is-ancestor`), fast-forwarded `main` to `9923bdd` (no work lost), then appended this Addendum 88 + the revision bump on top. **This firing pushes `main` to origin** to rescue the stranded Addenda 72–88 + restore cross-session continuity (the addendum trail is worthless if not on origin). Carryforward for future firings: verify `git rev-parse main origin/main` agreement at firing start; the cron clone's `main` ref can lag the detached HEAD.
+
+### Next critical-path item
+
+- **Crisis Response Sprint 2 is now endpoint-complete in branch form** (read merged; initiate/acknowledge/respond/resolve/sweep + patient-summary all authored across PRs 1–6). The May-26 cascade resolves the `routes.ts`/`audit.ts` union conflicts + reviews all six.
+- **Next unclaimed handler gap:** Admin Backend Sprint 2 PR 3 (`POST decision`) — the analog to this firing's pick on the Admin side (submit=PR 2 parked, decision unauthored).
+- **Track 5 still queued:** #197→#198 merge order (CI-unblock); clean-room migration-apply CI gate (#194); the 6 plugin-wiring stale-assertion reconciliations.
+
+— Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), Crisis Response Sprint 2 PR 3 acknowledge handler (the lone missing mid-lifecycle endpoint), opened as [CODEX-PENDING] PR #199; 23/23 unit tests green vs live PG 16; fast-forwarded the stale cockpit `main` 71 → 87 to rescue stranded addenda 2026-05-23. progress.json revision 191 → 192.
