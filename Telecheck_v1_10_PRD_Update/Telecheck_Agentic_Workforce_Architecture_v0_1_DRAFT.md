@@ -6,7 +6,7 @@
 **Successor to:** `Telecheck_Workstream_Discipline_Note_Multi_Agent_Orchestration_v0_1_DRAFT.md` (v1.10 cycle multi-agent orchestration pilot)
 **Decision class:** Hard-floor item 6 (net-new platform-floor architecture for HOW the platform gets built; NOT a change to what the platform IS)
 
-**v0.1 → v0.2 changelog (Codex Pass-1 + Pass-2 closures):**
+**v0.1 → v0.2 changelog (Codex Pass-1 + Pass-2 closures + portability discipline):**
 - §3.2 canonical.json schema: replaced multi-writer JSON model with **append-only event log + materialized current-state projection** (BLOCKING-FINDING-1 closure)
 - §3.3 convergence mechanics: added optimistic locking + idempotency keys + signed/typed events + replay tooling + explicit hook-failure recovery
 - §7 success criteria: added **hard-stop expansion gates** (any P0/platform-floor defect, unexplained canonical drift, unauthorized spec write, or escaped tenant/auth/audit/clinical/crisis invariant breach freezes expansion immediately)
@@ -16,6 +16,7 @@
 - §3.4 NEW: P0 incident response mode with bypass-Codex-then-post-audit pattern + Incident Commander rotation
 - §9 NEW: delegated-ratifier rules (Engineering Lead for non-platform-floor sub-decisions; Evans retains hard-floor item 6 + invariant amendments + Promotion Ledger ratifications + ADR-class decisions)
 - §4.1 first-pilot-slice criterion: must be already-ratified narrow slice with no open spec prerequisites (Med-Interaction PR 10+ is candidate ONLY if Sprint 1 endpoint set + AUDIT_EVENTS catalog amendment for `medication_interaction.*` action IDs both ratified first)
+- **§12 NEW: portability discipline (7 binding rules) + migration trigger criteria + migration runbook** — preserves AWS / DigitalOcean / self-hosted migration as a 1–3 week mechanical exercise rather than 6–10 week rewrite. Enforced via Codex per-PR review + QA/Audit Agent daily sweep.
 
 ## 1. Motivation
 
@@ -366,7 +367,92 @@ The following are explicit open questions for adversarial review. Codex is invit
 
 Per the dual-recommendation two-pass discipline codified in CLAUDE.md (2026-05-20), Claude's recommendation on Option A/B/C is held in a separate artifact (`Agentic_Workforce_Claude_Recommendation_2026-05-23.md`) and surfaced to Evans only AFTER Codex Pass-1 (source-first independent) completes. This document is the source material Codex Pass-1 reviews without Claude's framing.
 
-## 11. References
+## 12. Portability discipline — binding constraints during pilot (v0.2 addition)
+
+**Purpose:** The Option B+ pilot uses Supabase + Vercel + PostHog + RemoteTrigger as the runtime substrate (per §4.2 + revised infrastructure plan). These tools are sufficient for pilot scale but may be migrated to AWS / DigitalOcean / self-hosted as production triggers fire (HIPAA compliance for Heros Health US tenant, scale > 10k users, data residency requirements, cost crossover, etc.). The portability discipline below makes that migration **mechanical (1–3 weeks)** rather than architectural (8–12 weeks).
+
+**Enforcement:** These rules are binding constraints on every agent's PR. Codex per-PR adversarial review MUST verify rule compliance. Violations are HIGH-severity findings. The QA/Audit Agent's daily cross-agent consistency check MUST include portability-rule audit.
+
+### 12.1 The 7 portability rules
+
+| # | Rule | Why | What it forbids | What it requires |
+|---|---|---|---|---|
+| **P-1** | **Backend code must not import Supabase JS SDK.** Use plain `pg` library + standard Postgres connection string. | DB layer stays portable across any Postgres host (Supabase Cloud, Supabase self-hosted, AWS RDS, DigitalOcean Managed PG, self-hosted PG). | `import { createClient } from '@supabase/supabase-js'` in any `src/modules/**/internal/**` or `src/lib/**` | `import { Pool } from 'pg'` + `DATABASE_URL` env var (Supabase exposes a standard Postgres connection string for this) |
+| **P-2** | **Auth abstracted behind `IAuthProvider` interface.** Day-1 implementation = Supabase Auth. Migration = swap implementation, no handler changes. | Auth is the stickiest migration. Interface abstraction makes the swap a 1-week job instead of 4-week. | Direct calls to `supabase.auth.*` in handler code; embedding Supabase JWT format assumptions in `req.actorContext` resolution | `src/lib/auth/provider.ts` exports `IAuthProvider { verifyJwt(token): Promise<User>; refreshSession(...); ... }`. Implementations: `SupabaseAuthProvider` (day 1), `CustomJwtAuthProvider` (post-migration option), `Auth0Provider` (alt). Handlers call the interface only. |
+| **P-3** | **Migrations are raw SQL files in `migrations/`.** RLS policies live inside migration files, not Supabase Dashboard. | Already our pattern; Supabase doesn't change it. Dashboard-authored RLS is invisible to git + breaks audit. | Any RLS policy created via Supabase Dashboard / Supabase CLI dashboard UI; any schema change applied outside the migration runner | All schema + RLS in numbered `.sql` files in `migrations/`, applied via the canonical migration runner (existing pattern). Dashboard read-only for ops queries. |
+| **P-4** | **Edge functions = minimal.** Keep all business logic in Fastify backend (running on Vercel functions OR future ECS container). Supabase Edge Functions used ONLY for: webhooks Supabase delivers (e.g., auth events), DB triggers that need application-side reaction. | Edge functions are Deno + Supabase-specific. Every line of business logic there is a line to rewrite on migration. | Implementing slice handler logic (Pharmacy, Crisis, Med-Int, etc.) in `supabase/functions/`; using Supabase-specific Deno APIs outside webhook bridges | Slice handlers in `src/modules/**/internal/handlers/`. Edge functions limited to thin webhook receivers that forward to Fastify endpoints (5–20 lines each). |
+| **P-5** | **Avoid Vercel-specific APIs.** Skip `@vercel/blob`, `@vercel/kv`, `@vercel/postgres`, `@vercel/edge-config`. | Vercel-specific APIs lock the frontend to Vercel even when the platform allows migration (Next.js itself is portable). | `import` from `@vercel/*` packages other than `@vercel/analytics` (which has trivial fallback) | Generic alternatives: S3 SDK (works against Supabase Storage AND real S3); Redis client (works against any Redis); plain `pg` (already P-1); standard Next.js APIs |
+| **P-6** | **PostHog SDK is consistent cloud vs self-hosted.** No code changes required to migrate. | PostHog open source = same SDK + same dashboards self-hosted. Just swap `POSTHOG_HOST` env var. | Using PostHog Cloud-only features (advanced funnels, etc.) that aren't in open-source build, when the alternative is similarly easy | Use only OSS-tier PostHog features (event tracking, feature flags, session replay, basic analytics) until self-host or stay-on-cloud decision is final |
+| **P-7** | **Agent runtime scheduling is abstracted.** Day-1 implementation = RemoteTrigger. Migration = swap to EventBridge cron → Lambda invoking Anthropic API directly. | RemoteTrigger ties to Anthropic's cloud runtime; AWS-native scheduling is a 1-week rebuild but the AGENT WORK (PR authoring, Codex review, canonical event log writes) is fully portable. | Coupling agent business logic to RemoteTrigger-specific scheduling primitives | Agent CLAUDE.md templates accept any "fire signal" (cron tick, manual trigger, event-driven). The orchestration layer (RemoteTrigger OR EventBridge OR similar) is replaceable infrastructure. |
+
+### 12.2 Codex review enforcement
+
+Every agent PR's Codex review prompt MUST include the portability-rule check. Suggested verbatim addition to per-repo Codex routing config:
+
+```
+## Portability discipline check (Telecheck v0.2 §12)
+
+This PR runs in the agentic-workforce pilot. Verify:
+- P-1: no @supabase/supabase-js imports in backend code (src/modules/**, src/lib/**)
+- P-2: handler code calls IAuthProvider interface, not direct Supabase auth
+- P-3: all schema/RLS changes are in migrations/*.sql files
+- P-4: business logic in src/modules/, not supabase/functions/
+- P-5: no @vercel/* imports except @vercel/analytics
+- P-6: PostHog usage stays within OSS-tier feature set
+- P-7: no RemoteTrigger-specific scheduling primitives in agent business logic
+
+Violations are HIGH-severity findings. Block merge until fixed.
+```
+
+### 12.3 QA/Audit Agent daily portability sweep
+
+QA/Audit Agent runs `npx telecheck-portability-audit` daily across all repos. Output: pass/fail per rule + offending file:line. Failures emitted as `portability_violation` event in canonical event log + Slack alert.
+
+Suggested audit-rule implementations (regex-grade; semantic checks would be deeper):
+- **P-1**: `grep -r "@supabase/supabase-js" src/ --include="*.ts"` → must return empty (allowed paths: `src/lib/auth/providers/supabase.ts` only)
+- **P-2**: `grep -r "supabase\.auth\." src/modules/` → must return empty
+- **P-3**: `grep -r "CREATE POLICY\|ALTER POLICY\|DROP POLICY" --include="*.sql" migrations/` → all RLS changes accounted for; cross-check vs Supabase Dashboard via API
+- **P-4**: `find supabase/functions -name "*.ts" -exec wc -l {} \;` → each function ≤ 20 lines (webhook bridges only)
+- **P-5**: `grep -r "@vercel/" src/ --include="*.ts" --include="*.tsx" | grep -v "@vercel/analytics"` → must return empty
+- **P-6**: Manual spot-check on PostHog SDK usage; auto-audit only catches obvious cases
+- **P-7**: `grep -r "RemoteTrigger\|@anthropic/remote-trigger" src/modules/` → must return empty (agent runtime stays in `orchestrator/`)
+
+### 12.4 Migration trigger criteria (when to actually migrate)
+
+Migration is triggered (not before) when ANY of the following holds:
+
+1. **HIPAA compliance required** for active user-facing surface (Heros Health US tenant launch). Supabase Team plan w/ BAA buys time ($599+/mo); full AWS migration may follow if Team tier doesn't meet specific BAA needs.
+2. **Scale crossover**: active user count > 10,000 (Supabase Pro/Team cost-effective ceiling for telehealth read/write pattern) AND ≥ 3 months of sustained growth past that point.
+3. **Cost crossover**: monthly Supabase + Vercel bill > monthly AWS (RDS + ECS + CloudFront + Lambda + EventBridge) projection by ≥ 30% sustained.
+4. **Data residency**: regulatory requirement for specific region/jurisdiction not supported by current Supabase + Vercel regions.
+5. **Custom infrastructure**: required Postgres extension or replication topology not supported by Supabase.
+6. **Multi-region active-active DR**: ADR-026 us-east-1 primary + us-west-2 active DR (not cold) — Supabase has read replicas but full active-active requires AWS-native.
+
+If NONE of the above hold, the pilot stack is the production stack. No migration ever.
+
+### 12.5 Migration runbook (when triggered)
+
+1. **Trigger event recorded** as `migration_trigger_fired` event in canonical event log. Ratifier convenes within 5 business days.
+2. **Ratifier approves migration scope + target stack** (e.g., AWS RDS + ECS + CloudFront vs DigitalOcean Managed PG + App Platform).
+3. **Provision target infrastructure** (~1 week DevOps Agent + Infra Agent work).
+4. **Postgres migration** (~1 day): `pg_dump` from Supabase → `pg_restore` to target. Verify schema + data + RLS policies + SECDEF wrappers + roles all transfer.
+5. **Auth migration** (~1-4 weeks): swap `SupabaseAuthProvider` → target implementation. User-id continuity strategy depends on target (Auth0 supports import; Cognito requires re-registration flow; custom = port GoTrue users table).
+6. **Frontend deploy migration** (~1-2 weeks): Next.js `next build standalone` → Docker → ECR → ECS Fargate behind CloudFront.
+7. **Edge functions migration** (~1-2 weeks): port any `supabase/functions/*` to Lambda or container endpoints. P-4 keeps this minimal.
+8. **Agent runtime migration** (~1-2 weeks): rebuild scheduler as EventBridge cron rules → Lambda invoking Anthropic API directly. Agent CLAUDE.md unchanged per P-7.
+9. **PostHog**: if staying on cloud, no migration. If self-hosting: ~1 week to deploy PostHog stack on target.
+10. **DNS cutover** + **rollback plan tested** + **soak period** (~1 week).
+11. **Promotion Ledger entry** recording migration complete + canonical infrastructure pointer updated in `telecheckONE/canonical.json`.
+
+**Total realistic migration: 6-10 weeks unfocused; 1-3 weeks if portability discipline is honored throughout pilot.** Doable interleaved with feature work; does not block ongoing slice development.
+
+### 12.6 Rationale for binding constraint status
+
+Without P-1 through P-7 as binding constraints, agents will naturally take the path of least resistance: import Supabase SDK directly, use Vercel-specific APIs for convenience, put business logic in Edge Functions because they're co-located with auth. Each shortcut individually is innocuous; cumulatively they make migration a 6–10 week rewrite. By making the rules binding from PR-1 of the pilot + audited daily, migration stays a 1–3 week mechanical exercise — preserving the strategic flexibility to choose Supabase-forever OR AWS-when-triggered without locking in either path prematurely.
+
+---
+
+## 13. References
 
 - `Telecheck_Workstream_Discipline_Note_Multi_Agent_Orchestration_v0_1_DRAFT.md` — v1.10 cycle multi-agent orchestration pilot (precedent)
 - `Telecheck_Master_Platform_PRD_v1_10.md` — canonical platform PRD
