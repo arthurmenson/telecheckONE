@@ -6629,3 +6629,78 @@ Verified `git rev-parse main origin/main` at firing start in both repos. **telec
 - **Remote-cron CI-hardening is now also approaching saturation:** #194 (clean-room chain gate), #197 (BOM/role apply fix), #198 (RLS lockdown), #200 (plugin-wiring assertions), and now #211 (BOM guard) cover the migration-apply + RLS + plugin-wiring + encoding defect classes. Future no-Codex firings should prefer **(ii) Track 6 SI authoring/row-shaping for Async-Consult (SI-004/SI-005) ratification-readiness** — the one remaining lever that advances the actual pilot critical path — over further CI-hardening of diminishing marginal value.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex plugin in this env), Track 5 platform-floor durable UTF-8 BOM guard (defect-class hardening per Addenda 82/86/90; TLC-035 EOL-guard analogue) + stripped the 6 recurring BOM files incl. the 2 rollback-dir files #197's scope misses; opened as [CODEX-PENDING] PR #211; 6→0 BOM violations + 102 SQL files clean + prettier/JSON clean, all self-verified without DB or Codex 2026-05-23. progress.json revision 195 → 196.
+
+
+---
+
+## Addendum 93 — P-043 Agentic Workforce Architecture v0.2 (Option B+) RATIFIED + Day-1 bootstrap skeleton in telecheckONE (2026-05-23, Evans local session)
+
+**Date:** 2026-05-23
+**Trigger:** Evans's chat-message ratification: "Go with your recommendations. remember to keep this project git separate from main telecheck corpus. ratify B+"
+**Authority:** Hard-floor item 6 per CLAUDE.md "Autonomous-work authorization" — platform-floor architecture decision
+
+### What ratified
+
+**Option B+ (3-agent pilot then expand to 7-agent post-validation)** per the three-way recommendation convergence:
+- **Claude:** Option B (3-agent pilot then expand) with operational mitigations (optimistic locking, 7-agent topology, multi-LLM Codex SPOF fallback, Engineering Lead delegation, Codex pre-approval on CRs, daily S3 snapshot)
+- **Codex Pass-1 (source-first independent):** Option B+ with 2 BLOCKING findings — canonical.json multi-writer unsafe → append-only event log; success/rollback criteria too weak → hard-stop expansion gates + severity-weighted defect metrics + tested rollback runbook
+- **Codex Pass-2 (contrast-and-synthesize):** Option B+ executed against design v0.2 patched with the BLOCKING-FINDING closures; explicit directive to patch design doc BEFORE surfacing ratifier-ready recommendation
+- **Evans (ratifier):** Approved Option B+ + all 4 cockpit design recommendations (per-user variant persistence, app-router-with-client-dashboards, Supabase Auth via IAuthProvider, device-detected mobile)
+
+### Promotion Ledger entry P-043
+
+Authored in `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_Promotion_Ledger.md`. **Classification: reconciliation / meta-architecture entry** — no canonical-artifact content change; absorbs into existing Registry v2.28 without bump. Records the platform-floor architectural decision on HOW the platform gets built, NOT a change to canonical contracts.
+
+**Cumulative cycle statistics through P-043:** 18th successive Q2 2026 auto-proceed ratification; 1st platform-floor meta-architecture ratification (HOW vs WHAT); 1st ratification with cross-three-way reviewer convergence on a stricter Option.
+
+### Day-1 skeleton authored in telecheckONE (this commit)
+
+**Per Evans's directive — repo isolation** — the cockpit + first pilot slice repos are git-separate from `telecheckONE` (spec corpus) and `telecheck-app` (existing monolith). They become sibling GitHub repos under `arthurmenson/`. Bootstrap obligations split into telecheckONE-side (this commit) + sibling-repo-side (Day-1 follow-up).
+
+**telecheckONE-side bootstrap (THIS COMMIT):**
+
+1. **`canonical-events/`** — append-only event log infrastructure per design v0.2 §3 (Codex Pass-1 BLOCKING-FINDING-1 closure):
+   - `canonical-events/README.md` — architecture + file layout + concurrency model + idempotency + forgery prevention + failed-hook recovery + replay/integrity verification
+   - `canonical-events/_schemas/agent_heartbeat.schema.json` — heartbeat event schema (Orchestrator stall-detection driver)
+   - `canonical-events/_schemas/ratification_decision.schema.json` — ratifier-only event schema (drives Spec Corpus canonical_version_bumped events)
+   - `canonical-events/_schemas/pr_merged.schema.json` — PR-merge-hook event schema (authoritative for cockpit throughput metrics)
+   - `canonical-events/authorized/sources.json` — bootstrap allowlist (6 sources: Ratifier active + 3 agents activation_pending Day-1/4 + 2 GitHub Action hooks activation_pending Day-3)
+   - 12 additional event schemas authored as needed in follow-up
+
+2. **`agents/`** — 3 agent CLAUDE.md templates:
+   - `agents/orchestrator-agent.md` — control plane; 5-min cadence; reads all repos, writes only canonical-events; 7 hard-stop gate escalation triggers; fail-closed posture
+   - `agents/spec-corpus-agent.md` — single-write-owner of canonical contracts; 30-min cadence; reviews CRs with Codex pre-approval before ratifier sees; CI gate enforces single-writer discipline
+   - `agents/clinical-pilot-agent.md` — first implementation agent; owns Forms/Intake Templates HTTP/Admin JWT slice in `telecheck-forms-intake` repo; 2-hour cadence work hours, 4-hour overnight; 9-PR slice roadmap; portability §12 P-1 through P-7 binding
+
+3. **`orchestrator/rollback-runbook.md`** — 3-path runbook (A partial / B full / C pivot-to-humans) + Day-0 dry-run obligation (BLOCKING for pilot start) + Promotion Ledger template for rollback events
+
+### Day-1 sibling-repo bootstrap (TASKS 98 + 99 — follow-up)
+
+These are separate from telecheckONE per Evans's directive:
+
+- **`arthurmenson/telecheck-cockpit`** — Next.js + React + Tailwind + shadcn/ui operational cockpit UI. Source: `design_handoff_ops_cockpit/` HTML/JSX prototypes (design-locked per the handoff README — pixel-perfect parity required). Token system: translate `cockpit.css` (94 design tokens) → `globals.css` + `tailwind.config.js`. Wires Supabase Realtime to consume canonical event log. Deploys to Vercel.
+- **`arthurmenson/telecheck-forms-intake`** — Fastify + Postgres first pilot slice. Already-ratified Forms/Intake Templates HTTP/Admin JWT scope. Clinical Pilot Agent's home repo. Honors §12 portability discipline (P-1 through P-7 enforced via Codex per-PR + planned CI gate).
+
+### What does NOT ship in this commit
+
+- The 12 additional event schemas (lands per as-needed basis when Day-1 follow-up activates)
+- Projection Service implementation (`orchestrator/projection-service.mjs`) — schema-first; implementation lands when first agent fires
+- CI gates in telecheckONE (signed-commit verification + authorized-source allowlist enforcement) — drafted but not committed; lands with first real agent commit
+- Cockpit + forms-intake repos themselves — separate bootstrap commits per task 98 + 99
+- Day-0 rollback dry-run — happens when 3 pilot agents are bootstrapped (Day-3)
+
+### Pilot timeline (post-P-043)
+
+- **Day 1 (today, 2026-05-23):** This commit — telecheckONE skeleton
+- **Day 2:** Sibling-repo bootstrap (`telecheck-cockpit` Next.js scaffold + `telecheck-forms-intake` Fastify scaffold)
+- **Day 3:** GitHub Actions wiring per repo (PR-merge hook → canonical-events event emission); cockpit token translation (cockpit.css → globals.css)
+- **Day 4:** Day-0 rollback dry-run + Clinical Pilot Agent first firing
+- **Day 5–14:** Pilot execution — Clinical Pilot Agent authors PRs 1–9 against Forms/Intake slice
+- **Day 14:** Pilot evaluation against 10 success criteria + 7 hard-stop expansion gates
+- **Day 15:** Expansion to 7-agent workforce (if criteria met + zero gates fired) OR Path B/C rollback per runbook
+
+### Cockpit-Addendum-vs-Promotion-Ledger discipline note
+
+This is the 1st Cockpit Addendum recording a P-NN ratification ceremony (prior Addendums tracked operational state — PRs opened, branches pushed, agents firing). The cockpit doc continues serving operational-status purposes; the Promotion Ledger entry is the canonical record of the ratification. Both reference each other for cross-traceability.
+
+— Claude (Opus 4.7, 1M context, Evans's local session), Agentic Workforce Architecture v0.2 (Option B+) RATIFIED via Evans's chat-message + Day-1 telecheckONE skeleton authored (canonical-events directory + 3 agent CLAUDE.md templates + rollback runbook + Promotion Ledger P-043 entry); Day-2/3 sibling-repo bootstrap (telecheck-cockpit + telecheck-forms-intake) is the immediate follow-up 2026-05-23. progress.json revision 196 → 197.

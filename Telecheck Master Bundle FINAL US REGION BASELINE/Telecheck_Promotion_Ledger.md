@@ -37,6 +37,49 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-043 — 2026-05-23 — Agentic Workforce Architecture v0.2 (Option B+) RATIFIED via Evans's chat-message ratification ("Go with your recommendations. remember to keep this project git separate from main telecheck corpus. ratify B+")
+
+**Classification:** **Reconciliation / meta-architecture entry** (no canonical-artifact content change; absorbs into existing Registry version without bump). Records a platform-floor decision on HOW the Telecheck platform gets BUILT (multi-agent workforce + canonical event log + Orchestrator + per-pilot-slice repos with Codex-per-repo adversarial review), NOT a change to WHAT the platform IS (no CDM / OpenAPI / State Machines / RBAC / AUDIT_EVENTS delta).
+
+**Decision class:** Hard-floor item 6 per CLAUDE.md "Autonomous-work authorization" — platform-floor architecture. Evans's chat-message ratification authorizes execution per the dual-recommendation two-pass discipline (CLAUDE.md 2026-05-20 codification): Claude recommended Option B; Codex Pass-1 (source-first independent) recommended Option B+ with 2 BLOCKING findings on canonical.json multi-writer concurrency + weak success/rollback criteria; Codex Pass-2 (contrast-and-synthesize) reconciled to Option B+ executed against design v0.2 patched with the BLOCKING-FINDING closures. Three-way recommendation converged. Auto-proceed rule applied at the design-doc patching step (v0.1 → v0.2); ratifier chat-message confirmation captured the Option B+ ratification step itself per hard-floor item 6 precedence.
+
+**Ratified artifacts** (all on `design/agentic-workforce-architecture-v0-1` branch in `arthurmenson/telecheckONE`; commits `cd3a2f5` → `741d1fa`):
+1. `Telecheck_v1_10_PRD_Update/Telecheck_Agentic_Workforce_Architecture_v0_1_DRAFT.md` v0.2 (8-agent → 7-agent day-1 topology + canonical append-only event log + materialized projection + 7 hard-stop expansion gates + severity-weighted defect metrics + tested rollback runbook + 3 consolidation paths + 7 portability discipline rules in §12 + migration trigger criteria + migration runbook).
+2. `Telecheck_v1_10_PRD_Update/Agentic_Workforce_Claude_Recommendation_2026-05-23.md` (Claude's Pass-2-ready Option B recommendation; held until Codex Pass-1 returned).
+3. `Telecheck_v1_10_PRD_Update/Codex_Pass2_Prompt_AgenticWorkforce_2026-05-23.md` (artifact-based Pass-2 invocation prompt).
+4. `Telecheck_v1_10_PRD_Update/Agentic_Workforce_Synthesis_Ratifier_Ready_2026-05-23.md` (three-way ratifier-ready synthesis recommendation).
+5. `design_handoff_ops_cockpit/` directory at project root (HTML/JSX prototypes for the operational cockpit UI; 9 screens; 3 Cockpit variants Dense/Hybrid/Glance; iris-AI three-cue rule enforced).
+
+**4 cockpit design Open Questions ratified to recommended answers** (Evans chat-message "Go with your recommendations"):
+- Cockpit variant persistence: **per-user** (same operator wants same density across projects).
+- Next.js rendering: **App router + client-side dashboards** (SSR the shell + auth gate; client-render the live data screens — live data doesn't benefit from SSR).
+- Auth: **Supabase Auth via `IAuthProvider` interface** (consistent with §12 portability discipline P-2; cockpit becomes first consumer of IAuthProvider).
+- Mobile route: **device-detected at root with `?view=desktop` escape hatch** (single URL is easier to share; auto-redirect by viewport).
+
+**Per Evans's directive on repo isolation:** the cockpit + the first pilot slice repo (`telecheck-forms-intake`) are git-separate from `telecheckONE` (spec corpus) and `telecheck-app` (existing monolith implementation). They become sibling GitHub repos under `arthurmenson/`:
+- `arthurmenson/telecheck-cockpit` — Next.js + React + Tailwind + shadcn/ui operational cockpit UI (consumes canonical event log via Supabase Realtime).
+- `arthurmenson/telecheck-forms-intake` — Fastify + Postgres first agentic-workforce pilot slice (Forms/Intake Templates HTTP/Admin JWT scope per Codex Pass-1 + Pass-2 selection — already-ratified narrow slice with no open spec prereqs).
+
+**Registry absorption:** None. Per the operating-rules carve-out (P-009 precedent), this is a reconciliation / meta-architecture entry that does NOT change canonical contracts (CDM / OpenAPI / State Machines / RBAC / AUDIT_EVENTS / Contracts Pack). Artifact Registry v2.28 remains canonical; no v2.29 bump.
+
+**Bootstrap obligations triggered** (Day 1–3 deliverables per design v0.2 §4.2):
+1. Canonical event log directory structure in `telecheckONE/canonical-events/` + JSON Schemas per event type + signed-commit CI gate + `authorized-sources.json` allowlist.
+2. Projection Service skeleton (`telecheckONE/orchestrator/`) — deterministic reducer over event log → `canonical.json`.
+3. 3 agent CLAUDE.md templates in `telecheckONE/agents/`: Spec Corpus Agent + Orchestrator Agent + Clinical Pilot Agent.
+4. Rollback runbook in `telecheckONE/orchestrator/rollback-runbook.md` (3 consolidation paths: partial / full / pivot-to-humans).
+5. `arthurmenson/telecheck-cockpit` repo created + Next.js scaffold + token translation from `design_handoff_ops_cockpit/cockpit.css` → `globals.css` + `tailwind.config.js`.
+6. `arthurmenson/telecheck-forms-intake` repo created + Fastify scaffold.
+
+**Day 4–14 obligations:** Per design v0.2 §4.2 pilot plan — Clinical Pilot Agent fires via RemoteTrigger against `telecheck-forms-intake` slice; canonical event log captures every PR + Codex round + ratifier decision; cockpit live by Day 14 displaying pilot metrics.
+
+**Day 14 success criteria** (10 metrics per design v0.2 §7.1) + **7 hard-stop expansion gates** (§7.2) determine expansion to full 7-agent workforce vs pivot.
+
+**Cumulative cycle statistics through P-043:** 18th successive Q2 2026 auto-proceed ratification (P-026 → … → P-042 → P-036a → **P-043**); 1st platform-floor meta-architecture ratification (HOW the platform gets built rather than WHAT it is); 1st ratification with cross-three-way reviewer convergence on a stricter Option (Claude Option B → Codex Pass-1 Option B+ → Codex Pass-2 Option B+ → Evans chat-message ratification Option B+). Telecheck-app pilot implementation pattern shifts from single-Claude serial-PR (current; Wave-1 through Wave-3) to agentic-workforce-with-cockpit (post-P-043 bootstrap; pilot Day 4–14).
+
+**Evans's standing autonomous-work authorization** (CLAUDE.md "Autonomous-work authorization" + dual-recommendation + two-pass + auto-proceed) applies fully post-P-043. Codex APPROVE on per-PR review remains mandatory before merge per the discipline floor. The agentic workforce architecture extends — not replaces — the existing discipline.
+
+---
+
 ### Entry P-041 — 2026-05-22 — SI-023 Admin Backend Basics Slice v1.0 spec RATIFIED — **5th and FINAL pilot-required Ghana revenue anchor slice**; 4 net-new CDM entities (`admin_dashboard_query_execution` audit trail + `forms_template_admin_review` + `forms_template_admin_review_lifecycle_transition` append-only Option A per I-035 + `admin_template_decision_idempotency_key` canonical IDEMPOTENCY per P-027) + 3 OPTIONAL canonical views (`admin_crisis_operational_health_v` + `admin_consult_queue_health_v` + `admin_mode1_volume_health_v`; data-minimization split per P-038 R5 + P-040 R1 HIGH-2 pattern; wrapper-only canonical read path) + 6 SECURITY DEFINER procedures (1 raw lifecycle writer + 3 dashboard read-wrappers + 2 template wrappers; 3-layer authorization defense LAYER A+B+C per R4 HIGH-1 dissolution of net-new-RBAC-helper risk via P-038 R6 dissolution pattern; SECURITY INVOKER for triggers; READ COMMITTED isolation precondition + pg_advisory_xact_lock(int8) for state-continuity) + 6 new audit events (4 Cat A + 2 Cat C under `admin.*` namespace) + 5 OpenAPI endpoints under `/v1/admin/*` (3 dashboard reads + 2 template-review actions) + 1 new state machine `forms_template_admin_review_lifecycle` (5 states / 5 transition triples; DERIVED from append-only per I-035) + 11 net-new RBAC roles (2 application + 3 dashboard-wrapper-owner + 2 template-wrapper-owner + 1 raw-writer-owner + 3 view-owner); Artifact Registry v2.27 → v2.28; **TENTH instance of established post-P-029 SI-spec-first promotion pattern** (P-029, P-032, P-034, P-035, P-036, P-037, P-038, P-039, P-040, P-041); pilot-viable scope item 5 of 5 RATIFIED — **5 of 5 pilot-required slices NOW SI-RATIFIED: Med-Interaction (P-033+P-034), Async-Consult (P-037+P-038), Mode 1 AI Service (P-035+P-036), Crisis Response (P-039+P-040), Admin Backend Basics (P-041; P-042 CDM follow-on amendment cycle queued)**. **Telecheck-app pilot implementation gate OPENS FULLY** post-P-041; remaining pilot work is implementation, not specification.
 
 **Evans's standing autonomous-work authorization (CLAUDE.md "Autonomous-work authorization" + dual-recommendation + two-pass + auto-proceed):** when Codex APPROVE + Claude READY agree, auto-proceed. P-041 follows the established post-P-029 SI-spec-first promotion pattern; SI-023 v1.0 RATIFIED content lands in named bundle file sections via P-042 CDM v1.10 → v1.11 follow-on amendment cycle queued as next deliverable.

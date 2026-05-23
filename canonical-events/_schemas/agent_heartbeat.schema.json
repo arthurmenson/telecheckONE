@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/agent_heartbeat.schema.json",
+  "title": "Agent Heartbeat Event",
+  "description": "Emitted by each active agent every 30 minutes (default cadence). Orchestrator's stall-detection alert fires if any agent's last heartbeat age > 2 hours (per design v0.2 §7 success criteria + §7.2 HSG-7 hard-stop gate).",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$", "description": "ULID — sortable + unique across event log" },
+    "event_type": { "const": "agent_heartbeat" },
+    "source": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*-agent$|^[a-z][a-z0-9_-]*-pilot-agent$" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+    "payload": {
+      "type": "object",
+      "required": ["agent_id", "status", "current_focus", "active_prs", "codex_queue_size", "completion_pct"],
+      "properties": {
+        "agent_id": { "type": "string" },
+        "status": { "enum": ["active", "idle", "stalled", "offline"] },
+        "current_focus": { "type": "string", "maxLength": 280 },
+        "active_prs": { "type": "integer", "minimum": 0 },
+        "codex_queue_size": { "type": "integer", "minimum": 0 },
+        "completion_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "active_blockers": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "reasoning_trace_excerpt": { "type": "string", "maxLength": 1000, "description": "Optional last-N tokens of agent's current reasoning; surfaced in cockpit Agent drawer" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

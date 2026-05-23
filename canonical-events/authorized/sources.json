@@ -1,0 +1,80 @@
+{
+  "$schema": "../_schemas/_authorized-sources.schema.json",
+  "version": 1,
+  "last_rotated_at": "2026-05-23T18:08:00Z",
+  "last_rotated_by_event": "bootstrap (P-043 ratification)",
+  "rotation_note": "Bootstrap allowlist post-P-043. Subsequent rotations require Ratifier-signed event with event_type=authorized_sources_rotated.",
+  "authorized_sources": [
+    {
+      "id": "ratifier-evans",
+      "type": "ratifier",
+      "name": "Evans (Founder / Ratifier)",
+      "gpg_fingerprint": "TBD-evans-fingerprint",
+      "github_login": "arthurmenson",
+      "authority_scope": ["all"],
+      "active": true,
+      "added_at": "2026-05-23T18:08:00Z",
+      "added_by_event": "bootstrap"
+    },
+    {
+      "id": "orchestrator-agent",
+      "type": "agent",
+      "name": "Orchestrator Agent",
+      "gpg_fingerprint": "TBD-orchestrator-fingerprint",
+      "github_login": "telecheck-orchestrator-bot",
+      "authority_scope": ["dep_filed", "dep_satisfied", "ratification_queue_updated", "milestone_updated", "message_routed", "conflict_resolved", "expansion_frozen", "workforce_pause_invoked"],
+      "active": false,
+      "activation_pending": "Day-1 bootstrap (GitHub bot account creation + GPG key generation)",
+      "added_at": "2026-05-23T18:08:00Z",
+      "added_by_event": "bootstrap"
+    },
+    {
+      "id": "spec-corpus-agent",
+      "type": "agent",
+      "name": "Spec Corpus Agent",
+      "gpg_fingerprint": "TBD-spec-corpus-fingerprint",
+      "github_login": "telecheck-spec-corpus-bot",
+      "authority_scope": ["cr_filed", "cr_approved", "cr_rejected", "canonical_version_bumped"],
+      "active": false,
+      "activation_pending": "Day-1 bootstrap (GitHub bot account creation + GPG key generation)",
+      "added_at": "2026-05-23T18:08:00Z",
+      "added_by_event": "bootstrap"
+    },
+    {
+      "id": "clinical-pilot-agent",
+      "type": "agent",
+      "name": "Clinical Pilot Agent (Forms/Intake slice)",
+      "gpg_fingerprint": "TBD-clinical-fingerprint",
+      "github_login": "telecheck-clinical-pilot-bot",
+      "authority_scope": ["agent_heartbeat", "human_orchestrator_dialogue"],
+      "active": false,
+      "activation_pending": "Day-4 pilot start (after Orchestrator + Spec Corpus active)",
+      "added_at": "2026-05-23T18:08:00Z",
+      "added_by_event": "bootstrap"
+    },
+    {
+      "id": "telecheck-forms-intake-pr-merge-hook",
+      "type": "github_action",
+      "name": "telecheck-forms-intake PR-merge hook (Clinical Pilot slice)",
+      "github_login": "github-actions[bot]",
+      "github_action_repo": "arthurmenson/telecheck-forms-intake",
+      "authority_scope": ["pr_opened", "pr_merged", "codex_round_completed", "completion_pct_updated"],
+      "active": false,
+      "activation_pending": "Day-3 bootstrap (repo creation + GitHub Action workflow commit)",
+      "added_at": "2026-05-23T18:08:00Z",
+      "added_by_event": "bootstrap"
+    },
+    {
+      "id": "telecheck-cockpit-pr-merge-hook",
+      "type": "github_action",
+      "name": "telecheck-cockpit PR-merge hook",
+      "github_login": "github-actions[bot]",
+      "github_action_repo": "arthurmenson/telecheck-cockpit",
+      "authority_scope": ["pr_opened", "pr_merged", "codex_round_completed", "completion_pct_updated"],
+      "active": false,
+      "activation_pending": "Day-3 bootstrap (repo creation + GitHub Action workflow commit)",
+      "added_at": "2026-05-23T18:08:00Z",
+      "added_by_event": "bootstrap"
+    }
+  ]
+}

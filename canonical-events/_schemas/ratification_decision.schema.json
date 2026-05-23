@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/ratification_decision.schema.json",
+  "title": "Ratification Decision Event",
+  "description": "Emitted ONLY by source=ratifier (Evans / Engineering Lead). Records the outcome of a Promotion Ledger ceremony, hard-floor item 6 escalation, or CR approval. Drives Spec Corpus Agent's subsequent canonical_version_bumped event.",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "ratification_decision" },
+    "source": { "enum": ["ratifier", "engineering-lead"] },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["cr_id", "outcome", "ratifier_name", "rationale"],
+      "properties": {
+        "cr_id": { "type": "string", "pattern": "^(CR|P|HFI6)-[0-9]+[a-z]?$" },
+        "outcome": { "enum": ["approve", "reject", "modify", "defer"] },
+        "ratifier_name": { "type": "string" },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "ratified_artifacts": { "type": "array", "items": { "type": "string" }, "description": "File paths absorbed into canonical state" },
+        "promotion_ledger_entry": { "type": "string", "pattern": "^P-[0-9]+[a-z]?$", "description": "Optional — link to Promotion Ledger entry if this is a formal P-NN ceremony" },
+        "dual_recommendation_evidence": {
+          "type": "object",
+          "description": "When the decision was driven by the dual-recommendation two-pass discipline (CLAUDE.md 2026-05-20), capture the three-way reviewer state",
+          "properties": {
+            "claude_recommendation": { "type": "string" },
+            "codex_pass1_verdict": { "type": "string" },
+            "codex_pass2_synthesis": { "type": "string" },
+            "convergence": { "enum": ["full", "partial", "divergent"] }
+          }
+        },
+        "blocks_resolved": { "type": "array", "items": { "type": "string" }, "description": "Blocker IDs this ratification unblocks" },
+        "follow_up_obligations": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
