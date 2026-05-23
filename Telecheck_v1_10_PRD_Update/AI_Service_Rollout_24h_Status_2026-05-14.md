@@ -6469,3 +6469,51 @@ When Codex limit resets, the queue is now:
 **Numbering note:** This Addendum was originally drafted as #86 in Evans's local session but the remote-cron firing concurrently appended Addenda 86 (#197 infra), 87 (#198 RLS reconcile), and 88 (#199 Crisis acknowledge handler — partial Wave-3a overlap with row 3a/1 above). Renumbered to #89 + revision bumped 189 → 193 on rebase to preserve append-only ordering. The #197 + #198 remote-cron firings are the same artifacts as table rows A + B above; the Crisis Sprint 2 PR 3 acknowledge handler exists as two independent parallel attempts (Evans's local-session branch `feat/crisis-response-sprint2-pr3-post-acknowledge-handler` at `531e6ac` vs remote-cron PR #199); the May-26 Codex catch-up cascade picks the deeper of the two + closes the other, mirroring the Med-Int PR 8 reconciliation note from Addendum 85.
 
 — Claude (Opus 4.7, 1M context, Evans's local session), Wave-3 parallel-agent orchestration close-out + 2 main-session silent-agent rescues + 2 hard-floor item 6 NO-SHIPs documented 2026-05-23. progress.json revision 192 → 193.
+## Addendum 90 — Track 5 platform-floor CI-debt: plugin-wiring stale-assertion reconciliation (6 admin-backend + crisis-response §1a/§1b/§1c assertions) — OPENED as [CODEX-PENDING] (PR #200) (2026-05-23, remote-cron)
+
+**Date:** 2026-05-23
+**Trigger:** Standing autonomous-work loop (remote-cron firing). Read the Addendum trail through #88. **Numbering note:** drafted as #89 from the remote-cron base (`97976ff`, Addendum 88); Evans's local session concurrently appended its own #89 (Wave-3a/b/c close-out, `43b6bfe`). Renumbered to #90 + revision rebased 193 → 194 on push to preserve append-only ordering.
+
+### Critical-path selection — Addendum 88's "next" pointer is STALE; the whole Sprint-2 handler surface is already authored
+
+Surveyed the origin branch inventory before picking. **Addendum 88 named "Admin Backend Sprint 2 PR 3 (`POST decision`) — decision unauthored" as the next unclaimed gap. That is no longer true:** `origin/feat/admin-backend-sprint2-pr3-post-forms-template-decision-handler` (`36b435b`, "Wave-3a hung-agent rescue", +1135 LOC: handler + 416-test + `audit.ts` + `routes.ts` mount) and `origin/feat/admin-backend-sprint2-pr2-post-forms-template-submit-handler` (`a43f52b`) both already exist — authored-in-branch but **with no open PR** (stranded). Walking the full priority order against actual branch state:
+
+- **(a) Med-Interaction DB layer** — DONE (migrations 046–051; PR 7 merged `d096b7a`; PR 8 = #196).
+- **(b) Async-Consult clinician decision loop** — **SPEC-BLOCKED → STOP per discipline floor.** SI-004 (async-consult) + SI-005 (consult schema) are at v0.2 "concrete proposals, pre-ratification" (open PRs #138/#139). "Spec ratification leads implementation by ≥1 sprint"; the decision-loop schema is unratified, so no implementation this firing.
+- **(c) AI Mode 1 chat handler** — DONE (Addendum 76; #193 corrects its `/health`+`/ready` introspection).
+- **(d) Crisis Response Sprint 2 handlers** — all 6 authored-in-branch (read merged; initiate/acknowledge/respond/resolve/sweep + patient-summary across PRs 1–6; acknowledge = #199).
+- **(e) Admin Backend Sprint 2 handlers** — crisis-dashboard merged (PR 1 `1e90b15`); submit + decision authored-in-branch (above).
+
+**Every handler in the prioritized surface is already authored.** Re-authoring any of them is the forbidden Addendum-85 double-attempt. The genuinely **unclaimed, non-duplicative, spec-ratified, fully-verifiable-in-this-env** item is the CI-debt repeatedly flagged-but-never-owned in Addenda 82/86/87/88: **the 6 plugin-wiring assertions red on `main`.** Precedent for fixing stale liveness/readiness introspection in its own PR is the accepted **PR #193** (ai-service `/health`+`/ready` accuracy). Deliberately did NOT touch the parked handler branches, the RLS-lockdown count (#198), or the migration-chain fixes (#197) — single-purpose PR.
+
+### What shipped (`test/plugin-wiring-reconcile-admin-crisis-post-firsthandler` → PR #200, commit `fbee9e3`)
+
+Test-only, 2 files (`+51 / −15`). The Sprint-2-PR-1 first-handler merges (`get-crisis-event` `e4cb312`, `get-crisis-operational-health` `1e90b15`) advanced each module's `/health`+`/ready` introspection text and the write-POST behavior; the v0.1 skeleton assertions went stale:
+
+- **§1a (×2)** — `blocked` label v0.1 → v0.2 (`Sprint 2 of 4 at v0.2` / `Sprint 2 PR 1 of N at v0.2`). DB-layer migration-number assertions (`038`/`044`) unchanged.
+- **§1b (×2)** — `/ready` `reason` → `write_path_handlers_not_yet_implemented` (crisis) / `partial_handlers_mounted_full_surface_incomplete` (admin); `reason_message` substring re-pinned on the stable `Sprint 4` close marker.
+- **§1c (×2)** — **root-caused:** the still-unmounted write-collection POST no longer 404s; it now returns **400 from the global idempotency `preHandler` guard** (`internal.idempotency.missing_key`, `src/lib/idempotency.ts:730–752`) — every state-changing request without an `Idempotency-Key` is rejected before routing produces a 404. Re-pinned to assert `400` + the guard's error code. **Forward-stable:** the probe sends no `Idempotency-Key`, so the 400 holds even after the write handlers mount — the assertion still proves "no mounted write handler served this request," removing the churn the addenda feared.
+
+No source/route change; no migration → **no `migrations/rollback/` companion** (per Addenda 86/87/88 hygiene). The parked write-handler branches (#199, admin submit/decision) do **not** touch these test files — verified no merge conflict.
+
+### Verification (live PostgreSQL 16, full chain 000→051)
+
+Mirrored the Addendum 87/88 recipe: spun up the env's `postgresql-16` cluster + Redis, applied the unmerged **PR #197** migration-apply fixes (BOM strip 047–050 + `telecheck_app_role` provisioning) **uncommitted** to make the chain apply, ran the suite, then reverted byte-exact (`git checkout` — BOM confirmed restored `ef bb bf` on 047/050) so the committed diff is strictly the 2 test files.
+- Targeted 2 files: **10/10 pass** (were 6 failed / 4 passed).
+- Full plugin-wiring suite (9 files): **27/27 pass** — no regression.
+- `tsc --noEmit`: clean. `prettier --check` on both files: clean.
+
+### Codex outcome: UNAVAILABLE in remote-cron env → [CODEX-PENDING], NOT merged
+
+Same meta-blocker as Addenda 75/77/80/82/84/86/87/88: no `OPENAI_API_KEY`, no `codex` CLI, and `api.openai.com` is blocked by the network allowlist (`npx @openai/codex review` → `403 Host not in allowlist`). Per the discipline floor (Codex APPROVE mandatory before any merge), PR #200 opened `[CODEX-PENDING]`, left UNMERGED for Evans's local Codex session / the May-26 cascade. Integration CI stays red until **#197** merges — identical dependency to #195/#196/#198/#199.
+
+### Cockpit-ref-integrity note (checked this firing)
+
+Per Addendum 88's carryforward, verified `git rev-parse main origin/main` at firing start in both repos. The local remote-tracking refs were stale pre-fetch (telecheckONE showed `6adaae5`/Addendum 71; telecheck-app showed `baca008`), but `git fetch` confirmed **Addendum 88's push DID land** — `origin/main` is `97976ff` (telecheckONE, Addendum 88) and `f6c5160` (telecheck-app). No stranded work; cross-session continuity intact. Aligned both local `main` refs to origin before branching.
+
+### Next critical-path item — the bottleneck is the merge cascade, not handler authorship
+
+- **STRATEGIC FLAG for Evans:** the prioritized Sprint-2 handler surface (a–e) is now **entirely authored-in-branch**, and **nothing can merge in the remote-cron env** (Codex network-blocked). The deferred-review pile is ≥ 9 `[CODEX-PENDING]` PRs (#194–#200) plus **several authored handler branches with NO open PR** (admin submit `a43f52b` / decision `36b435b`; crisis pr2/pr4/pr5/pr6). Marginal value of authoring more parked handlers is now low and risks compounding the cascade's `routes.ts`/`audit.ts` union-conflict debt. **The highest-leverage next action is the May-26 Codex cascade itself (Evans-local-session-gated), in order: #197 (migration-chain-apply) → #198 (RLS lockdown) → the handler PRs → this #200.**
+- **Optional continuity housekeeping (next firing, if still no Codex):** open PRs for the stranded admin submit/decision + crisis pr2/4/5/6 branches so they enter the review queue with visibility (no re-authoring — just surface existing work). Plus the clean-room `000→head` migration-apply CI gate (#194) is the durable guard for the migration-apply defect class.
+
+— Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), Track 5 plugin-wiring stale-assertion reconciliation (6 admin-backend + crisis-response §1a/§1b/§1c assertions; root-caused §1c's 404→400 to the global idempotency guard), opened as [CODEX-PENDING] PR #200; 27/27 plugin-wiring tests green + tsc/prettier clean vs live PG 16; flagged the merge-cascade-not-authorship bottleneck for Evans 2026-05-23. progress.json revision 193 → 194.

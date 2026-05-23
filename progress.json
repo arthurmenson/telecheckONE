@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 192,
+  "revision": 194,
   "updated": "2026-05-23",
   "lifecycle": {
     "current": "foundation-build",
@@ -559,7 +559,7 @@
       "status": "in-dev",
       "progress": 90,
       "owner": "",
-      "notes": "Migrations through 007 rollback + idempotent ALTER + schema-qualified CHECK; HTTP-level verify-r1 raw tenant_id scans. Addendum 80: clean-room 000→head migration-chain gate (scripts/check-migration-chain.sh + .github/workflows/migration-chain.yml) shipped PR #194 [CODEX-PENDING] — fills the no-env-ever-applies-fresh-chain gap that let the med-interaction role-name defect reach main latently.",
+      "notes": "Migrations through 007 rollback + idempotent ALTER + schema-qualified CHECK; HTTP-level verify-r1 raw tenant_id scans. Addendum 80: clean-room 000→head migration-chain gate (scripts/check-migration-chain.sh + .github/workflows/migration-chain.yml) shipped PR #194 [CODEX-PENDING] — fills the no-env-ever-applies-fresh-chain gap that let the med-interaction role-name defect reach main latently. Addendum 90: plugin-wiring stale-assertion reconciliation — the 6 admin-backend + crisis-response §1a/§1b/§1c assertions made red on main by the Sprint-2-PR-1 first-handler merges fixed in test-only PR #200 [CODEX-PENDING] (PR #193 standalone-introspection-accuracy precedent); 27/27 plugin-wiring tests green vs live PG16; same #197 migration-chain-apply CI dependency as the rest of the deferred queue.",
       "docs": [
         "Telecheck_System_Architecture_v1_2.md"
       ],
@@ -635,6 +635,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-23T16:45:00.000Z",
-  "lastSyncedSha": "1e90b15"
+  "updatedAt": "2026-05-23T20:30:00.000Z",
+  "lastSyncedSha": "f6c5160"
 }
