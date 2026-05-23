@@ -6574,3 +6574,58 @@ Per Addendum 88's carryforward, verified `git rev-parse main origin/main` at fir
 - **Async-Consult (item b)** is the next pilot-required slice needing code, but it is **Track 6 spec-ratification-gated** (SI-004/SI-005 at v0.2) — a hard-floor STOP for implementation until ratified. The marginal value of further remote-cron firings authoring parked handlers is now near-zero; future no-Codex firings should prefer (i) Track 5 CI-hardening that is fully self-verifiable in-env, or (ii) Track 6 SI authoring/row-shaping for Async-Consult ratification, rather than more parked handler code.
 
 — Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), continuity housekeeping: surfaced the 10 stranded Wave-2/3 authored-handler branches as [CODEX-PENDING] PRs #201–#210 (no re-authoring; Addendum 90's prescription); deferred-review queue now fully PR-visible at 19 open [CODEX-PENDING] PRs; reaffirmed the merge-cascade-not-authorship bottleneck for Evans 2026-05-23. progress.json revision 194 → 195.
+
+---
+
+## Addendum 92 — Track 5 platform-floor: durable UTF-8 BOM guard for migration SQL (defect-class hardening, not instance fix) + strip the 6 recurring BOM files — OPENED as [CODEX-PENDING] PR #211 (2026-05-23, remote-cron)
+
+**Date:** 2026-05-23
+**Trigger:** Standing autonomous-work loop (remote-cron firing). Read the Addendum trail through #91. Executed Addendum 91's explicit "next firing, if still no Codex" prescription: **prefer (i) Track 5 CI-hardening that is fully self-verifiable in-env** over authoring more parked handler code.
+
+### Critical-path selection — handler surface is saturated; the genuinely-unclaimed self-verifiable item is the recurring-BOM defect class
+
+Walked the task priority order (a)–(e) against actual `origin` branch + open-PR state before picking (matches Addenda 90/91 surveys):
+
+- **(a) Med-Interaction DB layer** — DONE (migrations 046–051; PR 7 merged `d096b7a`).
+- **(b) Async-Consult clinician decision loop** — **SPEC-BLOCKED → STOP per discipline floor** (SI-004/SI-005 at v0.2 pre-ratification, PRs #138/#139). No implementation this firing.
+- **(c) AI Mode 1 chat handler** — DONE (Addendum 76; #193 introspection fix).
+- **(d) Crisis Response Sprint 2** — all 6 handlers authored + PR-visible (#199, #201–#204; read merged).
+- **(e) Admin Backend Sprint 2** — crisis-dashboard merged; submit/decision/dashboard-reads authored + PR-visible (#205–#207).
+
+**Every prioritized handler is authored AND PR-visible (19 open [CODEX-PENDING] PRs #192–#210).** Re-authoring any is the forbidden Addendum-85 double-attempt. **Confirmed Codex remains UNAVAILABLE this firing** (`OPENAI_API_KEY` absent, no `codex` CLI/plugin, `api.openai.com` → `403` allowlist-blocked) — same meta-blocker as Addenda 75/77/80/82/84/86/87/88/90/91. So no merges are possible.
+
+The genuinely unclaimed, non-duplicative, **fully-self-verifiable-without-DB-or-Codex** item is the CI-hardening that Addenda 82/86/90 repeatedly flagged-but-never-owned as a *durable guard*: the recurring **UTF-8 BOM** on migration SQL. The BOM defect has silently broken the test-harness migration-chain apply **three times** (Addenda 82/86/90). `tests/setup.ts` feeds each migration's raw bytes to Postgres; a leading BOM (`EF BB BF`) turns the first `-- …` line into an invalid token and aborts the whole chain apply. Prior hotfixes (and the in-flight **#197**) strip the *instances* — but **Addendum 90 documents a byte-exact revert that *restored* the BOM**, i.e. fixing the instance never fixed the class. This is the BOM analogue of the TLC-035 EOL-normalization guard (`.gitattributes`, Sprint 19): a precedent for landing an encoding-defect-class guard as its own focused PR.
+
+### What shipped (`feat/infra-migration-bom-guard` → PR #211, commit `ab21a76`)
+
+Branched off true `origin/main` `f6c5160` (local `origin/main` remote-tracking ref was stale at `baca008`/045-era; `git fetch` + `reset --hard f6c5160` re-based the branch onto current main before any authoring — cockpit-ref-integrity per Addendum 88 carryforward).
+
+- **`scripts/check-migration-bom.mjs`** (new) — DB-free, dependency-free Node ESM scan of `migrations/*.sql` + `migrations/rollback/*.sql`; reads the first 3 bytes of each, exits 1 with a clear file-by-file report on any `EF BB BF` prefix, exits 0 clean. Lives outside the lint/format/typecheck globs (`.mjs` under `scripts/`).
+- **`package.json`** — `check:migration-bom` script.
+- **`.github/workflows/ci.yml`** — runs the guard **first** (fastest, no deps), ahead of format/lint/typecheck/test, so the encoding defect surfaces in seconds instead of as a confusing mid-suite Postgres syntax error.
+- **BOM stripped from the 6 currently-affected files**: `migrations/047-050` + `migrations/rollback/049` + `migrations/rollback/050`. Encoding-only (3-byte prefix removed; **zero** applied-SQL-semantics change — verified via `git diff`: line-1 `-- ===` content identical after BOM removal). **No `migrations/rollback/` companion** per Addenda 86/87/88/90 hygiene (no DDL/schema change).
+
+**Net-new vs #197 (convergent, non-blocking):** the BOM-strip portion convergently overlaps #197 (which strips `047-050` in the migrations dir + provisions `telecheck_app_role` in `tests/setup.ts` — **untouched here**). BOM removal is idempotent → whichever merges first no-ops the other's strip. This PR's durable contributions are (1) the **permanent guard** (#197 has none) and (2) the **two rollback-dir files** (`rollback/049`, `rollback/050`) that #197's "047-050" scope does **not** cover — a real gap #197 misses.
+
+### Verification (in-env: no DB, no Codex)
+
+- Guard on `f6c5160`: reports **6 violations** → strip → re-run **clean** (102 SQL files scanned, 0 BOM). `exit=0`.
+- `package.json`: `prettier --check` clean + valid JSON.
+- `ci.yml`: parseable; guard step inserted after `npm ci`, before format-check.
+
+A full live-PG `000→head` chain apply was **not** run because it requires #197's orthogonal `telecheck_app_role` provisioning (which this PR deliberately does not touch) — and the BOM is an encoding defect correctly verified at the **byte** level, the right granularity. The guard + byte-level `git diff` are decisive.
+
+### Codex outcome: UNAVAILABLE in remote-cron env → [CODEX-PENDING], NOT merged
+
+Per the discipline floor (Codex APPROVE mandatory before any merge), PR #211 opened `[CODEX-PENDING]`, left UNMERGED for Evans's local Codex session / the May-26 cascade. Integration CI stays red until **#197** merges — identical dependency to #195/#196/#198/#199/#200.
+
+### Cockpit-ref-integrity note (checked this firing)
+
+Verified `git rev-parse main origin/main` at firing start in both repos. **telecheck-app:** local `origin/main` remote-tracking ref stale at `baca008`; `git fetch` confirmed current `origin/main` is `f6c5160` — branched/reset onto it explicitly. **telecheckONE:** local `main` stale at `6adaae5` (Addendum 71); `origin/main` current at `1b77ea5` (Addendum 91) — `--ff-only` fast-forwarded local `main` to origin (clean ancestor; no work lost). No stranded addenda; cross-session continuity intact.
+
+### Next critical-path item — bottleneck remains the Codex merge cascade, not authorship
+
+- **STRATEGIC FLAG (reaffirms Addenda 90/91):** the prioritized Sprint-2 handler surface is entirely authored AND PR-visible; the deferred-review queue is now **20 open [CODEX-PENDING] PRs** (#192–#211). **Nothing can merge in the remote-cron env** (Codex network-blocked). Highest-value next action remains the **Evans-local-session / May-26 Codex cascade**, in order: **#197 (migration-chain-apply) → #198 (RLS lockdown) → #211 (BOM guard, prefer over #197's BOM portion) → handler PRs → reconcile #196/#208 Med-Int PR 8 double-attempt**, with rebase-on-main between merges.
+- **Remote-cron CI-hardening is now also approaching saturation:** #194 (clean-room chain gate), #197 (BOM/role apply fix), #198 (RLS lockdown), #200 (plugin-wiring assertions), and now #211 (BOM guard) cover the migration-apply + RLS + plugin-wiring + encoding defect classes. Future no-Codex firings should prefer **(ii) Track 6 SI authoring/row-shaping for Async-Consult (SI-004/SI-005) ratification-readiness** — the one remaining lever that advances the actual pilot critical path — over further CI-hardening of diminishing marginal value.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex plugin in this env), Track 5 platform-floor durable UTF-8 BOM guard (defect-class hardening per Addenda 82/86/90; TLC-035 EOL-guard analogue) + stripped the 6 recurring BOM files incl. the 2 rollback-dir files #197's scope misses; opened as [CODEX-PENDING] PR #211; 6→0 BOM violations + 102 SQL files clean + prettier/JSON clean, all self-verified without DB or Codex 2026-05-23. progress.json revision 195 → 196.
