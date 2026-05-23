@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 184,
+  "revision": 185,
   "updated": "2026-05-23",
   "lifecycle": {
     "current": "foundation-build",
@@ -126,7 +126,7 @@
       "status": "spec-final",
       "progress": 100,
       "owner": "",
-      "notes": "v1.1 promoted. DB layer (migrations 039-044) COMPLETE + Codex-reviewed; app-layer skeleton only (src/modules/admin-backend = types.ts). Sprint 2 handlers (submit + decision + crisis-dashboard) BLOCKED on app-role acquisition (Addendum 76): telecheck_app_role holds no EXECUTE on the admin SECDEF wrappers (granted ONLY to admin_basic_operator / admin_template_reviewer) and no mechanism grants it — the 003:164 `006_roles.sql` foundation gap. NEW hard-floor item 6 ERR: Engineering-Review-Request-App-Role-Acquisition-SECDEF-Slice-Wrappers-2026-05-23.md (4 options; Claude rec Option B NOINHERIT + per-tx SET LOCAL ROLE; Codex consult DEFERRED — remote env). Same blocker gates Crisis Response Sprint 2. Awaiting Evans ratifier decision; co-ratifiable with the Med-Interaction role-name ERR.",
+      "notes": "v1.1 promoted. DB layer (migrations 039-044) COMPLETE + Codex-reviewed. Foundation 051 (Option B app-role acquisition: NOINHERIT membership + per-tx SET LOCAL ROLE + withDbRole helper) MERGED 2026-05-23 (telecheck-app:main 79ad0ca; 4-round Codex convergence with 4 HIGH + 1 MEDIUM closed; ratified via Claude+Pass-1+Pass-2 unanimous + Evans auto-proceed per Addendum 81). Sprint 2 handlers (submit + decision + crisis-dashboard) NOW UNBLOCKED — next PR series wires them via withDbRole(tx, 'admin_basic_operator', fn) and withDbRole(tx, 'admin_template_reviewer', fn).",
       "docs": [
         "Telecheck_Admin_Backend_Slice_PRD_v1_1.md"
       ],

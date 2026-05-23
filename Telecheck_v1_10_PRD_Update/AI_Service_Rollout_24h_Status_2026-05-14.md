@@ -5870,3 +5870,102 @@ While prototyping, a full reverse unwind (head → 000) was attempted and aborts
 **Stop-condition markers (carried):** `[RATIFIER-PENDING]` (app-role-acquisition, Addendum 76) + `[CODEX-PENDING]` (PR #194 this firing; PR #193 AI introspection; remote PR #192 obsolete per Addendum 79). The Med-Interaction role-name `[RATIFIER-PENDING]` is now CLEARED (resolved via Addendum 79).
 
 — Claude (Opus 4.7), remote-cron autonomous firing 2026-05-23. Shipped the Track 5 migration-chain gate (PR #194 `[CODEX-PENDING]`), verified the role-name reconciliation clean, reconciled the PR-7+ blocker to the open app-role-acquisition ERR. progress.json revision 183 → 184.
+
+---
+
+## Addendum 81 — App-role acquisition foundation Option B EXECUTED via dual-recommendation auto-proceed; migration 051 + withDbRole helper merged to telecheck-app:main 79ad0ca; 4-round Codex convergence with 4 HIGH + 1 MEDIUM closed (2026-05-23)
+
+**Date:** 2026-05-23
+**Trigger:** Evans's local session ran the full Codex dual-recommendation consult that the remote-cron Addendum 76 ERR documented but could not execute (no plugin in remote env). Auto-proceed gate cleared; Option B (NOINHERIT membership + per-tx `SET LOCAL ROLE` + `withDbRole` helper) executed and merged.
+
+### Cross-cycle reconciliation
+
+Cockpit Addendum 76 (remote-cron 2026-05-23) authored the ERR `Engineering-Review-Request-App-Role-Acquisition-SECDEF-Slice-Wrappers-2026-05-23.md` with 4 options + Claude pre-recommendation Option B, but STOPPED for ratifier because the remote-cron environment has no Codex plugin (cannot run the mandatory two-pass consult). Cockpit Addendum 80 (remote-cron 2026-05-23) shipped a related Track 5 followup (CI gate PR #194 [CODEX-PENDING]) and re-flagged that Med-Interaction PR 7+ handlers remain gated on this ERR.
+
+This addendum documents that the ERR has now been RATIFIED + EXECUTED via Evans's local session, which has the `codex@openai-codex` plugin available.
+
+### Codex dual-recommendation consult (local session)
+
+**Background task ids (Evans's local Codex plugin):**
+- Pass-1 (source-first independent): `by6tqd358` — verdict **Option B**; explicitly rejected Option C as "violates the existing anti-bypass DO blocks", ranked Option A as runner-up but weaker (coarse app-wide privilege).
+- Pass-2 (contrast-and-synthesize): `b32wx73n8` — verdict **APPROVE Option B**; refined API shape (allowlist enum); confirmed `SET LOCAL ROLE` does NOT create a new GUC scope so `app.tenant_id` + `app.request_nonce` remain bound across role elevation; explicitly rejected wrapper-internal `SET ROLE` + `SECURITY INVOKER` alternatives as boundary-blurring.
+
+**Three-way result:** UNANIMOUS Option B. Claude + Pass-1 + Pass-2 all converged with consistent rationale (least-privilege + zero merged-migration churn + RLS-safe by construction + closes the `migrations/003_rls_helpers.sql:164` foundation gap canonically).
+
+**Auto-proceed gate cleared:** Claude updated recommendation + Codex Pass-2 agreement on Option B → executed without further chat-message ratification per the codified rule.
+
+### Codex per-PR review cycle (R1 → R4 convergence)
+
+| Round | Task ID | Findings | Closures |
+|---|---|---|---|
+| R1 | `btdbpb7d0` | 2 (HIGH-1 + MED-1) | HIGH-1 `withDbRole` left elevated role active past `fn` return (callback API implied scoped, but `SET LOCAL ROLE` persists until tx end) — closed by capturing `current_user` BEFORE elevation + restoring in `finally` (supports nested composition). MED-1 migration 051 silently skipped missing slice roles (drifted DB could mark 051 applied with incomplete bridge) — closed with fail-on-missing-role precondition gate listing which slice RBAC migration creates each. |
+| R2 | `b99vixy6e` | 1 (HIGH-1) | HIGH-1 PG 16+ per-membership `INHERIT` option (`pg_auth_members.inherit_option`) is NOT controlled by `ALTER ROLE NOINHERIT` — only sets default for NEW grants; pre-existing memberships with `INHERIT TRUE` defeat Option B. Closed by version-gating §2 GRANT: on PG 16+ always issues `WITH INHERIT FALSE, SET TRUE` (normalizes per-membership options even on re-runs); §3.2 verifier on PG 16+ queries `pg_auth_members.inherit_option + set_option` and RAISEs if either is wrong. |
+| R3 | `b8byix4rd` | 1 (HIGH-1) | HIGH-1 R1's always-swallow restore-error pattern was over-broad: when `fn` SUCCEEDED but restore FAILED, silently returning success would let later code in the same transaction execute under the slice role's privileges. Closed by tracking `fnThrew` flag: swallow restore only when fn already threw (preserves original fn error per JS finally-throw shadowing); PROPAGATE annotated restore error when fn succeeded (caller must roll back to prevent privilege leakage). |
+| R4 | `bmhj3dhpp` | 0 | **APPROVE** — no material findings; R3 closure correctly implemented; R1/R2/MED-1 regressions not evident in diff. |
+
+**Series totals:** 4 rounds, 4 HIGH + 1 MEDIUM closed, 0 architectural-judgment hard-floor item 6 invocations (all findings within ratified Option B sub-decision scope). Every R-finding caught a real second-order privilege-boundary subtlety that static review alone would not have surfaced.
+
+### What landed (`feat/foundation-051-app-role-acquisition-option-b` → main `79ad0ca`)
+
+**4 files, ~1193 LOC:**
+
+- **`migrations/051_app_role_acquisition_foundation.sql`**:
+  - §1 `ALTER ROLE telecheck_app_role NOINHERIT`
+  - §2 GRANT 13 slice application/reader roles TO telecheck_app_role
+    - Crisis (7): `crisis_initiator`, `crisis_acknowledger`, `crisis_responder`, `crisis_resolver`, `crisis_sweep_scheduler`, `crisis_event_staff_reader`, `crisis_event_patient_reader`
+    - Admin (2): `admin_basic_operator`, `admin_template_reviewer`
+    - Med-Interaction (4): `medication_interaction_engine_evaluator`, `medication_interaction_signal_viewer`, `medication_interaction_override_recorder`, `medication_interaction_knowledge_base_updater`
+  - Wrapper-owner / view-owner / writer-owner roles DELIBERATELY EXCLUDED from the grant set (internal SECDEF identities; never SET-ROLEd into by handlers)
+  - PG 16+ uses `WITH INHERIT FALSE, SET TRUE` to normalize per-membership options; PG 15 falls back to plain GRANT + role-default NOINHERIT
+  - §3 verification: NOINHERIT + membership-present + (PG 16+ only) per-membership inherit_option=FALSE + set_option=TRUE + anti-bypass smoke check (telecheck_app_role MUST NOT be a direct grantee on representative wrappers in 036/043/048)
+  - Fail-closed precondition: missing any of the 13 slice roles → RAISE EXCEPTION listing which slice RBAC migration creates each
+- **`migrations/rollback/051_rollback.sql`**: symmetric REVOKE memberships + ALTER ROLE INHERIT restore + post-rollback verification with WARNING on incomplete state
+- **`src/lib/with-db-role.ts`**: SLICE_ROLES const tuple (13 roles) + SliceRole string-literal union + assertSliceRole runtime guard + withDbRole(tx, role, fn) helper with R1+R3 fnThrew-tracking finally for safe restore semantics
+- **`src/lib/with-db-role.test.ts`**: 5 test groups covering allowlist + statement emission + restore-prior-role + nested composition + propagation-on-success-restore-failure + swallow-on-failed-fn-restore-failure + abort-if-current_user-empty + SLICE_ROLES composition assertion (wrapper-owners absent)
+
+### Composability with the existing context helpers (Pass-2 mandate)
+
+Required nesting order:
+```
+withTransaction → withTenantContext → withActorContext → withDbRole → fn
+```
+
+GUC composability verified by Pass-2: `SET LOCAL ROLE` does NOT create a new GUC scope; `app.tenant_id` (from withTenantContext) and `app.request_nonce` (from withActorContext) remain bound across role elevation. The SECDEF wrapper body — running AS the wrapper-owner under SECURITY DEFINER — sees the same session GUCs because GUCs are transaction-scoped, not role-scoped.
+
+### Invariant preservation
+
+- **I-023 (three-layer tenancy):** preserved. RLS layer 1 unchanged; `set_tenant_context` GUC layer 2 unchanged; per-tenant KMS layer 3 unchanged.
+- **I-024 (cross-tenant break-glass):** preserved. Slice roles NOLOGIN NOBYPASSRLS → `SET ROLE` cannot escape tenant scope.
+- **I-027 (audit attribution):** preserved. Audit records continue to bind to the SI-010 actor via `current_actor_account_id`.
+
+Migration `003:380` break-glass caution targets RLS-BYPASSING role changes specifically; foundation 051 does not implicate that caution.
+
+### Anti-bypass design preserved
+
+The wrappers' verification DO-blocks (036 §3, 037, 038, 043 §3, 044, 049 §4, 050 §6) RAISE if any direct grantee other than the documented slice role + wrapper-owner exists. Option B's GRANT membership is NOT a direct grant — direct-grantee inspection via `information_schema.role_routine_grants` / `aclexplode` continues to show ONLY the wrapper-owner + the canonical slice role. The §3 anti-bypass smoke check in 051 enforces this for a representative subset (one per slice).
+
+### Cumulative cycle statistics through Addendum 81
+
+- **5 of 5 pilot-required Ghana revenue anchor slices** SI+CDM ratified.
+- **DB-layer implementation**: Crisis Response (7 PRs + 045 hotfix), Admin Backend (6 PRs), Med-Interaction (6 PRs + Option C role-name reconciliation), App-Role Acquisition Foundation (1 PR with 4-round Codex convergence). **PR 7+ Fastify handlers across all 3 SECDEF slices NOW UNBLOCKED.**
+- **Cumulative DB-layer / foundation Codex rounds**: 38 (Crisis) + 24 (Admin) + (22 + 3 dual-rec + 1 R1) (Med-Int Option C) + (3 dual-rec + 4 cycle) (foundation 051) = **~98 rounds total** at the implementation/foundation layer alone (excludes ~362 spec-cycle rounds tracked in earlier Addenda).
+- **Dual-recommendation discipline value**: 2 CRITICAL non-executability/correctness defects caught by Pass-2 across the two dual-rec consults (Med-Interaction Option A→C ordering defect 2026-05-23; foundation 051's GUC composability + boundary verification 2026-05-23). 4 HIGH + 1 MEDIUM caught in the foundation 051 Codex review cycle alone, all closed inline.
+- **2 hard-floor item 6 ERRs CLOSED via execution**: (i) Med-Interaction role-name reconciliation (Addendum 79); (ii) App-role acquisition foundation (THIS ERR + addendum).
+- 20th successive Q2 2026 auto-proceed close-out. 0 open ERRs at the implementation/foundation layer.
+
+### Out-of-scope followups (documented; do not block PR 7+ handlers)
+
+1. **Live-DB integration tests** proving the 4 Codex Pass-2 invariants — will land alongside the first real handler PR (Crisis Sprint 2 OR Med-Interaction PR 7), where they have a real wrapper to call.
+2. **End-to-end `000 → head` migration-apply CI gate** — Track 5 Infra & Ops workstream item (the remote-cron PR #194 [CODEX-PENDING] from Addendum 80 is the in-flight implementation of this).
+
+### Next critical-path item
+
+With foundation 051 + Med-Interaction Option C reconciliation both merged, the standing autonomous-work loop can now resume **per-slice handler PR series**. Three independent slice surfaces are unblocked in parallel:
+
+- **Med-Interaction PR 7+**: Fastify handler implementation (8 endpoints per SI-019 §5 + CDM §6 OpenAPI v0.3) + Cat A audit emission (6 events under `medication_interaction.*`) + LAYER B role-membership check at route layer + integration tests for tenant isolation + I-002 ordering invariant. Lowest-risk first endpoint: `GET /v1/med-interaction/signals/:id` (pure read via SECDEF access function from migration 048; uses `medication_interaction_signal_viewer` slice role; no Cat A audit emission required for reads per SI-019 §6 audit catalog).
+- **Crisis Response Sprint 2**: handler implementation per SI-022 (initiation, acknowledgment, response, resolution).
+- **Admin Backend Sprint 2**: handler implementation per SI-023 (template submit + decision + crisis-dashboard).
+
+Pilot launch posture unchanged: Telecheck-Ghana revenue anchor still depends on the cross-slice handler PRs shipping. Foundation 051 unblocks the gate but does not by itself produce a user-visible interface.
+
+— Claude (Opus 4.7, 1M context, Evans's local session with Codex plugin), App-role acquisition foundation Option B executed via dual-recommendation auto-proceed + 4-round Codex convergence 2026-05-23. progress.json revision 184 → 185.
