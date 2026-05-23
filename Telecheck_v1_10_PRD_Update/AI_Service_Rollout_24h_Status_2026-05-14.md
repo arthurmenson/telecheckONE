@@ -6517,3 +6517,60 @@ Per Addendum 88's carryforward, verified `git rev-parse main origin/main` at fir
 - **Optional continuity housekeeping (next firing, if still no Codex):** open PRs for the stranded admin submit/decision + crisis pr2/4/5/6 branches so they enter the review queue with visibility (no re-authoring — just surface existing work). Plus the clean-room `000→head` migration-apply CI gate (#194) is the durable guard for the migration-apply defect class.
 
 — Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), Track 5 plugin-wiring stale-assertion reconciliation (6 admin-backend + crisis-response §1a/§1b/§1c assertions; root-caused §1c's 404→400 to the global idempotency guard), opened as [CODEX-PENDING] PR #200; 27/27 plugin-wiring tests green + tsc/prettier clean vs live PG 16; flagged the merge-cascade-not-authorship bottleneck for Evans 2026-05-23. progress.json revision 193 → 194.
+
+---
+
+## Addendum 91 — Continuity housekeeping: surfaced the 10 stranded authored-handler branches as [CODEX-PENDING] PRs #201–#210 (2026-05-23, remote-cron)
+
+**Date:** 2026-05-23
+**Trigger:** Standing autonomous-work loop (remote-cron firing). Read the Addendum trail through #90. Executed Addendum 90's explicit "next firing, if still no Codex" prescription: **open PRs for the stranded handler branches so they enter the review queue with visibility — no re-authoring, just surface existing work.**
+
+### Critical-path selection — every prioritized handler is authored; new code is either duplicative or spec-blocked
+
+Walked the task's priority order (a)–(e) against actual `origin` branch + open-PR state before picking:
+
+- **(a) Med-Interaction DB layer** — DONE (migrations 046–051; PR 7 merged `d096b7a`).
+- **(b) Async-Consult clinician decision loop** — **SPEC-BLOCKED → STOP per discipline floor.** SI-004 (async-consult) + SI-005 (consult schema) are at v0.2 "concrete proposals, pre-ratification" (open PRs #138/#139). "Spec ratification leads implementation by ≥1 sprint"; no implementation this firing.
+- **(c) AI Mode 1 chat handler** — DONE (Addendum 76; #193 introspection fix).
+- **(d) Crisis Response Sprint 2** — all 6 handlers authored-in-branch (read merged; initiate/acknowledge/respond/resolve/sweep + patient-summary).
+- **(e) Admin Backend Sprint 2** — crisis-dashboard merged; submit + decision + dashboard-reads authored-in-branch.
+
+Re-authoring any of these is the forbidden Addendum-85 double-attempt. **Confirmed Codex remains UNAVAILABLE this firing** (`OPENAI_API_KEY` absent, no `codex` CLI, `api.openai.com` → `403` allowlist-blocked) — same meta-blocker as Addenda 75/77/80/82/84/86/87/88/90. So no merges are possible, and the highest-leverage non-duplicative action is exactly Addendum 90's prescription: surface the stranded queue.
+
+### What shipped — 10 PRs opened (no new code; existing branches surfaced)
+
+Each branch was verified `NOT-merged`, exactly 1 commit ahead of `origin/main` (`f6c5160`), with no pre-existing open PR. PRs opened with `[CODEX-PENDING]` prefix, provenance note (Wave-2/3 origin per Addenda 85/89), and the standard `#197`-first CI-dependency note:
+
+| PR | Branch | Commit | Scope |
+|---|---|---|---|
+| #201 | crisis-response-sprint2-pr2 | `ff35441` | `POST /v0/crisis-events` initiate (first write-path) |
+| #202 | crisis-response-sprint2-pr4 | `6943e29` | `POST /:id/respond` + `/:id/resolve` mid-lifecycle |
+| #203 | crisis-response-sprint2-pr5 | `5b83db0` | `GET /:id/patient-summary` (patient-scoped, fail-closed nonce) |
+| #204 | crisis-response-sprint2-pr6 | `65337ce` | `POST /:id/_sweep` (operator escalation, fencing-token idempotency) |
+| #205 | admin-backend-sprint2-pr2 | `a43f52b` | `POST .../submit-for-review` (first admin write handler) |
+| #206 | admin-backend-sprint2-pr3 | `36b435b` | `POST .../decision` (approve/reject/request_revision) |
+| #207 | admin-backend-sprint2-pr4 | `3cf677f` | consult-queue + mode1-volume dashboard reads (503 fail-closed) |
+| #208 | med-interaction-pr8-write-handlers | `80e8012` | 3 write handlers (create-evaluation/emit-signal/activate-signal) |
+| #209 | med-interaction-pr9-remaining-write-handlers | `62fe013` | 4 write handlers (supersede/override/resolve/expire, fail-closed) |
+| #210 | ai-service-mode2-case-prep-handler | `6de027f` | mount Mode 2 case-prep `POST /v0/ai/case-prep` |
+
+**Med-Int PR 8 double-attempt flagged in #208's body:** #208 (this branch, 3 handlers — the deeper attempt) vs **#196** (`pr8-post-evaluations`, single endpoint). Per the Addendum 85/89 reconciliation note, the May-26 cascade picks the deeper (#208) + closes #196. Both now visible side-by-side.
+
+### Deferred-review queue is now fully PR-visible
+
+After this firing, the complete `[CODEX-PENDING]` queue for the May-26 Codex catch-up cascade carries open PR numbers: **#192–#200 (9 prior)** + **#201–#210 (this firing's 10)** = **19 open `[CODEX-PENDING]` PRs**, plus the 3 SI pre-ratification docs (#137/#138/#139) and dependabot PRs. No authored handler work remains stranded without a PR.
+
+### Codex outcome: UNAVAILABLE → nothing merged this firing
+
+Per the discipline floor (Codex APPROVE mandatory before any merge), zero merges. This firing is pure continuity housekeeping — it changes no code and converts stranded branches into reviewable PRs.
+
+### Cockpit-ref-integrity note (checked this firing)
+
+Per Addendum 88's carryforward, verified `git rev-parse main origin/main` at firing start in both repos. **telecheckONE:** `origin/main` was current at `4eb944d` (Addendum 90); only the local `main` ref was stale (`6adaae5`, Addendum 71) — fast-forwarded local `main` to origin (no work lost; clean ancestor). **telecheck-app:** local `main` stale at `baca008` (045-era); `origin/main` current at `f6c5160` — branched/verified against `origin/main` explicitly. No stranded addenda; cross-session continuity intact.
+
+### Next critical-path item — the bottleneck remains the Codex merge cascade, not authorship
+
+- **STRATEGIC FLAG (reaffirms Addendum 90):** the prioritized Sprint-2 handler surface is entirely authored AND now entirely PR-visible. **Nothing can merge in the remote-cron env** (Codex network-blocked). The highest-value next action is the **Evans-local-session / May-26 Codex cascade**, in order: **#197 (migration-chain-apply) → #198 (RLS lockdown) → handler PRs (#192/#195/#196 + #199/#200 + #201–#210) → reconcile the #196/#208 Med-Int PR 8 double-attempt**, with rebase-on-main between merges.
+- **Async-Consult (item b)** is the next pilot-required slice needing code, but it is **Track 6 spec-ratification-gated** (SI-004/SI-005 at v0.2) — a hard-floor STOP for implementation until ratified. The marginal value of further remote-cron firings authoring parked handlers is now near-zero; future no-Codex firings should prefer (i) Track 5 CI-hardening that is fully self-verifiable in-env, or (ii) Track 6 SI authoring/row-shaping for Async-Consult ratification, rather than more parked handler code.
+
+— Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), continuity housekeeping: surfaced the 10 stranded Wave-2/3 authored-handler branches as [CODEX-PENDING] PRs #201–#210 (no re-authoring; Addendum 90's prescription); deferred-review queue now fully PR-visible at 19 open [CODEX-PENDING] PRs; reaffirmed the merge-cascade-not-authorship bottleneck for Evans 2026-05-23. progress.json revision 194 → 195.
