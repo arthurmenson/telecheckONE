@@ -5969,3 +5969,61 @@ With foundation 051 + Med-Interaction Option C reconciliation both merged, the s
 Pilot launch posture unchanged: Telecheck-Ghana revenue anchor still depends on the cross-slice handler PRs shipping. Foundation 051 unblocks the gate but does not by itself produce a user-visible interface.
 
 — Claude (Opus 4.7, 1M context, Evans's local session with Codex plugin), App-role acquisition foundation Option B executed via dual-recommendation auto-proceed + 4-round Codex convergence 2026-05-23. progress.json revision 184 → 185.
+
+## Addendum 82 — Med-Interaction (SI-019) PR 7: first Fastify handler (`GET /v0/med-interaction/signals/:id` current-state read) OPENED as [CODEX-PENDING] (PR #195); two pre-existing migration-chain-apply defects fixed to unblock the suite (BOM on 047-050 + missing `telecheck_app_role`); full suite runnable again (1906 passed) surfacing 4 pre-existing cross-slice CI-debt failures (2026-05-23, remote-cron)
+
+**Date:** 2026-05-23
+**Trigger:** Standing autonomous-work loop (remote-cron firing) picking up the next critical-path item per Addendum 81 — the first per-slice handler PR now that foundation 051 (`withDbRole`) + Med-Interaction Option C role-name reconciliation are merged. Selected the explicitly-named lowest-risk first endpoint: Med-Interaction `GET /signals/:id` current-state read.
+
+### What shipped (`feat/med-interaction-pr7-signal-read` → PR #195, commit `7059a57`)
+
+**First Fastify handler of the Med-Interaction series.** `GET /v0/med-interaction/signals/:id`:
+
+- Reads the current-state projection (`{ signal_id, current_state, as_of, transition_reason }`) via the SECDEF access function `get_interaction_signal_current_state` from migration 048 (SI-019 Sub-decision 9 HOT-PATH DISPLAY read path; the MV/view is non-authoritative per I-035).
+- **First handler-layer consumer of `withDbRole`** (Option B app-role acquisition; migration 051): elevates into `medication_interaction_signal_viewer` AFTER the route-layer LAYER B authorization, per the with-db-role.ts trust-boundary contract (never elevate for an unentitled actor). Nesting `withTransaction → withTenantContext → withDbRole` (no `withActorContext` — pure read, no actor-bound write).
+- **No Cat A audit emission** — SI-019 §6 audit catalog has no read event (its 6 events are all write/lifecycle). Confirms Addendum 81's read-path classification.
+- **I-025 tenant-blind 404** — cross-tenant, absent, and malformed ids all return the identical not-found envelope (`crossTenantNotFoundError`). A ULID-shape guard (26-char Crockford base32) also prevents an over-long id from overflowing the access function's `VARCHAR(26)` parameter into a 500.
+- **LAYER B** gates to `clinician + tenant_admin + platform_admin` (the `signal_viewer`-entitled roles expressible in the current JWT enum per SI-019 §RBAC; `pharmacist` + `ai_clinical_assistant` land with their own slices). Patients → 403.
+- `/ready` stays 503 — only 1 of 8 endpoints + the deferred live-DB tests means the module is not yet traffic-ready.
+
+Files: `src/modules/med-interaction/internal/handlers/signals.ts` (new), `internal/repositories/signal-read-repo.ts` (new), `internal/types.ts` (read-model projection `InteractionSignalCurrentState`), `routes.ts` (wire route), `README.md` (Sprint 2 status), `tests/integration/med-interaction-signal-read-http.test.ts` (new).
+
+### Codex outcome: UNAVAILABLE in remote-cron env → [CODEX-PENDING], NOT merged
+
+Codex CLI is installed (`codex-cli 0.133.0`) but `OPENAI_API_KEY` is absent and `wss://api.openai.com/v1/responses` returns **403 Forbidden** — the mandatory two-pass adversarial review cannot run in the remote-cron environment (same meta-blocker as Addenda 75/77/80). Per the discipline floor (Codex APPROVE mandatory before any merge), PR #195 is opened with the **`[CODEX-PENDING]`** prefix and left UNMERGED for Evans's local session (which has the `codex@openai-codex` plugin) to run the review + iterate to APPROVE.
+
+### Prerequisite migration-chain-apply fixes (the high-value discovery this firing)
+
+This is the **first firing to run the integration suite end-to-end against a live PostgreSQL** (the remote env has the `postgresql-16` binaries; spun up a local instance to verify). Doing so revealed the suite **could not run at all** — two pre-existing defects in the local-session-merged DB layers, both fixed in PR #195 as prerequisites:
+
+1. **UTF-8 BOM on migrations 047, 048, 049, 050.** The leading `EF BB BF` caused `syntax error at or near "<BOM>"`, aborting the migration runner at 047 and failing **every** integration test at `tests/setup.ts`. Fix: surgical strip of the 3 BOM bytes (only the first line of each file changes; no SQL semantics touched; comment-level latin1 mojibake left as-is — cosmetic, in `--` comments, non-apply-breaking).
+2. **`telecheck_app_role` never created.** Migration 051 (foundation, Addendum 81) added an *unguarded* `ALTER ROLE telecheck_app_role NOINHERIT` + `GRANT` of the 13 slice roles, but no migration creates that role — 002/003/031/036 only reference it in comments or behind `IF EXISTS (rolname='telecheck_app_role')` guards, which is why the chain applied cleanly through 050. Fix: provision it (idempotent) in `tests/setup.ts` BEFORE migrations, mirroring the IaC provisioning of the production app login role (it is NOT the session role tests run as — that remains `telecheck_test_app`).
+
+**Root-cause signal:** both defects are invisible to unit tests and were merged in local sessions that bypassed a full CI run. The clean-room `000 → head` migration-apply CI gate (PR #194, Addendum 80, still `[CODEX-PENDING]`) is the durable guard for exactly this class of defect — its absence is why these slipped.
+
+### Verification (PostgreSQL 16, remote env)
+
+- `npm run typecheck` ✅ · `eslint` on all changed files ✅ · `prettier --check` ✅.
+- New handler tests green: §A 401 (no JWT) / §B 403 (patient) / §C tenant-blind 404 on malformed + over-length id — all CI-verifiable (they short-circuit before any slice-role/MV access).
+- **Full suite: 1906 passed**, 3 skipped, 33 todo (was: 0 runnable pre-fix).
+- The live-DB **200 / absent-404 / cross-tenant** read paths are `it.todo` pending the SECDEF-aware test-harness extension (grant the test session membership in the slice + MV-refresh-owner roles with NOINHERIT-equivalent options; add a seed→`REFRESH MATERIALIZED VIEW` helper). This is Addendum 81 out-of-scope item #1 and the reusable pattern for all three SECDEF slices (Med-Interaction / Crisis / Admin).
+
+### Pre-existing CI debt surfaced (NOT fixed — out of scope; flagged for follow-on)
+
+Making the suite runnable surfaced **4 pre-existing failures** (in OTHER slices, unrelated to this handler) + **2 pre-existing lint errors**, all masked by the BOM. Per the discipline floor — especially the I-023 platform-floor lockdown — these were left untouched and surfaced rather than casually patched:
+
+- `tests/contracts/rls-policy-coverage-lockdown.test.ts` §2a/§2b — expects **25** tenant-scoped tables, finds **39**. The **I-023 RLS-coverage lockdown count was never updated** when the Crisis (033) / Admin (040) / Med-Interaction (047) migrations added tenant-scoped tables. Updating it is a deliberate platform-floor review gate spanning three slices — needs its own PR with per-table verification (the test also guards against ROGUE RLS), not a number bump.
+- `admin-backend-plugin-wiring.test.ts` §1c + `crisis-response-plugin-wiring.test.ts` §1c — POST to an unmounted route expects **404**, gets **400**. Pre-existing route-behavior/expectation mismatch in those slices.
+- `@typescript-eslint/no-unnecessary-type-assertion` in `crisis-response-plugin-wiring.test.ts:63,82` (+ admin equivalents) — pre-existing, auto-fixable.
+
+**Implication:** main's CI integration job has very likely been **red since the Crisis-Response DB layer merged locally** — this firing is the first to run the suite end-to-end and surface it. Recommend Evans prioritize the clean-room `000→head` gate (PR #194) + an I-023 lockdown-count reconciliation PR.
+
+### Next critical-path item
+
+- **Med-Interaction PR 8+**: the 7 remaining write/lifecycle endpoints (evaluation init, signal emission, activate, override, supersede, resolve, expire) + Cat A audit emission (6 events) + the SECDEF lifecycle wrappers (049/050). These DO require the actor-bound audit path + the deferred SECDEF test-harness extension.
+- **Parallel-unblocked:** Crisis Response Sprint 2 + Admin Backend Sprint 2 handlers (same `withDbRole` pattern this PR establishes).
+- **Recommended interleave (infra/ops):** the I-023 lockdown-count reconciliation + clean-room migration gate, so CI returns to a trustworthy green before more handler PRs stack on top.
+
+Pilot launch posture unchanged: Telecheck-Ghana revenue anchor still depends on the cross-slice handler PRs shipping; PR 7 is the first user-facing read surface but not yet traffic-ready (`/ready` 503).
+
+— Claude (Opus 4.7, 1M context, remote-cron autonomous firing — no Codex plugin in this env), Med-Interaction PR 7 signal-read handler opened as [CODEX-PENDING] PR #195 + two migration-chain-apply prerequisite fixes; full suite restored to runnable (1906 passed); 4 pre-existing cross-slice failures surfaced for follow-on 2026-05-23. progress.json revision 185 → 186.
