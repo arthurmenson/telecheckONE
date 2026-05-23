@@ -5815,3 +5815,58 @@ Codex noted: *"Run the full 000-to-050 migration chain in a real database before
 **Pilot launch posture unchanged:** Telecheck-Ghana revenue anchor still depends on PR 7+ Fastify handlers shipping + cross-slice integration. No pilot-blocker added by the role-name defect (pre-deployment caught + fixed).
 
 — Claude (Opus 4.7, 1M context, Evans's local session with Codex plugin), Med-Interaction role-name reconciliation Option C executed via dual-recommendation auto-proceed 2026-05-23. progress.json revision 182 → 183.
+
+## Addendum 80 — Shipped Addendum 79's named Track 5 followup: clean-room `000 → head` migration-chain CI gate (PR #194 `[CODEX-PENDING]`); trust-but-verify reconciles "PR 7+ UNBLOCKED" — Med-Interaction handlers remain gated on the app-role-acquisition ERR (the sole remaining gate across all 3 SECDEF slices) (2026-05-23)
+
+**Date:** 2026-05-23
+**Trigger:** scheduled remote-cron critical-path firing. Resumed after Evans's local-session Addendum 79 (role-name reconciliation merged to telecheck-app:main `01268d2`). Per discipline, re-verified ground-truth **against the actual code** (not addendum-trust) and shipped the highest-leverage genuinely-unblocked, non-presupposing item.
+
+### Ground-truth on entry (trust-but-verify)
+
+- `telecheck-app` main = `01268d2` (Med-Interaction role-name Option C reconciliation merged; local main was stale at `baca008` and fast-forwarded). `telecheckONE` main = `6468f90` (Addendum 79).
+- **Role-name reconciliation verified clean at the code level.** Built the full role-reference graph across migrations 046–050 + rollbacks: every live `OWNER TO` / `GRANT EXECUTE` / `GRANT SELECT` / `REVOKE` references a bare role that migration 046 actually `CREATE ROLE`s. The only non-created reference (`medication_interaction_resolution_subscriber`) sits in a commented-out DEFERRED line. No residual slice-prefixed reference remains.
+- **Codex remains unavailable** in the remote env (no `OPENAI_API_KEY`, no `codex` binary). Meta-blocker persists: this loop can open `[CODEX-PENDING]` PRs but cannot merge.
+
+### What shipped — `000 → head` migration-chain CI gate (Addendum 79 followup #1)
+
+Addendum 79 named this as the Track 5 (Infra & Ops) followup that Codex Pass-2 + R1 both flagged: the slice-prefixed role-name defect went uncaught across ~25 review rounds because **no environment had ever applied `000 → head` from a pristine database** (`tests/setup.ts` applies migrations only as a side effect of the integration suite, tracking applied files in `schema_migrations` + using cross-fork advisory locks). PR **#194** (`feat/infra-migration-chain-ci-gate`, commit `67ac917`):
+
+- **`scripts/check-migration-chain.sh`** — forward-applies every `migrations/NNN_*.sql` (000 → head) with `psql --single-transaction -v ON_ERROR_STOP=1` (mirrors how `tests/setup.ts` wraps each file in one `BEGIN/COMMIT`; several migrations use `SET LOCAL`/`LOCK TABLE`). Asserts every migration has a `rollback/NNN_rollback.sql` companion.
+- **`.github/workflows/migration-chain.yml`** — runs the script against a fresh `postgres:15-alpine` service container (matches `ci.yml`) on any change under `migrations/`. The fresh container satisfies the pristine-DB precondition.
+- **`migrations/README.md`** — discoverability pointer under Discipline.
+
+**Local validation (PostgreSQL 16, real DB):** forward chain applies cleanly — **50 migrations, exit 0**. Negative test: an injected `GRANT EXECUTE … TO interaction_signal_emission_owner` (a role no migration creates) appended to 050 → forward apply **aborts at 050** with `role "interaction_signal_emission_owner" does not exist`, **exit 1**. The gate catches the exact defect class that reached main latently.
+
+### Trust-but-verify reconciliation of Addendum 79's "PR 7+ UNBLOCKED"
+
+Addendum 79 stated Med-Interaction PR 7+ is "UNBLOCKED." Code-level verification refines this: migration **050 grants `EXECUTE` on the lifecycle wrappers ONLY to the slice functional roles** (`medication_interaction_engine_evaluator` / `signal_viewer` / `override_recorder`) — **never to `telecheck_app_role`**, and no migration grants `telecheck_app_role` membership or direct EXECUTE. A handler running as `telecheck_app_role` would hit `permission denied for function record_signal_emission`. This is exactly what the **app-role-acquisition ERR (Addendum 76, OPEN)** §3 already documents: "Med-Interaction PR 7+ — EXECUTE its lifecycle wrappers (additionally gated on the separate role-name reconciliation ERR)."
+
+**Net:** the role-name ERR is resolved, so the app-role-acquisition ERR is now the **sole remaining gate** — and it gates **all three** SECDEF slices identically: Crisis Response Sprint 2, Admin Backend Sprint 2, **and** Med-Interaction PR 7+. Med-Interaction handlers additionally cannot be authored without presupposing which acquisition option (A/B/C/D) is ratified, since the handler's per-transaction code differs by option (Option B needs `SET LOCAL ROLE` in the tx; Option A needs none; Option D needs a slice pool). Authoring them now would presuppose the open ERR — correctly declined.
+
+### Why the migration-chain gate was the right non-presupposing PR
+
+It is Track 5 Infra & Ops (authorized), explicitly named by Addendum 79 + Codex, and **presupposes no open ERR** (it applies migrations; it does not decide the app-role-acquisition mechanism, nor touch any wrapper grant). It closes the precise process gap that let the role-name defect land. By contrast, a Crisis/Admin/Med-Interaction handler PR would presuppose the open app-role-acquisition option.
+
+### Finding surfaced (not fixed) — reverse rollback-chain unwind
+
+While prototyping, a full reverse unwind (head → 000) was attempted and aborts at `rollback/003_rollback.sql`: `cannot drop function current_tenant_id() because policy audit_tenant_isolation on audit_records depends on it`. Root cause: `current_tenant_id()` is **shared** between migration 002 (which creates `audit_records` + its RLS policy) and 003 (`CREATE OR REPLACE`); 003's rollback header explicitly documents this as **dev/test-only, "drop RLS policies first."** The slice rollbacks (050 → 004) all unwind cleanly. Hardening the reverse unwind touches platform-floor foundation rollbacks (002/003, I-003/I-023 territory) and is **out of scope** for this gate PR — filed as a candidate future Track 5 item, NOT bundled here.
+
+### Codex outcome
+
+**Not run — unavailable in remote env.** PR #194 opened `[CODEX-PENDING]`; NOT merged. Codex APPROVE remains mandatory before merge (Evans's local session, or a remote firing provisioned with `OPENAI_API_KEY`).
+
+### Cockpit updates this firing
+
+1. PR #194 `[CODEX-PENDING]` opened on telecheck-app (`67ac917`).
+2. This Addendum 80.
+3. `progress.json` revision 183 → 184; `slice-med-interaction` note (gate delivered + PR-7+-blocker reconciliation) + `impl-rls-baseline` note (gate shipped).
+
+### Next critical-path items
+
+1. **App-role-acquisition ERR (Addendum 76, OPEN)** — now the SOLE gate across all 3 SECDEF slices (Crisis Sprint 2, Admin Sprint 2, Med-Interaction PR 7+). Needs Evans ratifier decision + the two-pass Codex consult (runnable only where the plugin is installed). Resolving it unblocks all three handler series in parallel.
+2. **Async-Consult clinician loop** — still gated on AI Mode 2 / SI-007 (unbuilt).
+3. **Reverse rollback-chain hardening** (Track 5) — optional follow-on to this gate; 002/003 shared-`current_tenant_id()` ownership.
+
+**Stop-condition markers (carried):** `[RATIFIER-PENDING]` (app-role-acquisition, Addendum 76) + `[CODEX-PENDING]` (PR #194 this firing; PR #193 AI introspection; remote PR #192 obsolete per Addendum 79). The Med-Interaction role-name `[RATIFIER-PENDING]` is now CLEARED (resolved via Addendum 79).
+
+— Claude (Opus 4.7), remote-cron autonomous firing 2026-05-23. Shipped the Track 5 migration-chain gate (PR #194 `[CODEX-PENDING]`), verified the role-name reconciliation clean, reconciled the PR-7+ blocker to the open app-role-acquisition ERR. progress.json revision 183 → 184.

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 183,
+  "revision": 184,
   "updated": "2026-05-23",
   "lifecycle": {
     "current": "foundation-build",
@@ -275,7 +275,7 @@
       "status": "in-dev",
       "progress": 70,
       "owner": "",
-      "notes": "SI-019 v2.0 RATIFIED (P-033) + CDM v1.6→v1.7 (P-034). DB layer PRs 1-6 MERGED to telecheck-app main 5da9766. ROLE-NAME RECONCILIATION COMPLETE (Addendum 79, merge 01268d2): Option C executed via Codex two-pass dual-recommendation consult — Pass-2 caught CRITICAL non-executability defect in initial Option A recommendation (051 hotfix cannot fix chain that aborts at 047); Claude conceded Option C. 81 refs across 6 files rewritten 1:1 to bare names per spec P-034 §8; symmetric 267 insertions + 267 deletions; Codex R1 APPROVE. Fresh 000→050 chain now applies cleanly. REMOTE-CRON PR #192 obsolete + should be CLOSED. PR 7+ Fastify handlers UNBLOCKED. Followup (Track 5 Infra & Ops): add 000→head migration-apply CI gate per Pass-2 + R1 recommendation.",
+      "notes": "SI-019 v2.0 RATIFIED (P-033) + CDM v1.6→v1.7 (P-034). DB layer PRs 1-6 MERGED to telecheck-app main 5da9766. ROLE-NAME RECONCILIATION COMPLETE (Addendum 79, merge 01268d2): Option C executed via Codex two-pass dual-recommendation consult — Pass-2 caught CRITICAL non-executability defect in initial Option A recommendation (051 hotfix cannot fix chain that aborts at 047); Claude conceded Option C. 81 refs across 6 files rewritten 1:1 to bare names per spec P-034 §8; symmetric 267 insertions + 267 deletions; Codex R1 APPROVE. Fresh 000→050 chain now applies cleanly. REMOTE-CRON PR #192 obsolete + should be CLOSED. PR 7+ Fastify handlers role-name-UNBLOCKED, but trust-but-verify (Addendum 80) confirms migration 050 grants EXECUTE on the lifecycle wrappers ONLY to the slice functional roles (engine_evaluator/signal_viewer/override_recorder), never to telecheck_app_role — so handler EXECUTE remains gated on the app-role-acquisition ERR (Addendum 76, OPEN), same primitive as Crisis+Admin Sprint 2. Track 5 Infra & Ops followup DELIVERED: 000→head clean-room migration-chain CI gate shipped as PR #194 [CODEX-PENDING] (Addendum 80), validated locally (50 migrations apply clean; negative test catches the exact role-reference defect class).",
       "docs": [
         "Telecheck_Medication_Interaction_Engine_Slice_PRD_v2_0.md",
         "Telecheck_CDM_v1_6_to_v1_7_Amendment.md"
@@ -559,7 +559,7 @@
       "status": "in-dev",
       "progress": 90,
       "owner": "",
-      "notes": "Migrations through 007 rollback + idempotent ALTER + schema-qualified CHECK; HTTP-level verify-r1 raw tenant_id scans.",
+      "notes": "Migrations through 007 rollback + idempotent ALTER + schema-qualified CHECK; HTTP-level verify-r1 raw tenant_id scans. Addendum 80: clean-room 000→head migration-chain gate (scripts/check-migration-chain.sh + .github/workflows/migration-chain.yml) shipped PR #194 [CODEX-PENDING] — fills the no-env-ever-applies-fresh-chain gap that let the med-interaction role-name defect reach main latently.",
       "docs": [
         "Telecheck_System_Architecture_v1_2.md"
       ],
@@ -635,6 +635,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-23T00:00:00.000Z",
+  "updatedAt": "2026-05-23T14:30:00.000Z",
   "lastSyncedSha": "666358d"
 }
