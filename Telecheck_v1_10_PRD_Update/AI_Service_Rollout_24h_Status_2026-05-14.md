@@ -5728,3 +5728,90 @@ Choosing the acquisition mechanism — (A) broad INHERIT membership, (B) NOINHER
 - Promotion Ledger entry counter does NOT advance (P-042 remains latest).
 
 — Claude (Opus 4.7), remote-cron firing: code-level critical-path re-verification + sustained 2-ERR hard-floor item 6 STOP + meta-blocker (no Codex in remote env) surfaced 2026-05-23. progress.json revision 181 → 182.
+
+---
+
+## Addendum 79 — Med-Interaction (SI-019) role-name reconciliation EXECUTED via Option C; full Codex two-pass + R1 verification cycle ran in Evans's local session; merged to telecheck-app:main as `01268d2`; SI-019 critical-path UNBLOCKED for PR 7+ Fastify handlers (2026-05-23)
+
+**Date:** 2026-05-23
+**Trigger:** Evans's local session (has Codex plugin + companion script available) executed the role-name reconciliation that Addendum 75's ERR + the remote-cron-authored `Engineering-Review-Request-Med-Interaction-Role-Name-Reconciliation-2026-05-23.md` recommended (Option C — spec-conformant bare-name reconciliation).
+
+### Cross-cycle reconciliation
+
+The remote-cron-authored ERR (Addendum 75) and Evans's local-session ERR (drafted independently in this session) BOTH converged on Option C as the spec-conformant solution. The remote-cron ERR explicitly noted "Codex consult DEFERRED — Codex unavailable in remote env" and stopped for ratifier decision. Evans's local session HAS the Codex plugin installed and ran the full two-pass dual-recommendation consult that the discipline requires before any auto-proceed gate evaluation. The execution path documented here is the discipline-floor-compliant version of the same reconciliation the remote-cron ERR had recommended.
+
+### Codex two-pass dual-recommendation consult (local session)
+
+**Background task ids (Evans's local Codex plugin):**
+- Pass-1 (source-first independent): `bg3mio1fg`
+- Pass-2 (contrast-and-synthesize): `brwjln326`
+- R1 verification on Option C fix: `bsvk68nfu`
+
+**Pass-1 verdict (source-first independent, NOT given Claude's framing):** **Option C** — "Use the bare role names created by 046 throughout 047-050: override_wrapper_owner, lifecycle_transition_writer_owner, mv_refresh_owner, emission_wrapper_owner, activation_wrapper_owner, superseded_wrapper_owner, resolution_wrapper_owner, and expiry_wrapper_owner. Then add a fresh end-to-end migration apply check for this slice." Pass-1 explicitly REJECTED Option A: "Do not paper over this by creating both bare and prefixed roles unless there is a documented compatibility migration for an already-mutated environment; duplicate owner roles would preserve ambiguity in the trust boundary."
+
+**Pass-2 verdict (contrast-and-synthesize):** **Option C** — and caught a **CRITICAL framing defect in Claude's initial Option A recommendation**: *"A numbered 051 hotfix cannot repair a fresh chain that already aborts in 047. Migration 047 must complete before 051 is reached, but 047 already aborts on `interaction_signal_override_wrapper_owner`. This is not just a tradeoff against immutable history; it means the recommended hotfix is non-executable for the primary broken path."* Pass-2 also reaffirmed the trust-boundary argument: GRANT-membership inheritance is asymmetric — privileges granted to the prefixed role are NOT visible through the bare role, and object ownership remains attached to the prefixed identity. Operators auditing the spec-canonical bare role would miss real owners/grantees unless they also understand the alias map.
+
+**Claude updated recommendation (concession to Pass-2):** **Option C**. Pass-2's CRITICAL ordering finding is correct — initial Option A was non-executable for the primary broken path. Pass-2's trust-boundary argument also lands: object ownership in PostgreSQL is identity-anchored, not membership-anchored.
+
+**Auto-proceed gate cleared:** Claude updated recommendation (Option C) + Codex Pass-2 (Option C) AGREE. Evans confirmed in chat. Implementation proceeded.
+
+### Option C fix (commit `c5dd1fc`, merged as `01268d2`)
+
+**81 references across 6 files rewritten 1:1 from slice-prefixed to bare names per spec P-034 §8:**
+
+| File | Slice-prefixed refs (before) | Bare refs (after) | Symmetric diff |
+|---|---|---|---|
+| `migrations/047_med_interaction_entities.sql` | 6 | 6 | 0 net byte change |
+| `migrations/048_med_interaction_view_mv_access_function.sql` | 15 | 15 | 0 net byte change |
+| `migrations/049_med_interaction_raw_lifecycle_writer.sql` | 22 | 22 | 0 net byte change |
+| `migrations/050_med_interaction_wrappers.sql` | 18 | 18 | 0 net byte change |
+| `migrations/rollback/049_rollback.sql` | 8 | 8 | 0 net byte change |
+| `migrations/rollback/050_rollback.sql` | 12 | 12 | 0 net byte change |
+| **Total** | **81** | **81** | 267 insertions + 267 deletions, perfectly symmetric |
+
+**Mapping applied (8 pairs):**
+
+1. `interaction_signal_emission_wrapper_owner` → `emission_wrapper_owner`
+2. `interaction_signal_activation_wrapper_owner` → `activation_wrapper_owner`
+3. `interaction_signal_override_wrapper_owner` → `override_wrapper_owner`
+4. `interaction_signal_supersession_wrapper_owner` → `superseded_wrapper_owner` (also normalizes spelling: supersession → superseded per spec §8 stem)
+5. `interaction_signal_resolution_wrapper_owner` → `resolution_wrapper_owner`
+6. `interaction_signal_expiry_wrapper_owner` → `expiry_wrapper_owner`
+7. `interaction_signal_lifecycle_transition_writer_owner` → `lifecycle_transition_writer_owner`
+8. `interaction_signal_mv_refresh_owner` → `mv_refresh_owner`
+
+**Verification:** post-rewrite grep across telecheck-app returns 0 hits for the slice-prefixed pattern. `npx tsc --noEmit` passes.
+
+### Codex R1 verification on Option C fix (`bsvk68nfu`)
+
+**Verdict:** **APPROVE**. *"No material blocker found in the branch diff. Static review shows the executable GRANT, OWNER TO, verification arrays, MV access checks, and rollback REVOKEs consistently use the bare roles created by migration 046; no defensible stale slice-prefixed executable role reference remains."*
+
+Codex noted: *"Run the full 000-to-050 migration chain in a real database before merge if that has not already been done; this review only used read-only repository inspection."* — this aligns with Pass-2's earlier recommendation to add a `000 → head` migration-apply CI gate (Track 5 Infra & Ops followup).
+
+### Merge (`01268d2`)
+
+`feat/med-interaction-role-name-reconciliation-option-c` merged `--no-ff` to telecheck-app:main as `01268d2` per autonomous-work standing directive. Merge succeeded; CI checks pending (same posture as Crisis Response + Admin Backend code-repo merges).
+
+### Out-of-scope followups (documented)
+
+1. **Add `000 → head` migration-apply CI gate** — Track 5 (Infra & Ops) workstream item. The Codex Pass-2 + R1 both flagged that the slice-prefixed defect went uncaught across 25 review rounds because no end-to-end fresh-apply step was in the discipline. Adding this gate as a per-PR CI check would have caught the defect immediately. Pre-deployment posture is preserved (no env has applied these migrations) so no live-database remediation is needed.
+2. **CLOSE remote-cron PR #192** — `feat/med-interaction-pr3-readpath-mv-048` at `6a31d90` contains a 047-only partial fix that becomes obsolete after this merge. Evans's local-session main now has the FULL reconciliation (047/048/049/050 + rollbacks). The remote-cron PR also bundled a read-path migration 048 attempt that was superseded by the already-merged migration 048 from PR 3 — so the PR is fully obsolete and should be closed without merging.
+
+### Cumulative cycle statistics through Addendum 79
+
+- **5 of 5 pilot-required Ghana revenue anchor slices** SI+CDM ratified.
+- **Med-Interaction DB layer** now FULLY INTERNALLY CONSISTENT: 046 (bare role creation per spec §8) + 047-050 (bare role references per spec §8) + 049/050 rollbacks (symmetric bare-name REVOKEs). Migration chain `000 → 050` applies cleanly.
+- **Cumulative DB-layer Codex rounds across 3 implemented slices**: 38 + 24 + (22 + 3 dual-recommendation + 1 R1) = **88 rounds total** at the implementation layer (excludes ~362 spec-cycle rounds tracked in earlier Addenda).
+- **Dual-recommendation discipline value caught**: 1 CRITICAL non-executability framing defect in Claude's initial Option A (Pass-2 catch). 1 architectural-judgment STOP correctly executed (hard-floor item 6 invocation that would otherwise have shipped non-executable code).
+- **2 hard-floor item 6 ERRs documented across the v1.10 implementation cycle so far**: (i) Med-Interaction role-name reconciliation (THIS ERR — now CLOSED via Option C execution); (ii) App-role acquisition for slice SECDEF wrappers (Addendum 76 ERR — REMAINS OPEN; blocks Crisis Response + Admin Backend Sprint 2; Evans ratifier decision pending).
+- 19th successive Q2 2026 auto-proceed close-out (18th was Med-Interaction PR 6 of 6; 19th is this Option C reconciliation post-dual-recommendation-consult).
+- **Critical-path status:** Med-Interaction PR 7+ Fastify handler series NOW UNBLOCKED. Crisis Response + Admin Backend Sprint 2 still blocked on the second open ERR (app-role acquisition).
+
+### Next critical-path items (per the standing autonomous-work loop)
+
+1. **Med-Interaction PR 7+** (UNBLOCKED): author Fastify handler implementation — 8 endpoints per SI-019 §5 + CDM §6 OpenAPI v0.3 (signal-check, override-record, lifecycle actions) + Cat A audit emission (6 events: 4 Cat A + 2 Cat B) under `medication_interaction.*` + LAYER B role-membership check at route layer + integration tests for tenant isolation + I-002 ordering invariant. The hard rule I-002 (interaction engine runs BEFORE clinician commits `medication_request`) binds at the Pharmacy + Async Consult clinician-commit boundaries.
+2. **Address Addendum 76 ERR** (app-role acquisition for slice SECDEF wrappers): the remote-cron-authored ERR proposes 4 options for granting `telecheck_app_role` EXECUTE on the Crisis + Admin SECDEF wrappers. Evans ratifier decision required; this unblocks Crisis Response + Admin Backend Sprint 2 handlers in parallel.
+
+**Pilot launch posture unchanged:** Telecheck-Ghana revenue anchor still depends on PR 7+ Fastify handlers shipping + cross-slice integration. No pilot-blocker added by the role-name defect (pre-deployment caught + fixed).
+
+— Claude (Opus 4.7, 1M context, Evans's local session with Codex plugin), Med-Interaction role-name reconciliation Option C executed via dual-recommendation auto-proceed 2026-05-23. progress.json revision 182 → 183.

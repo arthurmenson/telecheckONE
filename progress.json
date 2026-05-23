@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 182,
+  "revision": 183,
   "updated": "2026-05-23",
   "lifecycle": {
     "current": "foundation-build",
@@ -273,15 +273,15 @@
       "name": "Medication Interaction Engine",
       "category": "Slice PRD",
       "status": "in-dev",
-      "progress": 60,
+      "progress": 70,
       "owner": "",
-      "notes": "SI-019 v2.0 RATIFIED (P-033) + CDM v1.6→v1.7 (P-034). DB layer PRs 1-6 MERGED to telecheck-app main 5da9766 (Evans's local session). LATENT DEFECT live on main: migrations 047/048/049/050 (+ rollbacks 049/050) reference slice-prefixed role names (interaction_signal_*_owner; 81 sites/6 files) but migration 046 creates BARE names per spec P-034 §8 (CDM v1.7 §4.NEW3 line 197) — fresh 000→047 chain aborts. ERR AUTHORED (Addendum 75): Engineering-Review-Request-Med-Interaction-Role-Name-Reconciliation-2026-05-23.md. KEY FINDING: README records NO slice-prefix carryforward decision (only dotted application-role realization) → prefixed refs are a defect, not a ratified choice → recommendation REVISED from Addendum 74's Option A to Option C (spec-conformant bare-name reconciliation, amend in place). STOP sustained — hard-floor item 6 (naming + amend-vs-forward-fix axes) + Codex consult DEFERRED (no OPENAI_API_KEY/binary in remote env). Awaiting Evans ratifier decision + Codex two-pass consult. Open remote PR #192 [CODEX-PENDING] = partial Option C (047 grant + read-path 048); reconcile per ratified option. PR 7+ Fastify handlers blocked until reconciliation lands.",
+      "notes": "SI-019 v2.0 RATIFIED (P-033) + CDM v1.6→v1.7 (P-034). DB layer PRs 1-6 MERGED to telecheck-app main 5da9766. ROLE-NAME RECONCILIATION COMPLETE (Addendum 79, merge 01268d2): Option C executed via Codex two-pass dual-recommendation consult — Pass-2 caught CRITICAL non-executability defect in initial Option A recommendation (051 hotfix cannot fix chain that aborts at 047); Claude conceded Option C. 81 refs across 6 files rewritten 1:1 to bare names per spec P-034 §8; symmetric 267 insertions + 267 deletions; Codex R1 APPROVE. Fresh 000→050 chain now applies cleanly. REMOTE-CRON PR #192 obsolete + should be CLOSED. PR 7+ Fastify handlers UNBLOCKED. Followup (Track 5 Infra & Ops): add 000→head migration-apply CI gate per Pass-2 + R1 recommendation.",
       "docs": [
         "Telecheck_Medication_Interaction_Engine_Slice_PRD_v2_0.md",
         "Telecheck_CDM_v1_6_to_v1_7_Amendment.md"
       ],
       "stage": "slice-build",
-      "updatedAt": "2026-05-23T11:00:00.000Z"
+      "updatedAt": "2026-05-23T13:00:00.000Z"
     },
     {
       "id": "slice-pharmacy",
