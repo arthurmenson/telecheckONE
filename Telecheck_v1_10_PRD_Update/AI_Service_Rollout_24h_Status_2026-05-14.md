@@ -6265,3 +6265,60 @@ Same meta-blocker as Addenda 75/77/80/82/84: `OPENAI_API_KEY` absent, no `codex`
 - **Handler series** (Wave 3a per Addendum 85) continues in parallel; all of it benefits from #197 restoring trustworthy green.
 
 — Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), Track 5 migration-chain-apply unblock (BOM strip 047-050 + `telecheck_app_role` test provisioning) opened as [CODEX-PENDING] PR #197; verified end-to-end vs live PostgreSQL 16 (1932 passed); the foundational CI-unblock for the May-26 deferred-review queue 2026-05-23. progress.json revision 189 → 190.
+
+---
+
+## Addendum 87 — Track 5 platform-floor: I-023 RLS-coverage lockdown reconciliation 25 → 39 tables (Crisis/Admin/Med-Interaction), OPENED as [CODEX-PENDING] (PR #198) (2026-05-23, remote-cron)
+
+**Date:** 2026-05-23
+**Trigger:** Standing autonomous-work loop (remote-cron firing). Read the Addendum trail through #86. Selected the **non-duplicative, unclaimed, platform-floor** item that Addenda 82/83/84/85/86 all flag as needing its own PR with per-table verification: the **I-023 RLS-coverage lockdown count reconciliation** (live DB carries 39 tenant-scoped tables; the lockdown asserted 25). Deliberately avoided the Wave 3a handler series (Med-Int PR9 / Crisis acknowledge / Admin decision) to prevent collision with Evans's local-session orchestration (the Addendum-85 double-attempt on Med-Int PR8 is the cautionary precedent) and to avoid stacking yet another handler PR onto an already-red CI.
+
+### What shipped (`fix/i023-rls-lockdown-reconcile-crisis-admin-med-interaction` → PR #198, commit `983de82`)
+
+`tests/contracts/rls-policy-coverage-lockdown.test.ts`: `TENANT_SCOPED_TABLES` 25 → 39, with per-migration provenance comments. The Crisis Response (033), Admin Backend (040), and Med-Interaction (047) DB-layer migrations each added tenant-scoped tables but predated their registration in the lockdown, so the DB-backed §2 count-drift assertion correctly fired once the migration chain could apply end-to-end.
+
+| Slice | Migration | +N | Tables |
+|---|---|---|---|
+| Crisis Response | 033 | +6 | `crisis_event`, `crisis_event_lifecycle_transition`, `crisis_sweep_execution`, `notification_crisis_dispatch_ledger`, `notification_crisis_escalation_obligation`, `notification_crisis_provider_attempt` |
+| Admin Backend | 040 | +4 | `admin_dashboard_query_execution`, `admin_template_decision_idempotency_key`, `forms_template_admin_review`, `forms_template_admin_review_lifecycle_transition` |
+| Med-Interaction | 047 | +4 | `interaction_engine_evaluation`, `interaction_signal`, `interaction_signal_lifecycle_transition`, `interaction_signal_override` |
+
+Also corrected the policy-name-convention comment: **five** name conventions exist (not the three documented) — 35 on the default `tenant_isolation`, plus `audit_tenant_isolation`, `tenant_users_visibility`, `medication_requests_tenant_isolation`, `product_catalog_tenant_isolation`.
+
+**Test-only — no migration → no `migrations/rollback/` companion required** (per Addendum 86's hygiene note).
+
+### Per-table verification (live PostgreSQL 16, full chain 000→051)
+
+This is the platform-floor part: §2b guards against **rogue RLS** (a table flagged RLS-enabled that shouldn't be tenant-scoped). Each of the 14 new tables was empirically verified against the live catalog (the lockdown's own queries):
+- `relrowsecurity = true` ✅ all 14 · `relforcerowsecurity = true` (FORCE, no owner/superuser bypass) ✅ all 14
+- ≥1 `pg_policies` row (`tenant_isolation`) ✅ all 14 · a real `tenant_id` column ✅ all 14
+- §2b reverse-direction set diff (RLS-enabled tables EXCEPT registered list) is **empty** ✅
+- platform-level exclusions (`tenants`, `country_profiles`) remain RLS-off (`f|f`) ✅
+
+### Verification
+
+- **Lockdown test 82/82 passed** (39 tables × §1 RLS-forced + §1 has-policy = 78, + §2a/§2b = 2, + §3 platform exclusion = 2) via the real vitest harness against a live PG 16 with 000→051 applied.
+- `tsc --noEmit` clean · `eslint` clean · `prettier --check` clean.
+- The full chain was applied locally with the #197 fixes (BOM strip 047–050 + `telecheck_app_role` provisioning) applied **uncommitted**, then **reverted byte-exact** (`git checkout`) so the committed diff is strictly the lockdown test (BOM confirmed restored: `ef bb bf` on 047).
+
+### Codex outcome: UNAVAILABLE in remote-cron env → [CODEX-PENDING], NOT merged
+
+Same meta-blocker as Addenda 75/77/80/82/84/86: no `OPENAI_API_KEY`, no `codex` CLI, no plugin cache. Per the discipline floor (Codex APPROVE mandatory before any merge), PR #198 opened with the `[CODEX-PENDING]` prefix, left UNMERGED for Evans's local session.
+
+### Branch-base hygiene note (caught + corrected this firing)
+
+Both code-repo working trees had a **stale local `main` ref** (telecheck-app local `main` = `baca008`, an 045-era commit; `origin/main` = `f6c5160`). The first branch attempt was created off the stale local `main` and was missing migrations 046–051 — caught when a BOM check found only `045` present. Corrected by rebasing the branch onto `f6c5160` (verified the lockdown test file was byte-identical between the two bases before the stash-pop). **Carryforward for future firings:** branch off `origin/main` explicitly (`git checkout -b <name> origin/main`), not the local `main` ref, in these cron-cloned worktrees.
+
+### CI dependency + relationship to the deferred-review queue
+
+Like #195/#196, PR #198's integration CI stays red until **#197** (migration-chain-apply prerequisite) merges — the lockdown is DB-backed and cannot run until migrations apply end-to-end. **Recommended May-26 cascade order: #197 first**, then this PR. PR #198 closes **2 of the 8** pre-existing failures Addendum 86 surfaced (the `rls-policy-coverage-lockdown` §2a/§2b pair). The remaining 6 (`admin-backend`/`crisis-response` plugin-wiring §1a/§1b/§1c) belong with those slices' handler series, not here.
+
+### Next critical-path item
+
+- **#197 → #198 merge order** at the May-26 Codex catch-up restores `rls-policy-coverage-lockdown` to green and gives every future handler PR a trustworthy I-023 coverage gate again.
+- **Remaining CI debt (own PRs):** the 6 plugin-wiring assertion failures (stale `health`/`ready` introspection + unmounted-route 404→400 expectations) in admin-backend/crisis-response — belong with those slices' handler series; and the clean-room `000→head` migration-apply CI gate (PR #194, Addendum 80) — the durable guard that would catch the migration-apply class of defect pre-merge.
+- **Handler series** (Wave 3a) continues in parallel under Evans's local-session orchestration.
+
+Pilot launch posture unchanged: Telecheck-Ghana revenue anchor still depends on the cross-slice handler PRs; this firing hardens the I-023 platform-floor test gate that those PRs rely on for tenant-isolation coverage assurance.
+
+— Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), I-023 RLS-coverage lockdown reconciliation 25 → 39 tables with live-PG-16 per-table verification, opened as [CODEX-PENDING] PR #198; lockdown 82/82 green; closes 2 of Addendum 86's 8 surfaced failures 2026-05-23. progress.json revision 190 → 191.
