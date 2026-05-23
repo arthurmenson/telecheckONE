@@ -5543,3 +5543,39 @@ at migration 047 line 350. Verified again locally during this cockpit-sync (grep
 **telecheck-app main is currently `5da9766` and contains the latent defect.** No production environment has applied these migrations. Pre-deployment posture preserves the fix-forward optionality across all 4 options. Pilot launch (Telecheck-Ghana revenue anchor) is NOT blocked by this defect at this moment — Ghana doesn't start until handlers exist (PR 7+) + crisis-floor + interaction-engine fastify surface ships. But the reconciliation MUST land before PR 7+ begins, because Fastify handlers will call the wrappers and the wrapper EXECUTE grants are routed through the slice-prefixed names that don't exist.
 
 — Claude (Opus 4.7, 1M context), Med-Interaction DB-layer cockpit reconciliation + role-name defect STOP for ratifier escalation 2026-05-23. progress.json revision 177 → 178.
+
+---
+
+## Addendum 75 — Med-Interaction (SI-019) role-name reconciliation: ERR artifact authored + recommendation revised Option A → Option C on spec-conformance grounds; Codex consult DEFERRED (unavailable in remote env); STILL STOPPED for Evans ratifier decision (2026-05-23)
+
+**Date:** 2026-05-23
+**Firing type:** remote-cron autonomous firing (no Codex/OPENAI_API_KEY in env)
+**Trigger:** resumed from Addendum 74's open hard-floor item 6 STOP. Its next-step #1 ("author ERR artifact") was never completed by the prior firing — the ERR did not exist. This firing authored it + corrected a premise error + re-confirmed the STOP.
+
+**Ground-truth reconciliation on entry.** This container initialized with a stale `origin/main` view (`baca008`, migration 045). `git fetch origin main` updated `origin/main` → `5da9766`, confirming Evans's local push of the full Med-Interaction DB layer (migrations 046–050) **did land on `telecheck-app:main`**. Both repos fast-forwarded to origin (`telecheck-app` → `5da9766`; `telecheckONE` → `cf48b69`). The latent defect is live on `main`. No new code merged this firing.
+
+**Defect re-verified empirically (static grep on `5da9766`).** Migration 046 creates 8 **bare** infrastructure roles (`override_wrapper_owner`, `lifecycle_transition_writer_owner`, `mv_refresh_owner`, `emission_wrapper_owner`, `activation_wrapper_owner`, `superseded_wrapper_owner`, `resolution_wrapper_owner`, `expiry_wrapper_owner`) per spec P-034 §8 (CDM v1.7 §4.NEW3 line 197: `GRANT INSERT … TO override_wrapper_owner;` — bare). Migrations 047 (6 refs) / 048 (15) / 049 (22) / 050 (18) + rollbacks 049 (8) / 050 (12) reference **slice-prefixed** names that do not exist — **81 reference sites across 6 files.** Additional wrinkle: row-6 stem differs (`superseded_wrapper_owner` bare vs `interaction_signal_supersession_wrapper_owner` prefixed), so a naive prefix-strip is insufficient; the fix must name-map.
+
+**KEY FINDING — Addendum 74's hard-floor-item-6 premise was partly wrong; recommendation revised.** Addendum 74 stated the slice-prefixed naming "was recorded in `src/modules/med-interaction/README.md` as a cross-slice collision-safety choice" and preliminarily recommended **Option A** (keep prefixed; add roles via migration 051). On inspection, the README's Option-2 carryforward block records **no such decision** — its only role-naming bullet covers the *dotted application-role* underscore realization (`medication_interaction.override_recorder` → underscore form), not the wrapper-owner infrastructure roles. The wrapper-owner roles are created **bare** in 046 per spec. **Conclusion: the slice-prefixed references are a defect, not a ratified design choice.** The spec-conformant end-state is bare names → **revised recommendation: Option C** (rewrite 047–050 + rollbacks to bare spec names; amend in place since no environment has applied them).
+
+**Why it remains a hard-floor item 6 STOP (not closed inline).** Two independent ratifier-judgment axes survive: (1) **naming** — bare (spec) vs slice-prefixed (Options A/B/D introduce 8 net-new non-spec DB roles → discriminator (c) platform-floor primitives); (2) **mechanism** — amend merged migrations (B/C) vs forward-fix migration 051 (A/D). Picking between these is a ratifier call. Claude does not execute it inline (avoids the PR #10 anti-pattern of iterating architecture past a finding).
+
+**Codex dual-recommendation DEFERRED.** No `OPENAI_API_KEY`, no `codex` binary in this remote-cron container (the CLAUDE.md companion script path is Windows-only `C:/Users/menso/...`). The mandatory two-pass consult (Pass-1 + Pass-2) **was not run**. Per the auto-proceed rule, the agreement gate is **un-evaluable** without Pass-2 → no auto-proceed possible → this STOPS for Evans's explicit chat-message ratification unconditionally (hard-floor item 6 would require Evans's confirmation even WITH Codex agreement).
+
+**Shipped this firing (docs only, committed direct to `telecheckONE:main` — not Codex-gated):**
+1. `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-Med-Interaction-Role-Name-Reconciliation-2026-05-23.md` — the missing ERR: full defect anatomy, 8-role mapping table, 81-site scope, all 4 options with spec-conformance + amend-vs-forward-fix analysis, Claude's revised Option C recommendation + rationale, Codex-PENDING placeholder, ratifier-decision section, next-step checklist.
+2. This Addendum 75.
+3. `progress.json` revision 178 → 179 (med-interaction note updated to reflect ERR authored + revised recommendation + Codex-deferred).
+
+**No code PR opened this firing.** Reasons: (a) Codex unavailable → no APPROVE attainable → discipline floor forbids merge; (b) the option choice (including amend-merged-migrations-vs-forward-fix) is a live ratifier decision — opening a competing fix PR would presuppose Option C; (c) a partial Option C fix already exists in flight as open remote **PR #192** [CODEX-PENDING] (047 grant fix + read-path 048). The ratifier-executing session should EXPAND #192 (if C) or CLOSE it (if A/B/D), per the ERR §5 compatibility column.
+
+**Stop-condition marker:** `[RATIFIER-PENDING]` (hard-floor item 6) + `[CODEX-PENDING]` (consult deferred). Both gates must clear before any fix lands.
+
+**Next critical-path item.** Med-Interaction PR 7+ (Fastify handlers) remains blocked on this reconciliation. Once the ERR is ratified + the fix lands with Codex APPROVE, PR 7+ resumes. If Evans wants forward progress on an *unblocked* track in the interim, the next candidates per the Master Completion Plan priority are: Async-Consult clinician decision loop (~40%), AI Service Mode 1 chat handler, Crisis Response Sprint 2 handlers, or Admin Backend Sprint 2 handlers — none of which depend on the Med-Interaction role-name fix.
+
+**Cumulative cycle statistics through Addendum 75:**
+- DB-layer implementation: Crisis Response (PRs 1-7 + 045 hotfix), Admin Backend (PRs 1-6), Med-Interaction (PRs 1-6 merged; blocked on role-name reconciliation — ERR now authored, ratifier decision pending).
+- 2nd consecutive firing on the same hard-floor item 6 (Addendum 74 discovered + classified; Addendum 75 authored the ERR + corrected the premise + revised the recommendation). No inline closure attempted in either — discipline held.
+- Promotion Ledger entry counter does NOT advance (P-042 remains latest).
+
+— Claude (Opus 4.7), remote-cron firing: ERR authoring for Med-Interaction role-name reconciliation + recommendation revision (A→C) + sustained hard-floor item 6 STOP 2026-05-23. progress.json revision 178 → 179.
