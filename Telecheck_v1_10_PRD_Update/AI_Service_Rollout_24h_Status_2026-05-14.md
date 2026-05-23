@@ -5428,3 +5428,50 @@ Migrations 036 (initiation), 037 (acknowledgement + response + resolution), and 
 **Next critical-path item:** Med-Interaction PR 2 — the 4 entities (`interaction_engine_evaluation` + `interaction_signal` + `interaction_signal_override` + `interaction_signal_lifecycle_transition`) + RLS + per-table append-only triggers (I-035) + state-transition-triple CHECK constraints (migration 047), per `docs/med-interaction-implementation-plan.md`. BLOCKED on PR #191 reaching Codex APPROVE + merge first (047 depends on the writer-owner roles 046 creates). If Codex remains unavailable next firing, resume by either (a) advancing a Codex-independent unit on another slice, or (b) authoring 047 on a stacked branch atop 046 and parking it [CODEX-PENDING] too.
 
 — Claude (Opus 4.7, 1M context), Med-Interaction PR 1 RBAC-roles open-as-CODEX-PENDING close-out 2026-05-23. progress.json revision 175 → 176.
+
+---
+
+## Addendum 73 — Med-Interaction (SI-019) PR 3: read-path MV/view/access-fn (048) + a prerequisite grant-defect fix in migration 047 OPENED as [CODEX-PENDING] (2026-05-23); trail-vs-code reconciliation (PR 1 + PR 2 already merged to telecheck-app main `666358d`)
+
+**Trigger:** autonomous-work firing under Evans's standing directive (Master Completion Plan Phase B open items; Med-Interaction = the I-002 critical-path slice that gates Pharmacy clinician-commit).
+
+**Trail-vs-code reconciliation (resolved at firing start).** The addendum trail ended at Addendum 72 (PR 1 = migration 046 RBAC roles opened [CODEX-PENDING], "not merged", `progress.json` revision 176, `lastSyncedSha` `baca008`). The actual telecheck-app `origin/main` had advanced two merges past that documented state:
+- **PR #191 (Med-Interaction PR 1, migration 046)** — MERGED to main by arthurmenson 2026-05-23 07:53 (head `cf6ecae`, merge `748c93f`). The [CODEX-PENDING] PR from Addendum 72 was merged in Evans's local session.
+- **Med-Interaction PR 2 (migration 047, the 4 entities + RLS + append-only triggers + monotonic-ordering trigger)** — MERGED to main as `666358d` after a 7-round Codex convergence (R1-R6 closures: SECDEF monotonic trigger + tenant guard + OWNER pinning + strict-monotonic server-assigned `transition_at` + state-continuity check + rollback robustness). Codex ran in Evans's local session (where the plugin is installed), NOT in this remote env.
+
+Neither merge had an addendum or a `progress.json` bump, so the cockpit was behind the code by ~2 merges. The local clone's `origin/main` ref was also stale (`baca008`); a `git fetch` resolved it to `666358d`. **Telecheck-app `main` is `666358d` (migrations 000-047 present).** No control-plane STOP was warranted — the git state and trail disagreed only because the trail lagged; `origin/main` is the shared source of truth and was internally consistent once fetched.
+
+**Defect discovered + fixed (prerequisite for all downstream Med-Interaction DB work).** Empirical apply of migrations `000 → 047` on a throwaway PostgreSQL 16 cluster **aborted at migration 047 line 350**:
+```
+ERROR:  role "interaction_signal_override_wrapper_owner" does not exist
+```
+Migration 047 (merged as PR 2) grants INSERT/SELECT on `interaction_signal_override` + `interaction_signal_lifecycle_transition` to three **slice-prefixed** owner-role names — `interaction_signal_override_wrapper_owner`, `interaction_signal_lifecycle_transition_writer_owner`, `interaction_signal_mv_refresh_owner` — that **no migration creates**. Migration 046 (PR 1) and P-034 §8 both name those owner roles in their **bare** forms (`override_wrapper_owner`, `lifecycle_transition_writer_owner`, `mv_refresh_owner`). A fresh `000 → 047` therefore could not complete, blocking 048+. PR 3 corrects the three grant targets in 047 to the bare canonical names. **Mechanical naming fix** (canonical names unambiguous per 046 + spec §8) — NOT a hard-floor item 6 finding, NOT a new architectural decision. Fixed in place rather than forward-only because 047 aborts mid-file before any later migration can run, and the migrations are pre-deployment (no prod/staging has applied them; CI not wired for this slice).
+
+**Content shipped this firing (branch `feat/med-interaction-pr3-readpath-mv-048`, commit `6a31d90`):**
+- **`migrations/048_med_interaction_read_path.sql`** — the read-path projection surfaces per CDM v1.6→v1.7 §4.NEW5 + SI-019 v2.0 Sub-decision 9:
+  - `interaction_signal_current_state_mv` materialized view (`DISTINCT ON (tenant_id, signal_id)` ordered `transition_at DESC, id DESC` → latest `to_state` as `current_state`) + the UNIQUE index required for `REFRESH … CONCURRENTLY`.
+  - `interaction_signal_current_state_v` SECURITY BARRIER view (tenant-scoped via `current_tenant_id()`).
+  - `get_interaction_signal_current_state(VARCHAR(26))` SECURITY DEFINER access function, `OWNER TO mv_refresh_owner`.
+  - MV direct SELECT limited to `mv_refresh_owner`; app roles read only via the view/function (MVs do not enforce RLS). Verification block asserts no MV SELECT to PUBLIC or `signal_viewer` (anti-drift) + SECDEF/owner/locked-search_path on the access fn (OID-gated).
+- **`migrations/rollback/048_rollback.sql`** — reverse-dependency drop (fn → view → MV); function drop OID-gated via `to_regprocedure` exact signature; view/MV drops `DROP IF EXISTS → verify-absent → guarded RAISE`; double-rollback clean no-op.
+- **`migrations/047_med_interaction_entities.sql`** — the 3-role grant-defect fix described above.
+- **`docs/med-interaction-implementation-plan.md`** — PR 1/2 marked MERGED, PR 3 in progress, the 047 fix + the 048 Option 2 adaptations recorded.
+
+**Option 2 carryforward (migration 048):** `current_tenant_id_strict('…')` → `current_tenant_id()`; `ulid_t` → `VARCHAR(26)`; return domains `interaction_signal_state_t` / `interaction_signal_transition_reason_t` → `TEXT` (MV columns already TEXT → spec R1 MED-1 casts become no-ops, omitted). Same SI-024.1 cutover-deferral posture as 047/041/034.
+
+**Local validation (CI not yet wired for this slice) — PostgreSQL 16 throwaway cluster:** clean `000 → 048` apply (first time the chain completes, post-047-fix); current-state derivation correct (`emitted → active` shows `active`); tenant isolation verified — under tenant US the SECDEF function lookup of a Ghana signal returns 0 rows + cross-tenant view rows never leak; `REFRESH` + `REFRESH … CONCURRENTLY` both succeed; rollback drops all 3 surfaces → re-apply OK → double-rollback clean no-op; all verification DO-blocks pass.
+
+**Codex outcome — NOT RUN (environment gap):** Codex (`@openai-codex`) is unavailable in this remote execution environment (no `codex` binary, no `~/.claude/plugins/cache/openai-codex/`, no `OPENAI_API_KEY`, no `scripts/codex-companion.mjs`). Per the discipline floor (**Codex APPROVE mandatory before any merge**), the PR was opened **[CODEX-PENDING]** and **NOT merged**. A future firing — or Evans's next local session — must run `OPENAI_API_KEY=$OPENAI_API_KEY npx -y @openai/codex review --base main`, iterate to APPROVE, then merge `--no-ff`.
+
+**PR:** [arthurmenson/telecheck-app#192](https://github.com/arthurmenson/telecheck-app/pull/192) — `[CODEX-PENDING] Med-Interaction PR 3: read-path MV/view/access-fn (048) + unblock 047 grant defect`. Branch `feat/med-interaction-pr3-readpath-mv-048` @ `6a31d90`. **OPEN, unmerged.** No new telecheck-app `main` commit this firing → telecheck-app `main` stays `666358d`.
+
+**Cumulative cycle statistics through Addendum 73:**
+- 2 telecheck-app implementation PRs opened CODEX-PENDING in this remote env (PR #191 Addendum 72 — since merged in Evans's local session; PR #192 this firing — open).
+- 0 Codex rounds this firing (Codex unavailable; PR parked for review).
+- 0 hard-floor item 6 invocations (the 047 grant fix + the 048 read-path are mechanical/within-ratified-scope; no net-new schema/invariant/platform-floor decision).
+- 0 STOP conditions hit.
+- 1 latent defect in already-merged main found + fixed forward-on-branch (047 grant role-name mismatch; empirically reproduced + fix empirically verified).
+
+**Next critical-path item:** Med-Interaction PR 4 — migration 049: the raw lifecycle writer `record_interaction_signal_lifecycle_transition()` SECDEF (§6.NEW1) + anti-bypass EXECUTE matrix (the 6 wrapper-owner roles only; app roles never hold EXECUTE on the raw writer) + BIGSERIAL/sequence USAGE grant if applicable (per migration 045 hotfix precedent — note the transition PK is VARCHAR(26), not BIGSERIAL, so likely no sequence grant needed; verify at authoring). BLOCKED on PR #192 reaching Codex APPROVE + merge first if a strict stack is desired; otherwise 049 can be authored on a branch stacked atop this one and parked [CODEX-PENDING] too. The 047 grant fix should land (via PR #192 merge) before 049 so the writer-owner EXECUTE grants reference roles with consistent table grants.
+
+— Claude (Opus 4.7, 1M context), Med-Interaction PR 3 read-path open-as-CODEX-PENDING close-out 2026-05-23. progress.json revision 176 → 177.

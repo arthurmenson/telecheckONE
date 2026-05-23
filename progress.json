@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 176,
+  "revision": 177,
   "updated": "2026-05-23",
   "lifecycle": {
     "current": "foundation-build",
@@ -271,15 +271,16 @@
       "id": "slice-med-interaction",
       "name": "Medication Interaction Engine",
       "category": "Slice PRD",
-      "status": "blocked",
-      "progress": 20,
+      "status": "in-dev",
+      "progress": 45,
       "owner": "",
-      "notes": "feat(med-interaction): TLC-007 module skeleton (BLOCKED on slice PRD ratification)",
+      "notes": "SI-019 v2.0 RATIFIED (P-033) + CDM v1.6→v1.7 (P-034). DB layer in progress: PR 1 (046 RBAC roles) + PR 2 (047 entities) MERGED to telecheck-app main 666358d; PR 3 (048 read-path MV/view/access-fn + 047 grant-defect fix) OPEN as [CODEX-PENDING] #192. Next: PR 4 raw lifecycle writer (049).",
       "docs": [
-        "Telecheck_Medication_Interaction_Engine_Slice_PRD_v1_0.md"
+        "Telecheck_Medication_Interaction_Engine_Slice_PRD_v2_0.md",
+        "Telecheck_CDM_v1_6_to_v1_7_Amendment.md"
       ],
       "stage": "slice-build",
-      "updatedAt": "2026-05-05T21:40:56.023Z"
+      "updatedAt": "2026-05-23T00:00:00.000Z"
     },
     {
       "id": "slice-pharmacy",
@@ -634,5 +635,5 @@
     }
   ],
   "updatedAt": "2026-05-23T00:00:00.000Z",
-  "lastSyncedSha": "baca008"
+  "lastSyncedSha": "666358d"
 }
