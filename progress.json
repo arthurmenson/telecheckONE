@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 187,
+  "revision": 188,
   "updated": "2026-05-23",
   "lifecycle": {
     "current": "foundation-build",
@@ -273,15 +273,15 @@
       "name": "Medication Interaction Engine",
       "category": "Slice PRD",
       "status": "in-dev",
-      "progress": 70,
+      "progress": 74,
       "owner": "",
-      "notes": "SI-019 v2.0 RATIFIED (P-033) + CDM v1.6→v1.7 (P-034). DB layer PRs 1-6 MERGED to telecheck-app main 5da9766. ROLE-NAME RECONCILIATION COMPLETE (Addendum 79, merge 01268d2): Option C executed via Codex two-pass dual-recommendation consult — Pass-2 caught CRITICAL non-executability defect in initial Option A recommendation (051 hotfix cannot fix chain that aborts at 047); Claude conceded Option C. 81 refs across 6 files rewritten 1:1 to bare names per spec P-034 §8; symmetric 267 insertions + 267 deletions; Codex R1 APPROVE. Fresh 000→050 chain now applies cleanly. REMOTE-CRON PR #192 obsolete + should be CLOSED. PR 7+ Fastify handlers role-name-UNBLOCKED, but trust-but-verify (Addendum 80) confirms migration 050 grants EXECUTE on the lifecycle wrappers ONLY to the slice functional roles (engine_evaluator/signal_viewer/override_recorder), never to telecheck_app_role — so handler EXECUTE remains gated on the app-role-acquisition ERR (Addendum 76, OPEN), same primitive as Crisis+Admin Sprint 2. Track 5 Infra & Ops followup DELIVERED: 000→head clean-room migration-chain CI gate shipped as PR #194 [CODEX-PENDING] (Addendum 80), validated locally (50 migrations apply clean; negative test catches the exact role-reference defect class).",
+      "notes": "PR 8 (first WRITE handler) OPENED as [CODEX-PENDING] PR #196 (commit 503090f, 2026-05-23): POST /v0/med-interaction/evaluations INSERTs the append-only interaction_engine_evaluation row under withDbRole(medication_interaction_engine_evaluator) + emits Cat A medication_interaction.engine_evaluation_completed audit in the same tx — establishes the canonical write composition for PR 9+ + all 3 SECDEF slices. Synced lib/audit.ts to AUDIT_EVENTS v5.9 (6 medication_interaction.* IDs, P-034). Validated end-to-end vs live PG16 (27 unit tests + direct-SQL INSERT/RLS-WITH-CHECK smoke). Depends on PR #195 (PR 7, migration-chain BOM + telecheck_app_role fixes) for green CI — merge #195 first. PR 7 read handler (GET /signals/:id) shipped as [CODEX-PENDING] PR #195 (Addendum 82). DB layer PRs 1-6 MERGED to telecheck-app main 5da9766. ROLE-NAME RECONCILIATION COMPLETE (Addendum 79, merge 01268d2): Option C executed via Codex two-pass dual-recommendation consult — Pass-2 caught CRITICAL non-executability defect in initial Option A recommendation (051 hotfix cannot fix chain that aborts at 047); Claude conceded Option C. 81 refs across 6 files rewritten 1:1 to bare names per spec P-034 §8; symmetric 267 insertions + 267 deletions; Codex R1 APPROVE. Fresh 000→050 chain now applies cleanly. REMOTE-CRON PR #192 obsolete + should be CLOSED. PR 7+ Fastify handlers role-name-UNBLOCKED, but trust-but-verify (Addendum 80) confirms migration 050 grants EXECUTE on the lifecycle wrappers ONLY to the slice functional roles (engine_evaluator/signal_viewer/override_recorder), never to telecheck_app_role — so handler EXECUTE remains gated on the app-role-acquisition ERR (Addendum 76, OPEN), same primitive as Crisis+Admin Sprint 2. Track 5 Infra & Ops followup DELIVERED: 000→head clean-room migration-chain CI gate shipped as PR #194 [CODEX-PENDING] (Addendum 80), validated locally (50 migrations apply clean; negative test catches the exact role-reference defect class).",
       "docs": [
         "Telecheck_Medication_Interaction_Engine_Slice_PRD_v2_0.md",
         "Telecheck_CDM_v1_6_to_v1_7_Amendment.md"
       ],
       "stage": "slice-build",
-      "updatedAt": "2026-05-23T13:00:00.000Z"
+      "updatedAt": "2026-05-23T16:40:00.000Z"
     },
     {
       "id": "slice-pharmacy",
@@ -635,6 +635,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-23T14:30:00.000Z",
-  "lastSyncedSha": "666358d"
+  "updatedAt": "2026-05-23T16:45:00.000Z",
+  "lastSyncedSha": "1e90b15"
 }

@@ -6107,3 +6107,53 @@ These deferred items are **mechanical-confidence-high** because the fixes are ve
 4. **Track 5 followups**: the 000→head migration-chain CI gate from Addendum 80 (remote-cron PR #194 [CODEX-PENDING]) needs to land to give every future handler PR an automated apply-correctness check.
 
 — Claude (Opus 4.7, 1M context, Evans's local session), parallel-agent orchestration of 3 slice handler PRs + Med-Int 7.1 hotfix close-out 2026-05-23. progress.json revision 186 → 187.
+## Addendum 84 — Med-Interaction (SI-019) PR 8: first WRITE handler (`POST /v0/med-interaction/evaluations`) OPENED as [CODEX-PENDING] (PR #196); AUDIT_EVENTS v5.9 catalog sync (6 `medication_interaction.*` IDs) + canonical write composition established; validated end-to-end against a live PostgreSQL 16 (27 unit tests + direct-SQL INSERT/RLS smoke) (2026-05-23, remote-cron)
+
+**Date:** 2026-05-23
+**Trigger:** Standing autonomous-work loop (remote-cron firing) picking up the next critical-path item per Addendum 82's "Next" pointer — Med-Interaction PR 8, the first of the slice's write/lifecycle endpoints. Branched off the current `origin/main` (`1e90b15`), which had advanced past Addendum 82 to include the Crisis Response Sprint 2 PR 1 (`GET /v0/crisis-events/:id`) and Admin Backend Sprint 2 PR 1 (`GET /v1/admin/dashboards/crisis-operational-health`) first-handler merges — so the cockpit addendum trail (last at #82) lagged the app repo by those two merges; reconciled here.
+
+### What shipped (`feat/med-interaction-pr8-post-evaluations` → PR #196, commit `503090f`)
+
+**First Med-Interaction WRITE handler.** `POST /v0/med-interaction/evaluations` (OpenAPI v0.3 endpoint #1):
+
+- Records an `interaction_engine_evaluation` row (strict append-only, migration 047 §1) under `withDbRole(medication_interaction_engine_evaluator)` — the role's direct `INSERT` grant; there is no SECDEF wrapper for evaluation creation (wrappers in 050 are for the signal lifecycle state machine only).
+- Emits the **Cat A `medication_interaction.engine_evaluation_completed`** audit event **inside the same transaction** as the INSERT (I-003 same-tx durability) — emitted AFTER the `withDbRole` callback returns, i.e. under the restored `telecheck_app_role` which holds the `audit_records` INSERT grant. **This establishes the canonical write composition** (`withTransaction → withTenantContext → withActorContext? → { withDbRole(role) → INSERT; emitAudit(tx) }`) that PR 9+ signal-lifecycle handlers will mirror across all three SECDEF slices.
+- **AUDIT_EVENTS v5.9 catalog sync:** added the 6 ratified `medication_interaction.*` action IDs to `src/lib/audit.ts` (2 Cat A + 4 Cat B per the CDM v1.6→v1.7 Amendment §4 per-row enumeration table). Contract sync against ratified P-034 spec — NOT net-new authoring (no hard-floor item 6). First Med-Interaction emitter uses the canonical IDs directly (no `as AuditAction` placeholder cast, unlike the async-consult/forms-intake SI-004/SI-005 pattern).
+- `actor_type=system` (the engine is the acting authority); `ai_workload_type`/`autonomy_level` null — the interaction engine is a deterministic KB check, non-I-012 action (matches the legacy `interaction_engine_evaluation` catalog row's actor=system, no-workload-fields shape).
+- zod body validation (ULID-shape gate on `patient_id` + `triggered_by_resource_id`; `triggered_by` enum verbatim from the table CHECK; `evaluation_window_ms ≥ 0`; opaque JSONB snapshots); deferred-permissive LAYER B (identical posture to PR 7 get-signal — production fail-closed, non-prod permissive for test ergonomics); 201 + `{ evaluation_id }` with a server-assigned ULID.
+- `/health` + `/ready` introspection updated to 2-of-8 handlers; `/ready` stays 503 (slice not yet traffic-ready).
+
+Files: `src/lib/audit.ts` (catalog +6), `src/modules/med-interaction/audit.ts` (new emitter), `internal/handlers/post-evaluation.ts` (new), `internal/handlers/post-evaluation.test.ts` (new, 13 tests), `routes.ts` (wire + introspection).
+
+### Codex outcome: UNAVAILABLE in remote-cron env → [CODEX-PENDING], NOT merged
+
+Same meta-blocker as Addenda 75/77/80/82: `OPENAI_API_KEY` absent in the remote-cron environment, so the mandatory two-pass adversarial review cannot run. Per the discipline floor (Codex APPROVE mandatory before any merge), PR #196 is opened with the `[CODEX-PENDING]` prefix and left UNMERGED for Evans's local session (which has the `codex@openai-codex` plugin) to review + iterate to APPROVE.
+
+### Local validation (the Codex/CI substitute this firing)
+
+Spun up a local PostgreSQL 16 (the remote env ships the `postgresql-16` server binaries) and applied the full migration chain `000→051`:
+
+- **27 unit tests pass** (get-signal 14 + post-evaluation 13); `tsc --noEmit` clean; eslint on changed files clean (import-order fixed; the 2 `expect.stringContaining` unsafe-`any` matches the merged get-signal.test.ts sibling pattern exactly — pre-existing accepted test-file debt, not new).
+- **Direct-SQL smoke against migration 047's real schema** (the unit tests mock `tx.query`, so this validates the actual INSERT): happy-path INSERT under the evaluator role + `set_tenant_context('Telecheck-US')` succeeds with correct columns + `::jsonb` casts; a cross-tenant INSERT (Telecheck-Ghana row under Telecheck-US context) is **rejected by RLS WITH CHECK** — `new row violates row-level security policy` (I-023 confirmed live).
+
+### ⚠️ PR #196 depends on PR #195 (PR 7) for green CI — the migration-chain prerequisites are NOT duplicated
+
+Running the suite re-confirmed Addendum 82's two pre-existing main defects are **still on `main`** (PR #195 fixes them but remains `[CODEX-PENDING]`, unmerged):
+1. **UTF-8 BOM on migrations 047–050** (`EF BB BF` → `syntax error at or near "<BOM>"`, aborts the chain at 047).
+2. **Missing `telecheck_app_role`** provisioning for migration 051 in `tests/setup.ts`.
+
+Both were applied **locally (uncommitted)** to run the suite, then **reverted byte-exact** (`git checkout`) so PR #196's diff is cleanly scoped to the handler. PR #196's CI will therefore stay red until #195 lands on `main` — documented explicitly in the PR body. **Recommended merge order: #195 → #196.** Deliberately NOT folding the infra fixes into #196 (avoids a duplicate/conflicting diff with #195 and keeps the handler PR reviewable in isolation per the "don't fold unrelated fixes" discipline).
+
+### Observed spec inconsistency (non-blocking; surfaced to AUDIT_EVENTS owner)
+
+CDM v1.6→v1.7 Amendment §4: the summary line states "6 new action IDs (4 Cat A + 2 Cat B)" while its per-row enumeration table lists **2 Cat A** (`engine_evaluation_completed`, `signal_emitted`) + **4 Cat B** (the 4 `engine_*` events). The per-row table is the authoritative form and governs the code catalog; `engine_evaluation_completed` is unambiguously Cat A in both forms + the SI-019 PRD recommendation, so the PR-8 emission is unaffected. Flagged for the AUDIT_EVENTS owner to reconcile the summary line in a future hygiene pass.
+
+### Next critical-path item
+
+- **Med-Interaction PR 9+**: `POST /signals` (signal emission — emits `medication_interaction.signal_emitted` Cat A + the initial `none→emitted` lifecycle transition via the migration-049 raw writer / migration-050 emission wrapper), then the 5 signal-lifecycle actions (`activate`, `override`, `supersede`, `resolve`, `expire`). Note: `resolve`/`expire`/`override` wrappers in 050 are fail-closed (RAISE `0A000`) pending evidence-source migrations — their handlers will surface that as a 503/not-implemented until the Pharmacy active-medication-list + discontinuation-event-log + per-basis cadence dependencies land.
+- **Parallel-unblocked (same `withDbRole` + same-tx-audit pattern this PR establishes):** Crisis Response Sprint 2 write handlers + Admin Backend Sprint 2 write handlers (both slices have shipped only their first GET so far).
+- **Recommended infra/ops interleave (unchanged from Addendum 82):** merge the migration-chain prerequisites (#195) + the clean-room `000→head` gate (#194) + an I-023 RLS-lockdown-count reconciliation, so `main`'s CI returns to a trustworthy green before more handler PRs stack.
+
+Pilot launch posture unchanged: Telecheck-Ghana revenue anchor still depends on the cross-slice write-handler PRs shipping; PR 8 is the first write surface but the slice is not yet traffic-ready (`/ready` 503).
+
+— Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), Med-Interaction PR 8 POST /evaluations first write handler opened as [CODEX-PENDING] PR #196; canonical write composition + AUDIT_EVENTS v5.9 catalog sync established; validated end-to-end against live PostgreSQL 16; depends on #195 for green CI 2026-05-23. progress.json revision 187 → 188.
