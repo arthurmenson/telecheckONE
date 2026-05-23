@@ -6220,3 +6220,48 @@ When Codex limit resets, the queue is:
 **Codex catch-up wave (May 26 limit reset):** mass review + merge cascade on the accumulated queue.
 
 — Claude (Opus 4.7, 1M context, Evans's local session), Wave-2 parallel-agent orchestration close-out 2026-05-23. progress.json revision 188 → 189.
+
+---
+
+## Addendum 86 — Track 5 infra/ops: migration-chain-apply unblock — strip BOM on 047-050 + provision `telecheck_app_role` in test setup, OPENED as [CODEX-PENDING] (PR #197) (2026-05-23, remote-cron)
+
+**Date:** 2026-05-23
+**Trigger:** Standing autonomous-work loop (remote-cron firing). Read the Addendum trail through #85 (the Wave-2 close-out, which had advanced `origin/main` past Addendum 84). The thrice-recommended infra/ops interleave (Addenda 82/83/84/85 all flag it) is the highest-leverage non-duplicative item left: **`main`'s integration CI cannot apply migrations end to end**, so the entire May-26 deferred-review queue (#195, #196, the 5 Wave-2 branches) sits on red CI. Picked the clean infra-only extraction.
+
+### What shipped (`fix/migration-chain-apply-bom-strip-and-app-role-provision` → PR #197, commit `8d9c4f1`)
+
+Two pre-existing defects on `telecheck-app:main` (`f6c5160`) abort every integration test at the global `beforeAll → applyMigrations`:
+
+1. **UTF-8 BOM (`EF BB BF`) on migrations 047–050.** The Node `pg` apply path (`readFileSync(utf8) → client.query`) keeps the BOM in the query text → Postgres `syntax error at or near "<BOM>"`, aborting the chain at 047. (`psql -f` strips it — why it slipped local apply checks.) Fix: strip the 3 leading BOM bytes per file, first line only, no SQL semantics touched; pre-existing comment-level mojibake left as-is per Addendum 82's decision.
+2. **`telecheck_app_role` never provisioned.** Migration 051 does an unguarded `ALTER ROLE telecheck_app_role NOINHERIT` (line 148) + grants the 13 slice roles to it → chain aborts at 051 with `role "telecheck_app_role" does not exist`. Fix: provision it idempotently (NOLOGIN, no password) in `tests/setup.ts` **before** the migration loop, mirroring production IaC. Not the session role tests run as (that stays `telecheck_test_app`).
+
+Files: `migrations/047|048|049|050_*.sql` (BOM byte strip), `tests/setup.ts` (+23, idempotent `DO`-block role provisioning). **No new migration → no `migrations/rollback/` companion required.**
+
+### Why this is the right factoring (relationship to PR #195)
+
+PR #195 bundled these same two infra fixes with a Med-Interaction get-signal handler. That handler is now **superseded** (a different get-signal handler merged as `d096b7a`, Addendum 83), leaving #195's infra fixes orphaned in an unmergeable fat PR. #197 extracts **only** the infra prerequisites so they merge independently of any handler's Codex review. **Recommend closing #195 after #197 lands.** Per the "don't fold unrelated fixes" discipline, #197 deliberately does NOT touch the handler, the RLS-lockdown count, or the plugin-wiring expectations.
+
+### Verification (live PostgreSQL 16, remote env)
+
+Spun up the env's `postgresql-16` cluster, pristine DB + dropped all lingering slice/wrapper roles, then ran the actual vitest harness:
+- Full chain `000 → 051` applies clean via the harness path; `accounts-migration` suite **28/28 green** (was: aborted at setup pre-fix).
+- **Full suite: 1932 passed**, 3 skipped, 30 todo.
+- `npm run typecheck` ✅ · `eslint tests/setup.ts` ✅ · `prettier --check tests/setup.ts` ✅.
+
+### Pre-existing failures surfaced (NOT fixed — out of scope; surfaced-not-caused)
+
+Making the suite runnable surfaces **8 failures in untouched files** (this PR touches only 4 SQL files' first byte + a test-setup `DO`-block):
+- `tests/contracts/rls-policy-coverage-lockdown.test.ts` §2a/§2b — **I-023 RLS-coverage lockdown** canonical list (27 tables) stale vs the live DB after Crisis (033) / Admin (040) / Med-Interaction (047) added tenant-scoped tables. Platform-floor review gate (also guards rogue RLS) → its **own PR** with per-table verification, not a count bump.
+- `tests/integration/{admin-backend,crisis-response}-plugin-wiring.test.ts` §1a/§1b/§1c — Sprint-1 skeleton plugin-wiring expectations (`health`/`ready` metadata; unmounted-route 404) went stale when the Addendum-83 first-handler merges changed introspection (`ready` reason now `write_path_handlers_not_yet_implemented`; POST 400 not 404). Belongs with those slices' handler series. (This is the 4→8 growth vs Addendum 82's count: the Addendum-83 merges broke 4 more skeleton assertions.)
+
+### Codex outcome: UNAVAILABLE in remote-cron env → [CODEX-PENDING], NOT merged
+
+Same meta-blocker as Addenda 75/77/80/82/84: `OPENAI_API_KEY` absent, no `codex` CLI, no plugin cache. Per the discipline floor (Codex APPROVE mandatory before any merge), PR #197 opened with the `[CODEX-PENDING]` prefix, left UNMERGED for Evans's local session.
+
+### Next critical-path item
+
+- **#197 is the CI-unblock prerequisite for the entire May-26 deferred-review queue** — once it merges, #195/#196 + the 5 Wave-2 branches can be reviewed against **green** integration CI instead of a chain that won't apply. Recommend merging #197 **first** in the May-26 cascade.
+- **Sibling Track 5 follow-ons (still queued):** the clean-room `000→head` migration-apply CI gate (PR #194, Addendum 80) — the durable guard that would have caught both defects pre-merge; and the **I-023 RLS-lockdown-count reconciliation** (own PR, per-table verification across 033/040/047).
+- **Handler series** (Wave 3a per Addendum 85) continues in parallel; all of it benefits from #197 restoring trustworthy green.
+
+— Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), Track 5 migration-chain-apply unblock (BOM strip 047-050 + `telecheck_app_role` test provisioning) opened as [CODEX-PENDING] PR #197; verified end-to-end vs live PostgreSQL 16 (1932 passed); the foundational CI-unblock for the May-26 deferred-review queue 2026-05-23. progress.json revision 189 → 190.
