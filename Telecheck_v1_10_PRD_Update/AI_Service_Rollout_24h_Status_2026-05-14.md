@@ -5579,3 +5579,50 @@ at migration 047 line 350. Verified again locally during this cockpit-sync (grep
 - Promotion Ledger entry counter does NOT advance (P-042 remains latest).
 
 — Claude (Opus 4.7), remote-cron firing: ERR authoring for Med-Interaction role-name reconciliation + recommendation revision (A→C) + sustained hard-floor item 6 STOP 2026-05-23. progress.json revision 178 → 179.
+
+---
+
+## Addendum 76 — Critical-path sweep across all 5 pilot slices: (a) Med-Interaction + (d) Crisis + (e) Admin all blocked on app-layer↔slice-SECDEF-role integration; (b) Async-Consult blocked on AI Mode 2; (c) AI Mode 1 DONE. NEW hard-floor item 6 ERR authored for app-role acquisition (unblocks Crisis + Admin Sprint 2). No code PR. (2026-05-23)
+
+**Date:** 2026-05-23
+**Firing type:** remote-cron autonomous firing (no Codex / OPENAI_API_KEY in env — confirmed: no `codex` binary, `OPENAI_API_KEY` unset, Windows companion-script path absent on Linux container)
+**Trigger:** scheduled critical-path firing. Resumed from Addendum 75's open Med-Interaction STOP. Per Addendum 75's "next critical-path item" guidance, evaluated the unblocked candidates (Async-Consult / AI Mode 1 / Crisis Response Sprint 2 / Admin Backend Sprint 2) to ship one PR.
+
+**Ground-truth on entry.** `telecheck-app` main = `5da9766` (Med-Interaction DB layer 046–050 + latent role-name defect, unchanged since Addendum 75). `telecheckONE` main fast-forwarded to `6862903` (Addendum 75 + Med-Interaction ERR). No new code merged anywhere since last firing.
+
+**Critical-path sweep — findings per candidate (priority order from the firing brief):**
+
+| Item | Status this firing | Evidence |
+|---|---|---|
+| (a) Med-Interaction DB layer | **BLOCKED** — active hard-floor item 6 STOP (role-name reconciliation ERR, Addendum 75, awaiting Evans). Untouched per discipline. | Addendum 74/75 |
+| (b) Async-Consult clinician decision loop | **BLOCKED end-to-end** — the QUEUED-reaching path is fail-closed. `process` (SUBMITTED→PROCESSING) throws `AiServiceNotWiredError` pending SI-007; `ai_complete` (PROCESSING→QUEUED) is Sprint-10-deferred. Both are AI-Service-driven (Mode 2 case-prep), which remains gated on the protocol engine + I-012 (per `ai-service/routes.ts` Mode 2 comment). So QUEUED/UNDER_REVIEW are unreachable; the clinician transitions (claim/advise/request_data/refer) have no reachable from-state. Codex async-consult-r12 forbids DB-bypass to fabricate PROCESSING. | `async-consult/internal/services/consult-service.ts:593-661`; `ai-service/routes.ts:125-128` |
+| (c) AI Service Mode 1 chat handler | **DONE** — `POST /v0/ai/chat` mounted 2026-05-15; full lifecycle (I-019 crisis gate on input → Cat A audit; FLOOR-020 Cat C response audit fail-closed; AI-RESIL-001 NullProvider fail-soft; idempotency; tenant-blind errors; patient-only + delegate-reject gates). Codex R1–R6 reviewed. `/health.handlers_wired:false` is **stale** (route is mounted). | `ai-service/internal/handlers/chat.ts`; `ai-service/routes.ts:129` |
+| (d) Crisis Response Sprint 2 handlers | **BLOCKED** — DB layer complete + reviewed, but the handler PR requires resolving how `telecheck_app_role` acquires EXECUTE on the crisis SECDEF wrappers + SELECT on the reader views. No mechanism exists. → NEW hard-floor item 6 (see below). | crisis migrations 032–045; this Addendum |
+| (e) Admin Backend Sprint 2 handlers | **BLOCKED** — identical SECDEF-wrapper + slice-application-role pattern (EXECUTE granted ONLY to `admin_basic_operator` / `admin_template_reviewer`). Same app-role-acquisition blocker. | admin migrations 039–044 |
+
+**KEY FINDING — NEW hard-floor item 6: application-role acquisition of slice SECDEF privileges is undecided foundation work.**
+
+Crisis Response, Admin Backend, and Med-Interaction are the **first** slices to use the SECURITY DEFINER wrapper + dedicated `NOLOGIN NOBYPASSRLS` application-role pattern. Their wrappers `REVOKE EXECUTE … FROM PUBLIC` + `GRANT EXECUTE … TO <slice_role>` only; reader views `GRANT SELECT … TO <slice_reader_role>` only. **`telecheck_app_role` is a member of none of these roles and holds no direct grant** — a handler calling `record_crisis_initiation()` as the app role gets `permission denied`. This is the foundation gap explicitly flagged at `migrations/003_rls_helpers.sql:164` (`-- SPEC ISSUE: Grant to telecheck_app_role when 006_roles.sql lands.`); `006_roles.sql` never landed. The MATURE slices (forms-intake / pharmacy / consent) sidestepped it via direct RLS as the app role with no wrappers.
+
+Choosing the acquisition mechanism — (A) broad INHERIT membership, (B) NOINHERIT membership + per-tx `SET LOCAL ROLE` elevation, (C) direct grant, (D) per-slice login role + pool — establishes a **net-new role-elevation platform-floor primitive** with cross-slice blast radius = CLAUDE.md hard-floor item 6 discriminator (c). Not closeable inline.
+
+**ERR authored:** `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-App-Role-Acquisition-SECDEF-Slice-Wrappers-2026-05-23.md` — full privilege-surface table, 4 options with least-privilege / merged-gate-impact / app-code-cost analysis, **Claude's recommendation Option B** (NOINHERIT + per-tx `SET LOCAL ROLE` via a `withDbRole` helper: preserves role-layer least-privilege, keeps the wrappers' "EXECUTE ONLY to `<slice_role>`" anti-bypass gates intact with zero merged-migration churn, RLS-safe because slice roles are NOBYPASSRLS), runner-up Option A (simpler; abandons role-layer least-privilege), C/D not recommended. Codex two-pass consult **DEFERRED** (unavailable). Sibling to the open Med-Interaction role-name ERR (§6) — both are app-layer↔slice-SECDEF-role decisions and can be co-ratified.
+
+**Why no code PR this firing.** Every candidate is either DONE (c), blocked on a separate pending decision (a), blocked on an unbuilt upstream slice (b), or blocked on this new hard-floor item 6 (d, e). Opening a Crisis/Admin handler PR would presuppose an acquisition option (it requires the `006_roles.sql`-successor migration) = deciding the platform-floor primitive inline. Per the Addendum-75 precedent (do not open a competing code PR that presupposes a pending ratifier option), no code PR opened.
+
+**Shipped this firing (docs only, direct to `telecheckONE:main` — not Codex-gated):**
+1. The new ERR (above).
+2. This Addendum 76.
+3. `progress.json` revision 179 → 180 (slice-crisis-response + slice-admin-backend notes updated to reflect the app-role-acquisition blocker + ERR).
+
+**Stop-condition marker:** `[RATIFIER-PENDING]` (hard-floor item 6 — app-role acquisition) + `[CODEX-PENDING]` (consult deferred). Two open hard-floor item 6 ERRs now await Evans: the Med-Interaction role-name reconciliation (Addendum 75) and this app-role acquisition (Addendum 76).
+
+**Next critical-path item.** Gated on ratifier decisions. Once the app-role-acquisition ERR is ratified + the foundation migration lands (Codex APPROVE), **Crisis Response Sprint 2 + Admin Backend Sprint 2 handlers both unblock simultaneously** — these are the highest-leverage next code PRs (DB layers already complete + reviewed). Med-Interaction PR 7+ additionally needs its role-name ERR resolved. Async-Consult clinician loop needs AI Mode 2 case-prep (protocol engine + I-012) before its states are reachable.
+
+**Cumulative cycle statistics through Addendum 76:**
+- Pilot-slice implementation status: AI Mode 1 chat DONE (c); Crisis Response + Admin Backend DB-layers complete, app-layer blocked on app-role acquisition (d, e); Med-Interaction DB-layer complete, blocked on role-name reconciliation (a); Async-Consult clinician loop blocked on AI Mode 2 (b).
+- 2 open hard-floor item 6 ERRs awaiting Evans (Med-Interaction role-name; app-role acquisition) — both in the app-layer↔slice-SECDEF-role problem space, co-ratifiable.
+- 3rd consecutive firing terminating in a hard-floor item 6 STOP without inline closure — discipline held. The blocker shifted from one specific slice (Med-Interaction) to the shared foundation primitive (app-role acquisition) that gates 2 more slices.
+- Promotion Ledger entry counter does NOT advance (P-042 remains latest).
+
+— Claude (Opus 4.7), remote-cron firing: critical-path sweep + new app-role-acquisition hard-floor item 6 ERR + STOP 2026-05-23. progress.json revision 179 → 180.
