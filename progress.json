@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 177,
+  "revision": 178,
   "updated": "2026-05-23",
   "lifecycle": {
     "current": "foundation-build",
@@ -272,15 +272,15 @@
       "name": "Medication Interaction Engine",
       "category": "Slice PRD",
       "status": "in-dev",
-      "progress": 45,
+      "progress": 60,
       "owner": "",
-      "notes": "SI-019 v2.0 RATIFIED (P-033) + CDM v1.6→v1.7 (P-034). DB layer in progress: PR 1 (046 RBAC roles) + PR 2 (047 entities) MERGED to telecheck-app main 666358d; PR 3 (048 read-path MV/view/access-fn + 047 grant-defect fix) OPEN as [CODEX-PENDING] #192. Next: PR 4 raw lifecycle writer (049).",
+      "notes": "SI-019 v2.0 RATIFIED (P-033) + CDM v1.6→v1.7 (P-034). DB layer in progress: PRs 1-6 MERGED to telecheck-app main 5da9766 (Evans's local session, 22 Codex rounds total). LATENT DEFECT discovered in main: migrations 047/048/049/050 reference slice-prefixed role names (interaction_signal_*_wrapper_owner etc.) but migration 046 creates BARE names per spec §8 (override_wrapper_owner etc.) — fresh 000→047 chain aborts. ESCALATION pending ratifier decision via ERR (4 fix options). Parallel PR #192 [CODEX-PENDING] on feat/med-interaction-pr3-readpath-mv-048 from remote-cron fork contains 047-grant fix using Option C (rewrite to bare names); not yet merged. PR 7+ Fastify handlers blocked until role-name reconciliation lands.",
       "docs": [
         "Telecheck_Medication_Interaction_Engine_Slice_PRD_v2_0.md",
         "Telecheck_CDM_v1_6_to_v1_7_Amendment.md"
       ],
       "stage": "slice-build",
-      "updatedAt": "2026-05-23T00:00:00.000Z"
+      "updatedAt": "2026-05-23T05:30:00.000Z"
     },
     {
       "id": "slice-pharmacy",

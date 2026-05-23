@@ -5475,3 +5475,71 @@ Migration 047 (merged as PR 2) grants INSERT/SELECT on `interaction_signal_overr
 **Next critical-path item:** Med-Interaction PR 4 — migration 049: the raw lifecycle writer `record_interaction_signal_lifecycle_transition()` SECDEF (§6.NEW1) + anti-bypass EXECUTE matrix (the 6 wrapper-owner roles only; app roles never hold EXECUTE on the raw writer) + BIGSERIAL/sequence USAGE grant if applicable (per migration 045 hotfix precedent — note the transition PK is VARCHAR(26), not BIGSERIAL, so likely no sequence grant needed; verify at authoring). BLOCKED on PR #192 reaching Codex APPROVE + merge first if a strict stack is desired; otherwise 049 can be authored on a branch stacked atop this one and parked [CODEX-PENDING] too. The 047 grant fix should land (via PR #192 merge) before 049 so the writer-owner EXECUTE grants reference roles with consistent table grants.
 
 — Claude (Opus 4.7, 1M context), Med-Interaction PR 3 read-path open-as-CODEX-PENDING close-out 2026-05-23. progress.json revision 176 → 177.
+
+---
+
+## Addendum 74 — Med-Interaction (SI-019) DB-layer PRs 3-6 MERGED in Evans's local session + LATENT ROLE-NAME DEFECT discovered across migrations 047/048/049/050 (2026-05-23); STOP for ratifier escalation via ERR (4 fix options; remote-cron fork PR #192 carries Option C partial fix)
+
+**Date:** 2026-05-23
+**Trigger:** Evans's local session resumed from session compaction; completed Med-Interaction PR 6 Fastify scaffold update (commit `5da9766` to `arthurmenson/telecheck-app:main`, Codex R2 APPROVE). Cockpit-sync step exposed two collisions vs the remote-cron Addenda 72 + 73 trail.
+
+**Reconciliation with remote-cron Addenda 72 + 73.** The remote-cron firing that produced Addenda 72 + 73 ran against a stale `telecheck-app/main` view (only PR 1 + PR 2 merged in remote's view of main; remote opened PR #191 [CODEX-PENDING] for what became `748c93f` PR 1 + PR #192 [CODEX-PENDING] for read-path/047-fix). Evans's local session, running in parallel, had completed PRs 1-2 already and proceeded through PRs 3-6 end-to-end via full Codex-per-PR adversarial-review cycle:
+
+| PR | Migration | What | Codex rounds | Merge commit |
+|---|---|---|---|---|
+| 1 | 046 | 12 RBAC roles (4 application + 6 wrapper-owner + 2 service-level-owner) | 5 (stale-prose hygiene) | `748c93f` |
+| 2 | 047 | 4 entities + RLS + per-table append-only + monotonic-ordering triggers | 7 (trigger hardening) | `666358d` |
+| 3 | 048 | SECURITY BARRIER view + optional MV + SECDEF access function + MV access-discipline | 5 (MV-access-discipline defense-in-depth) | `7d05817` |
+| 4 | 049 | Raw lifecycle writer SECDEF + anti-bypass EXECUTE matrix + STEP-3.5 advisory-locked check | 3 | `1fc7bcd` |
+| 5 | 050 | 6 reason-specific wrappers (3 operational + 3 fail-closed) | 3 (incl. CRITICAL R2 UNREACHABLE-block comment-syntax) | `07b7904` |
+| 6 | n/a | Fastify scaffold update — README + routes + plugin/index/internal-types + app.ts + integration-test alignment to post-050 state | 2 (R1 MED on merged-PR count drift in /health.blocked_message) | `5da9766` |
+
+**Series totals (Evans's local session):** 6 PRs, 25 Codex adversarial-review rounds (5+7+5+3+3+2), 1 CRITICAL caught (PR 5 R2), 0 architectural-judgment hard-floor item 6 invocations *within Codex review framing*.
+
+**LATENT DEFECT discovered post-merge during cockpit-sync reconciliation.** Migration 046 creates wrapper-owner + writer + MV-refresh roles in their **BARE** form per spec P-034 §8 — `override_wrapper_owner`, `lifecycle_transition_writer_owner`, `mv_refresh_owner`, `emission_wrapper_owner`, `activation_wrapper_owner`, `superseded_wrapper_owner`, `resolution_wrapper_owner`, `expiry_wrapper_owner`. Migrations 047 / 048 / 049 / 050 GRANT to **SLICE-PREFIXED** names — `interaction_signal_override_wrapper_owner`, `interaction_signal_lifecycle_transition_writer_owner`, `interaction_signal_mv_refresh_owner`, `interaction_signal_emission_wrapper_owner`, `interaction_signal_activation_wrapper_owner`, `interaction_signal_supersession_wrapper_owner`, `interaction_signal_resolution_wrapper_owner`, `interaction_signal_expiry_wrapper_owner`. **Those slice-prefixed roles do not exist anywhere in the migration chain.**
+
+The defect was first surfaced by the remote-cron Addendum 73 firing, which empirically applied migrations `000 → 047` on a throwaway PostgreSQL 16 cluster and observed:
+
+```
+ERROR: role "interaction_signal_override_wrapper_owner" does not exist
+```
+
+at migration 047 line 350. Verified again locally during this cockpit-sync (greps in 046/047/048/049/050 confirm the asymmetric reference). The migrations applied successfully during the PR cycle ONLY because no end-to-end fresh apply was run (PR review used static SQL analysis via Codex + typecheck + test-discovery; no CI-driven migration apply for this slice yet — CI wiring is a separate workstream tracked under Track 5 Infra & Ops).
+
+**Why the PR-series Codex reviews didn't catch it.** Codex reviewed each PR's diff against `main` at PR time. At PR 2 time, migration 046 was the only RBAC-creation reference; the spec-prefixed grants in 047 looked syntactically correct (the roles "appear to" exist per the slice-prefix naming convention recorded in the README's Option-2 carryforward block). At PRs 3-5 time, the same naming pattern was repeated and Codex compared inter-migration consistency by name, not by existence. None of the PR cycles ran `000 → N` empirically. The remote-cron Addendum 73 firing — operating from outside Evans's session — was the first attempt to apply the chain end-to-end, which is what caught the bug.
+
+**Scope of the defect.** A fresh `000 → 047` apply aborts. Migrations 048, 049, 050 reference the same non-existent slice-prefixed roles (multiple `OWNED BY`, `GRANT EXECUTE TO`, `OWNER TO` clauses). All four migrations need reconciliation. The remote-cron Addendum 73 PR #192 fixed migration 047 only (3-role grant defect rewrite to bare names); 048-050 are untouched and would fail next.
+
+**ESCALATION — hard-floor item 6 — multi-option fix that touches Option-2 carryforward decision.** Per CLAUDE.md autonomous-work discipline ("Any Codex finding that proposes net-new architecture, schema, or invariant amendment beyond the ratified sub-decision scope of the SI under review is a hard STOP requiring ratifier escalation. Do not close it inline."), the fix is NOT a single-option mechanical typo — it has **4 viable options** that touch the slice's Option-2 carryforward (slice-prefixed role-name decision was recorded in `src/modules/med-interaction/README.md` as a cross-slice collision-safety choice). Surface to ratifier via Engineering Review Request (ERR).
+
+**Four fix options for ratifier:**
+
+| Option | What | Cross-slice collision-safety preserved? | Migrations touched | Compatibility with remote PR #192 |
+|---|---|---|---|---|
+| A | Author hotfix migration 051 that creates the 8 missing slice-prefixed roles as ALIASES of the bare roles (`CREATE ROLE … IN ROLE bare_role`) or as SAME-perm independent roles. 047-050 unchanged. | YES (slice-prefixed names exist alongside bare; cross-slice collision safety maintained) | +1 new migration (051) | DROP PR #192 (it would unnecessarily rewrite 047) |
+| B | Amend migration 046 in place to create slice-prefixed roles instead of bare. Re-author the verification block. No changes to 047-050. | YES (slice-prefixed names canonical) | 046 amend + rollback amend | DROP PR #192 |
+| C (remote-cron's choice) | Rewrite all GRANT / OWNER / OWNED BY clauses in 047, 048, 049, 050 to reference BARE names per spec §8. Amend rollback files symmetrically. 046 unchanged. | NO (loses the cross-slice collision-safety rationale recorded in README's Option-2 carryforward) | 047 + 048 + 049 + 050 amend + 4 rollback files | EXPAND PR #192 to cover 048-050 + rollbacks |
+| D | Author hotfix migration 051 that ALTER ROLE renames the 8 bare roles to slice-prefixed names. Update 046's verification block + add migration 045-style operator-facing note. | YES (slice-prefixed names canonical post-051) | +1 new migration (051) + 046 verification update | DROP PR #192 |
+
+**Claude's preliminary recommendation (pre-dual-recommendation consult):** **Option A**. Preserves the Option-2 carryforward rationale documented in the slice README (cross-slice collision safety) + minimizes amendments to already-merged migrations (047/048/049/050 stay untouched) + future-compat with potential cross-slice role conflicts. Trade-off: introduces 8 roles that are semantically "the same role with two names" — observability cost is real but small (operator playbook + role-name documentation updates).
+
+**Next steps:**
+1. Author ERR artifact `Telecheck_v1_10_PRD_Update/Engineering-Review-Request-Med-Interaction-Role-Name-Reconciliation-2026-05-23.md` enumerating all 4 options + Claude's recommendation + per-option pros/cons/deal-breakers.
+2. Run Codex dual-recommendation (Pass-1 source-first independent + Pass-2 contrast-and-synthesize). 
+3. Surface three-way to Evans for ratifier decision.
+4. If auto-proceed gate clears (Claude + Pass-2 agree on next concrete step), execute ratified option. If disagreement, wait for Evans's chat-message ratification.
+5. Land ratified migration changes in a new PR cycle with full Codex APPROVE before merge.
+6. Resume Med-Interaction PR 7+ Fastify handler work (currently blocked on this reconciliation).
+
+**Cumulative cycle statistics through Addendum 74:**
+- 5/5 pilot-required Ghana revenue anchor slices SI+CDM ratified.
+- DB-layer implementation: Crisis Response (PRs 1-7 merged + 045 hotfix), Admin Backend (PRs 1-6 merged), Med-Interaction (PRs 1-6 merged but blocked on role-name reconciliation).
+- Cumulative DB-layer Codex rounds across 3 implemented slices: ~87 rounds (Crisis Response 38 + Admin Backend 24 + Med-Interaction 25).
+- 18th successive Q2 2026 auto-proceed close-out interrupted at PR 6 cockpit-sync step by the role-name defect discovery. 1 NEW correct hard-floor item 6 invocation (this one — 4-option mechanical-fix-with-architectural-implications).
+- Promotion Ledger entry counter does NOT advance (P-042 remains latest spec-corpus ratification ledger entry).
+
+**Lesson for the workstream-discipline retro doc.** The 22-round Codex review series across PRs 1-6 caught structural defects (UNREACHABLE-block comment-syntax that would have blocked CREATE FUNCTION; merged-PR count drift in /health.blocked_message; MV access-discipline gaps; STEP 3.5 advisory-lock omission; etc.) but DID NOT catch the role-name asymmetry across migrations 046 ↔ 047/048/049/050. Codex reviews diffs against `main` — it does not run migrations end-to-end. The remote-cron firing's empirical apply of `000 → 047` was the catch. **Process upgrade candidate:** add an end-to-end `000 → N` apply step to the Codex-per-PR adversarial-review cycle for any PR that adds or modifies migrations referencing existing roles or other migration-chain prerequisites. (Currently CI is not wired for this slice; the end-to-end apply could be a manual operator step pre-merge or a CI gate post-CI-wireup.)
+
+**telecheck-app main is currently `5da9766` and contains the latent defect.** No production environment has applied these migrations. Pre-deployment posture preserves the fix-forward optionality across all 4 options. Pilot launch (Telecheck-Ghana revenue anchor) is NOT blocked by this defect at this moment — Ghana doesn't start until handlers exist (PR 7+) + crisis-floor + interaction-engine fastify surface ships. But the reconciliation MUST land before PR 7+ begins, because Fastify handlers will call the wrappers and the wrapper EXECUTE grants are routed through the slice-prefixed names that don't exist.
+
+— Claude (Opus 4.7, 1M context), Med-Interaction DB-layer cockpit reconciliation + role-name defect STOP for ratifier escalation 2026-05-23. progress.json revision 177 → 178.
