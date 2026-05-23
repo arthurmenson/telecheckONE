@@ -5390,3 +5390,41 @@ Migrations 036 (initiation), 037 (acknowledgement + response + resolution), and 
 **Next deliverable:** continued telecheck-app code implementation across the 5 anchor slices. The cockpit remains in steady-state pending the next telecheck-app implementation milestone. Phase F (multi-tenant launch) gating per Master Completion Plan v1.0 unchanged.
 
 — Claude (Opus 4.7, 1M context), Crisis Response PR 3 retroactive BIGSERIAL sequence USAGE hotfix close-out 2026-05-22 via auto-proceed. progress.json revision 174 → 175.
+
+---
+
+## Addendum 72 — Med-Interaction (SI-019) PR 1: 12 RBAC roles OPENED as [CODEX-PENDING] (2026-05-23; first Phase B fan-out telecheck-app code-repo entry; Med-Interaction DB layer begun)
+
+**Trigger:** autonomous-work firing under Evans's standing directive (Master Completion Plan v1.0 Phase B open items). Per the priority order — (a) Med-Interaction slice DB layer, the "new critical path" that blocks Pharmacy clinician-commit per the I-002 hard rule — Med-Interaction was confirmed as the next critical-path item: spec FULLY ratified (SI-019 PRD v2.0 P-033 + CDM v1.6→v1.7 follow-on P-034, both 2026-05-21 per Addenda 61/62), `src/modules/med-interaction/` is a BLOCKED-aware skeleton only, and `migrations/` had ZERO Med-Interaction DB-layer migrations. PR 1 begins the DB layer, mirroring the Crisis Response (032→038) + Admin Backend (039→044) per-slice cadence.
+
+**Why Med-Interaction is critical path:** the interaction engine runs BEFORE a clinician commits a `medication_request` (I-002). The signal lifecycle this slice persists is read at STRICT-FRESHNESS by the Pharmacy clinician-commit gate, refill-release checks, and Mode 2 protocol gates (P-034 §4.NEW5 read-path classification). It is the first P-NUM in the Master Completion Plan v1.0 Phase B fan-out (Track 1 Ghana revenue anchor).
+
+**Content shipped this firing (branch `feat/med-interaction-pr1-rbac-roles`, commit `42555f6`):**
+- **`migrations/046_med_interaction_rbac_roles.sql`** — the 12 net-new RBAC roles from the authoritative `Telecheck_CDM_v1_6_to_v1_7_Amendment.md` §8 RBAC table (P-034):
+  - Application (4): `medication_interaction_engine_evaluator`, `medication_interaction_signal_viewer`, `medication_interaction_override_recorder`, `medication_interaction_knowledge_base_updater`
+  - Wrapper-owner (6): `emission_wrapper_owner`, `activation_wrapper_owner`, `override_wrapper_owner`, `superseded_wrapper_owner`, `resolution_wrapper_owner`, `expiry_wrapper_owner`
+  - Service-level owner (2): `lifecycle_transition_writer_owner`, `mv_refresh_owner`
+  - All 12 `NOLOGIN` + `NOBYPASSRLS`; no grants (deferred to natural phase per the P-040 §8.2 R9 HIGH-1 closure pattern). Verification `DO` block asserts count = 12 + dotted-form anti-drift + resolution-subscriber non-ownership NOTICE.
+- **`migrations/rollback/046_rollback.sql`** — reverse-dependency `DROP ROLE IF EXISTS` + post-rollback count `WARNING` (migration 039/045 rollback-hygiene precedent).
+- **`docs/med-interaction-implementation-plan.md`** — the Option 2 carryforward migration sequence (046 RBAC → 047 entities → 048 MV/view → 049 raw writer → 050+ wrappers → 051+ Fastify), recorded divergences, and sequencing rationale; mirrors `docs/crisis-response-implementation-plan.md`.
+
+**Option 2 carryforward divergences (recorded for future hygiene-cycle reconciliation):**
+- **ONE divergence in this migration:** the two **dotted** canonical role names (`medication_interaction.override_recorder` / `.knowledge_base_updater`) are realized as their **underscore** forms — an unquoted dotted identifier is not a valid PostgreSQL role, the code repo has zero quoted-dotted roles, and the spec is internally inconsistent (Sub-decision 6 dotted vs §6 wrapper-grant matrix underscored). Mechanical DB-realization, not a new architectural decision. The verification block asserts the dotted forms are absent.
+- `medication_interaction_resolution_subscriber` NOT created (owned by the Async Consult subscriber registry per §8; referenced in the wrapper EXECUTE-grant table only for completeness).
+- Wrapper-owner / service-level owner names kept verbatim from §8 (bare, not slice-prefixed) so downstream procedure-DDL `OWNER TO` / `GRANT EXECUTE` (migrations 049-050) match the canonical spec text. Generic-name collision risk flagged as an observation in the plan doc, not a divergence.
+
+**Local validation (CI not yet wired for this slice):** validated against a throwaway PostgreSQL 16 cluster — clean apply (12 roles, all NOLOGIN + non-BYPASSRLS), verification block passes (count 12; anti-drift clean), rollback drops all 12 → count 0, clean re-apply after rollback, partial-state re-apply fails loudly (correct).
+
+**Codex outcome — NOT RUN (environment gap):** Codex (`@openai-codex`) is unavailable in this remote execution environment — no `codex` binary, no `~/.claude/plugins/cache/openai-codex/`, no `OPENAI_API_KEY`, no `scripts/codex-companion.mjs`. Per the discipline floor (**Codex APPROVE mandatory before any merge**), the PR was opened **[CODEX-PENDING]** and **NOT merged**. A future firing (or Evans's next local session, where Codex is installed) must run `OPENAI_API_KEY=$OPENAI_API_KEY npx -y @openai/codex review --base main`, iterate to APPROVE, then merge `--no-ff`.
+
+**PR:** [arthurmenson/telecheck-app#191](https://github.com/arthurmenson/telecheck-app/pull/191) — `[CODEX-PENDING] Med-Interaction Basics PR 1: 12 RBAC roles (SI-019 P-033/P-034)`. Branch `feat/med-interaction-pr1-rbac-roles` @ `42555f6`. **OPEN, unmerged.** No new telecheck-app `main` commit this firing → `lastSyncedSha` stays `baca008`.
+
+**Cumulative cycle statistics through Addendum 72:**
+- 1 telecheck-app implementation PR opened (CODEX-PENDING; not merged) — the 2nd post-P-042 code-repo entry (Addendum 71 was the 1st).
+- 0 Codex rounds this firing (Codex unavailable; PR parked for review).
+- 0 hard-floor item 6 invocations (no architectural-judgment decisions; the spec is fully ratified and the dotted→underscore mapping is a mechanical code-repo realization following the established Option 2 precedent).
+- 0 STOP conditions hit.
+
+**Next critical-path item:** Med-Interaction PR 2 — the 4 entities (`interaction_engine_evaluation` + `interaction_signal` + `interaction_signal_override` + `interaction_signal_lifecycle_transition`) + RLS + per-table append-only triggers (I-035) + state-transition-triple CHECK constraints (migration 047), per `docs/med-interaction-implementation-plan.md`. BLOCKED on PR #191 reaching Codex APPROVE + merge first (047 depends on the writer-owner roles 046 creates). If Codex remains unavailable next firing, resume by either (a) advancing a Codex-independent unit on another slice, or (b) authoring 047 on a stacked branch atop 046 and parking it [CODEX-PENDING] too.
+
+— Claude (Opus 4.7, 1M context), Med-Interaction PR 1 RBAC-roles open-as-CODEX-PENDING close-out 2026-05-23. progress.json revision 175 → 176.
