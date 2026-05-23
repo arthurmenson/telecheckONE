@@ -6704,3 +6704,52 @@ These are separate from telecheckONE per Evans's directive:
 This is the 1st Cockpit Addendum recording a P-NN ratification ceremony (prior Addendums tracked operational state — PRs opened, branches pushed, agents firing). The cockpit doc continues serving operational-status purposes; the Promotion Ledger entry is the canonical record of the ratification. Both reference each other for cross-traceability.
 
 — Claude (Opus 4.7, 1M context, Evans's local session), Agentic Workforce Architecture v0.2 (Option B+) RATIFIED via Evans's chat-message + Day-1 telecheckONE skeleton authored (canonical-events directory + 3 agent CLAUDE.md templates + rollback runbook + Promotion Ledger P-043 entry); Day-2/3 sibling-repo bootstrap (telecheck-cockpit + telecheck-forms-intake) is the immediate follow-up 2026-05-23. progress.json revision 196 → 197.
+
+---
+
+## Addendum 94 — Track 6 Async-Consult ratification-readiness: SI-020 R11 author-side closure (claim-procedure RBAC-owner + count lockstep) committed to main (2026-05-23, remote-cron)
+
+**Date:** 2026-05-23
+**Trigger:** Standing autonomous-work loop (remote-cron firing). Read the Addendum trail through #93. Executed Addendum 92's explicit "next firing" prescription: **prefer (ii) Track 6 SI authoring/row-shaping for Async-Consult (SI-004/SI-005) ratification-readiness — the one remaining lever that advances the actual pilot critical path** — over further CI-hardening (saturated) or re-authoring already-PR-visible handlers (the forbidden Addendum-85 double-attempt).
+
+### Critical-path selection — handler surface + CI-hardening saturated; the live lever is Async-Consult ratification-readiness
+
+Walked the task priority order (a)–(e) against actual `origin` branch + open-PR state before picking (matches Addenda 90/91/92 surveys):
+
+- **(a) Med-Interaction DB layer** — DONE (migrations 046–051 on `origin/main`; PRs #192/#195/#196/#208/#209 [CODEX-PENDING]).
+- **(b) Async-Consult clinician decision loop** — **SPEC-BLOCKED for implementation** (cannot write code before ratification per discipline floor). BUT ratification-*readiness* authoring is in-scope Track-6 work (hard-floor item 3: "Claude can file SIs and propose row shapes for ratification") — this is the firing's selected work.
+- **(c) AI Mode 1 chat handler** — DONE (Addendum 76; #193 introspection fix).
+- **(d) Crisis Response Sprint 2** — all handlers authored + PR-visible (#199, #201–#204).
+- **(e) Admin Backend Sprint 2** — submit/decision/dashboard-reads authored + PR-visible (#205–#207).
+
+**Codex confirmed UNAVAILABLE this firing** (`OPENAI_API_KEY` absent; no `codex` CLI; `api.openai.com` → `403` allowlist-blocked) — same meta-blocker as Addenda 75/77/80/82/84/86/87/88/90/91/92. **No merges possible.** The 20 open [CODEX-PENDING] handler/CI PRs (#192–#211) remain blocked on the Evans-local Codex cascade. Re-authoring or re-surfacing them adds zero marginal value. The genuinely-unclaimed, non-duplicative, pilot-critical-path-advancing, in-scope-without-Codex item is exactly Addendum 92's prescribed lever: SI-020 Async-Consult v2.0 implementation-readiness — the spec extension that gates Track-1 Async-Consult implementation (pilot-viable scope item 2, Ghana revenue anchor).
+
+### What shipped — SI-020 v0.11 → v0.12 R11 author-side closure (1 HIGH + 1 MED, committed directly to telecheckONE main)
+
+`Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_SI_020_Async_Consult_v2_0_Implementation_Readiness.md` was at v0.11 POST-R10, near-converged but with an internal-consistency defect that the R3/R4/R5 → R9/R10 closures left behind:
+
+- **R11 HIGH-1 closed:** the 2 claim-lifecycle SECURITY DEFINER procedures introduced across R3/R4/R5 (`claim_consult_for_review()` + `reassign_consult_claim()`, with canonical bodies in Sub-decision 1) were never reconciled into (a) Sub-decision 8's procedure enumeration (raw writer + 6 per-reason wrappers = 7), (b) Sub-decision 6's RBAC owner-role set (8 roles; none owned the claim procedures), or (c) the §3/§4 "7 SECURITY DEFINER procedures" count. Per this SI's own discipline (Sub-decision 8: "Raw transition writer EXECUTE restricted to wrapper owner roles ONLY" per P-034 R4 closure), a SECURITY DEFINER procedure with no dedicated non-BYPASSRLS owner role + owner-only EXECUTE defaults to the migration-superuser definer (BYPASSRLS) and/or broad EXECUTE — the exact P-034 R4 raw-writer-broadly-granted tenant-isolation hazard, here on a clinical-review claim-write path. This is the direct procedure-count analogue of the R9/R10 entity-count lockstep closures (same R1/R3/R4/R5 claim additions). **Within-scope reconciliation — the procedures are already ratification-scoped, so NO net-new architecture — closeable inline per hard-floor item 6's explicit "prose-consistency / within-scope clarification" exemption (NOT a STOP).** Fix: added `consult_claim_wrapper_owner` non-BYPASSRLS role (Sub-decision 6: 8 → 9) owning both procedures with owner-only EXECUTE; enumerated both in Sub-decision 8 (~7 → 9) with the discipline restated; corrected §3 (7 → 9 procedures; 8 → 9 roles) + §4 (7 → 9 procedures; 8 → 9 roles). Procedure enumeration + RBAC owner-role set + §3/§4 counts now mutually consistent at 9.
+- **R11 MED-1 closed:** §4's Codex-pre-ratification-target parenthetical still said "6 new entities" + "16 audit events" — stale vs the R1 closure (7 entities incl. `consult_review_claim`) + R6 closure (17 audit events incl. `claim_expired_auto_released`) already applied elsewhere. Fixed §4 to 7 entities + 17 audit events for full lockstep.
+
+### Discipline posture — this is author-side row-shaping, NOT a Codex round, NOT ratification
+
+- **Codex still gates ratification.** This R11 closure is Track-6 author-side readiness hardening (Codex unavailable). The SI's §7 Codex pre-ratification ship-it cycle (target 6–10 rounds + ship-it verification) STILL must run before the P-037/P-038 ratification ceremony. The header + §6 closure-log + §7 all state this explicitly. I did NOT ratify, bump any canonical version, append a Promotion Ledger entry, or touch any canonical contract — the SI remains a DRAFT.
+- **No hard-floor STOP fired.** The finding is within-scope reconciliation (claim procedures already scoped via R1/R3/R4/R5); it is the explicit hard-floor-item-6 exemption case ("prose-consistency findings, within-scope clarifications … DO NOT trigger this hard floor; they remain closeable inline"). No net-new schema field, invariant, or platform-floor primitive was proposed.
+- **Docs-not-Codex-gated → committed directly to telecheckONE main** per the established DRAFT-closure pattern (R1–R10 landed analogously) + the standing "docs commit directly to main" rule.
+
+### Commit SHAs
+
+- SI-020 v0.12 R11 closure: `a19b3d5` (telecheckONE main)
+- Addendum 94 + progress.json 197 → 198: this Addendum-94 commit (telecheckONE main)
+
+### Codex outcome: UNAVAILABLE in remote-cron env → no merge; spec readiness advanced instead
+
+No PR opened this firing — the work is a direct-to-main DRAFT-SI readiness closure (not a code change requiring Codex APPROVE). The 20 open [CODEX-PENDING] PRs (#192–#211) remain the merge-cascade bottleneck for the Evans-local Codex session.
+
+### Next critical-path item
+
+- **SI-020 is now lockstep-consistent across all 10 sub-decisions + §3/§4** and ready for its Codex pre-ratification ship-it cycle (§7 step 1) whenever Codex is available (Evans-local session). After Codex convergence → P-037 SI ratification + P-038 follow-on amendment (CDM v1.8 → v1.9 etc.) → Track-1 Async-Consult implementation unblocks.
+- **The bottleneck remains the human-gated Codex merge cascade**, not authorship. Both the handler surface (a)–(e) AND the Async-Consult readiness spec are now as advanced as a no-Codex remote-cron firing can take them. Highest-value next actions are Evans-local: (1) run the Codex cascade on #197 → #198 → #211 → handler PRs → reconcile #196/#208 Med-Int PR-8 double-attempt; (2) run the Codex pre-ratification ship-it cycle on SI-020 then ratify P-037/P-038; (3) the Addendum-93 Agentic-Workforce Day-2/3 sibling-repo bootstrap (`telecheck-cockpit` + `telecheck-forms-intake`) — out-of-scope for this GitHub-MCP-restricted env (repos not yet created; scope limited to telecheck-app + telecheckONE).
+- **Future no-Codex firings:** Async-Consult readiness is now also approaching saturation. The remaining Track-6 lever is SI-004 (Async-Consult audit-events ratification DRAFT in `Telecheck_SI_Closure_Cycle_2026-05-11/`) row-shaping toward the SI-020 audit taxonomy — verify it reconciles with SI-020 Sub-decision 2's 17-event table before the ratification ceremony.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex plugin in this env), Track-6 Async-Consult ratification-readiness: SI-020 v0.11 → v0.12 R11 author-side closure (claim-lifecycle SECURITY DEFINER procedures reconciled into Sub-decision 8 enumeration + new `consult_claim_wrapper_owner` RBAC role + §3/§4 procedure/role/entity/audit count lockstep); within-scope, no hard-floor STOP, Codex pre-ratification ship-it cycle still gates ratification per §7; committed directly to telecheckONE main 2026-05-23. progress.json revision 197 → 198.
