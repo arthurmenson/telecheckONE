@@ -5626,3 +5626,53 @@ Choosing the acquisition mechanism — (A) broad INHERIT membership, (B) NOINHER
 - Promotion Ledger entry counter does NOT advance (P-042 remains latest).
 
 — Claude (Opus 4.7), remote-cron firing: critical-path sweep + new app-role-acquisition hard-floor item 6 ERR + STOP 2026-05-23. progress.json revision 179 → 180.
+
+---
+
+## Addendum 77 — Unblocked forward progress while 2 hard-floor item 6 ERRs await Evans: shipped AI-service /health + /ready introspection-accuracy fix (PR #193, [CODEX-PENDING]); 4 of 5 pilot slices still ratifier-blocked (2026-05-23)
+
+**Date:** 2026-05-23
+**Firing type:** remote-cron autonomous firing (no Codex / OPENAI_API_KEY in env — re-confirmed: `codex-cli 0.133.0` fetches via npx but `OPENAI_API_KEY` is unset, so no authenticated review is possible; the CLAUDE.md companion-script path is Windows-only and absent on this Linux container)
+**Trigger:** scheduled critical-path firing. Resumed from Addendum 76's two open hard-floor item 6 STOPs. Re-verified all five pilot-slice candidates against the actual code (trust-but-verify, not addendum-trust) and looked for any genuinely-unblocked, non-presupposing code work to ship one PR.
+
+**Ground-truth on entry.** `telecheck-app` main = `5da9766` (Med-Interaction DB layer 046–050 + latent role-name defect, unchanged). `telecheckONE` main fast-forwarded `6adaae5 → 54adcc8` (Addenda 74–76 + both ERRs now on local main; local was stale at Addendum 71). No new code merged anywhere since Addendum 76.
+
+**Critical-path re-verification (code-level, not addendum-level):**
+
+| Item | Status this firing | Verification |
+|---|---|---|
+| (a) Med-Interaction PR 7+ | **BLOCKED** — role-name reconciliation ERR (hard-floor item 6, awaiting Evans). Confirmed `migrations/003_rls_helpers.sql:164` SPEC-ISSUE comment + 046 bare-role creation. Untouched. | Addendum 75 ERR |
+| (b) Async-Consult clinician loop | **BLOCKED** — QUEUED/UNDER_REVIEW unreachable; needs AI Mode 2 case-prep (protocol engine + I-012). | Addendum 76 |
+| (c) AI Service Mode 1 chat | **DONE + verified** — `routes.ts:129` mounts `mode1ChatHandler`; full lifecycle present in `internal/handlers/chat.ts` (I-019 input gate → Conservative Default → NullProvider AI-RESIL-001 fail-soft → FLOOR-020 Cat C audit; patient-only + delegate-reject; idempotent; tenant-blind). Codex R1–R6 closed. | direct code read |
+| (d) Crisis Response Sprint 2 | **BLOCKED** — app-role-acquisition ERR (hard-floor item 6, awaiting Evans). Confirmed `036` grants EXECUTE only to wrapper-owner roles; `telecheck_app_role` holds no grant; `006_roles.sql` never landed. | Addendum 76 ERR |
+| (e) Admin Backend Sprint 2 | **BLOCKED** — same app-role-acquisition primitive. | Addendum 76 ERR |
+
+**KEY FINDING — introspection drift on the (c) DONE slice, fixable without presupposing any ratifier option.** While verifying (c), found the AI-service `/health` + `/ready` probes had drifted out of sync with the actual wired state: Mode 1 chat is mounted and `provider_abstraction_published` / `guardrail_templates_wired` / `crisis_gate_wired` all report `true`, yet `/health.handlers_wired_tracking` still claimed `PR C + PR D + PR E + PR F` pending, `/health.phase` reported `crisis_gate_wired_pr_f`, and `/ready.{pending,pending_message}` still listed Mode 1 chat + provider + guardrails + crisis as pending. The slice README likewise claimed "handlers are NOT mounted" and `/chat` returns 404 — both false since the 2026-05-15 mount. Operators + monitoring tooling reading these probes got a wrong readiness picture. This is a pure introspection-accuracy defect — NOT a ratifier-gated decision, NOT a presupposition of any open ERR option.
+
+**Shipped this firing — code PR (one PR, full cycle short of merge):**
+
+- Branch `feat/ai-service-pr7-health-ready-wired-state-accuracy` off `telecheck-app:main` (`5da9766`).
+- Commit `2c26128` — `fix(ai-service): correct stale /health + /ready wired-state introspection`:
+  - `phase`: `crisis_gate_wired_pr_f` → `mode_1_chat_mounted` (both probes).
+  - Added precise per-handler booleans `mode_1_chat_handler_mounted: true` / `mode_2_case_prep_handler_mounted: false`.
+  - `handlers_wired_tracking` + `/ready.pending`/`pending_message` now reference only the genuinely-remaining handler (Mode 2 case-prep, gated on the protocol-engine / I-012 integration). `handlers_wired` stays `false`; `/ready` stays **503** (full-surface readiness-flip precedent preserved — partial surface intentionally not readiness-acceptable).
+  - Synced slice `README.md` + `tests/integration/ai-service-plugin-wiring.test.ts` assertions; added anti-drift assertions (provider/guardrails/crisis must NOT appear as pending).
+- **No behavior change** to the chat handler — introspection accuracy only.
+- **Local verification (a Postgres 16 instance was spun up in-container under an unprivileged user to actually run the integration suite, not just typecheck):** `tsc --noEmit` clean; `eslint --max-warnings 0` clean; `prettier --check` clean; `ai-service-plugin-wiring` + `ai-service-mode-1-chat-http` + `ai-service-crisis-gate` → **50 passed, 1 skipped**.
+- **PR #193 opened**, title prefixed `[CODEX-PENDING]`, base `main`, NOT merged.
+
+**Why merge is withheld.** Discipline floor: Codex APPROVE is mandatory before any merge, no time-pressure exception. Codex is unavailable in this environment (no `OPENAI_API_KEY`). The PR carries the `[CODEX-PENDING]` marker; Evans's next local session (or a future firing with Codex auth) runs `codex review --base main` and merges on APPROVE. CI (lint / typecheck / tests / OpenAPI / migration validation) will also run on the PR.
+
+**Why this is NOT a hard-floor item 6 and was safe to ship as a PR.** The change touches no canonical schema, no invariant, no platform-floor primitive, no contract surface — it corrects descriptive metadata in two introspection endpoints + the matching test assertions + README. It does not presuppose either open ERR's option (it doesn't touch DB roles, migrations, or the SECDEF wrapper grant surface). Per Addendum 75/76 precedent, opening a Crisis / Admin / Med-Interaction handler PR WOULD presuppose a pending option and was correctly avoided.
+
+**Stop-condition markers (carried, unchanged):** `[RATIFIER-PENDING]` ×2 (Med-Interaction role-name reconciliation, Addendum 75; app-role acquisition, Addendum 76) + `[CODEX-PENDING]` on PR #193 (this firing) and on the in-flight remote PR #192.
+
+**Next critical-path item.** Unchanged from Addendum 76: the two open hard-floor item 6 ERRs gate the highest-leverage code work. Once app-role-acquisition is ratified + the foundation migration lands (Codex APPROVE), **Crisis Response Sprint 2 + Admin Backend Sprint 2 handlers unblock simultaneously**. Med-Interaction PR 7+ additionally needs its role-name ERR resolved. Async-Consult needs AI Mode 2 case-prep (protocol engine + I-012). If Evans wants additional interim forward progress on the (c) DONE slice, the next non-gated candidates are AI Mode 1 follow-ons — but session-lifecycle endpoints + CCR-driven crisis helpline text are themselves blocked on CDM v1.3 promotion (SI-023) + SI-013 ratification respectively, so they are NOT currently unblocked.
+
+**Cumulative cycle statistics through Addendum 77:**
+- Pilot-slice status: AI Mode 1 chat DONE + re-verified (c); Crisis + Admin DB-layers complete, app-layer blocked on app-role acquisition (d, e); Med-Interaction DB-layer complete, blocked on role-name reconciliation (a); Async-Consult blocked on AI Mode 2 (b).
+- 2 open hard-floor item 6 ERRs still awaiting Evans (co-ratifiable; app-layer↔slice-SECDEF-role problem space).
+- This firing BROKE the 3-firing no-code streak with a genuinely-unblocked, non-presupposing introspection-accuracy PR (#193, [CODEX-PENDING]) — discipline held (no merge without Codex; no presupposition of any open ERR option).
+- Promotion Ledger entry counter does NOT advance (P-042 remains latest).
+
+— Claude (Opus 4.7), remote-cron firing: AI-service /health + /ready introspection-accuracy PR #193 [CODEX-PENDING] + critical-path re-verification 2026-05-23. progress.json revision 180 → 181.

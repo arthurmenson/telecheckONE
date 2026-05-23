@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 180,
+  "revision": 181,
   "updated": "2026-05-23",
   "lifecycle": {
     "current": "foundation-build",
@@ -613,7 +613,7 @@
       "status": "in-dev",
       "progress": 92,
       "owner": "",
-      "notes": "test(ai-service): Mode 1 chat audit-failure injection harness + R4 H1 round-trip regression (#163)",
+      "notes": "fix(ai-service): correct stale /health + /ready wired-state introspection — Mode 1 chat mounted, only Mode 2 case-prep remains (PR #193 [CODEX-PENDING], not merged; Codex unavailable in remote env)",
       "docs": [
         "Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md"
       ],
