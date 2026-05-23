@@ -1,10 +1,21 @@
-# Telecheck Agentic Workforce Architecture — v0.1 DRAFT
+# Telecheck Agentic Workforce Architecture — v0.2 DRAFT
 
-**Status:** DRAFT — pending Codex two-pass adversarial review + Evans ratification
+**Status:** DRAFT v0.2 — post Codex two-pass adversarial review; pending Evans ratification
 **Author:** Claude (Opus 4.7, 1M context), Evans's local session
 **Date:** 2026-05-23
 **Successor to:** `Telecheck_Workstream_Discipline_Note_Multi_Agent_Orchestration_v0_1_DRAFT.md` (v1.10 cycle multi-agent orchestration pilot)
 **Decision class:** Hard-floor item 6 (net-new platform-floor architecture for HOW the platform gets built; NOT a change to what the platform IS)
+
+**v0.1 → v0.2 changelog (Codex Pass-1 + Pass-2 closures):**
+- §3.2 canonical.json schema: replaced multi-writer JSON model with **append-only event log + materialized current-state projection** (BLOCKING-FINDING-1 closure)
+- §3.3 convergence mechanics: added optimistic locking + idempotency keys + signed/typed events + replay tooling + explicit hook-failure recovery
+- §7 success criteria: added **hard-stop expansion gates** (any P0/platform-floor defect, unexplained canonical drift, unauthorized spec write, or escaped tenant/auth/audit/clinical/crisis invariant breach freezes expansion immediately)
+- §7 success criteria: added severity-weighted defect escape metrics
+- §4.3 NEW: tested rollback runbook + branch/repo consolidation plan
+- §2.2 NEW: Codex-outage fallback (multi-LLM review redundancy + workforce-pause-on-Codex-down ≤ 72h policy)
+- §3.4 NEW: P0 incident response mode with bypass-Codex-then-post-audit pattern + Incident Commander rotation
+- §9 NEW: delegated-ratifier rules (Engineering Lead for non-platform-floor sub-decisions; Evans retains hard-floor item 6 + invariant amendments + Promotion Ledger ratifications + ADR-class decisions)
+- §4.1 first-pilot-slice criterion: must be already-ratified narrow slice with no open spec prerequisites (Med-Interaction PR 10+ is candidate ONLY if Sprint 1 endpoint set + AUDIT_EVENTS catalog amendment for `medication_interaction.*` action IDs both ratified first)
 
 ## 1. Motivation
 
@@ -60,14 +71,29 @@ Every agent operates under the existing CLAUDE.md autonomous-work authorization 
 
 ## 3. canonical.json — single source of truth
 
-### 3.1 Format
+### 3.1 Format — append-only event log + materialized current-state projection (v0.2 redesign per Codex BLOCKING-FINDING-1)
 
-Machine-readable JSON, git-tracked in `telecheckONE/canonical.json`. Updated exclusively by:
-1. Orchestrator agent (cross-project state, deps, ratifier queue, milestones)
-2. Per-repo GitHub Action on PR-merge (agent heartbeat, PR count, completion %)
-3. Spec Corpus agent (canonical versions, pending change requests)
+**Two artifacts, not one:**
 
-Manual edits forbidden. CI rejects PRs to `telecheckONE/` that touch `canonical.json` without one of the above origins.
+1. **`telecheckONE/canonical-events/`** — append-only event log, one event per file (`<ISO-8601>__<source>__<event-id>.json`). Events are signed (commit signature attests author) + typed (JSON Schema per event type) + idempotent (each event carries a `client_idempotency_key`). Never mutated after write.
+
+2. **`telecheckONE/canonical.json`** — materialized current-state projection over the event log. Rebuildable from scratch by replaying `canonical-events/`. Updated by the Projection Service (a deterministic reducer running as a GitHub Action triggered by any new event); manual edits forbidden + CI rejects.
+
+**Event sources (authorized writers — by signed commit identity):**
+1. Orchestrator agent (event types: `dep_filed`, `dep_satisfied`, `ratification_queue_updated`, `milestone_updated`, `message_routed`)
+2. Per-repo PR-merge hook (event types: `agent_heartbeat`, `pr_opened`, `pr_merged`, `codex_round_completed`, `completion_pct_updated`)
+3. Spec Corpus agent (event types: `cr_filed`, `cr_approved`, `cr_rejected`, `canonical_version_bumped`)
+4. Ratifier (Evans / Engineering Lead) (event types: `ratification_decision`, `incident_declared`, `incident_resolved`, `workforce_pause_invoked`)
+
+**Concurrency model:** Append-only event log eliminates concurrent-write conflict (each event is a new file). Projection Service serializes reduction in commit-order. If two events propose conflicting projections (e.g., two agents claim same dep at same instant), Projection Service applies a deterministic resolution rule (event with earlier `wall_clock_ts` wins; ties broken by source-priority: Ratifier > Spec Corpus > Orchestrator > PR-merge-hook) and emits a `conflict_resolved` event for audit.
+
+**Idempotency:** Every event carries `client_idempotency_key`. Projection Service deduplicates on key. Retries are safe.
+
+**Forgery prevention:** Every event commit must be signed (GPG or sigstore). CI gate in `telecheckONE/` rejects unsigned events + events from non-authorized authors. Authorized-author allowlist lives in `telecheckONE/canonical-events/authorized-sources.json` (itself rotated only by Ratifier ratification event).
+
+**Failed-hook recovery:** Per-repo PR-merge hooks have at-least-once delivery semantics. If a hook fails to write its event (network error, GitHub Action outage), it retries with exponential backoff up to 24 hours. After 24 hours, Orchestrator's stale-source detector files a `source_offline` event + alerts ratifier. Recovery: missing events can be back-filled manually (signed) and Projection Service replays.
+
+**Replay tooling:** `npx telecheck-orchestrator replay-events --from <ts> --to <ts>` rebuilds `canonical.json` from the event log; verified against git-tracked `canonical.json` on each Projection Service run (mismatch = highest-severity alert + auto-pause workforce).
 
 ### 3.2 Schema (proposed)
 
@@ -168,12 +194,40 @@ If Evans prefers de-risked path:
 
 | Day | Deliverable |
 |---|---|
-| 1–3 | Same Day 1–3 as Option A (canonical.json + Orchestrator + Spec Corpus Agent + 1 implementation repo) |
-| 4 | Bootstrap ONLY Clinical Agent + run on 1 slice (Med-Interaction Sprint 2) |
-| 5–14 | Observe convergence on 1 slice. Measure: PR throughput, defect rate caught by Codex, ratifier queue depth, canonical.json drift incidents |
-| Day 15 | Decision point: expand to full 8-agent (success criteria met) OR pivot |
+| 1–3 | Canonical event log + projection service + Orchestrator + Spec Corpus Agent + 1 implementation repo |
+| 4 | Bootstrap ONLY 1 implementation agent + run on already-ratified narrow slice |
+| 5–14 | Observe convergence on 1 slice. Measure: PR throughput, defect rate caught by Codex, ratifier queue depth, canonical event log integrity, hard-stop expansion gate triggers |
+| Day 15 | Decision point: expand to full 7-8 agent (all success criteria met + zero hard-stop gates fired) OR pivot |
 
-Trades 1–2 weeks of latency for risk-reduction. Recommended if Evans is uncertain.
+Trades 1–2 weeks of latency for risk-reduction. **Recommended per Codex Pass-1 + Pass-2 + Claude synthesis.**
+
+**First-pilot-slice criteria (v0.2):** Must be already-ratified narrow slice with no open spec prerequisites. Candidates evaluated against criteria:
+- Spec ratified: yes
+- Canonical contracts (CDM / OpenAPI / State Machines) reference: in current canonical version (v1.7 / v0.3 / v1.2)
+- AUDIT_EVENTS catalog: action IDs for slice are enumerated in canonical AUDIT_EVENTS v5.9 (not deferred to amendment)
+- No fail-closed wrapper dependencies on un-ratified evidence sources
+- Pilot-meaningful: slice exercises canonical.json + cross-agent message flow + Codex review path
+
+**Option B+ first-pilot-slice candidates:**
+- **Forms/Intake Templates HTTP/Admin JWT slice** — spec ratified, modest scope, AUDIT_EVENTS-enumerated. Top candidate.
+- **Crisis Response Sprint 2 PR 7+ (slice already largely shipped; remaining endpoints)** — spec ratified, canonical AUDIT_EVENTS amendment pending (would block per criteria).
+- **Med-Interaction Sprint 2 (beyond current PR 9)** — blocked per criteria (AUDIT_EVENTS amendment for `medication_interaction.*` action IDs still pending Spec Corpus ratification).
+
+### 4.3 Rollback runbook (NEW v0.2 per Codex Pass-2 closure)
+
+If pilot fails any hard-stop expansion gate or success criteria block expansion:
+
+1. **Immediate (hour 0):** Orchestrator emits `workforce_pause` event; all agents observe pause within next heartbeat (≤ 30 min); all in-flight PRs cease author + commit; existing PRs stay open `[CODEX-PENDING]` for human review.
+2. **Snapshot (hour 0–2):** Daily canonical event log + `canonical.json` snapshot to S3 versioned bucket (if not already on schedule); commit hash + event-log sha256 captured as `pre_rollback_state` event.
+3. **Decision window (hour 2–48):** Ratifier convenes (Evans + Engineering Lead + named domain expert if available). Reviews: which hard-stop gate fired, what's recoverable, what's lost, what's the consolidation path.
+4. **Consolidation (day 3–7):** Per-repo work in flight is retained (each repo's git history is preserved). Coordination state in canonical event log is preserved (event log is append-only — nothing lost). What's lost: agent runtime state (in-progress reasoning, partial PRs not yet committed).
+5. **Consolidation path A — partial rollback:** Pause failed agent(s); continue with remaining agents at reduced scope. Restart failed agent with refined briefing.
+6. **Consolidation path B — full rollback to single-Claude:** All implementation repos consolidate back to telecheck-app monorepo (or persist as standalone slice repos at maintainer's choice). Single-Claude (this session or equivalent) resumes pre-pilot pattern. canonical event log retained for forensic analysis.
+7. **Consolidation path C — pivot to humans:** Workforce paused indefinitely; human hiring accelerated per Option C; repos retained but inactive until human owners assigned.
+
+**Branch/repo consolidation plan:** Each pilot-spawned repo (Clinical, etc.) maintains a `consolidation-ready` git tag at every PR merge. Rollback to last `consolidation-ready` tag is guaranteed safe (typecheck + tests pass). Cross-cutting changes (Infra Agent) are reversible because they're additive (new shared libs); no removal of existing functionality during pilot.
+
+**Tested:** Rollback runbook MUST be tested via dry-run before pilot begins. Day 0 pilot deliverable includes: invoke `workforce_pause` event on test bench + verify all 3 pilot agents observe pause within 30 min + verify event log + canonical.json snapshot succeeds + verify last `consolidation-ready` tag exists in pilot repo.
 
 ## 5. Cost analysis
 
@@ -232,20 +286,41 @@ Change touching 3 repos requires 3 coordinated PRs. Today's single-repo monolith
 ### R10. Initial bootstrap cost is real
 2 weeks of focused setup work + Evans's attention is non-trivial during a time when shipping seems urgent. **Mitigation:** Option B (3-agent pilot) de-risks; even Option A's 2-week cost amortizes against the 12–18 month timeline of the current trajectory.
 
-## 7. Success criteria
+## 7. Success criteria + hard-stop expansion gates (v0.2 strengthened per Codex BLOCKING-FINDING-2)
 
-For Evans to evaluate at end of Day 14 (Option A) or Day 14 of pilot (Option B):
+### 7.1 Success criteria (evaluated at Day 14 of pilot)
 
 1. **Throughput.** Cumulative PRs across all agents > 2x prior 14-day single-Claude baseline (~30+ PRs vs current ~15).
-2. **Defect rate.** Codex APPROVE on first round ≥ 70% of PRs (matches or exceeds single-Claude rate).
-3. **Canonical.json integrity.** Zero unexplained drift incidents over 14 days; all updates trace to known sources.
-4. **Cross-agent dep resolution time.** Median dep resolution (filed → satisfied) < 48 hours.
-5. **Ratifier queue depth.** Median wait time for ratifier decisions < 5 business days.
-6. **Stall recovery time.** Median stall detection-to-restart < 1 hour.
+2. **Defect rate.** Codex APPROVE on first round ≥ 60% of PRs (lowered from 70% per Codex Pass-1 — N parallel authors increases defect density; pattern stabilizes over time).
+3. **Canonical event-log integrity.** Zero projection mismatches between event-log replay + git-tracked `canonical.json`; all events trace to authorized signed sources.
+4. **Cross-agent dep resolution time.** Median dep resolution (filed → satisfied) < 48 hours; with `filed_at`/`satisfied_at` instrumentation in event log.
+5. **Ratifier queue depth.** Median wait time for ratifier decisions < 5 business days; **no ratifier-queue items aged > 7 business days without resolution or explicit deferral.**
+6. **Stall recovery time.** Median stall detection-to-restart < 1 hour (verified by real stall injection during pilot).
 7. **Spec drift.** Zero unauthorized spec corpus writes detected by audit.
 8. **Cross-agent contract violations.** Zero OpenAPI contract violations escape to integration.
+9. **NEW — Defect escape rate to integration tests.** < 5% of merged PRs require post-merge hot-patch for defects integration tests catch.
+10. **NEW — Severity-weighted defect score.** No P0 escapes; ≤ 2 P1 escapes; ≤ 10 P2 escapes over 14 days. (P0 = production outage / data loss / invariant breach; P1 = functional regression in pilot-critical path; P2 = functional defect in non-critical path.)
 
-Failure on 2+ criteria triggers retrospective + adjustment (not necessarily termination). Failure on 4+ criteria triggers pivot consideration.
+### 7.2 Hard-stop expansion gates (NEW v0.2 — any one freezes expansion immediately)
+
+Expansion from pilot (3 agents) to full workforce (7-8 agents) is **automatically frozen** if ANY of the following occurs during the pilot:
+
+- **HSG-1.** Any P0 / platform-floor defect escape (production outage, data loss, audit-chain corruption, RLS bypass, KMS misuse, invariant breach on I-019/I-023/I-024/I-025/I-027/I-029/I-012).
+- **HSG-2.** Any unexplained drift between event-log replay + git-tracked `canonical.json` (the projection mismatch alert).
+- **HSG-3.** Any unauthorized spec-corpus write (Spec Corpus Agent commit not preceded by a ratification event from Evans / Engineering Lead).
+- **HSG-4.** Any escaped tenant-isolation / auth / audit / clinical-safety / crisis-detection invariant breach detected by QA/Audit Agent's daily consistency check.
+- **HSG-5.** Codex outage > 72 hours with no multi-LLM fallback operational (workforce auto-pauses; expansion frozen until Codex restored OR fallback proven).
+- **HSG-6.** Ratifier-queue saturation: any item aged > 10 business days without resolution = workforce auto-pauses pending Engineering Lead delegation activation.
+- **HSG-7.** Stall-recovery failure: any agent stall undetected by Orchestrator > 4 hours (heartbeat detector itself failed).
+
+Expansion freeze = workforce continues operating in pilot scope (3 agents), but adding 4th–8th agents is blocked until ratifier reviews the freeze trigger + explicitly authorizes resume. Freeze is recorded as `expansion_frozen` event in canonical event log.
+
+### 7.3 Failure-mode response
+
+- Failure on 1 success criterion: retrospective at Day 14; targeted adjustment; no scope change.
+- Failure on 2+ success criteria: retrospective + pause expansion + adjustment.
+- ANY hard-stop expansion gate fires: workforce paused; rollback runbook §4.3 executed if needed; ratifier convenes within 48 hours.
+- ANY P0 invariant breach with platform impact: Option C pivot considered (revert to single-Claude + accelerated human hiring).
 
 ## 8. Open questions for Codex review
 
