@@ -6372,3 +6372,100 @@ The spec-repo working clone had `main` + `origin/main` at `6adaae5` (**Addendum 
 - **Track 5 still queued:** #197→#198 merge order (CI-unblock); clean-room migration-apply CI gate (#194); the 6 plugin-wiring stale-assertion reconciliations.
 
 — Claude (Opus 4.7, remote-cron autonomous firing — no Codex plugin in this env), Crisis Response Sprint 2 PR 3 acknowledge handler (the lone missing mid-lifecycle endpoint), opened as [CODEX-PENDING] PR #199; 23/23 unit tests green vs live PG 16; fast-forwarded the stale cockpit `main` 71 → 87 to rescue stranded addenda 2026-05-23. progress.json revision 191 → 192.
+---
+
+## Addendum 89 — Wave 3a/b/c parallel-agent orchestration close-out: 8 PRs shipped + 2 main-session rescues + 2 hard-floor-item-6 NO-SHIPs (2026-05-23, Evans local session)
+
+**Date:** 2026-05-23
+**Trigger:** Evans's "fire agent orchestration to speed up work. work nonstop for 3 days" standing directive (Addendum 85 trigger continued). After Wave 2's 5-branch parallel close-out, Wave 3 fired in 3 sub-waves (3a → 3b → 3c) of 3 parallel agents each.
+
+### Wave 3 outcomes — 8 branches parked on origin + 2 NO-SHIPs + 2 main-session rescues
+
+| Wave | # | Branch | Commit | Scope | Outcome |
+|---|---|---|---|---|---|
+| 3a | 1 | `feat/crisis-response-sprint2-pr3-post-acknowledge-handler` | `531e6ac` | Crisis Sprint 2 PR 3 — `POST /v0/crisis-events/:id/acknowledge` via SECDEF wrapper `record_crisis_acknowledgement` from migration 037 | Parked [CODEX-PENDING] |
+| 3a | 2 | `feat/admin-backend-sprint2-pr3-post-forms-template-decision-handler` | `36b435b` | Admin Sprint 2 PR 3 — `POST /v1/admin/templates/:template_id/reviews/:review_id/decision` via SECDEF wrapper `record_forms_template_admin_decision`; `admin_template_reviewer` slice role; `approve | reject | request_revision` enum decision | **MAIN-SESSION RESCUE** (silent agent at 120+ min); parked [CODEX-PENDING] |
+| 3a | 3 | `feat/med-interaction-pr9-remaining-write-handlers` | `62fe013` | Med-Int PR 9 — 4 remaining write handlers: `supersede` (OPERATIONAL) + `override/resolve/expire` (FAIL-CLOSED at wrapper layer per Codex R1 closure 2026-05-23; RAISE `0A000` pending evidence-source migrations); same-tx Cat A audit on rejection per I-003 bare-suppression-forbidden | **MAIN-SESSION RESCUE** (silent agent at 120+ min); parked [CODEX-PENDING] |
+| 3b | 1 | `feat/crisis-response-sprint2-pr4-respond-resolve-handlers` | `6943e29` | Crisis PR 4 — `POST /:id/respond` + `POST /:id/resolve` mid-lifecycle handlers + union `audit.ts` extension for the 2 transition kinds | Parked [CODEX-PENDING] |
+| 3b | 2 | n/a | n/a | AI Service Mode 1 chat handler — agent correctly identified the handler was already on main; STOPPED at hard-floor item 6 (no unauthorized net-new architecture) | **NO-SHIP** (duplicate detection) |
+| 3b | 3 | `feat/crisis-response-sprint2-pr5-get-patient-summary-handler` | `5b83db0` | Crisis Sprint 2 PR 5 — patient-scoped `GET /v0/crisis-events/:id/patient-summary` with fail-closed nonce check (patient sees only their own events; staff-scoped GET ships in PR 1 already) | Parked [CODEX-PENDING] |
+| 3b | 4 | `feat/ai-service-mode2-case-prep-handler` | `6de027f` | AI Service Mode 2 case-prep — second AI workload class wired (after Mode 1 chat); `POST /v0/ai/case-prep` mount + workload-type tagging per ADR-029 WORKLOAD_TAXONOMY | Parked [CODEX-PENDING] |
+| 3c | 1 | n/a | n/a | Pharmacy clinician-commit handler — agent identified I-002 is **structurally enforced** by the pharmacy slice's existing state machine (interaction engine runs BEFORE clinician commit by construction, not by procedural check); STOPPED at hard-floor item 6 (would have introduced a parallel-procedural-check architecture absent ratifier authorization) | **NO-SHIP** (architectural-judgment) |
+| 3c | 2 | `feat/crisis-response-sprint2-pr6-sweep-handler` | `65337ce` | Crisis PR 6 — operator-invoked `POST /:id/_sweep` with fencing-token idempotency (no-acknowledgement-after-window escalation; per-event lease-takeover from migration 038 wrapper) | Parked [CODEX-PENDING] |
+| 3c | 3 | `feat/admin-backend-sprint2-pr4-dashboard-reads-deferred-wrappers` | `3cf677f` | Admin Sprint 2 PR 4 — `consult-queue` + `mode1-volume` dashboard reads; both 503 fail-closed scaffolds pending data-source landings (Mode 1 conversation aggregation MV + Async Consult queue projection); `42883` (function-not-exists) + `0A000` (wrapper feature-not-supported) both → tenant-blind 503 per I-025 | Parked [CODEX-PENDING] |
+
+**Plus 2 remote-cron infra-fix branches still queued (tasks #88 + #93):**
+
+| # | Branch | Commit | Scope | Outcome |
+|---|---|---|---|---|
+| A | `fix/migration-chain-apply-bom-strip-and-app-role-provision` | `8d9c4f1` | Strip UTF-8 BOM on migrations 047-050 + provision `telecheck_app_role` in `tests/setup.ts` (the 2 pre-existing main defects blocking the migration chain locally + in CI per Addendum 82) | Pending [CODEX-PENDING] |
+| B | `test/i023-rls-lockdown-reconcile-crisis-admin-med-interaction` | `983de82` | Reconcile I-023 RLS-lockdown tenant-scoped table count `25 → 39` across the 3 slice DB layers landed in Wave 2 (the integration test asserts exact count; new tables from Crisis/Admin/Med-Int migrations bump it) | Pending [CODEX-PENDING] |
+
+### Hard-floor item 6 catches (worked examples)
+
+Two Wave-3 agents correctly STOPPED at hard-floor item 6 rather than shipping unauthorized net-new architecture:
+
+1. **Mode 1 chat handler (Wave 3b)** — agent's pre-flight investigation found the handler already on `main`. Rather than ship a duplicate-build or "redo" PR, agent reported the duplicate-detection + STOPPED. This is the cheap case: the discriminator triggered on duplicate-build detection (not architectural judgment).
+2. **Pharmacy clinician-commit handler (Wave 3c)** — agent's pre-flight investigation found that I-002 ("interaction engine runs BEFORE clinician commits medication_request") is **structurally enforced** by the pharmacy slice's existing state machine (the `medication_request` state machine has a `pending_interaction_check → cleared_for_clinician_review` transition that is the I-002 enforcement point — there is no separate procedural check the handler needs to make). Shipping a parallel procedural check would have introduced a net-new defense-in-depth pattern outside the ratified state-machine architecture. Agent STOPPED + flagged for ratifier consideration. This is the canonical hard-floor item 6 worked example: the agent correctly distinguished "the spec already covers this differently" from "the spec is silent → I'll add coverage."
+
+Both NO-SHIPs preserved the discipline floor. Neither cost wall-clock since the agents exited cleanly with a status report rather than iterating into unauthorized work.
+
+### 2 main-session rescues (silent-agent recovery)
+
+Two Wave-3a sub-agents went silent at ~120+ minutes mid-author:
+
+1. **Admin Sprint 2 PR 3** (POST decision handler) — sub-agent silent at ~120 min. Evans directed "work on the 2 silent agents" → rescued in main session: authored `post-forms-template-decision.ts` + test + audit.ts extension + routes mount. Committed `36b435b` + pushed.
+2. **Med-Int PR 9** (4 remaining write handlers) — sub-agent silent at ~120 min. Rescued in main session immediately after the Admin rescue: authored `supersede-signal.ts` + `override-signal.ts` + `resolve-signal.ts` + `expire-signal.ts` + combined `pr9-write-handlers.test.ts` + seeded `audit.ts` from PR 8 branch + routes mounts + README bump. Committed `62fe013` + pushed.
+
+Both rescues followed the established cross-slice patterns (Option B `withDbRole` composition + same-tx Cat A audit per I-003 + tenant-blind 503 on fail-closed-wrapper 0A000 per I-025 + idempotency via `withIdempotentExecution`). No new architecture introduced; both are direct extensions of patterns Wave 2 established. Typecheck clean on both before push.
+
+`TaskStop` does not work on Agent sub-agents (only on Bash background tasks) — silent-agent recovery is necessarily manual rescue when the agent slot can't be released. Mitigation for future waves: tighter agent briefing on `git restore --staged <slice-namespace>` discipline + smaller per-agent scope (1 handler per agent vs 4) to reduce silent-stall blast radius.
+
+### Cross-slice patterns now consolidated through Wave 3
+
+- **Fail-closed wrapper handling**: Med-Int PR 9 establishes the canonical pattern for wrappers that RAISE `0A000` pending evidence-source migrations — handler scaffolds wire fully, map `0A000` → tenant-blind 503 per I-025, and **emit Cat A audit on rejection per I-003** (the rejected attempt belongs in the audit chain; bare suppression is forbidden). Reusable across any future wrapper marked fail-closed in its source migration.
+- **Mixed-converge mapper**: resolve-signal.ts establishes the pattern for endpoints where the app role has NO GRANT (so PG EXECUTE check fails with `42501` before the wrapper body's `0A000` fires) — both error codes converge to the same client-facing 503 envelope, preventing accidental envelope-divergence cross-tenant signal.
+- **Dashboard 503 scaffolds**: Admin Sprint 2 PR 4 establishes the pattern for dashboard reads whose data sources haven't landed yet — handler scaffolds with `42883` (function-not-exists) + `0A000` (wrapper feature-not-supported) both → tenant-blind 503. Lets the slice ship its UI surface without blocking on the data-source migration.
+- **Operator-invoked write with fencing token**: Crisis PR 6 sweep establishes the pattern for operator-invoked endpoints that need per-event lease-takeover with idempotency (fencing token in body + idempotency key collision detection).
+- **Patient-scoped vs staff-scoped GET split**: Crisis PR 5 + Crisis PR 1 establish the pattern for endpoints where the same resource has two access shapes (patient sees their own; staff sees all-in-tenant) — fail-closed nonce check on the patient-scoped variant.
+
+### Cumulative cycle statistics through Addendum 89
+
+- Wave 1 (Addendum 83): 4 PRs (3 first GET handlers + 1 hotfix), all merged.
+- Wave 2 (Addendum 85): 5 PRs (3 first write handlers + 1 foundation refactor + 1 test backfill), all parked [CODEX-PENDING].
+- Wave 3 (this Addendum): 8 PRs + 2 NO-SHIPs + 2 main-session rescues + 2 prior infra fixes still queued. All 8 shipped PRs parked [CODEX-PENDING].
+- **Total queued for May 26 Codex catch-up: ~15 PRs** (5 Wave-2 + 8 Wave-3 + 2 infra).
+- 5 of 5 pilot-required slices have foundation 051 + first read handler in main.
+- 4 of 5 pilot-required slices now have **first write handler** queued for review (Med-Int 3+4=7 endpoints across PR 8 + PR 9, Crisis 4 endpoints across PR 2+3+4+6, Admin 2 endpoints across PR 2+3, AI Service 2 workload classes across Mode 1 + Mode 2 case-prep).
+- Crisis Response slice is the most-complete: 6 of 6 Sprint-2 handlers shipped (PR 1 read merged; PR 2/3/4/5/6 writes queued). After May 26 Codex cascade, Crisis Response becomes the **first slice to be `/ready` 200**.
+
+### Friction caught for next-wave orchestration design
+
+**Silent-agent failure mode confirmed.** 2 of 3 Wave-3a agents went silent at ~120+ min. Wave-3b + 3c agents (concurrent firing) all completed cleanly. Working hypothesis: longer-scoped handler PRs (Med-Int PR 9 at 4 handlers + Admin PR 3 with deeper audit-extension scope) hit a silent-stall mode the smaller-scoped PRs didn't. **Mitigation for Wave 4+:** keep per-agent scope at 1-2 handlers max; chain dependent PRs as serial sub-waves rather than packing into one agent's brief.
+
+**Hard-floor item 6 discriminator working as intended.** 2 of 9 Wave-3 firings exited with NO-SHIP via the discriminator. The Pharmacy clinician-commit case is the canonical example: the agent correctly identified "the spec already covers this differently" rather than "the spec is silent." Cost: 0 wall-clock (agent exited cleanly with status report).
+
+### Cockpit reconciliation note
+
+This Addendum covers all 8 Wave-3 shipped PRs + the 2 main-session rescues + the 2 NO-SHIPs in a single cockpit bump rather than per-PR Addenda. Rationale: per-Addendum-per-PR is the discipline for **merged** PRs (per CLAUDE.md); these are all [CODEX-PENDING] (not merged) so a Wave-level Addendum mirrors Addendum 85's Wave-2 close-out shape and avoids cockpit-noise inflation while Codex is paused. When the May 26 Codex catch-up cascade runs, **each Codex-APPROVE-then-merge will get its own per-PR Addendum** per the standard discipline.
+
+### Deferred verification (May 26 catch-up)
+
+When Codex limit resets, the queue is now:
+
+- Codex R1 on all 8 Wave-3 branches (independent reviews, parallelizable in pairs/triples per limit posture)
+- Codex R1 on all 5 Wave-2 branches still queued
+- Codex R1 on the 2 remote-cron infra-fix branches
+- Resolve the 2 parallel Med-Int PR 8 attempts (local-session branch `feat/med-interaction-pr8-write-handlers` at `80e8012` vs remote-cron PR #196 — pick the deeper one + close the other per Addendum 85 reconciliation note)
+- Merge cascade with rebase-on-main between merges to keep branch states consistent
+- Per-PR Addenda + r193+ progress.json bumps as each merges
+
+### Next deliverable
+
+**Wave 4 (firing optional based on Evans's continued autonomous-work directive):** Next critical-path items per Master Completion Plan + the current implementation audit are likely Async Consult slice DB layer (next pilot-required slice not yet bootstrapped) + Track 5 CI gate ratification (the migration-chain apply discipline needs a CI gate, not just a hotfix). Both are spec-corpus work (Track 6 / Track 5 ratification) before code work resumes on them, so the parallel-agent orchestration may need to interleave with a spec-side push.
+
+**Codex catch-up wave (May 26 limit reset, ~3 days from now):** mass review + merge cascade on the ~15-branch accumulated queue is the highest-value upcoming work; will likely consume the bulk of the cycle when the limit resets.
+
+**Numbering note:** This Addendum was originally drafted as #86 in Evans's local session but the remote-cron firing concurrently appended Addenda 86 (#197 infra), 87 (#198 RLS reconcile), and 88 (#199 Crisis acknowledge handler — partial Wave-3a overlap with row 3a/1 above). Renumbered to #89 + revision bumped 189 → 193 on rebase to preserve append-only ordering. The #197 + #198 remote-cron firings are the same artifacts as table rows A + B above; the Crisis Sprint 2 PR 3 acknowledge handler exists as two independent parallel attempts (Evans's local-session branch `feat/crisis-response-sprint2-pr3-post-acknowledge-handler` at `531e6ac` vs remote-cron PR #199); the May-26 Codex catch-up cascade picks the deeper of the two + closes the other, mirroring the Med-Int PR 8 reconciliation note from Addendum 85.
+
+— Claude (Opus 4.7, 1M context, Evans's local session), Wave-3 parallel-agent orchestration close-out + 2 main-session silent-agent rescues + 2 hard-floor item 6 NO-SHIPs documented 2026-05-23. progress.json revision 192 → 193.
