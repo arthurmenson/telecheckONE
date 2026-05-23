@@ -5676,3 +5676,55 @@ Choosing the acquisition mechanism — (A) broad INHERIT membership, (B) NOINHER
 - Promotion Ledger entry counter does NOT advance (P-042 remains latest).
 
 — Claude (Opus 4.7), remote-cron firing: AI-service /health + /ready introspection-accuracy PR #193 [CODEX-PENDING] + critical-path re-verification 2026-05-23. progress.json revision 180 → 181.
+
+---
+
+## Addendum 78 — Critical-path re-verification (code-level): all 5 pilot slices remain blocked; NO non-presupposing code work remains after Addendum 77's introspection fix; sustained 2-ERR hard-floor item 6 STOP + meta-blocker (no Codex in remote env). No code PR. (2026-05-23)
+
+**Date:** 2026-05-23
+**Firing type:** remote-cron autonomous firing
+**Codex availability:** **UNAVAILABLE** — re-confirmed this firing: `OPENAI_API_KEY` unset; no `codex` binary on PATH; the CLAUDE.md companion-script path `C:/Users/menso/...` is Windows-only and absent on this Linux container. No authenticated Codex review or two-pass consult is possible.
+**Trigger:** scheduled critical-path firing. Resumed from Addendum 77's two open hard-floor item 6 STOPs. Per discipline, re-verified every pilot-slice candidate **against the actual code** (trust-but-verify, not addendum-trust) and searched for any genuinely-unblocked, non-presupposing code work to ship one PR.
+
+**Ground-truth on entry (verified, not assumed):**
+- `telecheck-app` main = `5da9766` (Med-Interaction DB layer 046–050 + latent role-name defect) — **unchanged** since Addendum 75. local HEAD == origin/main.
+- `telecheckONE` main = `5cb6127` (Addendum 77) — local fully synced with origin after `git fetch` (0 ahead / 0 behind).
+- Both ERRs confirmed **OPEN / `_pending_`** on origin (`§7 Ratifier decision: _pending_` in each): the Med-Interaction role-name reconciliation ERR + the app-role-acquisition ERR. Evans has not yet ratified either.
+- Open PRs on telecheck-app: **#193** (this loop's AI-Mode-1 introspection fix, `[CODEX-PENDING]`) and **#192** (Med-Interaction read-path / partial Option C, `[CODEX-PENDING]`) both still open + unmerged; plus dependabot + SI-doc PRs out of scope.
+
+**Critical-path re-verification (code-level):**
+
+| Item | Status this firing | Verification (this firing) |
+|---|---|---|
+| (a) Med-Interaction PR 7+ | **BLOCKED** — role-name reconciliation ERR (hard-floor item 6, awaiting Evans). | ERR §7 `_pending_`; 046 bare-role creation + 047–050 slice-prefixed refs unchanged on `5da9766`. |
+| (b) Async-Consult clinician decision loop | **BLOCKED** — confirmed *in code* this firing. `consult-service.ts::process` (SUBMITTED→PROCESSING) deliberately `throw new AiServiceNotWiredError` pending SI-007; the docstring (lines 618–649) records that earlier rounds attempted DB-bypass to reach PROCESSING and **Codex forbade it** ("would create PROCESSING rows without consult_events"). PROCESSING/QUEUED/UNDER_REVIEW are unreachable → claim/advise/request_data/refer have no reachable from-state. Implementing them now would produce unreachable, untestable handlers + presuppose the unbuilt AI Mode 2 / SI-007 case-prep architecture. | `src/modules/async-consult/internal/services/consult-service.ts:168-176, 615-661` (direct read) |
+| (c) AI Service Mode 1 chat | **DONE** — introspection fix shipped Addendum 77 (PR #193 `[CODEX-PENDING]`). Nothing further non-presupposing remains (Mode 1 follow-ons — session-lifecycle endpoints, CCR crisis-helpline text — are blocked on CDM v1.3/SI-023 + SI-013 per Addendum 77). | Addendum 77; PR #193 open |
+| (d) Crisis Response Sprint 2 | **BLOCKED** — app-role-acquisition ERR (hard-floor item 6, awaiting Evans). | ERR §7 `_pending_` |
+| (e) Admin Backend Sprint 2 | **BLOCKED** — same app-role-acquisition primitive. | ERR §7 `_pending_` |
+
+**Rollback-coverage check (non-presupposing-work hunt):** all migrations 026–050 have matching `migrations/rollback/NNN_rollback.sql` files — **no rollback gap exists** to fill. (The 047–050 rollbacks reference the prefixed role names = the latent defect, but touching them presupposes the role-name ERR option, so they are correctly left untouched.)
+
+**KEY CONCLUSION — no non-presupposing, pilot-critical-path code PR remains this firing.** Every candidate is (a)/(d)/(e) gated on the two open hard-floor item 6 ERRs awaiting Evans, (b) gated on the unbuilt AI Mode 2 / SI-007 with Codex having already forbidden the only shortcut, or (c) DONE with its one available non-presupposing fix already shipped in Addendum 77. Opening a Crisis/Admin/Med-Interaction handler PR would presuppose a pending ratifier option; implementing the async-consult clinician loop would presuppose SI-007. Authoring marginal test/doc churn purely to "ship a PR" is not engineering value and is declined per the build-discipline floor. **Therefore: no code PR opened this firing** (consistent with the Addendum 75/76 no-presupposition precedent).
+
+**META-BLOCKER (surfaced for Evans).** The remote autonomous environment has **no Codex / `OPENAI_API_KEY`**. Because Codex APPROVE is a mandatory pre-merge gate, the remote loop **cannot merge any PR** — even non-blocked ones (#193 sits `[CODEX-PENDING]`). Combined with the two open hard-floor item 6 ERRs (which require Evans's chat-message ratification AND a two-pass Codex consult that can only run where the plugin is installed), the remote loop is **structurally stalled**: it can author docs/ERRs and open `[CODEX-PENDING]` PRs, but cannot land code. This is the **4th consecutive firing terminating in a hard-floor item 6 STOP** (Addenda 74 + 75 + 76 + this 78; Addendum 77 shipped the single available non-presupposing PR).
+
+**What Evans needs to do to unblock (the two co-ratifiable ERRs + the env gap):**
+1. **Med-Interaction role-name reconciliation** — `Engineering-Review-Request-Med-Interaction-Role-Name-Reconciliation-2026-05-23.md` (Claude rec: **Option C**, spec-conformant bare names, amend in place). Unblocks Med-Interaction PR 7+.
+2. **App-role acquisition for slice SECDEF wrappers** — `Engineering-Review-Request-App-Role-Acquisition-SECDEF-Slice-Wrappers-2026-05-23.md` (Claude rec: **Option B**, NOINHERIT + per-tx `SET LOCAL ROLE` via `withDbRole`). Unblocks Crisis Sprint 2 + Admin Sprint 2 **simultaneously**.
+3. Both ERRs require the mandatory **two-pass Codex consult** (Pass-1 source-first independent + Pass-2 contrast-and-synthesize) before the ratifier decision is finalized — this **must run in Evans's local session** (plugin installed) or in a remote firing provisioned with `OPENAI_API_KEY`. To make the remote loop able to land code autonomously going forward, provision `OPENAI_API_KEY` in the remote-cron environment.
+
+**Recommendation to Evans (no decision-question posed → no Codex consult required for this Addendum itself):** pause the remote-cron autonomous loop until at least one of (1)/(2)/env-provisioning lands, since further unattended firings will keep producing this same STOP without forward code progress. The highest-leverage single action is ratifying the **app-role-acquisition ERR** (unblocks 2 of 5 slices whose DB layers are already complete + Codex-reviewed).
+
+**Shipped this firing (docs only, direct to `telecheckONE:main` — not Codex-gated):**
+1. This Addendum 78.
+2. `progress.json` revision 181 → 182.
+
+**Stop-condition markers (carried, unchanged):** `[RATIFIER-PENDING]` ×2 (Med-Interaction role-name, Addendum 75; app-role acquisition, Addendum 76) + `[CODEX-PENDING]` on PR #193 + remote PR #192.
+
+**Cumulative cycle statistics through Addendum 78:**
+- Pilot-slice status (code-level re-verified): AI Mode 1 chat DONE (c); Crisis + Admin DB-layers complete + Codex-reviewed, app-layer blocked on app-role acquisition (d, e); Med-Interaction DB-layer complete, blocked on role-name reconciliation (a); Async-Consult clinician loop blocked on AI Mode 2 / SI-007 — confirmed in code (b).
+- 2 open hard-floor item 6 ERRs still awaiting Evans (co-ratifiable; app-layer↔slice-SECDEF-role problem space).
+- 4th consecutive firing terminating in a hard-floor item 6 STOP without inline closure — discipline held. No churn PR manufactured.
+- Promotion Ledger entry counter does NOT advance (P-042 remains latest).
+
+— Claude (Opus 4.7), remote-cron firing: code-level critical-path re-verification + sustained 2-ERR hard-floor item 6 STOP + meta-blocker (no Codex in remote env) surfaced 2026-05-23. progress.json revision 181 → 182.
