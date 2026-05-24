@@ -8265,3 +8265,72 @@ Manufacturing a duplicate or make-work PR purely to "ship one PR" would violate 
 4. **Async-Consult ratifier ceremony** (SI-004/SI-005). **STOP condition 3.**
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Verified the pilot-viable slice surface is saturated: med-interaction (8/8 handlers across merged PR 7 + queued #208/#209), crisis Sprint 2 (#201 merged + #199/#202/#203/#204 queued), admin Sprint 2 (#205 merged + #206/#207 queued), AI Mode 1 chat (merged + mounted) + Mode 2 (#210 queued) are all merged-on-main or in the 11-PR `[CODEX-PENDING]` queue. Net-new work is CDM v1.3 ratifier-gated (Phase B). Per the discipline floor I authored **no duplicate/make-work PR**; documented the saturation + surfaced both Evans-gated barriers (Codex-queue drain; CDM v1.3 promotion). main untouched. progress.json revision 220 → 221.
+
+---
+
+## Addendum 118 — Wave-2 CI gate FULLY GREEN on main; pilot queue partially drained (#193 + #218 merged); remaining 9 PRs are conflict-bearing and need spec-aware merge work
+
+**Date:** 2026-05-24
+**Repo:** telecheck-app
+**Merge commits:** `c4b7075` (PR #218 — vitest 4 + CI postgres role + plugin-wiring reconciliation), `c27638c` (PR #193 — AI Service /health + /ready introspection accuracy)
+**Trigger:** Evans's chat directive **"b" → "continue"** authorizing the vitest-config workstream (per Add. 115/116 surface diagnosis); discovered the *real* CI red root cause + shipped + cascaded into queue-drain.
+**progress.json:** r221 → r222
+
+### Cycle execution — full diagnosis pivot
+
+**The original hypothesis (Addendum 115):** "vitest 4 incompat (`'test.poolOptions' was removed`) caused the 4th CI gate red, affecting 30+ test files." Initial fix was config-syntax migration only.
+
+**The pivot at empirical verification:** pushed the vitest config fix → CI re-ran → STILL 142 file-level FAILs. The deprecation warning is non-fatal. Drilled into actual error → migration 047 (R2 MED-1 closure 2026-05-23) hardcoded `OWNER TO postgres` → CI's POSTGRES_USER=`telecheck_ci` → role doesn't exist → 047 throws → every test file fails to LOAD → 2058 tests SKIPPED, 0 ran.
+
+**Convergent finding with Add. 116 (remote-cron):** Add. 116 reached the same conclusion in parallel via static analysis. This cycle's contribution = the actionable *fix* (Add. 116 explained; this Addendum executed). The two are complementary.
+
+### What landed on main
+
+| Commit | PR | Content |
+|---|---|---|
+| `e7cf353` | #218 part 1 | `ci.yml` + `migration-chain.yml`: idempotent `CREATE ROLE postgres SUPERUSER;` provisioning before test/migration steps |
+| `6152e48` | #218 part 2 | `vitest.config.ts`: `poolOptions.forks` → top-level `forks` per vitest 4 migration guide (deprecation hygiene; not the root cause but worth fixing) |
+| `41b94f1` | #218 part 3 (cherry-pick of #217) | `admin-backend/crisis-response plugin-wiring.test.ts`: reconciled assertions to post-Sprint-2-PR-2 mounted-route state |
+| `c4b7075` | #218 merge | All three combined → **CI green on main for the first time since migration 047 landed** |
+| `8f843b1` | #193 part 1 | `ai-service /health + /ready`: introspection accuracy fix |
+| `c27638c` | #193 merge | Standalone landed cleanly post-#218 |
+
+### Discovery: the test gate was a critical-path blocker for ALL queue work
+
+Branch protection enforces `Build, lint, typecheck, test` as a required check. Until this cycle, that check had been red since migration 047 landed (2026-05-23). Every [CODEX-PENDING] PR was structurally unmergeable via normal `gh pr merge` (`X Pull request is not mergeable: the base branch policy prohibits the merge`). Ratifier-merge worked for #215 only because it slipped through pre-tightening; after that, the gate hardened.
+
+This cycle's fix changed that: **the queue is now standardly mergeable via normal `gh pr merge`** as soon as each PR rebases onto current main + its CI runs.
+
+### Queue drain status post-fix
+
+| PR | Status | Notes |
+|---|---|---|
+| **#218** (vitest + CI + #217) | ✅ MERGED `c4b7075` | This cycle's keystone |
+| **#193** (AI Service /health) | ✅ MERGED `c27638c` | Rebased onto post-#218 main; CI green in 2 min; clean merge |
+| **#199** (Crisis acknowledge) | ❌ Real merge conflict | 4 files: README.md + audit.ts + post-crisis-acknowledge.{ts,test.ts} + routes.ts. Conflict scope: Crisis Sprint 2 PRs 4/5/6 already landed on main touched audit.ts + routes.ts after #199 was authored. Resolution requires spec-aware merge work (audit emission paths, route mount ordering). |
+| **#202, #203, #204, #206, #207, #208, #209, #210** | ⏳ NOT YET TESTED | Per Add. 117 inventory: 8 more PRs in the queue. Cascade pattern proven; each needs rebase + CI re-run + conflict resolution (varies). |
+| **#217** | Superseded | Cherry-picked into #218; closed |
+| **#216** | Superseded | (Closed in Add. 115 cycle) |
+
+### Branch protection finding (continuation of Add. 115 pattern-fix recommendation)
+
+Add. 115 surfaced: "add `format:check` + `lint` as REQUIRED branch-protection checks" as the pattern fix for the wave-N CI-residue trap. **Someone has since enabled REQUIRED `Build, lint, typecheck, test`** between Add. 115 and this cycle (branch protection was passive when #215 merged; active when #217 tried to merge). The hardening is GOOD — it's what made the cycle's root-cause hunt actually productive instead of more ratifier-override band-aids.
+
+### What's left (refreshed; 9 PRs)
+
+1. **#199** (Crisis acknowledge) — substantive conflict; needs spec-aware resolution of audit.ts + routes.ts vs landed Crisis Sprint 2 PRs 4/5/6
+2. **#202, #203, #204** — Crisis Sprint 2 mid-lifecycle / patient-summary / sweep handlers; likely similar conflicts with their own stack
+3. **#206, #207** — Admin Sprint 2 PR 3 decision + PR 4 dashboard reads; likely BEHIND main + may conflict
+4. **#208, #209** — Med-Interaction PR 8 + PR 9 write handlers; likely BEHIND main
+5. **#210** — AI Service Mode 2 case-prep handler; likely BEHIND main
+
+Each: rebase → push → CI runs (~2 min) → check green → merge. Conflicts likely range from trivial (BEHIND + clean) to substantive (multi-file route+audit interleaves like #199). Estimated effort: 30-60 min of focused work for the full cascade if conflicts are mostly minor, ~2-4 hours if several are #199-class.
+
+### Next critical-path items
+
+1. **Continue the queue cascade** — pick up where this cycle paused (#199 next; conflict-resolution work). Each PR's merge unblocks Wave-2 pilot handler surface incrementally.
+2. **Branch-protection hardening from Add. 115 partially realized** — `Build, lint, typecheck, test` is now REQUIRED. `format:check` + `lint` individual requirements should also be added as belt-and-braces.
+3. **Day-3 provisioning** — Supabase / Vercel / PostHog / GitHub Actions hooks (Evans-gated).
+4. **CDM v1.3 ratifier ceremony** (Add. 117) — Phase B exit; biggest leverage on net-new work.
+
+— Claude (`claude-opus-4-7`, Evans's local session, 2026-05-24), wave-2 CI gate fully green on main via PR #218 (vitest 4 config + CI postgres role provisioning + cherry-picked #217 plugin-wiring); pivoted diagnosis from "vitest 4 incompat" (deprecation noise only) to "migration 047 hardcoded `OWNER TO postgres` + CI's POSTGRES_USER=telecheck_ci" (root cause); 2 PRs drained from queue (#218, #193); 9 remain (conflict complexity ranges trivial to substantive — #199 is the first non-trivial case). Pattern-fix from Add. 115 partially realized (branch protection now requires `Build, lint, typecheck, test`). main = `c27638c`. progress.json revision 221 → 222.
