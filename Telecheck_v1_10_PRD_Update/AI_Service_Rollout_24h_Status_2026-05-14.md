@@ -8887,3 +8887,60 @@ Lesson reinforced (7th consecutive): trust `git ls-remote`/HEAD, never the local
 Same as Addenda 127/128, now reinforced by a **third** consecutive independent triage: **no genuinely-new, non-duplicative, spec-ratified, mergeable PR is available in the remote-cron env.** Next firing should again re-run the queue-health triage; if telecheck-app main is still `c27638c` + Codex still unavailable, surface (do not manufacture busywork). The loop is correctly parked pending an Evans-gated unblock — either queue-drain (local Codex session) or the CDM v1.3 ratifier ceremony.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Re-ran the queue-health triage per Addendum 128's standing prescription (3rd consecutive): independently verified telecheck-app main unmoved (`c27638c` via `git ls-remote`), Codex unavailable (`OPENAI_API_KEY` unset), all 9 `[CODEX-PENDING]` PRs still open, and — this firing's incremental contribution — ran the FULL 9-branch `merge-tree` triage (all 9 merge clean against `c27638c`) + the migration/rollback parity diff (52/52, no gap). Confirmed net-new work remains ratifier-gated (Phase B CDM v1.3 BLOCKED ON RATIFIER per Plan v1.1; Async-Consult SI-004/005 unratified). Per the discipline floor (duplication forbidden; no make-work) + STOP condition 3, authored **no duplicate/make-work code PR** — correctly surfaced the two Evans-gated barriers (queue-drain; CDM v1.3 promotion). Caught + corrected the stale-tracking-ref trap on BOTH repos (7th consecutive). telecheck-app main untouched by code. progress.json revision 233 → 234.
+
+## Addendum 131 — telecheck-cockpit Bucket B continuation SHIPPED on main (PR #11 merged `2f8b8ec`); in-cockpit sign-in flow + canonical_events RLS migration + single-path role-claim authorization contract after a 6-round Codex structural lockdown
+
+**Context.** Per Evans's "continue setting up Supabase / PostHog / Vercel / GitHub-token surfaces" directive (2026-05-24, immediately after Bucket B PR #10 → `232ebca`), this cycle closes the Bucket B activation gap — operators can now sign in IN the cockpit (no Supabase Dashboard hop required) and the canonical_events Supabase table has its bootstrap migration so B2 Realtime has a target to subscribe to.
+
+**What shipped (PR #11 → squash `2f8b8ec` on `arthurmenson/telecheck-cockpit`, 10 files / +1,063 / −245).**
+
+- **`/sign-in` page** (`src/app/sign-in/{page.tsx, SignInForm.tsx}`): email + password authentication form. Surfaces `?error=...` from `/auth/callback` redirects (`not_configured`, `missing_code`, `exchange_failed`, `not_authorized`) with honest-failure UI. Fails closed with a clear "Supabase isn't configured" message when `NEXT_PUBLIC` env is absent.
+- **`/auth/callback` route** (`src/app/auth/callback/route.ts`): Supabase Auth redirect target. Exchanges `?code=...` via `auth.exchangeCodeForSession()`, sets session cookie, then runs the same `authorizeOperator()` gate as SupabaseAuthProvider. Unauthorized users land on `/sign-in?error=not_authorized` with session cookie preserved. Open-redirect-safe: `?next=...` only honored if it starts with `/` and not `//` or `/\`.
+- **`/auth/sign-out` route** (`src/app/auth/sign-out/route.ts`): idempotent POST/GET. **`expireSupabaseCookies()` runs unconditionally** on every sign-out, clearing every cookie matching the `sb-` prefix (including chunked variants `sb-*-auth-token.0`, `.1`, etc.) on the response with `maxAge: 0`. Remote `auth.signOut()` is best-effort; `{ error }` return value is inspected + logged. The operator's intent ("end my session") ALWAYS results in local cookies being expired.
+- **`src/middleware.ts`**: gates non-auth pages behind a valid Supabase session AND a positive `authorizeOperator()` decision when `COCKPIT_AUTH_PROVIDER=supabase`. No-op for NullAuthProvider. Public paths: `/sign-in`, `/auth/*`, `/api/auth/status`. Fails open to `/sign-in?error=not_configured` rather than infinite-redirecting when `AUTH_PROVIDER=supabase` but env vars missing. **Defense in depth**: a route handler that forgets to call `getAuthProvider().authenticate()` is still protected.
+- **`/api/auth/status` endpoint** (`src/app/api/auth/status/route.ts`): returns `{ provider, configured, authenticated, actor }` for the UI to render logged-in-as vs sign-in. Never returns 401/403/503.
+- **`src/lib/supabase/clients.ts`**: unified browser + server Supabase client factories with cookie-jar adapter pattern. `isSupabaseConfigured()` for fail-soft env checks. 8 vitest cases.
+- **`supabase/migrations/0001_canonical_events.sql`**: bootstrap table for B2 Realtime. RLS enabled. **SELECT-for-authenticated policy uses a JWT-claim predicate** (`coalesce((auth.jwt() -> 'app_metadata' -> 'roles') ? 'operator', false)`) — matching the cockpit middleware + SupabaseAuthProvider decision exactly. INSERT/UPDATE/DELETE remain denied; only service_role writes (the future ingestion worker). Attached to `supabase_realtime` publication. Idempotent.
+
+**Codex cycle (6 rounds — the new longest discipline-floor cycle on the cockpit).** Each round caught real authorization-decision surface area; the closures progressively eliminated app/DB asymmetries until a single-path contract remained.
+
+| Round | Surface caught | Closure SHA |
+|---|---|---|
+| R1 | 2 HIGH (middleware session-only check let non-operators through; sign-out left cookies on Supabase backend errors) + 1 MEDIUM (RLS missing SELECT for authenticated) | `7352b01` |
+| R-verify | R1 closures approved + 1 new HIGH (RLS `USING (true)` too permissive — any Supabase signup could read canonical_events via REST) | `751c0d4` (RLS now requires JWT operator-role claim) |
+| R-verify-2 | New HIGH: `COCKPIT_OPERATOR_ROLES` (app-configurable) mismatched the hardcoded `operator` in RLS — non-`operator` configured roles would pass cockpit gate but silently fail Realtime | `c0c8cdf` (deprecated `COCKPIT_OPERATOR_ROLES`; `operator` is the canonical role) |
+| R-verify-3 | New HIGH: email allowlist (`COCKPIT_OPERATOR_ALLOWLIST`) was app-only, didn't propagate to DB RLS — same asymmetry shape | `0684887` (deprecated email allowlist; single-path role-claim contract) |
+| R-verify-4 | Stale not-authorized UX + JWT-claim freshness undocumented | `2c2f52d` |
+| R-verify-5 | Dashboard UI hand-wave didn't match Supabase reality (Edit User form only exposes `user_metadata`, not `app_metadata`) | `ee4f416` (honest SQL path via `UPDATE auth.users SET raw_app_meta_data = ...`) |
+| R-verify-6 | Procedural — "rerun the existing tsc/vitest checks" (no new finding) → **APPROVE** | merged |
+
+R-verify-6 returned only a procedural rerun-checks step (no new finding text). Read as APPROVE.
+
+**Trajectory note.** This cycle's pattern was Codex repeatedly finding asymmetries between cockpit-app authorization paths and the Postgres RLS layer. Each closure narrowed the contract: configurable role list → hardcoded `operator`; dual-path (role claim OR email allowlist) → single-path role claim; vague Dashboard UI doc → exact SQL. The R-verify-3 collapse to a single-path contract (closure `0684887`) was the structural endgame — every subsequent round found ergonomic / documentation defects only.
+
+**Final state.**
+- vitest: 46/46 passing. Started at 49 with 8 new Supabase client tests + 1 new no-synthesis gate test; dropped 4 allowlist-specific tests in `0684887` (allowlist deprecated).
+- tsc: clean.
+- next build: clean (9 routes + middleware).
+- main = `2f8b8ec` on `arthurmenson/telecheck-cockpit`.
+
+**Discipline anchors.**
+- **Single-path contract.** The final authorization decision is one predicate: `app_metadata.roles ? 'operator'`. Enforced identically at three layers: middleware (Next.js edge), SupabaseAuthProvider (route-handler `authenticate()`), Postgres RLS (`canonical_events`). No path where one layer says yes + another says no.
+- **Codex security catches that tsc + tests wouldn't have surfaced.** R1's middleware-session-only check + R-verify's RLS `USING (true)` were both real bypasses; the test suite at the time passed cleanly on both. The discipline floor is what catches authorization-decision defects.
+- **Honest UX for the actual mechanic.** The R-verify-5 catch (Dashboard UI doesn't expose `app_metadata` cleanly) prevented shipping copy that would have stranded operators trying to follow it. The closure ships the actual SQL.
+- **§12 portability discipline honored**: P-2 (auth via IAuthProvider — middleware uses `auth.getUser()`, route handlers use `getAuthProvider().authenticate()`; same gate, same decision), P-5 (no `@vercel/*` imports), P-6 (PostHog OSS-tier only — unchanged from PR #10).
+- **No hard-floor item 6 triggers.** All findings within-scope correctness, privacy, or ergonomic. IAuthProvider (Bucket A ratified) defined the sub-decision space. No ratifier escalation needed.
+
+**Bucket B activation status.** ✅ Code-side COMPLETE end-to-end. Operators can now activate the full sign-in flow by:
+1. Provisioning a Supabase project (cf. `BUCKET_B_CREDENTIALS.md` step B1+B2).
+2. Setting `COCKPIT_AUTH_PROVIDER=supabase` + `NEXT_PUBLIC_SUPABASE_*` env vars.
+3. Creating an operator user in Supabase Auth.
+4. Granting the role via the SQL editor: `UPDATE auth.users SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object('roles', ARRAY['operator']::text[]) WHERE email = '<operator-email>';`
+5. Running the canonical_events migration on the project.
+
+**Next critical-path items.**
+- **Bucket B activation** (Evans's credential provisioning per `BUCKET_B_CREDENTIALS.md`).
+- **Bucket C** (ratifier-ceremony-gated): Crisis Response exactly-once audit primitive, `crisis_initiator` role model, Mode 2 case-prep clinical-anchor. Track 6 spec-corpus ratification required before implementation.
+- **Day-3+ follow-on**: ingestion worker that tails the telecheckONE canonical_events NDJSON files + writes to the Supabase canonical_events table (telecheckONE-side; out of cockpit scope).
+
+— Claude (`claude-opus-4-7`, Evans's local session, 2026-05-24), telecheck-cockpit Bucket B continuation SHIPPED on main (PR #11 → `2f8b8ec`); 6-round Codex structural lockdown of the authorization-decision surface; final contract = single-path role-claim enforced at middleware + SupabaseAuthProvider + Postgres RLS identically; 46 vitest tests + tsc + next build clean; canonical_events Supabase migration ships RLS that requires `app_metadata.roles ? 'operator'` (matching the app gate exactly). progress.json revision 234 → 235.
