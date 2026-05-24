@@ -8791,3 +8791,45 @@ Manufacturing a duplicate or make-work PR purely to satisfy "ship one PR" would 
 Same as Addendum 127, now reinforced by a second consecutive independent triage: **no genuinely-new, non-duplicative, spec-ratified, mergeable PR is available in the remote-cron env.** Next firing should again re-run the queue-health triage; if main is still `c27638c` + Codex still unavailable, surface (do not manufacture busywork). The loop is correctly parked pending an Evans-gated unblock — either queue-drain or the CDM v1.3 ratifier ceremony.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Re-ran the queue-health triage per Addendum 127's prescription: independently verified main unmoved (`c27638c` via `git ls-remote`), Codex unavailable (`OPENAI_API_KEY` unset), and all 9 `[CODEX-PENDING]` PRs still open + conflict-free (actual trial-merge of #209 into `c27638c` clean — re-confirming Addendum 127's `merge-tree` finding). Confirmed migration/rollback parity 000→052 (no DB-layer gap). Per the discipline floor (duplication forbidden; no make-work) + STOP condition 3 (CDM v1.3 + Async-Consult ratifier-gated), authored **no duplicate/make-work code PR** — correctly surfaced the two Evans-gated barriers (queue-drain; CDM v1.3 promotion). Both repos' main untouched by code. progress.json revision 231 → 232.
+
+## Addendum 129 — telecheck-cockpit Bucket B Day-3+ scaffolds SHIPPED on main (PR #10 merged `232ebca`); SupabaseAuthProvider with fail-closed authorization gate + Supabase Realtime augmentation + PostHog locked to URL-only-pageview + 9-property-allowlist + Vercel deploy config + operator credential drop-in checklist
+
+**Context.** Per Evans's "Bucket B" directive (2026-05-24, immediately after Bucket A completion), this cycle ships the 4 external-service surfaces Bucket A's code-only closures expected to drop into. Each surface ships as fail-closed code: when env vars are absent the cockpit behaves identically to today (Null auth, disk-loader poll, fake-orchestrator chat fallback, no telemetry). When credentials drop in via `.env.local` or Vercel project settings, each surface activates without further code changes.
+
+**What shipped (PR #10 → squash `232ebca` on `arthurmenson/telecheck-cockpit`, 17 files / +2,033 / −37; 41 vitest tests, up from 19 at Bucket A merge).**
+
+- **B1 — SupabaseAuthProvider** (`src/lib/auth/supabase.ts`): validates the Supabase session cookie via `@supabase/ssr`'s `createServerClient` + `auth.getUser()`. Returns `ok` with stable `sub`/`displayName`/`roles` on success, `unauthenticated` on missing/expired cookie, `provider_unavailable` (503) on Supabase network failure. Throws at construction when `NEXT_PUBLIC_SUPABASE_URL` / `*_ANON_KEY` are absent. Factory switches `COCKPIT_AUTH_PROVIDER=supabase` from throw-not-implemented (Bucket A stub) to real construction. **Authorization gate is fail-CLOSED**: a valid Supabase JWT alone does NOT grant cockpit access; the user must also satisfy `app_metadata.roles ∩ COCKPIT_OPERATOR_ROLES ≠ ∅` OR `email`/`id ∈ COCKPIT_OPERATOR_ALLOWLIST`. Otherwise `forbidden` (403). Decision extracted into pure exported `authorizeOperator()` for unit testability; 10 dedicated tests cover every branch.
+- **B2 — Supabase Realtime augmentation** (`src/lib/realtime/supabase-realtime.ts`): `useSupabaseRealtimeRefresh()` hook subscribes to `public.canonical_events` `postgres_changes` and dispatches the existing `cockpit:refresh` `CustomEvent` to preempt the 5s disk-loader poll. Wired into AppShell once. Disk-loader poll stays as defense-in-depth + offline fallback. No-ops cleanly when env not configured; subscription errors logged via `console.warn`.
+- **B3 — Vercel deploy** (`vercel.json` + `.env.example` + `BUCKET_B_CREDENTIALS.md`): minimal `vercel.json` (`framework: nextjs` + `no-store` `Cache-Control` on `/api/*`). `BUCKET_B_CREDENTIALS.md` is an operator drop-in checklist with effort/cost estimates per service + step-by-step provisioning instructions including the authorization-gate env vars Evans must set.
+- **B4 — PostHog client provider** (`src/lib/telemetry/posthog-provider.tsx`): **strict pageview-only posture under multi-layer lockdown**. Event-level: `before_send` allowlist callback. Only `$pageview` AND events carrying `COCKPIT_INTENTIONAL_MARKER` reach the wire. Property-level: `$pageview` events are rewritten to a 9-key allowlist (`distinct_id`, `$session_id`, `$window_id`, `$insert_id`, `$time`, `$sent_at`, `token`, `$lib`, `$lib_version`). Everything else dropped — including `$current_url` (could contain auth-callback secrets), `title`, `$referrer`, raw user agent, screen/viewport dims, campaign tracking. Per-feature emitter pins: `autocapture: false` + `capture_dead_clicks: false` + `capture_heatmaps: false` + `capture_pageleave: false` + `disable_scroll_properties: true` + `capture_performance: false` + `disable_session_recording: true` + `disable_surveys: true`. Remote-config kill switch: `advanced_disable_decide: true`. External-dep lockdown + belt-and-braces masks. OSS-tier features only per AGENTS.md §12 P-6.
+- **B5 — ANTHROPIC_API_KEY**: no code changes (already env-wired since Bucket A).
+
+**Codex cycle (6 rounds; the longest discipline-floor cycle of the cockpit's lifecycle to date).**
+
+| Round | Findings | Closure |
+|---|---|---|
+| R1 | HIGH Supabase fail-open authorization + MEDIUM PostHog autocapture | `ca0e894` |
+| R-verify | Supabase APPROVED + new MEDIUM PostHog dead-click extension | `2798296` |
+| R-verify-2 | New MEDIUM PostHog heatmaps; closure pivots to `advanced_disable_decide: true` remote-config kill switch | `197f0ea` |
+| R-verify-3 | New MEDIUM PostHog pageleave + scroll props; closure pivots to `before_send` event-allowlist | `44c5629` |
+| R-verify-4 | New MEDIUM `$pageview` payload leak ($current_url with possible OAuth-callback secrets); closure adds property-allowlist on $pageview | `b9763fa` |
+| R-verify-5 | **APPROVE no material findings** | — |
+
+R-verify-5 verbatim: "I could not substantiate a remaining ship-blocking bypass. Installed posthog-js routes standard pageview, pageleave, identify, alias, and normal capture calls through capture() and runs before_send before enqueue/send; the local hook rewrites $pageview properties and drops unmarked internal events."
+
+The trajectory shows Codex iteratively finding PostHog's per-feature data-collection vectors. Each iteration was a real catch and made the next move obvious. The closures progressed from per-feature toggles to structural gates: `autocapture: false` (single toggle) → `advanced_disable_decide: true` (remote-config kill switch — closes a category) → `before_send` event-allowlist (catch-all for new event types) → property-allowlist on `$pageview` (catch-all for new properties on the one allowed event). That's the architectural answer that closes the recurring-finding pattern.
+
+**Discipline anchors.**
+- **The recurring-finding pattern was a real cost.** 6 rounds is the longest cycle this cockpit has run + the bulk was Codex finding one more PostHog vector per round. The architectural fix landed in R-verify-3/4.
+- **Codex caught a real security defect that tsc + tests would have missed.** SupabaseAuthProvider defaulting `roles` to `["operator"]` when absent would have silently granted operator access to anyone Supabase authenticated. HIGH + correct catch.
+- **No hard-floor item 6 triggers.** All findings within-scope correctness or privacy, not architectural-judgment.
+- **§12 portability discipline honored**: P-2 (SupabaseAuthProvider now the canonical real provider), P-5 (no `@vercel/*` imports), P-6 (PostHog OSS-tier only), P-7 (no RemoteTrigger).
+
+**Bucket B status.** ✅ COMPLETE on the code side (5/5 obligations shipped). Activation requires Evans to provision credentials — see `BUCKET_B_CREDENTIALS.md` at the cockpit repo root.
+
+**Next critical-path items.**
+- **Bucket B activation** (Evans's credential provisioning): ANTHROPIC_API_KEY → PostHog → Supabase → Vercel → GitHub Actions token.
+- **Bucket C** (ratifier-ceremony-gated): Crisis Response exactly-once audit primitive, `crisis_initiator` role model, Mode 2 case-prep clinical-anchor.
+- **Day-3+ follow-on PRs** (filed in cockpit `KNOWN_FOLLOWUPS.md`): `/auth/callback` handler + per-identity rate limiting.
+
+— Claude (`claude-opus-4-7`, Evans's local session, 2026-05-24), telecheck-cockpit Bucket B Day-3+ scaffolds SHIPPED on main (PR #10 → `232ebca`); 6-round Codex cycle (R1 → R-verify-1 [Supabase APPROVED + new MEDIUM] → R-verify-2 → R-verify-3 → R-verify-4 → R-verify-5 APPROVE); recurring-finding pattern closed by structural fix (event allowlist + property allowlist + remote-config kill switch); 41 vitest tests + tsc + next build clean. progress.json revision 232 → 233.
