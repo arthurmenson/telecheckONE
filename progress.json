@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 230,
+  "revision": 231,
   "updated": "2026-05-24",
   "lifecycle": {
     "current": "foundation-build",
@@ -100,7 +100,7 @@
       "status": "spec-final",
       "progress": 100,
       "owner": "",
-      "notes": "Mode 1 + Mode 2 architecture per ADR-002.",
+      "notes": "Mode 1 + Mode 2 architecture per ADR-002. Mode 1 chat MOUNTED on main; Mode 2 case-prep handler queued as PR #210 (rebased clean onto main c27638c, AI_MODE2_ENABLED-gated default-OFF, full suite green) — [CODEX-PENDING], merge blocked solely on Codex availability.",
       "docs": [
         "Telecheck_AI_Clinical_Assistant_Slice_PRD_v1_0.md"
       ],
@@ -636,6 +636,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-24T12:30:00.000Z",
+  "updatedAt": "2026-05-24T17:35:00.000Z",
   "lastSyncedSha": "c27638c"
 }
