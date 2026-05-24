@@ -7936,3 +7936,57 @@ Rather than duplicate the queue or force an ungated merge, shipped the one clean
 4. **Day-3 provisioning** (Supabase / Vercel / PostHog / GitHub Actions) — operator/Evans-gated.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex plugin in this env), 2026-05-24. Re-verified live remote (`git ls-remote`: telecheck-app main = `f6c5160`) after re-encountering the stale-`045` briefing trap; confirmed all five priority-ladder code items are on-main, queued (duplication-forbidden), or ratification-blocked, and the two unblock levers are Evans-gated; correctly shipped **no duplicate code PR**; genuine in-floor deliverable = docs PR #213 fixing the false `## No code yet` CLAUDE.md footer + adding a stale-tracking-ref-trap inoculation for future firings. No decision-question posed to Evans (Codex unavailable → dual-recommendation two-pass cannot run). progress.json revision 213 → 214.
+
+## Addendum 111 — telecheck-cockpit Codex R1+R2+R3 fix cycle COMPLETE; PR #6 squash-merged to main; first full discipline-floor cycle on cockpit
+
+Date: 2026-05-24
+Squash commit: `fe5b32a`
+Branch: `fix/codex-r1-findings` (deleted post-merge)
+
+### What landed
+
+7-commit fix cycle on cockpit closing 5 Codex R1 findings (3 HIGH + 2 MEDIUM) + 1 R2 follow-up + 1 R1 follow-up:
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| C1 | HIGH | Event Log false-trust "Integrity verified" pill | State machine (`unverified`/`verifying`/`verified`/`failed`); click handler transitions only to `failed` until Day-3+ hash-chain verify endpoint exists — honest signal until then. Cleanup commit removed unused `setIntegrityVerifiedAt`. |
+| C2 | HIGH | Chat history/draft lost on screen nav | Lifted state to AppShell + localStorage draft persistence (`cockpit-chat-draft` key). Messages stay in-memory (Day-3+ canonical event log obligation). |
+| C3 | HIGH | `CockpitEvent.json: string` brittle at jsonb boundary | Widened to `unknown` + render-side normalizer. |
+| C4 | MEDIUM | Drawer `aria-modal` without focus trap | Focus trap + capture/restore + ancestor-sibling `aria-hidden` walk (R2 follow-up corrected the R1 body-children walk that missed app root when drawer renders inline from AgentsScreen). |
+| C5 | MEDIUM | `AgentStatus` missing `activation_pending` | Added to union + amber dot in AgentDot (no glow — pending should not pulse like active). |
+
+### Discipline-floor cycle observed
+
+R1 → R2 (1 MEDIUM follow-up on C4 surfaced; ancestor-walk fix) → R3 (no material findings; Codex APPROVE). Three rounds total. The "ancestor walk" vs "body-children walk" R2 finding is the precedent worth remembering: when a modal renders inline (not portaled), the AT-isolation walk must climb the ancestor chain hiding non-ancestor siblings at each level, not just iterate `document.body.children`. Codex caught this exactly once and the fix is permanent in `src/components/shell/Drawer.tsx`.
+
+### Carry-debt resolved
+
+Both pilot repos (cockpit + forms-intake — see Addendum 112) now have **Codex-APPROVE** on every merged change, replacing the prior "ratifier-merged without Codex" cascades from Addenda 108 + 109. Full discipline-floor compliance restored for the agentic-workforce pilot stack.
+
+— Claude (Opus 4.7, 1M context, Evans's local session), 2026-05-24. progress.json revision 214 → 215.
+
+## Addendum 112 — telecheck-forms-intake Codex R1+R2+R3 fix cycle COMPLETE; PR #11 squash-merged to main
+
+Date: 2026-05-24
+Squash commit: `a5010b3`
+Branch: `fix/codex-r1-findings` (deleted post-merge)
+
+### What landed
+
+4-commit fix cycle on forms-intake closing 3 Codex R1 HIGH findings + 1 R2 MEDIUM follow-up:
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| F1 | HIGH | `listTemplatesForTenant` missing `AND tenant_id = $N` | Added explicit tenant filter to both cursor + non-cursor SELECT branches (I-023 Layer 3 defence-in-depth parity with detail + write paths). Caller in `routes/templates.ts:248` updated. Integration test seeds two-tenant scenario and asserts list-isolation. |
+| F2 | HIGH | `recordReviewDecisionAndFlipTemplateStatus` committed decision even when parent not in `pending_review` | Captures `parentUpdate.rowCount`; throws typed `TemplateReviewConflictError` if 0 → rolls back transaction (atomicity preserved). R2 follow-up: handler catches typed error → returns 409 with tenant-blind body `{ error: "Conflict", code: "parent_status_conflict", message: "Template state changed since review was requested. Refresh and retry." }`. Integration test re-pinned from `toBeGreaterThanOrEqual(500)` to `toBe(409)` + I-025 message-leak assertion. |
+| F3 | HIGH | Composition root always constructed `NullAuthProvider`, ignoring `AUTH_PROVIDER` | New `createAuthProvider(config)` factory at `src/lib/auth/factory.ts` branches on `config.AUTH_PROVIDER`; `'supabase'` requires `SUPABASE_JWT_SECRET` (throws if missing). Composition root uses factory. SupabaseAuthProvider stub at `src/lib/auth/supabase.ts` throws on verify (wiring defect fixed; JWT logic is a clean follow-up). 5 factory unit tests pass. |
+
+### Discipline-floor cycle observed
+
+R1 → R2 (1 MEDIUM on F2; recoverable-conflict was masked as 500) → R3 (no material findings; APPROVE). The F2-R2 finding is the precedent worth remembering: throwing a bare `Error` from a repo layer maps to Fastify's default 500 — when the failure mode is a recoverable race (concurrent transition / soft-delete / stale client), a typed error class + per-handler `.catch` translation to 409 is the right pattern. New `TemplateReviewConflictError` at `src/modules/forms-intake/repos/errors.ts` is the canonical repo-seam pattern for this slice; cross-handler consolidation with the inline `TemplateStatusConflictError` at `routes/templates.ts:668` is an optional future cleanup (both patterns coexist acceptably).
+
+### Status
+
+Forms-intake R1 → R3 cycle complete. Both pilot repos now have full Codex APPROVE provenance. Next critical-path: telecheck-app 20-PR `[CODEX-PENDING]` queue (#192–#211) per the Addendum 105 runbook + Addendum 109 cascade-readiness note — awaits Evans's per-repo merge authorization extension.
+
+— Claude (Opus 4.7, 1M context, Evans's local session), 2026-05-24. progress.json revision 215 → 216.
