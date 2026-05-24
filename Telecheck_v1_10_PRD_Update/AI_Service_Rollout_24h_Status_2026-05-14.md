@@ -8985,3 +8985,34 @@ Significantly faster than PR #11's 6 rounds — most of PR #11's cycle was spent
 5. Run canonical_events migration.
 
 — Claude (`claude-opus-4-7`, Evans's local session, 2026-05-24), telecheck-cockpit Google OAuth as canonical sign-in SHIPPED on main (PR #12 → `7201245`); 2-round Codex cycle (R1 caught production-hard-stop gap + OAuth redirect-allowlist-split-misconfig → R-verify APPROVE); email+password retained as dev-only fallback with production hard-stop; BUCKET_B_CREDENTIALS.md Step 6 now correctly splits the 2-hop redirect-URI allowlist between Google Cloud Console (hop 1 → Supabase) and Supabase Dashboard URL Configuration (hop 2 → cockpit); single-path role-claim authorization contract from PR #11 preserved. progress.json revision 235 → 236.
+
+## Addendum 133 — remote-cron firing: 4th-consecutive parked-state re-verification; every named pilot-viable priority is DONE, `[CODEX-PENDING]`-queued, or ratification-gated; no non-duplicative buildable PR exists in this env; loop-pacing recommendation surfaced
+
+**Context.** Standing remote-cron autonomous firing against the Master Completion Plan v1.0. Codex is unavailable in this environment, so per the discipline floor the firing's job is to (a) re-verify the queue-health premises from primary sources, (b) identify any genuinely-new, non-duplicative, spec-ratified, mergeable-or-PR-able critical-path item, and (c) if none exists, surface honestly rather than manufacture make-work. This is the **4th consecutive firing** to land on the parked state (cf. Addenda 127/128/129-130).
+
+**Primary-source re-verification this firing (not trusting prior addenda):**
+
+| Premise | Method | Result |
+|---|---|---|
+| Codex availability | `$OPENAI_API_KEY` + `which codex` + `~/.claude/plugins/cache/openai-codex` | **UNAVAILABLE** — key UNSET, no bin, no plugin |
+| telecheck-app main | `git ls-remote origin refs/heads/main` | **`c27638c`** — unmoved since Addendum 130 |
+| `[CODEX-PENDING]` queue | GitHub MCP `list_pull_requests state=open` | **exactly 9, unchanged**: #199, #202, #203, #204 (Crisis S2); #206, #207 (Admin S2); #208, #209 (Med-Interaction); #210 (AI Mode 2). None drained. |
+| SI ratification | PR queue | SI-003/004/005 still pre-ratification (#137/#138/#139 open) |
+
+**Incremental contribution this firing — full tally of the 5 named pilot-viable priorities against *actual repo state* (not against prior addenda's claims):**
+
+1. **(a) Med-Interaction DB layer** — DONE. Migrations `046`–`050` (rbac_roles, entities, view/MV-access fn, raw-lifecycle writer, wrappers) all present on main; rollbacks `046`–`050` present. Write handlers are the queued #208 (PR 8) + #209 (PR 9, stacked).
+2. **(b) Async-Consult clinician decision loop** — RATIFICATION-GATED on SI-005 (`Telecheck_Consult_Schema`), still pre-ratification (#139). Cannot implement ahead of spec per "ratification leads implementation by ≥1 sprint."
+3. **(c) AI Service Mode 1 chat handler** — DONE. `POST /v0/ai/chat` **mounted 2026-05-15** (`src/modules/ai-service/internal/handlers/chat.ts`; routes.ts `mode_1_chat_handler_mounted: true`): full lifecycle wired — I-019 input crisis gate (Cat A) → Conservative-Default guardrail → NullLLMProvider (AI-RESIL-001 fail-soft) → FLOOR-020 Cat C response audit. NOT a gap. (Mode 2 case-prep is the queued #210, gated on protocol-engine/I-012.)
+4. **(d) Crisis Response Sprint 2 handlers** — all queued: initiate (#201) already merged to main; acknowledge (#199), respond+resolve (#202), patient-summary read (#203), sweep (#204) queued.
+5. **(e) Admin Backend Sprint 2 handlers** — submit (#205) merged; review-decision (#206), dashboard-reads (#207) queued.
+
+**Conclusion: there is no un-queued, non-duplicative, ratified, buildable PR available in this environment.** Every named priority is DONE, sitting in the `[CODEX-PENDING]` queue (re-authoring = forbidden duplication), or ratification-gated (implementing ahead = forbidden). Authoring a "next" Sprint-3 PR would stack on un-merged queue PRs (a dependency chain on an undrainable queue = fragile-rebase make-work). Per Addendum 130's explicit finding, re-running the 9-branch `merge-tree` triage on an **unmoved** main is guaranteed-identical and is itself forbidden make-work — so it was deliberately NOT re-run this firing.
+
+**Loop-pacing recommendation (surfaced to Evans — single-reviewer; the dual-recommendation Codex consult is structurally impossible here because Codex is unavailable in this env).** The remote-cron loop has now fired into the identical parked state 4× consecutively, each firing a no-op-by-correct-discipline. The honest recommendation is one of: (1) **drain the 9-PR queue** in a Codex-enabled local session — recommended order #199→#202→#203→#204, #206→#207, #208→#209, #210; OR (2) **run the CDM v1.2→v1.3 + SI-003/004/005 ratification ceremony** (the highest-leverage unblock — opens Tracks 1/2/3 net-new work); OR (3) **pause the remote-cron loop** until (1) or (2) lands, to stop spending firings on no-op triages. The loop cannot self-unblock — both barriers are Evans-gated.
+
+**Stale-tracking-ref trap (8th consecutive).** telecheckONE local `main` label lagged at stale `6adaae5` (Addendum 71 / r175 era) while detached clone HEAD + `git ls-remote` both reported true tip `6f6f314` (Addendum 132 / r236); realigned via `git checkout -B main HEAD` + `git fetch origin main` (which force-updated the stale `origin/main` tracking ref `6adaae5`→`6f6f314`) before appending. telecheck-app local `main` label was in sync (`c27638c`) this firing. Lesson re-reinforced: trust `git ls-remote`/HEAD, never the local branch label, on a fresh container.
+
+**No code branch created; telecheck-app main untouched by code this firing.** This Addendum + the progress bump are the only artifacts.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. 4th-consecutive parked-state firing: independently re-verified Codex unavailable, telecheck-app main unmoved (`c27638c`), the 9-PR `[CODEX-PENDING]` queue unchanged, and SI-003/004/005 still pre-ratification. This firing's incremental contribution: a full tally of all 5 named pilot-viable priorities against actual repo state — confirming AI Mode 1 chat is MOUNTED (not a gap) and the Med-Interaction DB layer is DONE (046-050) — proving no un-queued, non-duplicative, ratified, buildable PR exists here. Deliberately did NOT re-run the unmoved-main merge-tree triage (forbidden make-work) and authored NO duplicate/stacked PR. Surfaced a loop-pacing recommendation (drain queue / run ratification ceremony / pause loop) — single-reviewer, since the dual-recommendation Codex consult is impossible without Codex. Caught + corrected the telecheckONE stale-tracking-ref trap (8th consecutive). progress.json revision 236 → 237.
