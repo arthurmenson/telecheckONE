@@ -8223,3 +8223,45 @@ The §1c change is exactly the **forward-CHANGING wiring-honesty signal** the te
 4. **Async-Consult ratifier ceremony** (SI-004/SI-005). Evans + Engineering Lead + CDM owner. Evans-gated. **STOP condition 3.**
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex in this env), 2026-05-24. Ran concurrently with Evans's local session: while it merged #215+#216 (cd30418, 3/4 gates green), this firing independently diagnosed the 4th gate. Corrected its test-gate misdiagnosis — the failure is 4 stale plugin-wiring assertions (#201/#205 PR-2 residue), NOT a vitest-4 incompat; the `test.poolOptions` line is a non-fatal deprecation warning (2058 tests run, 2021 pass on cd30418). Shipped the real fix as PR #217 [CODEX-PENDING] and proved cd30418+#217 = fully green CI end-to-end (2025 pass/0 fail). progress.json revision 219 → 220.
+
+---
+
+## Addendum 117 — Pilot-viable slice surface is SATURATED: every critical-path handler is merged-on-main or already in the 11-PR `[CODEX-PENDING]` queue; net-new work is CDM v1.3 ratifier-gated (Phase B). No non-duplicative, ratified-schema, non-STOP PR exists this firing → documented + surfaced, no make-work PR authored (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24
+**Repo:** telecheckONE (this Addendum + progress bump only). **No telecheck-app code PR authored this firing** — see saturation analysis below.
+**Trigger:** Standing autonomous-work loop (remote-cron firing), per telecheckONE/CLAUDE.md "Autonomous-work authorization."
+**progress.json:** r220 → r221
+**Codex:** re-checked in-env — the `@openai/codex` CLI **binary now fetches** (`npx -y @openai/codex --version` → `codex-cli 0.133.0`; npm reachable under this env's network policy), but **`OPENAI_API_KEY` is absent** (only `ANTHROPIC_BASE_URL` is set), so a review **cannot authenticate / run.** The charter's canonical Codex tool is the *local* plugin at `C:/Users/menso/.claude/plugins/cache/openai-codex/codex/1.0.4/scripts/codex-companion.mjs` — a **Windows path on Evans's machine, not present in this remote Linux container.** Net: Codex review remains **unavailable in remote-cron firings** (consistent with Addenda 105/107/110/113/114/116). I cannot provision the key (secret-handling is a prohibited action per hard-floor item 2). → any new PR would be `[CODEX-PENDING]`, unmergeable autonomously.
+
+### Why no PR was shipped: the pilot-viable slice surface is saturated
+
+I worked the task's critical-path priority list (a)→(e) and found **every item is already merged-on-main or sitting in the open `[CODEX-PENDING]` queue.** Re-authoring any of it is duplication, explicitly forbidden by the discipline floor (CLAUDE.md "stale-tracking-ref trap" + queue note). Coverage proof:
+
+| Priority item | Status | Evidence |
+|---|---|---|
+| (a) Med-Interaction DB layer | **DONE (merged)** + **handlers fully queued** | migrations 046–050 merged; GET signals/:id merged (PR 7). 7 POST endpoints = #208 (PR 8: create-evaluation + emit-signal + **activate**) + #209 (PR 9: override + resolve + expire + supersede). **All 8 handlers covered** — verified file lists on both PRs. **Zero gap.** |
+| (b) Async-Consult clinician decision loop | **STOP condition 3** | SI-004/SI-005 ratifier ceremony — Evans + Eng Lead + CDM owner. Open PRs #137/#138/#139 are the v0.2 *spec* proposals; implementation blocked on ratification. |
+| (c) AI Service Mode 1 chat handler | **DONE (merged + mounted)** | `src/modules/ai-service/internal/handlers/chat.ts` fully implements `POST /v0/ai/chat`: I-019 crisis gate (unconditional, FLOOR-013), Conservative-Default guardrail, NullProvider→AI-RESIL-001 graceful degrade, FLOOR-020 audit. Mounted in routes. (Persisted `ai_mode1_conversation` history = SI-023, 4 tables, **CDM v1.3-pending** — Phase B, future enhancement, not blocking the v0 handler.) |
+| (d) Crisis Response Sprint 2 (5 handlers + read) | **merged + fully queued** | initiate #201 (merged); acknowledge #199 (PR 3); respond+resolve #202 (PR 4); patient-summary read #203 (PR 5); _sweep #204 (PR 6). Full Sprint-2 scope. |
+| (e) Admin Backend Sprint 2 (submit + decision + dashboards) | **merged + fully queued** | crisis-operational-health dashboard (merged 1e90b15); submit-for-review #205 (merged); template-review decision #206 (PR 3); consult-queue + mode1-volume dashboards #207 (PR 4). |
+
+**The full telecheck-app `[CODEX-PENDING]` queue (open):** #193 (ai-service health/ready introspection fix), #199/#202/#203/#204 (crisis Sprint-2 PR 3–6), #206/#207 (admin Sprint-2 PR 3–4), #208/#209 (med-interaction PR 8–9), #210 (ai-service Mode 2 case-prep), #217 (the CI-greening 4th-gate fix). Plus #218 (cosmetic vitest-4 `poolOptions` hoist — NOT a CI blocker per Add. 116) and Dependabot #190/#189/#91/#90/#214.
+
+**Net-new work beyond this surface requires new canonical entities** — all DRAFTED but **pending CDM v1.3 batched promotion (Phase B, BLOCKED ON RATIFIER** per Master Completion Plan v1.1 §3): SI-022 session_state, SI-023 ai_mode1_conversation (4), Sprint-12 ai_mode2_*, Sprint-14 consent_revocation_event, Sprint-16 notification_crisis_* (3), Sprint-17 synthetic_canary/kms_residency (3), Sprint-18 iam_principal_human_binding (3). Authoring against any of these would violate the discipline floor's "spec ratification leads implementation by ≥1 sprint; do not author canonical schemas." → **STOP condition 3.**
+
+### Conclusion: both forward barriers are Evans-gated
+
+1. **Drain the 11-PR `[CODEX-PENDING]` queue** — needs Codex APPROVE (no key/binary-with-key in remote env; local plugin is Windows-only) **OR** Evans's per-repo "ignore codex till we are done with dev" override (invoked in Add. 115 for #215; Add. 116 declined to self-extend it autonomously — the same discipline applies here, so I did **not** self-extend it either). Recommended merge order once unblocked: **#217 first** (lands main's first all-green CI), then #193, then the slice PRs in sprint order (#199→#202→#203→#204; #206→#207; #208→#209; #210).
+2. **CDM v1.2 → v1.3 batched promotion** (Phase B) — ratifier ceremony (Evans + Eng Lead + CDM owner). Unblocks ALL net-new handler/migration work across Tracks 1/2/3/5.
+
+Manufacturing a duplicate or make-work PR purely to "ship one PR" would violate the discipline floor (duplication forbidden; no make-work). The correct, honest firing output is this analysis + surface. **No code branch was created; main is untouched by this firing.**
+
+### Next critical-path items (refreshed)
+
+1. **Evans: unblock the queue** — provision `OPENAI_API_KEY` for remote Codex, OR extend the per-repo Codex-override to the 11 PRs, OR run Codex locally. #217 is the keystone (first all-green CI).
+2. **Evans + ratifier quorum: CDM v1.3 batched promotion ceremony** (Phase B exit) — the single highest-leverage unblock for all net-new implementation.
+3. **Branch-protection hardening** (Add. 115/116 standing rec): add `format:check` + `lint` + `test` as REQUIRED checks. *(Access-control change → operator/Evans action; not autonomously actionable.)*
+4. **Async-Consult ratifier ceremony** (SI-004/SI-005). **STOP condition 3.**
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Verified the pilot-viable slice surface is saturated: med-interaction (8/8 handlers across merged PR 7 + queued #208/#209), crisis Sprint 2 (#201 merged + #199/#202/#203/#204 queued), admin Sprint 2 (#205 merged + #206/#207 queued), AI Mode 1 chat (merged + mounted) + Mode 2 (#210 queued) are all merged-on-main or in the 11-PR `[CODEX-PENDING]` queue. Net-new work is CDM v1.3 ratifier-gated (Phase B). Per the discipline floor I authored **no duplicate/make-work PR**; documented the saturation + surfaced both Evans-gated barriers (Codex-queue drain; CDM v1.3 promotion). main untouched. progress.json revision 220 → 221.
