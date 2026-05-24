@@ -1,15 +1,16 @@
 # SI-005 Closure Artifact — Consult / ConsultEvent canonical schema
 
-**Status:** DRAFT v0.2 — awaiting Evans's ratification into spec corpus CDM v1.2 §4.X (or v1.3)
+**Status:** **SUPERSEDED-FOR-RATIFICATION (entity/schema model) — 2026-05-24.** The 2-entity mutable-state-column schema this artifact proposes (`consults` with a mutable `state` column + denormalized lifecycle timestamps, plus a generic `consult_events` log) is **superseded for ratification** by `Telecheck Master Bundle FINAL US REGION BASELINE/Telecheck_SI_020_Async_Consult_v2_0_Implementation_Readiness.md` **Sub-decision 1** (7 new entities + 1 derived view; Option A **append-only-only per I-035**; immutable `consult` envelope with state in a separate `consult_lifecycle_transition` log). SI-020 Sub-decision 1 §43 explicitly states it "superseded mutable-state-column model from v1.0 §12" — the exact model SI-005 persists. **The two schema models must NOT both be ratified.** SI-005's closure now routes through SI-020's P-037 (SI ratification) / P-038 (CDM v1.8 → v1.9 follow-on amendment) ceremony, NOT a standalone SI-005 CDM amendment. This artifact is preserved as the **historical record of the Sprint-9 placeholder schema that actually shipped** in `telecheck-app/migrations/020_async_consult.sql` + `021_async_consult_tenant_boundary_constraints.sql`. See the **"Reconciliation against SI-020 Sub-decision 1"** section below for the full divergence table + entity/column crosswalk + the open migration-reconciliation gap flagged for the SI-020 ratifier. (Previously DRAFT v0.2 — awaiting ratification into CDM v1.2 §4.X / v1.3.)
 **Version history:**
 - v0.1 (2026-05-11): initial draft authored by parallel agent.
 - v0.2 (2026-05-11): Codex adversarial-review revisions — see §"v0.2 Codex revision" banner below. Findings 5 + 7 addressed. Full resolution record at `Telecheck_SI_Closure_Cycle_Codex_Review_Findings_v0_1.md`.
-**Date:** 2026-05-11
+- v0.3 (2026-05-24): **SUPERSEDED-FOR-RATIFICATION** annotation against SI-020 Sub-decision 1 (per cockpit Addendum 95 lever). Status header flipped; reconciliation/crosswalk section added; closure re-homed onto the SI-020 P-037/P-038 ceremony. No schema change to the historical-record body. Mirrors the SI-004 ↔ SI-020 reconciliation pattern (Addendum 95). Cross-artifact hygiene only — no Codex round, no ratification, no version bump on canonical contracts.
+**Date:** 2026-05-11 (v0.1/v0.2); 2026-05-24 (v0.3 supersession annotation)
 **Author:** Autonomous Claude (SI closure cycle workstream)
-**Closes:** SI-005 in `telecheck-app/docs/SI-005-Consult-ConsultEvent-Schema-Gap.md`
-**Target spec doc:** `Telecheck_Canonical_Data_Model_v1_2.md`
-**Severity:** medium → resolved-on-ratification
-**Adjacent SI:** SI-001 (MedicationRequest schema; consults reference `medication_request` via the `prescribing_consult_id` back-reference once Sprint 10+ branches land). SI-004 (Async Consult audit events; same SI cycle).
+**Closes:** SI-005 in `telecheck-app/docs/SI-005-Consult-ConsultEvent-Schema-Gap.md` — **closure now via SI-020 P-037/P-038, not a standalone SI-005 amendment.**
+**Target spec doc:** ~~`Telecheck_Canonical_Data_Model_v1_2.md`~~ → re-homed onto SI-020's CDM v1.8 → v1.9 follow-on amendment (P-038).
+**Severity:** medium → resolved-on-ratification (via SI-020 ceremony)
+**Adjacent SI:** SI-020 (Async Consult v2.0 implementation-readiness — **the superseding canonical schema source**; Sub-decision 1). SI-001 (MedicationRequest schema; the SI-020 `consult_clinician_decision.prescription_details_id` references `medication_request` per CDM canonical). SI-004 (Async Consult audit events — itself SUPERSEDED-FOR-RATIFICATION by SI-020 Sub-decision 2 per Addendum 95; same SI cycle).
 
 ---
 
@@ -22,6 +23,59 @@ Codex adversarial review returned 2 findings against this artifact:
 2. **Finding 7 (MEDIUM)** — ConsultEvent append-only enforcement at the application layer only; DB trigger marked as optional. Resolved: append-only is mandated at the DB layer via a `BEFORE UPDATE/DELETE` trigger that raises an exception. Mirrors `migrations/002_audit_chain.sql:470+`. Added `audit_event_id` NOT NULL column on consult_events with composite FK to `audit_records` so replay tooling can detect mismatches.
 
 Both `[NEEDS RATIFICATION]` markers in the v0.1 footer's open-questions list removed.
+
+---
+
+## Reconciliation against SI-020 Sub-decision 1 (2026-05-24)
+
+**Finding: SI-005 and SI-020 Sub-decision 1 propose genuinely divergent Consult/ConsultEvent persistence models that must NOT both be ratified.** SI-020 (whole-slice v2.0 implementation-readiness, POST-R11, lockstep-consistent across 10 sub-decisions) makes the canonical schema decision; SI-005 (2-entity placeholder ratification, last substantively touched v0.2 2026-05-11) is the older, narrower proposal that ratifies the Sprint-9 placeholder. SI-020 Sub-decision 1 §43 explicitly names its predecessor: it is "Option A append-only-only per I-035 … superseded mutable-state-column model from v1.0 §12" — the exact mutable-state model SI-005 §4.16 persists.
+
+### Divergence table
+
+| Axis | SI-005 (v0.2, 2026-05-11) | SI-020 Sub-decision 1 (v0.12 R11) |
+|---|---|---|
+| Persistence model | **mutable-state-column** — `consults` row carries a mutable `state` column + denormalized lifecycle timestamps; append-**update** over lifecycle | **Option A append-only-only per I-035** — immutable `consult` envelope; state lives in a separate `consult_lifecycle_transition` append-only log; `enforce_append_only()` trigger on every entity |
+| Entity count | **2** (`consults`, `consult_events`) | **7 entities + 1 derived view** (`consult`, `consult_intake_submission`, `consult_clinical_summary`, `consult_review_claim`, `consult_clinician_decision`, `consult_lifecycle_transition`, `consult_follow_up_message`, + `consult_outcome_summary_view`) |
+| PK / ID type | `VARCHAR(26)` | `ULID` (`gen_ulid()`) |
+| Patient FK | `patient_account_id` → `accounts(tenant_id, account_id)` | `patient_id` → `patient(tenant_id, id)` |
+| Clinician identity | `assigned_clinician_id` nullable column → `accounts` | dedicated `consult_review_claim` entity (90-min claim, single-active-claim partial-UNIQUE invariant, reassignment + expired-auto-release procedures); `consult_clinician_decision` carries a 5-column composite FK to the active claim enforcing deciding-clinician == claiming-clinician at schema level |
+| Lifecycle state | `state` CHECK enum on `consults` (17 states) | `consult_lifecycle_transition` log (`from_state`/`to_state`/`transition_reason` enums + CHECK on ~22 `(reason, from, to)` triples); current state read via `consult_outcome_summary_view` |
+| Event/transition log | generic `consult_events` (7 `event_type` values; `audit_event_id` 1:1 to `audit_records`) | `consult_lifecycle_transition` (transition-specific) + the platform audit chain itself; no generic per-consult event table |
+| Intake linkage | `intake_form_submission_id` → `forms_submission` | dedicated `consult_intake_submission` entity (`template_id` → `forms_template`; KMS-encrypted `intake_payload_ciphertext` + 8-column envelope) |
+| PHI at rest | "none in baseline — intake lives in `forms_submission`" | KMS-encrypted ciphertext + 8-column envelope on `consult_intake_submission`, `consult_clinical_summary`, `consult_clinician_decision`, `consult_follow_up_message` |
+| Payment / revenue anchor | none | `consult.payment_intent_id` NOT NULL (FK `billing_payment_intent`), `payment_provider`, `currency`, `consult_fee_cents` (Sub-decision 10 sequencing) |
+| AI clinical summary | none | dedicated `consult_clinical_summary` entity (Mode 1/2; `interaction_signals_snapshot` from Med-Interaction P-034) |
+| Follow-up messaging | none | dedicated `consult_follow_up_message` entity |
+
+### Canonical decision
+
+**SI-020 Sub-decision 1 (7 entities + 1 derived view; Option A append-only-only per I-035) is canonical for ratification** — it is newer, whole-slice, far more converged (R11 vs SI-005 v0.2), revenue-anchor-complete, PHI-encryption-complete, and explicitly designed to supersede the v1.0 §12 mutable-state model that SI-005 ratifies. SI-005's 2-entity schema is preserved only as the **historical record of the Sprint-9 placeholder** that shipped in `migrations/020` + `021`.
+
+### Entity / column crosswalk (SI-005 → SI-020 disposition)
+
+| SI-005 element | SI-020 disposition |
+|---|---|
+| `consults` (mutable-state envelope) | **SPLIT** → immutable `consult` envelope (identity/payment/program) + `consult_lifecycle_transition` (state) + `consult_outcome_summary_view` (current-state read) |
+| `consults.state` column + 9 denormalized `*_at` timestamps | **DROPPED** → derived from `consult_lifecycle_transition` log + surfaced via `consult_outcome_summary_view` (I-035 append-only model has no mutable state column) |
+| `consults.patient_account_id` (→ `accounts`) | **RENAMED + RE-TARGETED** → `consult.patient_id` (→ `patient(tenant_id, id)`) |
+| `consults.assigned_clinician_id` (nullable column) | **PROMOTED to entity** → `consult_review_claim` (claim/admission lifecycle) + decision-time FK enforcement |
+| `consults.consult_type` (`program`/`general`) | **RENAMED** → `consult.consult_type` (`program_pathway`/`general`) |
+| `consults.modality` (`async`/`sync`) + ADR-012 in-place flip | **DROPPED as a column** → sync handoff modeled as `escalated_to_sync` state/transition + `async_consult.escalated_to_sync` audit (Sub-decision 2 #13). **See GAP-2 below** (no explicit `modality` column in SI-020). |
+| `consults.intake_form_submission_id` (→ `forms_submission`) | **PROMOTED to entity** → `consult_intake_submission` (→ `forms_template`; KMS-encrypted payload) |
+| `consults.current_program_catalog_entry_id` | **RE-MAPPED** → `consult.program_id` (→ `program(tenant_id, id)`; set IFF `consult_type=program_pathway`) |
+| `consults.country_of_care` (`[NEEDS RATIFICATION]`) | **NOT carried** in SI-020 `consult`. **See GAP-3 below.** |
+| `consults.version` (optimistic-concurrency `[NEEDS RATIFICATION]`) | **MOOT** — append-only-only model has no in-place UPDATE on `consult` to guard |
+| `consult_events` (generic log; `event_type`, `from/to_state`, `actor_type/id`, `audit_event_id`) | **SUPERSEDED** → `consult_lifecycle_transition` (transition log w/ `transition_by_actor_role`) + platform audit chain; no separate `audit_event_id` cross-link column (audit chain carries `consult_id` as `resource_id`) |
+| `consult_events` append-only `BEFORE UPDATE/DELETE` trigger (Finding 7) | **PRESERVED in principle** → SI-020 applies `enforce_append_only()` per I-035 to every entity (same defense-in-depth) |
+| 4 cross-tenant safety constraints (composite UNIQUE + 3 composite FKs) | **PRESERVED in principle** → SI-020 uses composite tenant-scoped UNIQUE/FK on every entity (`(tenant_id, id, patient_id)` propagation) + `current_tenant_id_strict()` RLS |
+
+### Gaps flagged for the SI-020 ratifier (NOT filled here per hard-floor item 6)
+
+1. **GAP-1 — shipped-migration reconciliation (the load-bearing handoff item).** Migrations `020_async_consult.sql` + `021_async_consult_tenant_boundary_constraints.sql` shipped the **SI-005-shaped 2-entity mutable-state placeholder** (`consults` + `consult_events`). If SI-020 Sub-decision 1's 7-entity append-only model is ratified, the SI-020 **P-038 follow-on amendment must include a migration that reconciles the shipped 020/021 placeholder to the canonical model — this is a schema-model replacement (drop mutable-state `consults`/`consult_events`; create the 7 entities + view), NOT the forward-ALTER path SI-005 §"Cross-check" anticipated.** Whether to (a) data-migrate any Sprint-9 rows or (b) treat 020/021 as greenfield-replaceable (no production data pre-launch) is a ratifier/engineering-handoff decision. Flagged, not authored.
+2. **GAP-2 — `modality` / ADR-012 async↔sync conversion.** SI-005 §4.16 carries a `modality` column + an open `[NEEDS RATIFICATION]` on in-place-flip vs new-row continuity. SI-020 has **no explicit `modality` column** on `consult`; it models sync handoff as the `escalated_to_sync` state/transition + audit event only. Ratifier confirms whether ADR-012 modality is fully captured by the transition log or whether `consult` needs an explicit modality column.
+3. **GAP-3 — `country_of_care` denormalization.** SI-005 recommended a denormalized `country_of_care CHAR(2)` on `consults` for CCR hot-path resolution (`[NEEDS RATIFICATION]`). SI-020's `consult` does not carry it (CCR resolved via `tenant`). Ratifier confirms whether the hot-path denormalization is wanted on `consult`.
+
+**Deliberately NOT authored:** no new SI-020 entity, column, invariant, or migration. GAP-1/2/3 are surfaced for the ratifier to resolve at the SI-020 P-037/P-038 ceremony — authoring any would be net-new schema beyond SI-020's ratified sub-decision scope (hard-floor item 6).
 
 ---
 
