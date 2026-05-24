@@ -7731,3 +7731,77 @@ ID patterns reuse the established conventions (CR-N, DEP-N, P-N, `(CR|P|HFI6)-N[
 4. **Projection Service** (`orchestrator/projection-service.mjs`) + telecheckONE CI gates (signed-commit + authorized-source + ajv schema validation) — schema-first; the schema set this firing completed is the input. Lands with the first real agent commit.
 
 — Claude (Opus 4.7, remote-cron autonomous firing), 2026-05-24. Closed Addendum-105 next-item #4: authored the 12 remaining canonical-event schemas, completing the P-043 agentic-workforce event-log schema set (15/15); validated structurally + against the README file-layout enumeration; committed direct to telecheckONE:main; no telecheck-app code PR (pilot scope fully queued + Codex unavailable — duplicating the queue or starting Async-Consult would both violate the discipline floor). progress.json revision 210 → 211.
+---
+
+## Addendum 108 — telecheck-cockpit feature-complete merge cascade landed (PRs #1-#5 all on main); 9 cockpit screens live
+
+**Date:** 2026-05-24
+**Repo:** telecheck-cockpit
+**Trigger:** Evans's chat directive *"merge them for me"* — explicit per-repo extension of the standing "ignore codex till we are done with dev" override to telecheck-cockpit (the auto-mode classifier had initially scoped the override to forms-intake only and blocked the first merge attempt; this Addendum records the explicit extension).
+**progress.json:** r211 → r212 (renumbered after remote-cron Addendum 107 — canonical-events schemas — landed r210 → r211 concurrently with this firing)
+
+### Cascade execution
+
+| PR | Branch | Original base | Action | Result |
+|---|---|---|---|---|
+| #1 — Shell (Sidebar + Topbar + PulseRibbon) + 8 icons + types + mock data | `pr-1-shell-sidebar-topbar-pulseribbon` | `main` | `gh pr merge 1 --merge` | ✅ MERGED `db0a3a7` |
+| #2 — Cockpit screen (3 variants) + 4 hero metrics + 3 middle cards + live events feed | `pr-2-cockpit-screen` | `pr-1-shell` → retargeted to `main` | edit base + merge | ✅ MERGED `185c5e5` |
+| #3 — Agents + Work screens + Drawer + 7 icons + PR types | `pr-3-agents-work-screens` | `pr-2-cockpit-screen` → retargeted to `main` | edit base + merge | ✅ MERGED `ee53450` |
+| #4 — Event Log + Chat screens + 5 icons + ChatMessage type | `pr-4-eventlog-chat` | `pr-3-agents-work-screens` → retargeted to `main` | edit base + merge | ✅ MERGED `18a55f7` |
+| #5 — Spec Corpus + Inventory + Settings + Mobile (cockpit feature-complete) | `pr-5-remaining-screens` | `pr-4-eventlog-chat` → retargeted to `main` | edit base + merge | ✅ MERGED `4588d0a` |
+
+**Final state:** `origin/main` HEAD = `4588d0a`. Zero open PRs. Branch was at `1395cbd` (Day-1 bootstrap) pre-cascade; now carries 9 cockpit screens + shell + design-locked Tailwind 4 styling.
+
+### Stack-strand mechanic — pattern observation
+
+The cockpit stack used standard GitHub stack semantics: each subsequent PR targeted the prior branch (PR#2 → `pr-1-shell`, etc.). Unlike the forms-intake cascade where Evans had merged stacks via the GitHub UI (which auto-rebases the stack base in some cases but stack-strands PR-4 last time), this cascade was executed via `gh pr edit <N> --base main` + `gh pr merge <N> --merge` per PR. **Two-command pattern** (retarget + merge) is the canonical incantation for stacked-PR cascades when the prior approach stack-strands.
+
+### What landed — 9 cockpit screens + full shell
+
+| Component | What |
+|---|---|
+| `<Sidebar>` 224px | brand chip + project chip (Telecheck pilot · Ghana) + 7-item workspace nav + Mobile + Settings + user chip |
+| `<Topbar>` 48px | live WebSocket pulse + ⌘K search + ticking UTC clock + refresh + notifications + theme toggle (sun/moon, persists per-user) |
+| `<PulseRibbon>` 28px | 24-hour event histogram (empty until Supabase Realtime wires Day-3) |
+| Cockpit screen | 3 variants (Dense/Hybrid/Glance) + 4 hero metric cards + 3 middle cards + live events feed |
+| Agents screen | per-agent status + drawer for detail |
+| Work screen | PR list (consumes GitHub REST API) |
+| Event Log screen | structured event timeline |
+| Chat screen | per-agent chat history |
+| Spec Corpus screen | spec-doc navigator |
+| Inventory screen | resource catalog |
+| Settings screen | per-user preferences |
+| Mobile screen | small-viewport fallback |
+
+### Verification
+
+`origin/main` = `4588d0a` confirmed via `git log origin/main --oneline -8`. Zero open cockpit PRs (`gh pr list --state open` returns `[]`). Each merge commit recorded by GitHub as a standard merge ("Merge pull request #X from ...") preserving the per-PR commit lineage for audit traceability.
+
+### Pilot status post-cockpit-cascade
+
+| Track | Status |
+|---|---|
+| Cockpit UI (telecheck-cockpit) | ✅ **FEATURE-COMPLETE ON MAIN** — 9 screens + shell live at `arthurmenson/telecheck-cockpit:4588d0a` |
+| forms-intake (telecheck-forms-intake) | Slice-complete on slice roadmap; PRs #7-#10 stacked open awaiting Evans's merge cascade (same retarget+merge pattern applies if stack-strand recurs) |
+| Spec corpus (telecheckONE) | 3/15 canonical event schemas; 12 queued |
+| Supabase + Vercel + PostHog provisioning | Pending Evans's account auth (Day-3 critical-path) — once provisioned, cockpit live data flows replace mock data |
+| Day-0 rollback dry-run | Pending (Day-4 obligation before Clinical Pilot Agent first firing) |
+| telecheck-app [CODEX-PENDING] queue | 20 PRs (#192-#211) awaiting either Codex cascade (May-26 reset) or per-PR ratifier-merge cascade analogous to this one |
+
+### Acceleration unlocked
+
+With cockpit feature-complete on main:
+- **Day-14 evaluation criterion HIT** for the cockpit deliverable
+- Cockpit operators can browse the 9 screens locally via `cd telecheck-cockpit && npm run dev` (mock data until Day-3 wiring)
+- The `Agent` interface in `cockpit/src/lib/cockpit-types.ts` is now the canonical control-plane consumer of forms-intake's `GET /v1/agents/clinical-pilot/status` handshake endpoint (which is also live on the forms-intake stacked PRs awaiting merge)
+- Once forms-intake PRs #7-#10 merge + Day-3 provisioning lands, cockpit Agents tab will populate with real Clinical Pilot Agent state
+
+### Next critical-path items (refreshed)
+
+1. **forms-intake PRs #7-#10 merge cascade** — same retarget+merge pattern as cockpit; results in forms-intake slice formally complete on main
+2. **Apply the same per-repo ratifier-merge cascade to the telecheck-app [CODEX-PENDING] queue** (20 PRs) — single biggest backend acceleration; pattern is proven now (cockpit cascade demonstrates retarget+merge works at stack scale)
+3. **12 remaining canonical-event schemas** in telecheckONE — Claude-doable, no blockers
+4. **forms-intake audit-outbox follow-on** — port `writeAuditEvent` + retrofit 3 write handlers
+5. **Day-3 provisioning** — Supabase / Vercel / PostHog / GitHub Actions PR-merge hooks → cockpit live data + integration tests execute
+
+— Claude (Opus 4.7, 1M context, Evans's local session), telecheck-cockpit feature-complete merge cascade executed: 5 PRs merged to main via `gh pr edit --base main` + `gh pr merge --merge` per PR (retarget+merge pattern proven for stack-strand workaround); zero open cockpit PRs; 9 screens + shell live at `origin/main` `4588d0a`; Day-14 evaluation cockpit deliverable HIT; pattern now applicable to forms-intake PRs #7-#10 + telecheck-app [CODEX-PENDING] queue (20 PRs); 2026-05-24. **progress.json revision 211 → 212** (this Addendum was authored as 107 pre-rebase; renumbered to 108 after remote-cron Addendum 107 — canonical-events schemas at line ~7676 — claimed 107 first).
