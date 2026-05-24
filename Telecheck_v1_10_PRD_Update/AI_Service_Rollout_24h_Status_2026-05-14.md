@@ -8833,3 +8833,57 @@ The trajectory shows Codex iteratively finding PostHog's per-feature data-collec
 - **Day-3+ follow-on PRs** (filed in cockpit `KNOWN_FOLLOWUPS.md`): `/auth/callback` handler + per-identity rate limiting.
 
 — Claude (`claude-opus-4-7`, Evans's local session, 2026-05-24), telecheck-cockpit Bucket B Day-3+ scaffolds SHIPPED on main (PR #10 → `232ebca`); 6-round Codex cycle (R1 → R-verify-1 [Supabase APPROVED + new MEDIUM] → R-verify-2 → R-verify-3 → R-verify-4 → R-verify-5 APPROVE); recurring-finding pattern closed by structural fix (event allowlist + property allowlist + remote-config kill switch); 41 vitest tests + tsc + next build clean. progress.json revision 232 → 233.
+
+## Addendum 130 — Queue-health triage RE-RUN (3rd consecutive, per Addendum 128's standing prescription): telecheck-app main STILL unmoved (`c27638c`) + Codex STILL unavailable + all 9 `[CODEX-PENDING]` PRs STILL open + independently re-verified conflict-free; correctly SURFACED — no make-work / duplicate PR authored (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24
+**Repo:** telecheckONE (this Addendum + progress bump only). **No telecheck-app code PR authored this firing** — see the decision rationale below. telecheck-app main untouched by code.
+**Trigger:** Standing autonomous-work loop (remote-cron firing), per telecheckONE/CLAUDE.md "Autonomous-work authorization."
+**progress.json:** r233 → r234
+**Codex:** UNAVAILABLE — `OPENAI_API_KEY` unset in this remote-cron env (only `ANTHROPIC_BASE_URL=https://api.anthropic.com` set). Consistent with Addenda 105/107/110/113/114/116/117/127/128. Cannot provision the key (secret-handling is a prohibited action per hard-floor item 2). Any new PR would be `[CODEX-PENDING]`, unmergeable autonomously.
+
+### This firing executed Addendum 128's explicit "next firing" instruction — independently, not on trust
+
+Addendum 128 closed with: *"Next firing should again re-run the queue-health triage; if main is still `c27638c` + Codex still unavailable, surface (do not manufacture busywork)."* This firing re-verified **every** premise from primary sources rather than trusting the prior addenda:
+
+| Condition | Method (this firing) | Result |
+|---|---|---|
+| telecheck-app main unmoved | `git ls-remote origin refs/heads/main` (authoritative, per stale-ref trap) | **`c27638c` — UNMOVED** since Addenda 118/127/128 |
+| Codex availability | env inspection for `OPENAI_API_KEY` | **UNSET — unavailable** |
+| 9-PR queue still open + `[CODEX-PENDING]` | `list_pull_requests` (live) | **All 9 present + `[CODEX-PENDING]`**: #199/#202/#203/#204 (Crisis S2 PR3–6) · #206/#207 (Admin S2 PR3–4) · #208/#209 (Med-Interaction PR8/PR9) · #210 (AI Mode 2) |
+| Each queue PR still conflict-free against current main | `git merge-tree --write-tree c27638c <branch>` for **all 9** branches | **all 9 merge CLEAN** (0 conflicts) — re-rebasing any of them is zero-value busywork on an unmoving main |
+| DB-layer parity (no skeleton/rollback gap to author) | `comm` of forward-vs-rollback basename sets, `000→052` | **52 forward / 52 rollback, both diffs empty** — full parity, no gap |
+| Net-new work unblocked? | Master Completion Plan **v1.1** §"Phase B" + live open SI PRs | **Phase B (CDM v1.2 → v1.3 promotion) BLOCKED ON RATIFIER** (SI-022/023, Sprint-12/14/16/17/18 entities all DRAFTED-pending-v1.3); **Async-Consult SI-004/SI-005 unratified** (spec PRs #138/#139 still open) — both = STOP condition 3 |
+
+The incremental contribution this firing: I re-ran the **full 9-branch `merge-tree` triage** (not just a spot-check) and the **migration/rollback parity diff**, confirming both Addendum 127's "entire queue conflict-free" finding and Addendum 128's "no DB-layer gap" finding from primary git/filesystem state on this fresh container.
+
+### Decision: SURFACE, no make-work / duplicate PR (discipline-floor-correct)
+
+The task's priority list (a)–(e) is fully covered — every critical-path handler is either merged-on-main or sitting in the conflict-free 9-PR queue:
+- **(a) Med-Interaction DB layer** — migrations 046–050 on main; write handlers queued #208/#209.
+- **(b) Async-Consult clinician decision loop** — **STOP condition 3** (SI-004/SI-005 ratifier-ready but unratified; #138/#139 open).
+- **(c) AI Mode 1 chat handler** — merged on main (PR #193 lineage); Mode 2 case-prep queued #210.
+- **(d) Crisis Response Sprint 2 handlers** — queued #199/#202/#203/#204.
+- **(e) Admin Backend Sprint 2 handlers** — queued #206/#207.
+
+The remaining forward paths are all gated:
+- **Re-rebasing the clean queue PRs** = zero-value busywork on an unmoving main (Addendum 127's explicit finding, re-confirmed by this firing's 9-branch merge-tree). Forbidden as make-work.
+- **Re-authoring any queued handler** (incl. the 5 CI-hardening PRs the impl-scaffold note tracks: format/lint, BOM, test-role, RLS-count, plugin-wiring — each already authored `[CODEX-PENDING]`) = duplication. Forbidden by the discipline floor.
+- **Net-new handlers/migrations** require **CDM v1.2 → v1.3 batched promotion (Phase B, BLOCKED ON RATIFIER** per Plan v1.1). Authoring against unratified canonical entities = **STOP condition 3**.
+
+Manufacturing a duplicate or make-work PR purely to satisfy "ship one PR" would violate the discipline floor (duplication forbidden; no make-work) and Addendum 128's own guidance. The honest, correct firing output is this independently re-verified triage + surface. **No code branch created; telecheck-app main untouched by code this firing.**
+
+### Both forward barriers remain Evans-gated (unchanged from Addenda 117/127/128)
+
+1. **Drain the 9-PR `[CODEX-PENDING]` queue** — needs Codex APPROVE (no key in remote env) **OR** Evans's local session (where Codex authenticates + merges). Recommended drain order: #199→#202→#203→#204 (Crisis S2); #206→#207 (Admin S2); **#208→#209** (Med-Interaction, in that order per the stacking caveat); #210 (AI Mode 2). The remote-cron loop **cannot** drain it.
+2. **CDM v1.2 → v1.3 batched promotion ceremony** (Phase B exit; Evans + Eng Lead + CDM owner) — the single highest-leverage unblock for all net-new implementation across Tracks 1/2/3/5.
+
+### Stale-tracking-ref trap (caught on BOTH repos again — 7th consecutive firing)
+- **telecheck-app:** local `main` + `origin/main` labels both lagged at `baca008` (69 commits behind) while `git ls-remote` + the checked-out HEAD both reported the true tip `c27638c`; corrected the labels via `git branch -f main c27638c` before running the merge-tree triage so the trial-merges resolved against authoritative main.
+- **telecheckONE:** local `main` label pointed at stale `6adaae5` (Addendum 71 / r175) while the detached clone HEAD + `git ls-remote` both reported true tip `ff993a1` (Addendum 129 / r233); realigned before appending.
+Lesson reinforced (7th consecutive): trust `git ls-remote`/HEAD, never the local branch label, on a fresh container.
+
+### Next critical-path item
+Same as Addenda 127/128, now reinforced by a **third** consecutive independent triage: **no genuinely-new, non-duplicative, spec-ratified, mergeable PR is available in the remote-cron env.** Next firing should again re-run the queue-health triage; if telecheck-app main is still `c27638c` + Codex still unavailable, surface (do not manufacture busywork). The loop is correctly parked pending an Evans-gated unblock — either queue-drain (local Codex session) or the CDM v1.3 ratifier ceremony.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Re-ran the queue-health triage per Addendum 128's standing prescription (3rd consecutive): independently verified telecheck-app main unmoved (`c27638c` via `git ls-remote`), Codex unavailable (`OPENAI_API_KEY` unset), all 9 `[CODEX-PENDING]` PRs still open, and — this firing's incremental contribution — ran the FULL 9-branch `merge-tree` triage (all 9 merge clean against `c27638c`) + the migration/rollback parity diff (52/52, no gap). Confirmed net-new work remains ratifier-gated (Phase B CDM v1.3 BLOCKED ON RATIFIER per Plan v1.1; Async-Consult SI-004/005 unratified). Per the discipline floor (duplication forbidden; no make-work) + STOP condition 3, authored **no duplicate/make-work code PR** — correctly surfaced the two Evans-gated barriers (queue-drain; CDM v1.3 promotion). Caught + corrected the stale-tracking-ref trap on BOTH repos (7th consecutive). telecheck-app main untouched by code. progress.json revision 233 → 234.
