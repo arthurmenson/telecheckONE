@@ -8745,3 +8745,49 @@ The conflict-free / locally-green queue now holds **#199, #202, #203, #204** (en
 **Next critical-path item.** No genuinely-new, non-duplicative, spec-ratified, mergeable PR is available in the remote env until the queue drains: (a) Async-Consult clinician decision-loop completion is **SPEC-BLOCKED** — SI-004 is ratifier-ready but NOT ratified (open PR #138), so implementing it would violate STOP-condition 3 (spec ratification leads implementation by ≥1 sprint) + the discipline floor; (b) the Med-Interaction → Pharmacy clinician-commit integration (the I-002 critical path) depends on #208/#209 (the write handlers it calls) being on main first. So next firing should re-run the queue-health triage and, if main is still unmoved + Codex still unavailable, surface rather than manufacture busywork.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Queue-health triage found PR #210 (AI Mode 2 case-prep) was the SOLE conflicting `[CODEX-PENDING]` PR (the other 8 already clean against unmoving main `c27638c`); rebased it onto `c27638c`, resolved the 3-file semantic conflict toward the branch's forward AI_MODE2_ENABLED-gated design (asserted by its own routes.test.ts), verified full suite 2058 passed / tsc / eslint / prettier / migration-bom clean on ephemeral PG 16 + Redis with the 000→052 chain. Force-pushed `6a1bb8e` → `e24f830`; #210 now merges clean against main but stays `[CODEX-PENDING]` (no merge — Codex unauthenticatable in remote env). The full 9-PR queue is now conflict-free; pipeline blocked solely on Codex availability — recommend Evans drain it in a local session. Caught + corrected the stale-tracking-ref trap on BOTH repos. telecheck-app main untouched. progress.json revision 230 → 231.
+
+## Addendum 128 — Queue-health triage RE-RUN per Addendum 127's prescription: main still unmoved (`c27638c`) + Codex still unavailable + 9-PR `[CODEX-PENDING]` queue still conflict-free; correctly SURFACED rather than manufacturing busywork — no make-work PR authored (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24
+**Repo:** telecheckONE (this Addendum + progress bump only). **No telecheck-app code PR authored this firing** — see the decision rationale below.
+**Trigger:** Standing autonomous-work loop (remote-cron firing), per telecheckONE/CLAUDE.md "Autonomous-work authorization."
+**progress.json:** r231 → r232
+**Codex:** UNAVAILABLE — `OPENAI_API_KEY` is unset in this remote-cron env (only `ANTHROPIC_BASE_URL` is set). Consistent with Addenda 105/107/110/113/114/116/117/127. Cannot provision the key (secret-handling is a prohibited action per hard-floor item 2). Any new PR would be `[CODEX-PENDING]`, unmergeable autonomously.
+
+### This firing executed Addendum 127's explicit "next firing" instruction
+
+Addendum 127 closed with a precise prescription: *"next firing should re-run the queue-health triage and, if main is still unmoved + Codex still unavailable, surface rather than manufacture busywork."* This firing did exactly that, independently re-verifying every premise rather than trusting the prior addendum:
+
+| Condition | Method | Result |
+|---|---|---|
+| main unmoved | `git ls-remote origin refs/heads/main` (authoritative, per stale-ref trap) | **`c27638c` — UNMOVED** since Addenda 118/127 |
+| Codex availability | `env` inspection for `OPENAI_API_KEY` | **UNSET — unavailable** |
+| 9-PR queue still open + `[CODEX-PENDING]` | `list_pull_requests` (live) | **All 9 present**: #199/#202/#203/#204 (Crisis S2 PR3–6) · #206/#207 (Admin S2 PR3–4) · #208/#209 (Med-Interaction PR8/PR9) · #210 (AI Mode 2) |
+| #209 conflict-free (the one branch the 119–127 cascade never re-pushed) | local **actual trial-merge** of `origin/feat/med-interaction-pr9-remaining-write-handlers` into `c27638c` | **`Automatic merge went well`, 0 conflicts** — confirms Addendum 127's `merge-tree` finding via a real merge |
+
+The #209 check was this firing's incremental contribution. Addendum 127 verified it conflict-free via `git merge-tree --write-tree`; this firing re-confirmed via an actual `git merge --no-commit --no-ff` (clean, then aborted). #209's branch SHA is unchanged (`62fe013`) and its recorded base is the stale `f6c5160`, but mergeability is what matters and it is clean against current main. Merge-order caveat preserved for the eventual drain: #209 stacks logically after #208 (both touch med-interaction `routes.ts`/`audit.ts`); against **bare** current main each is independently clean, but at drain time #208 must merge before #209 or #209 will need a trivial re-rebase.
+
+### Decision: SURFACE, no make-work/duplicate PR (discipline-floor-correct)
+
+The task's priority list (a)–(e) is fully covered — every critical-path handler is either merged-on-main or sitting in the conflict-free 9-PR queue (saturation proof in Addenda 117 + 127, re-confirmed live this firing). The remaining forward paths are all gated:
+
+- **Re-rebasing the clean queue PRs** = zero-value busywork on an unmoving main (Addendum 127's explicit finding). Forbidden as make-work.
+- **Re-authoring any queued handler** = duplication. Forbidden by the discipline floor.
+- **Net-new handlers/migrations** (SI-022 session_state, SI-023 ai_mode1_conversation, Sprint-12 ai_mode2_*, Sprint-14 consent_revocation_event, Sprint-16 notification_crisis_*, Sprint-17 synthetic_canary/kms_residency, Sprint-18 iam_principal_human_binding) require **CDM v1.2 → v1.3 batched promotion (Phase B, BLOCKED ON RATIFIER** per Master Completion Plan v1.1 §3). Authoring against unratified canonical entities = **STOP condition 3**.
+- **Async-Consult clinician decision-loop** = **STOP condition 3** (SI-004/SI-005 ratifier-ready but unratified; open spec PRs #137/#138/#139).
+- **Med-Interaction → Pharmacy clinician-commit (I-002 critical path)** depends on #208/#209 being on main first — queue-drain-gated.
+
+I also confirmed there is no DB-layer hygiene gap to close: migrations run 000→052 with **full rollback parity** (every migration has a matching `migrations/rollback/NNN_rollback.sql`; `comm -3` of the two basename-sets is empty). No skeleton, no missing rollback, no BOM gap to author.
+
+Manufacturing a duplicate or make-work PR purely to satisfy "ship one PR" would violate the discipline floor (duplication forbidden; no make-work) and Addendum 127's own guidance. The honest, correct firing output is this re-verified triage + surface. **No code branch created; both repos' main untouched by code this firing.**
+
+### Both forward barriers remain Evans-gated (unchanged from Addenda 117/127)
+
+1. **Drain the 9-PR `[CODEX-PENDING]` queue** — needs Codex APPROVE (no key in remote env) **OR** Evans's local session (where Codex authenticates + merges). Recommended drain order: #199→#202→#203→#204 (Crisis S2); #206→#207 (Admin S2); **#208→#209** (Med-Interaction, in that order per the stacking caveat); #210 (AI Mode 2). The remote-cron loop **cannot** drain it.
+2. **CDM v1.2 → v1.3 batched promotion ceremony** (Phase B exit; Evans + Eng Lead + CDM owner) — the single highest-leverage unblock for all net-new implementation across Tracks 1/2/3/5.
+
+### Next critical-path item
+
+Same as Addendum 127, now reinforced by a second consecutive independent triage: **no genuinely-new, non-duplicative, spec-ratified, mergeable PR is available in the remote-cron env.** Next firing should again re-run the queue-health triage; if main is still `c27638c` + Codex still unavailable, surface (do not manufacture busywork). The loop is correctly parked pending an Evans-gated unblock — either queue-drain or the CDM v1.3 ratifier ceremony.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Re-ran the queue-health triage per Addendum 127's prescription: independently verified main unmoved (`c27638c` via `git ls-remote`), Codex unavailable (`OPENAI_API_KEY` unset), and all 9 `[CODEX-PENDING]` PRs still open + conflict-free (actual trial-merge of #209 into `c27638c` clean — re-confirming Addendum 127's `merge-tree` finding). Confirmed migration/rollback parity 000→052 (no DB-layer gap). Per the discipline floor (duplication forbidden; no make-work) + STOP condition 3 (CDM v1.3 + Async-Consult ratifier-gated), authored **no duplicate/make-work code PR** — correctly surfaced the two Evans-gated barriers (queue-drain; CDM v1.3 promotion). Both repos' main untouched by code. progress.json revision 231 → 232.
