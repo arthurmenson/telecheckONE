@@ -8334,3 +8334,48 @@ Each: rebase → push → CI runs (~2 min) → check green → merge. Conflicts 
 4. **CDM v1.3 ratifier ceremony** (Add. 117) — Phase B exit; biggest leverage on net-new work.
 
 — Claude (`claude-opus-4-7`, Evans's local session, 2026-05-24), wave-2 CI gate fully green on main via PR #218 (vitest 4 config + CI postgres role provisioning + cherry-picked #217 plugin-wiring); pivoted diagnosis from "vitest 4 incompat" (deprecation noise only) to "migration 047 hardcoded `OWNER TO postgres` + CI's POSTGRES_USER=telecheck_ci" (root cause); 2 PRs drained from queue (#218, #193); 9 remain (conflict complexity ranges trivial to substantive — #199 is the first non-trivial case). Pattern-fix from Add. 115 partially realized (branch protection now requires `Build, lint, typecheck, test`). main = `c27638c`. progress.json revision 221 → 222.
+
+---
+
+## Addendum 119 — Queue cascade advanced: PR #199 (Crisis acknowledge) rebased onto current main + 3-file union conflict resolved + 68 tests green locally; stays [CODEX-PENDING] (Codex unavailable in remote env) (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24
+**Repo:** telecheck-app (PR #199 force-push, rebase + conflict resolution) + telecheckONE (this Addendum + progress bump)
+**Trigger:** Standing autonomous-work loop (remote-cron firing), per telecheckONE/CLAUDE.md "Autonomous-work authorization." Picks up the queue cascade exactly where Addendum 118 paused (#199 named as "the first non-trivial case").
+**progress.json:** r222 → r223
+**Codex:** Re-verified unavailable in remote-cron env — `npx -y @openai/codex --version` → `codex-cli 0.133.0` (binary fetches), but `OPENAI_API_KEY` is **absent** (only `ANTHROPIC_BASE_URL` set) → review cannot authenticate. Consistent with Addenda 105/107/110/113/114/116/117. I cannot provision the key (secret-handling is a prohibited action per hard-floor item 2). → no autonomous merge this firing.
+
+### What this firing did: advanced the cascade, did NOT merge
+
+Addendum 118 drained #218 + #193 and left **9 conflict-bearing PRs**, naming **#199 (Crisis acknowledge)** as the first non-trivial conflict (audit.ts + routes.ts vs the landed Crisis Sprint-2 PR 2 `crisis.detected` stack). This firing executed the rebase + spec-aware conflict resolution on #199 so it is now **conflict-free + CI-ready**, awaiting only a Codex APPROVE.
+
+**Force-push:** `531e6ac` (old, based on stale main `f6c5160`) → `485933b` (rebased onto current main `c27638c`).
+
+**Conflict resolution — union of merged PR 2 (`crisis.detected`) + this PR's (`crisis.acknowledged`):**
+
+| File | Conflict class | Resolution |
+|---|---|---|
+| `src/modules/crisis-response/audit.ts` | add/add | Kept **both** emitters — `emitCrisisDetectedAudit` (from merged #201) + `emitCrisisAcknowledgedAudit` (this PR). Placeholder union widened to `'crisis.detected' \| 'crisis.acknowledged'`; the single `crisisAuditPlaceholder()` cast site is shared. Header JSDoc generalized to both. |
+| `src/modules/crisis-response/routes.ts` | content | Body auto-merged to the union (both mounts present); reconciled header JSDoc + imports (both handler imports) + `/health` + `/ready` probe text to the both-handlers-mounted reality. **Critical fix:** the branch's `/ready` `reason` had drifted to `write_path_handlers_not_yet_fully_mounted`; reverted to main's canonical contract string `write_path_handlers_not_yet_implemented` — the branch's variant broke the main-side `crisis-response-plugin-wiring.test.ts` §1b assertion. |
+| `src/modules/crisis-response/README.md` | content (4 hunks) | Status header, Sprint-2 checklist, module-structure tree, handler listing all reconciled to "initiate (PR 2, merged) + acknowledge (PR 3, this commit)". |
+
+The two net-new handler files (`post-crisis-acknowledge.ts` +511 / `.test.ts` +586) applied **clean** during rebase (no conflict). Final diff vs main: 5 files, +1345 / −78.
+
+**Local verification (ephemeral PG 16, CI env mirrored — `telecheck_ci` user + provisioned `postgres` superuser role per the #218 migration-047 fix, full `000→052` chain applied):**
+- `tsc --noEmit`: **clean** (validates the entire union — both emitters, both route mounts, both imports, widened placeholder type).
+- `prettier --check` + `eslint` on `routes.ts` + `audit.ts`: **clean**.
+- `vitest run`: **68/68 pass** — crisis-response module (62, incl. the 23 §1–§10 acknowledge unit tests) + `crisis-response-plugin-wiring.test.ts` (6).
+
+**PR #199 state:** `mergeable_state: blocked` (was `unknown`/conflicting) → now conflict-free, awaiting the required `Build, lint, typecheck, test` gate (in_progress at firing end; metadata + dependency-review checks already green). A rebase-status comment was posted to the PR documenting the resolution + local verification for the next Codex-equipped session.
+
+### Why not merged
+
+Per the discipline floor (**Codex APPROVE mandatory before any merge**) + the Addenda 116/117 precedent (do NOT self-extend Evans's per-repo Codex-override autonomously), #199 stays `[CODEX-PENDING]`. This firing's deliverable is the **cascade-advance** Addendum 118 prescribed ("each needs rebase + push + CI re-run + conflict resolution") — not a merge. #199 is now the cheapest PR in the queue for the next Codex-equipped session: rebased, conflict-free, locally green.
+
+### Next critical-path items
+
+1. **Continue the queue cascade** — #202 (Crisis respond+resolve) next; same conflict class as #199 (audit.ts/routes.ts union vs the now-landed detected + acknowledge stack). Then #203 (patient-summary), #204 (sweep); then #206/#207 (admin Sprint 2), #208/#209 (med-interaction PR 8/9), #210 (AI Mode 2). Each: rebase → resolve union → push → local-verify → leave `[CODEX-PENDING]`.
+2. **Evans: unblock the merge gate** — provision `OPENAI_API_KEY` for remote Codex, OR extend the per-repo Codex-override to the rebased queue, OR run Codex locally on the now-conflict-free PRs (#199 is ready first).
+3. **CDM v1.3 ratifier ceremony** (Add. 117) — Phase B exit; biggest leverage on net-new work.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Advanced the queue cascade per Addendum 118: rebased PR #199 (Crisis acknowledge) onto current main `c27638c`, resolved the 3-file audit.ts/routes.ts/README union conflict (both `crisis.detected` + `crisis.acknowledged` emitters, both route mounts), aligned the `/ready` reason back to main's contract string, verified 68/68 tests green + tsc/prettier/eslint clean on an ephemeral PG 16. Force-pushed `531e6ac` → `485933b`; PR is now conflict-free + CI-ready but stays `[CODEX-PENDING]` (no merge — Codex unauthenticatable in remote env). main untouched. progress.json revision 222 → 223.
