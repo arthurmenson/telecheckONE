@@ -6822,3 +6822,78 @@ No PR opened — the work is a direct-to-main DRAFT-SI reconciliation (not a cod
 - **The bottleneck remains the human-gated Codex merge cascade**, not authorship. Highest-value next actions are Evans-local: (1) run the Codex cascade on #197 → #198 → #211 → handler PRs → reconcile #196/#208 Med-Int PR-8 double-attempt; (2) run the SI-020 §7 Codex pre-ratification ship-it cycle, then ratify P-037/P-038 (resolving the `consult.expired` gap at the ceremony); (3) the Addendum-93 Agentic-Workforce Day-2/3 sibling-repo bootstrap (out-of-scope for this GitHub-MCP-restricted env — repos not yet created; scope limited to telecheck-app + telecheckONE).
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex plugin in this env), Track-6 Async-Consult ratification-readiness: SI-004 ↔ SI-020 audit-taxonomy reconciliation (SI-004 `consult.*` 20-event annotated SUPERSEDED-FOR-RATIFICATION by SI-020 Sub-decision 2 `async_consult.*` 17-event + full crosswalk + reciprocal pointer; `consult.expired` gap flagged for the SI-020 ratifier, not filled per hard-floor item 6); within-scope, no hard-floor STOP, no ratification, no version bump; committed directly to telecheckONE main `e5ac618` 2026-05-24. progress.json revision 198 → 199.
+
+---
+
+## Addendum 96 — Track-6 Async-Consult ratification-readiness: SI-005 ↔ SI-020 Sub-decision 1 schema-model reconciliation — SI-005 2-entity mutable-state schema annotated SUPERSEDED-FOR-RATIFICATION by SI-020 7-entity append-only-only (I-035) model + divergence table + entity/column crosswalk + shipped-migration-020/021-replacement gap flagged for ratifier (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24
+**Trigger:** Standing autonomous-work loop (remote-cron firing). Read the Addendum trail through #95. Executed Addendum 95's explicit named "next" lever verbatim: *"SI-005 (Consult/ConsultEvent schema, paired sibling) row-shaping toward SI-020 Sub-decision 1 is the next adjacent Track-6 lever if another no-Codex firing fires before the Codex cascade."*
+
+### Cockpit-ref-integrity note (checked this firing)
+
+Per the Addendum 88 carryforward, verified `git rev-parse main origin/main` at firing start in both repos. **telecheck-app:** local `main` ref stale at `baca008` (045-era); `origin/main` current at `f6c5160` (Addendum 95-era handler-PR baseline) — branched/verified against `origin/main`. **telecheckONE:** local `main` ref stale at `6adaae5` (Addendum 71-era); `origin/main` current at `3b5ce4a` (Addendum 95, revision 199) — aligned local `main` to origin (`git branch -f main origin/main`; clean ancestor, no work lost; HEAD was already at `3b5ce4a`). No stranded addenda; cross-session continuity intact. **Reconciliation note on the inbound brief:** the firing's task brief again carried stale pointers (migration 045, Addendum 71, revision 175); actual live state at firing start was migration 051, Addendum 95, revision 199. Followed the LIVE Addendum-trail next-pointer (Addendum 95 → SI-005 reconciliation), not the stale brief premise, per the discipline that the Addendum trail is the authoritative cross-session continuity mechanism.
+
+### Codex availability — CONFIRMED UNAVAILABLE (trust-but-verify, this firing)
+
+Did not assume from prior addenda — verified directly: `OPENAI_API_KEY` absent; no `codex` CLI on PATH; `curl https://api.openai.com/v1/models` → **HTTP 403** (host not in network allowlist). Same meta-blocker as Addenda 75/77/80/82/84/86/87/88/90/91/92/94/95. **No code-PR merge possible this firing.** The 20 open [CODEX-PENDING] handler/CI PRs (#192–#211) remain blocked on the Evans-local Codex cascade.
+
+### Critical-path selection — handler surface + CI-hardening + Async-Consult audit-taxonomy saturated; the live lever is the SI-005↔SI-020 schema-model reconciliation
+
+Walked the task priority order (a)–(e) against actual `origin` + open-PR state (matches the Addenda 90–95 surveys):
+
+- **(a) Med-Interaction DB layer** — DONE (migrations 046–051 on `origin/main`; PRs #192/#195/#196/#208/#209 [CODEX-PENDING]).
+- **(b) Async-Consult clinician decision loop** — **SPEC-BLOCKED for implementation** (cannot write code before ratification). Ratification-*readiness* authoring IS in-scope Track-6 work (hard-floor item 3) — this firing's selected work.
+- **(c) AI Mode 1 chat handler** — DONE (Addendum 76; #193 introspection fix).
+- **(d) Crisis Response Sprint 2** — all handlers authored + PR-visible (#199, #201–#204).
+- **(e) Admin Backend Sprint 2** — submit/decision/dashboard-reads authored + PR-visible (#205–#207).
+
+Re-authoring any of (a)–(e) is the forbidden Addendum-85 double-attempt. The genuinely-unclaimed, non-duplicative, pilot-critical-path-advancing, in-scope-without-Codex item is exactly Addendum 95's named lever: the SI-005↔SI-020 Sub-decision 1 schema-model reconciliation (the paired sibling to the Addendum 95 SI-004↔SI-020 audit-taxonomy reconciliation).
+
+### What shipped (commit `5369a8c`, telecheckONE main — docs not Codex-gated)
+
+**Finding: SI-005 and SI-020 Sub-decision 1 propose genuinely divergent Consult/ConsultEvent persistence models that must NOT both be ratified.** SI-020 Sub-decision 1 §43 explicitly names its predecessor — "Option A append-only-only per I-035 … superseded mutable-state-column model from v1.0 §12" — the exact mutable-state model SI-005 §4.16 persists. Verified divergence:
+
+| Axis | SI-005 (v0.2, 2026-05-11) | SI-020 Sub-decision 1 (v0.12 R11) |
+|---|---|---|
+| Persistence model | mutable-state-column (append-**update**) | append-only-only per I-035 (immutable envelope + transition log) |
+| Entity count | 2 (`consults`, `consult_events`) | 7 entities + 1 derived view |
+| PK type | `VARCHAR(26)` | `ULID` |
+| Patient FK | `patient_account_id` → `accounts` | `patient_id` → `patient` |
+| State | mutable `state` column on `consults` | `consult_lifecycle_transition` log + `consult_outcome_summary_view` |
+| Clinician identity | nullable `assigned_clinician_id` column | dedicated `consult_review_claim` entity + 5-col composite decision FK |
+| PHI / payment | none in baseline | KMS-encrypted ciphertext on 4 entities + `payment_intent_id`/`payment_provider`/`currency` revenue anchor |
+
+**Canonical decision: SI-020 Sub-decision 1 (7 entities + 1 view, Option A append-only-only per I-035) is canonical** for ratification — newer, whole-slice, far more converged (R11), revenue-anchor- + PHI-encryption-complete, explicitly designed to supersede the v1.0 §12 mutable-state model. SI-005's 2-entity schema is preserved only as the historical record of the Sprint-9 placeholder that actually shipped in `telecheck-app/migrations/020` + `021`.
+
+Two files edited:
+1. **SI-005** — status header flipped DRAFT v0.2 → **SUPERSEDED-FOR-RATIFICATION (entity/schema model)**; v0.3 version-history entry added; closure/target/severity/adjacent-SI metadata re-homed onto SI-020's P-037/P-038 ceremony; inserted a full **Reconciliation against SI-020 Sub-decision 1** section with the divergence table + an 11-row SI-005→SI-020 entity/column crosswalk (SPLIT / DROPPED / RENAMED+RE-TARGETED / PROMOTED-to-entity / RE-MAPPED / NOT-carried / MOOT / SUPERSEDED / PRESERVED-in-principle dispositions per element) + the 3 gaps flagged for the ratifier.
+2. **SI-020** — added a **Predecessor reconciliation** paragraph under Sub-decision 1's Recommendation (mirroring the Addendum-95 Sub-decision 2 SI-004 paragraph): states it supersedes SI-005, "must NOT both be ratified," carries the shipped-migration-replacement gap + the modality + country_of_care gaps to the ratifier. No version bump, no R-closure-log entry (cross-artifact hygiene from the SI-005 side, not a Codex round).
+
+**3 gaps flagged, NOT filled** (hard-floor item 6 — net-new schema beyond ratified sub-decision scope):
+- **GAP-1 (load-bearing):** migrations 020/021 shipped the SI-005-shaped mutable-state placeholder; SI-020's append-only-only model is a **schema-model replacement**, not the forward-ALTER SI-005 anticipated. The P-038 follow-on must include a replacement migration (drop `consults`/`consult_events`; create the 7 entities + view) + a ratifier decision on Sprint-9-row data-migration vs greenfield-replaceable (no production data pre-launch).
+- **GAP-2:** no explicit `modality` column on SI-020 `consult` (ADR-012 async↔sync handoff modeled as the `escalated_to_sync` transition/audit only) — ratifier confirms.
+- **GAP-3:** no denormalized `country_of_care` on SI-020 `consult` (CCR resolved via `tenant`) — ratifier confirms.
+
+### Discipline posture
+
+- **SUPERSEDED-annotation discipline closure + within-scope crosswalk** — explicitly the hard-floor item 6 exemption ("SUPERSEDED-annotation discipline closures … remain closeable inline"); paired sibling to the Addendum 95 SI-004↔SI-020 reconciliation. No hard-floor STOP fired: no net-new schema field / invariant / audit-event / platform-floor primitive authored; the 3 genuine gaps flagged for the ratifier, not filled.
+- **No ratification, no canonical bump.** Both SI-005 and SI-020 remain unratified DRAFTs. No Promotion Ledger entry, no canonical-contract edit, no version bump. SI-020's Codex pre-ratification ship-it cycle (§7) still gates the P-037/P-038 ceremony.
+- **Docs-not-Codex-gated → committed directly to telecheckONE main** per the Addendum 94/95 / R1–R11 DRAFT-closure precedent.
+
+### Commit SHAs
+
+- SI-005↔SI-020 reconciliation: `5369a8c` (telecheckONE main)
+- Addendum 96 + progress.json 199 → 200: this Addendum-96 commit (telecheckONE main)
+
+### Codex outcome: UNAVAILABLE in remote-cron env → no merge; spec readiness advanced instead
+
+No PR opened — the work is a direct-to-main DRAFT-SI reconciliation (not a code change requiring Codex APPROVE). The 20 open [CODEX-PENDING] PRs (#192–#211) remain the merge-cascade bottleneck for the Evans-local Codex session.
+
+### Next critical-path item
+
+- **Async-Consult ratification-readiness is now fully saturated for no-Codex firings.** SI-020 (whole-slice, R11, lockstep across 10 sub-decisions + §3/§4) + SI-004 (audit taxonomy, superseded with crosswalk per Addendum 95) + SI-005 (entity schema, superseded with crosswalk this firing) are all as advanced as a no-Codex remote-cron firing can take them. The remaining author-side items are all ratifier decisions, not author-side fillable (GAP-1/2/3 above + the `consult.expired` gap from Addendum 95) — hard-floor item 6.
+- **The bottleneck remains the human-gated Codex merge cascade + ratification ceremony**, not authorship. Highest-value next actions are Evans-local: (1) run the Codex cascade on #197 → #198 → #211 → handler PRs → reconcile #196/#208 Med-Int PR-8 double-attempt; (2) run the SI-020 §7 Codex pre-ratification ship-it cycle, then ratify P-037 (SI) + P-038 (CDM v1.8 → v1.9 follow-on, resolving GAP-1/2/3 + `consult.expired` at the ceremony) — note P-038 must now reconcile the shipped migration 020/021 placeholder to the canonical 7-entity model per GAP-1; (3) the Addendum-93 Agentic-Workforce Day-2/3 sibling-repo bootstrap (out-of-scope for this GitHub-MCP-restricted env — repos not yet created; scope limited to telecheck-app + telecheckONE).
+- **Future no-Codex firings:** with the full Async-Consult ratification-readiness surface (SI-004/005/020) now saturated, the remaining Track-6 levers are SI-001 (MedicationRequest schema — the `consult_clinician_decision.prescription_details_id` FK target; verify it reconciles with SI-020's prescribing path) and SI-002/SI-003 (AUDIT_EVENTS / DOMAIN_EVENTS placeholder ratification) row-shaping; or Track-5 CI-hardening that is fully self-verifiable in-env.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex plugin in this env), Track-6 Async-Consult ratification-readiness: SI-005 ↔ SI-020 Sub-decision 1 schema-model reconciliation (SI-005 2-entity mutable-state schema annotated SUPERSEDED-FOR-RATIFICATION by SI-020 Sub-decision 1 7-entity append-only-only (I-035) model + divergence table + 11-row entity/column crosswalk + reciprocal pointer; shipped-migration-020/021-replacement GAP-1 + modality GAP-2 + country_of_care GAP-3 flagged for the SI-020 ratifier, not filled per hard-floor item 6); within-scope, no hard-floor STOP, no ratification, no version bump; committed directly to telecheckONE main `5369a8c` 2026-05-24. progress.json revision 199 → 200.
