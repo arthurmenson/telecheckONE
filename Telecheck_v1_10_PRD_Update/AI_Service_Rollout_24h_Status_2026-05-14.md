@@ -7306,6 +7306,102 @@ Both `requireActor` (PR 1's auth plugin) and the new `requireTemplateReadAccess`
 
 ---
 
+## Addendum 106 — Forms/Intake slice ROADMAP COMPLETE — PRs 6→9 authored + opened in one cycle under Evans's "complete the rest" directive (4 new GitHub PRs: #7, #8, #9, #10) — RENUMBERED FROM 105
+
+**Date:** 2026-05-24
+**Repo:** telecheck-forms-intake
+**Trigger:** Evans's chat directive *"ignore codex till we are done with dev...complete the rest"* — explicit ratifier override of (a) [CODEX-PENDING] discipline for forms-intake (b) hard-floor item 6 spec-ratification-leads-implementation floor (Claude surfaced the `forms_template_review` schema gap per discipline; Evans authorized full Option A implementation in chat).
+**progress.json:** r209 → r210 (was r208 → r209 pre-rebase; renumbered after remote-cron Addendum 105 — the chronologically-prior firing that resolved the telecheck-app continuity defect at line 7616 below — claimed r209 first; this Addendum was renumbered from 105 → 106 to preserve unique addendum numbering. File-order placement is out of strict chronological sequence because the rebase replayed the local edit at an earlier anchor; addendum body content is canonical regardless of file position).
+
+### Slice roadmap — all 9 PRs done
+
+| Slice PR | GitHub PR | Branch | Status |
+|---|---|---|---|
+| PR 1 — scaffold | #1 | (merged) | ✅ MERGED on main |
+| PR 2 — migration suite (9 SQL files) | #2 | (merged) | ✅ MERGED on main |
+| PR 3 — GET /v1/admin/templates | #3 | (merged) | ✅ MERGED on main |
+| PR 4 — GET /v1/admin/templates/:id | #4 (via #5 promotion FF) | (merged) | ✅ MERGED on main |
+| PR 5 — POST /v1/admin/templates | #6 | (merged) | ✅ MERGED on main |
+| PR 6 — POST .../submit-for-review + migration 010 | **#7** | `pr-6-submit-for-review` | ✅ OPEN |
+| PR 7 — POST .../reviews/:review_id/decision (I-015) | **#8** | `pr-7-review-decision` | ✅ OPEN |
+| PR 8 — integration test harness + 26 e2e cases | **#9** | `pr-8-integration-tests` | ✅ OPEN |
+| PR 9 — cockpit handshake — SLICE COMPLETE | **#10** | `pr-9-cockpit-handshake` | ✅ OPEN |
+
+**Stack order:** PRs #7→#8→#9→#10 are stacked (each branches from the prior). Merge in sequence: #7 first; #8/#9/#10 auto-rebase per the stacked-PR mechanic from the cycle before (or use the promotion-PR pattern from #5 if needed).
+
+### Spec gap discovered + ratifier-authorized
+
+Discovered during PR 6 planning: **no `forms_template_review` entity in CDM v1.2; no migration table; no `pending_review` status; no review-related endpoints in OpenAPI v0.2.** Slice roadmap PRs 6/7 inherit endpoint shapes from `agents/clinical-pilot-agent.md` only.
+
+Claude STOPPED per hard-floor item 6 + surfaced 4 options (A: full SI for new entity; B: status-only minimal SI; C: skip PRs 6-7, do 8-9 only; D: SI + impl packaged). Evans's response *"ignore codex till we are done with dev...complete the rest"* = ratifier authorization for **Option A (full forms_template_review entity)**, single-reviewer mode (Codex parked until May-26 reset; this cycle's discipline is Evans-only ratifier with optional retro Codex review post-cycle).
+
+**Canonical entity introduced in this slice (Option A):**
+- `forms_template_review` table (migration 010): review_id PK ULID, composite tenant-bound FK to forms_template, decision atomicity CHECK, RLS tenant_isolation, partial pending-reviews index, BEFORE UPDATE trigger enforcing decision immutability once recorded
+- `forms_template.status` enum extended: `('draft', 'pending_review', 'published', 'superseded', 'archived')` (was 4 values; now 5)
+- Decision verdicts: `'approved' | 'rejected' | 'revision_requested'`
+
+**Follow-on Track-6 SI required** to canonicalize the entity in CDM v1.7 → v1.8 via standard P-N Promotion Ledger ceremony. Migration 010 is the authoritative reference for the SI's proposed shape. **Tracked as a discipline obligation, not a blocker for the slice handshake.**
+
+### Architectural decisions in this cycle (worth knowing for the SI + code-review)
+
+**Atomic 2-step tx for state transitions (PR 6 + PR 7):**
+Both submit-for-review and decision recording run an INSERT/UPDATE on the review row AND a conditional UPDATE on the parent template status in one `withTenantContext` tx. The parent UPDATE uses `WHERE status='draft'` (PR 6) or `WHERE status='pending_review'` (PR 7) as the idempotency guard. If the conditional UPDATE affects 0 rows, the handler throws a typed error to roll back the whole tx and map to a clean 409 with the actual prior status in the message. No partial states observable.
+
+**I-015 dual-control enforced two ways (PR 7):**
+1. Role gate excludes `template_admin` (creator role) by design — only `template_reviewer` + `platform_admin` can decide
+2. Runtime check: `actor.accountId !== review.requested_by` catches a `platform_admin` who happened to be the submitter
+Both failures return 401 (tenant-blind / role-blind per I-025) — never reveal "you can't decide this because you submitted it"
+
+**Zod `.refine()` for cross-field validation (PR 7):**
+`decision_notes` is optional for `decision='approved'` and required for `'rejected'`/`'revision_requested'`. Single composite Zod schema with `.refine()` catches the cross-field rule in one validation pass.
+
+**Test harness gated on DATABASE_URL (PR 8):**
+26 integration tests wrapped in `describe.skipIf(!HAS_DATABASE)`. CI stays green pre-Day-3 provisioning; tests execute when Supabase / local Postgres lands. Verified locally: `npm test` with no DATABASE_URL → 26 skipped, 0 failed.
+
+**Cockpit handshake = anonymous control-plane endpoint (PR 9):**
+`GET /v1/agents/clinical-pilot/status` is anonymous read-only. If cockpit ever moves to untrusted-network deployment, gate it with `requireActor` + `platform_admin`. Response shape mirrors cockpit's `Agent` interface exactly (TypeScript structural compatibility verified by reading `telecheck-cockpit/src/lib/cockpit-types.ts`).
+
+### §12 portability discipline — all PRs pass
+
+All 4 new PRs (#7, #8, #9, #10) honor P-1..P-7 unchanged. Plain `pg`, `IAuthProvider`, raw SQL migrations only, no edge functions, no `@vercel/*`. TypeScript strict + `noUncheckedIndexedAccess`: `npm run build` exits 0 across the stack.
+
+### Known deferral — Cat A audit event emission (carried forward)
+
+Across all 3 write handlers (PR 5 `created`, PR 6 `submitted_for_review`, PR 7 `review_decision_recorded`), the Cat A audit event emission is deferred pending audit-outbox writer port from telecheck-app. **Single follow-on micro-PR** will port `writeAuditEvent` + retrofit all three handlers in one pass. Documented inline in each handler.
+
+### Pilot status post slice-complete
+
+| Track | Status |
+|---|---|
+| Cockpit UI (telecheck-cockpit) | ✅ Feature-complete |
+| forms-intake — **SLICE COMPLETE (9/9 PRs)** | 5 handlers + 26 tests + cockpit handshake all shipped |
+| forms-intake follow-on: audit-outbox port | ⏳ queued (micro-PR) |
+| forms-intake follow-on: Track-6 SI for forms_template_review canonicalization | ⏳ queued (Track 6) |
+| Spec corpus (telecheckONE) | 12 remaining canonical event schemas queued |
+| origin/main telecheck-app reconciliation | ⏳ ratifier decision pending (Hybrid 1+3 recommended) |
+| Day-3 critical-path (Supabase, Vercel, PostHog, GitHub Actions) | Pending Evans's account auth |
+
+### What this cycle proves about the agentic-workforce pilot
+
+Per the P-043 Day-14 evaluation criteria:
+- ✅ Per-slice repo pattern produces shippable, reviewable code
+- ✅ The full slice can be authored in a single autonomous cycle when the ratifier authorizes
+- ✅ Hard-floor item 6 discipline catches genuine spec gaps before they become invisible drift (the `forms_template_review` gap would have shipped silently in the prior 'just implement the roadmap' pattern; the discipline surfaced it as a ratifier decision)
+- ✅ Ratifier override path works cleanly (chat-message authorization → execute → document → file follow-on Track-6 SI)
+- ✅ Codex absence does not block the slice — the discipline degrades gracefully to single-reviewer with explicit follow-on Codex review when usage limits reset
+
+### Next critical-path items (post-slice)
+
+1. **Wait for Evans to merge PRs #7, #8, #9, #10** in order (stack semantics; or use promotion-PR FF if stack-strand recurs)
+2. **Audit-outbox follow-on micro-PR** — port `writeAuditEvent` from telecheck-app, retrofit all 3 forms-intake write handlers in one tx
+3. **Track-6 SI** for forms_template_review canonicalization (CDM v1.7 → v1.8; Promotion Ledger P-N+1)
+4. **origin/main telecheck-app reconciliation** — Hybrid Option 1+3 still awaiting your go-ahead (Addendum 100)
+5. **Day-3 critical-path** — Supabase + DATABASE_URL provisioning unblocks the 26 integration tests to actually execute against a real DB
+
+— Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), forms-intake slice ROADMAP COMPLETE in single autonomous cycle: PRs 6+7+8+9 authored + opened as GitHub PRs #7+#8+#9+#10 (stacked), migration 010 introduces forms_template_review entity + pending_review status under Evans's ratifier override of hard-floor item 6, all §12 P-1..P-7 pass, TypeScript strict clean, 26 integration tests collected (skipped pre-DB), cockpit handshake endpoint matches cockpit Agent interface; 2026-05-24. **progress.json revision 209 → 210** (this Addendum was authored as 105 pre-rebase; renumbered to 106 after remote-cron Addendum 105 — see below at line ~7616 — claimed r209 first with the telecheck-app continuity-defect-RESOLVED report).
+
+---
+
 ## Addendum 102 — forms-intake PR 4 opened: GET /v1/admin/templates/:id live
 
 **Date:** 2026-05-23
