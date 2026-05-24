@@ -7514,3 +7514,63 @@ Unchanged from PRs 3–4. No new imports outside the slice; Zod + ulid were alre
 4. **12 remaining canonical event schemas** in telecheckONE/canonical-events/_schemas/ — no account dependencies.
 
 — Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), forms-intake slice-roadmap PR 5 (= GitHub PR #6) opened: POST /v1/admin/templates first write handler with Zod body validation, write-scope role gate narrower than read, ULID generation, 23505→409 mapping, audit emission deferred to follow-on; 2026-05-24. progress.json revision 207 → 208.
+
+---
+
+## Addendum 105 — telecheck-app continuity-defect RESOLVED (origin/main FF'd to f6c5160 = full foundation chain); verified per-PR cascade-readiness matrix for the 20-PR [CODEX-PENDING] queue; 3 PRs superseded; no new code PR (all pilot-scope queued, Async-Consult ratification-blocked, Codex unavailable) (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24 (Day-3 window; remote-cron autonomous firing)
+**Repo:** telecheck-app (+ this cockpit doc in telecheckONE)
+**Deliverable:** `telecheck-app/docs/CODEX_CASCADE_RUNBOOK_2026-05-24.md` (docs PR **#212**, branch `docs/codex-cascade-runbook-2026-05-24`, commit `f1c2b7f`)
+**progress.json:** r208 → r209
+
+### Headline — the Addendum-100 "origin/main stranded at 045" defect is RESOLVED
+
+Addendum 100 (earlier remote-cron firing, same day) reported `origin/main` stranded at migration 045 (`baca008`), preserved the 51-commit Codex-APPROVED chain as `origin/recovery/detached-work-through-051` (`f6c5160`), and left three reconciliation options for Evans.
+
+**That reconciliation has since landed.** Verified this firing against the **live** remote (`git ls-remote origin refs/heads/main`):
+
+| Repo | live origin/main | meaning |
+|---|---|---|
+| telecheck-app | **`f6c5160`** | Addendum-100 **Option 2** (full detached-chain FF) — migrations 046–051 + Med-Interaction DB layer + foundation-051 + Wave-1 read handlers (`get-signal`, `get-crisis-event`, `get-crisis-operational-health`) + Mode 1 `chat.ts` |
+| telecheckONE | `5a17e7c` | = cockpit Addendum 104; current |
+
+**Root of the briefing/Addendum-100 confusion (now fully diagnosed):** the *stale local `origin/main` tracking refs*. `git rev-parse origin/main` returned `baca008` (telecheck-app) and `6adaae5` / "Addendum 71 / rev 175" (telecheckONE) — the exact numbers the firing briefing cited. A fresh `git fetch origin main` corrects both. The actual remote state was current all along. **Lesson for future firings: when continuity is in doubt, trust `git ls-remote`, not the local tracking ref.** This single stale-ref trap is what made the briefing (rev 175 / Addendum 71 / migration 045) look accurate.
+
+### Cascade-readiness matrix (verified — see runbook §2 for full detail)
+
+Computed via `git merge-base --is-ancestor` + `git rev-list --count` of each queue PR head against live `origin/main` (`f6c5160`):
+
+| Bucket | PRs | Action |
+|---|---|---|
+| **SUPERSEDED** (content now on main, or by newer PR) | #192 (migration 048 landed under different name), #195 (signal-read landed as `get-signal.ts` not `signals.ts`), #196 (subsumed by #208) | Recommend **CLOSE-as-superseded** (Evans's call; branches preserved) |
+| **NET-NEW, needs rebase** (branched pre-FF) | #193 (ai-service health/ready), #194 (migration-chain CI gate) | Rebase onto `f6c5160`, then Codex |
+| **READY** (0 behind; cleanly based on current main) | #197, #198, #199, #200, #201, #202, #203, #204, #205, #206, #207, #208, #209, #210, #211 (15 PRs) | Codex APPROVE → merge |
+
+Notes: #199's head `531e6ac` IS the crisis-acknowledge "local" commit Addendum 100 flagged — it is this PR, not a separate dup. #208 (`create-evaluation.ts` + emit-signal + activate-signal + 304-line `audit.ts`) is canonical over #196.
+
+### Discipline item for the ratifier
+
+The FF to `f6c5160` adopted Addendum-100's **Tier-2 "ambiguous-APPROVE"** Wave-1 read handlers onto main without an unambiguous clean Codex APPROVE on record (Addendum 83: "Codex usage limit hit mid-cycle"). Now a fait accompli on main (presumed Evans ratifier action, consistent with the Addendum-103 forms-intake cascade). **Not reversed** — advancing/rewinding main is Evans-gated, hard-to-reverse shared state. Recommend a confirming Codex pass on the three read handlers during the May-26 cascade.
+
+### Why no new code PR this firing
+
+Per the briefing priority ladder (a–e), every item is **authored + queued** (#192–#211):
+- (a) Med-Interaction DB layer — on main (046–051); write handlers queued (#208/#209).
+- (b) Async-Consult clinician decision loop — **STOP condition.** SI-004 + SI-005 annotated SUPERSEDED-FOR-RATIFICATION; pending spec-corpus ratifier ceremony (Evans + Engineering Lead + CDM owner). Spec-ratification-leads-implementation floor forbids starting the DB layer. No SI re-filed (the reconciliation SIs already exist + are correctly pending).
+- (c) AI Service Mode 1 chat — on main (`chat.ts`).
+- (d) Crisis Sprint 2 — all queued (#199/#201/#202/#203/#204 + #200 wiring).
+- (e) Admin Sprint 2 — all queued (#205/#206/#207).
+
+**Codex is unavailable in the remote-cron env** (no `OPENAI_API_KEY`, no `codex` binary) → no queue PR is mergeable here (merge requires Codex APPROVE). Authoring a duplicate or starting a ratification-blocked slice would both violate the discipline floor. The honest, in-floor deliverable is the verified continuity reconciliation + executable cascade runbook (docs PR #212), which de-risks the May-26 cascade by removing the false "stranded base" premise + the 3 superseded PRs + a concrete merge order.
+
+**Note on docs-to-main:** the standing "docs commit direct to main" pattern assumes a pushable main; `main` is **branch-protected** here (direct push → 403). The runbook therefore shipped as docs PR #212 (ratifier-mergeable, no Codex gate). This cockpit Addendum + progress bump went to `telecheckONE:main` (pushable).
+
+### Next critical-path item
+
+1. **May-26 Codex mass cascade** on the 20-PR queue per runbook §3 order — after closing #192/#195/#196 and rebasing #193/#194.
+2. **Async-Consult DB layer** — gated on SI-004/SI-005 ratifier ceremony (STOP until ratified).
+3. **forms-intake slice-roadmap PR 6** (POST submit-for-review) + audit-outbox follow-on — Evans's local-session track (separate repo, outside remote-cron GitHub scope).
+4. **12 remaining canonical event schemas** in `telecheckONE/canonical-events/_schemas/` — no account dependencies.
+
+— Claude (Opus 4.7, remote-cron autonomous firing), 2026-05-24. Diagnosed the stale-tracking-ref trap behind the Addendum-100 "stranded at 045" alarm; confirmed origin/main reconciliation landed (Option 2 FF to `f6c5160`); shipped a verified per-PR cascade-readiness runbook (docs PR #212) flagging 3 superseded PRs + 2 needs-rebase + 15 ready + the Tier-2-on-main discipline item; no new code PR (correctly — all pilot scope queued, Async-Consult ratification-blocked, Codex unavailable). progress.json revision 208 → 209.
