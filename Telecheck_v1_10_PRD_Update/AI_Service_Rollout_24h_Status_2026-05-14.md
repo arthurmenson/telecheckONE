@@ -7303,3 +7303,55 @@ Both `requireActor` (PR 1's auth plugin) and the new `requireTemplateReadAccess`
 - **Day-3 critical-path** (needs Evans's accounts): Supabase provisioning + DATABASE_URL + Vercel link + PostHog + GitHub Actions hooks.
 
 — Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), telecheck-forms-intake PR 3 opened (GET /v1/admin/templates, tx-receiver pattern, keyset pagination, I-025 tenant-blind auth, [CODEX-PENDING] until May 26 cascade); 2026-05-23. progress.json revision 204 → 205.
+
+---
+
+## Addendum 102 — forms-intake PR 4 opened: GET /v1/admin/templates/:id live
+
+**Date:** 2026-05-23
+**Repo:** telecheck-forms-intake
+**Branch:** pr-4-get-template-by-id (commit 4ca1edb)
+**PR:** https://github.com/arthurmenson/telecheck-forms-intake/pull/4
+**Status:** [CODEX-PENDING] — awaiting May 26 usage-limit reset cascade
+**progress.json:** r205 → r206
+
+### What shipped
+
+PR 4 of the 9-PR Forms/Intake slice roadmap. Wires `GET /v1/admin/templates/:id` — the detail handler — completing both read endpoints of the templates admin surface.
+
+**Changes (3 files modified):**
+
+| File | Change |
+|---|---|
+| `src/modules/forms-intake/routes/templates.ts` | Added `getTemplateHandler` (~60 lines): `requireActor` + `requireTemplateReadAccess` + path param extraction + `withTenantContext` → `findTemplateById` + tenant-blind 404 on null |
+| `src/modules/forms-intake/plugin.ts` | Uncommented PR 4 route; added `getTemplateHandler` import |
+| `src/index.ts` | Updated `scaffold_state`, `endpoints_live`, `next_pr`, `/ready` reason to PR-4 state |
+
+### Key design decisions
+
+**Full row on detail:** `getTemplateHandler` returns the complete `FormTemplate` including all 4 JSONB layer columns (`presentation_content`, `branching_logic`, `eligibility_logic`, `approval_governance`). The PR 3 list handler deliberately omits these (summary projection for DoS prevention). The detail handler is intended for use when the caller needs the full form definition — clients must authenticate and hold a template-read role to access the JSONB layers.
+
+**Tenant-blind 404 (I-025):** `findTemplateById(tx, actor.tenantId, templateId)` returns `null` both when the row doesn't exist and when it belongs to a different tenant (RLS + explicit `AND tenant_id = $2` WHERE clause — same observable result). The handler maps `null → 404 { "Not Found" }` without differentiation — never leaks whether the ID exists in another tenant.
+
+**No :id validation beyond string-nonempty:** ULID format validation is not done at this layer (it adds no security; DB will simply return null for a non-ULID string, which correctly maps to 404). This matches the telecheck-app pattern for detail handlers.
+
+### §12 portability discipline — all P-1..P-7 pass
+
+All rules unchanged from PR 3. No new imports, no schema changes, no edge functions.
+
+### Pilot status post PR 4
+
+| Track | Status |
+|---|---|
+| forms-intake — PR 1 (scaffold) | ✅ [CODEX-PENDING] |
+| forms-intake — PR 2 (migration suite, 9 SQL files) | ✅ [CODEX-PENDING] |
+| forms-intake — PR 3 (GET /v1/admin/templates) | ✅ OPEN [CODEX-PENDING] |
+| forms-intake — PR 4 (GET /v1/admin/templates/:id) | ✅ OPEN [CODEX-PENDING] |
+| forms-intake — PR 5 (POST /v1/admin/templates) | ⏳ next — first WRITE handler |
+
+### Next critical-path item
+
+- **forms-intake PR 5** — POST /v1/admin/templates (create draft): first write handler in the slice; introduces Zod + Fastify JSON Schema validation for request body (deferred from PRs 3–4 per plugin.ts spec comments); creates a new `FormTemplate` row in `draft` status; `template_admin` role gate; Cat A audit event `forms_template.created`.
+- **12 remaining canonical event schemas** in `telecheckONE/canonical-events/_schemas/` — no account dependencies; can ship in parallel.
+
+— Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), telecheck-forms-intake PR 4 opened (GET /v1/admin/templates/:id, tenant-blind 404, I-025, [CODEX-PENDING] until May 26 cascade); 2026-05-23. progress.json revision 205 → 206.
