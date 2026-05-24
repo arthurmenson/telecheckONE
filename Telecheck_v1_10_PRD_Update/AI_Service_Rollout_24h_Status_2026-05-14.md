@@ -7884,3 +7884,55 @@ Same incantation will work for the **telecheck-app 20-PR [CODEX-PENDING] queue**
 4. **Day-3 provisioning** — Supabase / DATABASE_URL / Vercel / PostHog / GitHub Actions PR-merge hooks → integration tests actually execute + cockpit live data + production deploys.
 
 — Claude (Opus 4.7, 1M context, Evans's local session), telecheck-forms-intake slice formally COMPLETE on main: 4-PR cascade merged via `gh pr edit --base main` + `gh pr merge --merge` per PR; zero open PRs; main HEAD = `66c0235`; all 10 slice-roadmap PRs live; both pilot repos (cockpit + forms-intake) now simultaneously feature-complete on main for the first time; 3 of 6 Day-14 evaluation criteria HIT; same cascade pattern stands ready for the 20-PR telecheck-app queue when authorized; 2026-05-24. progress.json revision 212 → 213.
+
+## Addendum 110 — telecheck-app code critical-path confirmed fully blocked (queue-merge Evans-gated + Async-Consult ratification-gated + Codex unavailable); genuine in-floor deliverable = CLAUDE.md continuity-defect fix (docs PR #213) (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24
+**Repo:** telecheck-app
+**Trigger:** Standing autonomous-work loop (remote-cron firing). Read CLAUDE.md (both repos) + the Master Completion Plan + the Addendum trail through #109 + migrations/ + the 32 open PRs.
+**progress.json:** r213 → r214
+
+### Live-state re-verification (stale-ref trap re-encountered + corrected)
+
+Booted with the firing briefing again citing the stale `rev 175 / Addendum 71 / migration 045` numbers — the same stale-tracking-ref trap diagnosed in Addenda 105/107. Corrected via `git ls-remote` + `git fetch origin main`:
+
+| Repo | local pre-fetch | **live remote main** |
+|---|---|---|
+| telecheck-app | `baca008` (stale ref) | **`f6c5160`** — migrations 000→051, 11 modules, Wave-1 read handlers + Mode 1 `chat.ts` |
+| telecheckONE | current | `5a17e7c`-era (= Addendum 109) |
+
+Codex re-checked in-env: **NOT available** (no `codex` binary, no `OPENAI_API_KEY`, no plugin cache). Confirms the no-Codex remote-cron profile of Addenda 94–96/104–107.
+
+### Priority-ladder (a–e) state — every code item blocked or on-main/queued
+
+| Item | State | Verdict |
+|---|---|---|
+| (a) Med-Interaction DB layer | migrations 046–051 on main; `get-signal` handler on main; PRs #192/#195/#196/#208/#209 queued | DONE / queued — **duplication forbidden** |
+| (b) Async-Consult clinician decision loop | SI-020/SI-004/SI-005 **unratified**; pending spec-corpus ratifier ceremony (Evans + Eng Lead + CDM owner) | **HARD STOP** — spec-ratification-leads-implementation floor (STOP condition 3) |
+| (c) AI Mode 1 chat | `chat.ts` on main; Mode 2 case-prep queued (#210) | DONE / queued |
+| (d) Crisis Response Sprint 2 (5 handlers) | read handler on main; initiate/ack/respond+resolve/patient-summary/sweep all queued (#199/#201/#202/#203/#204) | queued — **duplication forbidden** |
+| (e) Admin Backend Sprint 2 (3 handlers) | crisis-dashboard read on main; submit/decision/consult-queue dashboards queued (#205/#206/#207) | queued — **duplication forbidden** |
+
+**Conclusion (4th consecutive firing to reach it): no in-floor, non-duplicate, non-ratification-blocked telecheck-app CODE PR is available.** The entire pilot-viable handler surface is either on `main` or authored in the 20-PR `[CODEX-PENDING]` queue (#192–#211). The two levers that would unblock real code velocity are both **Evans-gated**:
+1. **`"merge them for me"` extended to telecheck-app** → the verified cascade (Addendum 105 runbook) drains the 20-PR queue. (Not yet authorized for this repo; cockpit + forms-intake were per-repo.)
+2. **Async-Consult ratifier ceremony** (SI-020 + SI-004/SI-005 superseded-with-crosswalk per Addenda 95/96) → unblocks slice (b).
+
+Dual-recommendation discipline (CLAUDE.md) requires a Codex two-pass consult before posing a decision-question to Evans; Codex is unavailable, so **no decision-question is posed this firing** — the two levers are surfaced informationally only.
+
+### Genuine in-floor deliverable shipped — docs PR #213
+
+Rather than duplicate the queue or force an ungated merge, shipped the one clean, low-risk, self-verifiable, non-ratification-gated deliverable: **corrected the false `## No code yet` footer in `telecheck-app/CLAUDE.md`.** That footer claimed "bootstrap commit only — no slice implementation has begun" — flatly false against 11 modules + migrations 000→051 + shipped handlers, and it is the *first* doc every firing is told to read. Replaced with an accurate "Implementation status" section pointing to the live continuity sources (this Addendum trail, `git log`, open-PR queue, `migrations/`) + an explicit **stale-tracking-ref-trap** warning to inoculate future firings against the exact `045`-stranded misread this firing (and 105/107) had to correct.
+
+- **Branch:** `feat/claude-md-impl-status-correction` → `main`
+- **Commit:** see branch head (single-file Markdown change)
+- **PR:** **#213** — docs-only, no Codex gate, ratifier-mergeable (`main` branch-protected → docs-PR pattern per Addendum 105)
+- **Codex outcome:** N/A (docs-only; no executable surface) — **no `[CODEX-PENDING]` marker needed**
+
+### Next critical-path items (refreshed)
+
+1. **telecheck-app 20-PR `[CODEX-PENDING]` queue (#192–#211)** — biggest backend unlock; needs Evans's `"merge them for me"` extension to telecheck-app (Addendum 105 runbook: 3 superseded to close, 2 needs-rebase, 15 ready). Evans-gated.
+2. **Async-Consult ratifier ceremony** — SI-020/SI-004/SI-005 ratification (Evans + Eng Lead + CDM owner). Unblocks slice (b) DB layer. Evans-gated.
+3. **Merge docs PR #213** (ratifier; no Codex). Then this CLAUDE.md fix retires the stale-footer landmine permanently.
+4. **Day-3 provisioning** (Supabase / Vercel / PostHog / GitHub Actions) — operator/Evans-gated.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex plugin in this env), 2026-05-24. Re-verified live remote (`git ls-remote`: telecheck-app main = `f6c5160`) after re-encountering the stale-`045` briefing trap; confirmed all five priority-ladder code items are on-main, queued (duplication-forbidden), or ratification-blocked, and the two unblock levers are Evans-gated; correctly shipped **no duplicate code PR**; genuine in-floor deliverable = docs PR #213 fixing the false `## No code yet` CLAUDE.md footer + adding a stale-tracking-ref-trap inoculation for future firings. No decision-question posed to Evans (Codex unavailable → dual-recommendation two-pass cannot run). progress.json revision 213 → 214.
