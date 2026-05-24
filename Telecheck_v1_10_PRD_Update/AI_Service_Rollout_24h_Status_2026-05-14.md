@@ -8467,3 +8467,55 @@ Addendum 120 rebased #202 (respond+resolve) and named **#203 (Crisis patient-sum
 3. **CDM v1.3 ratifier ceremony** (Add. 117) — Phase B exit; biggest leverage on net-new work.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Advanced the queue cascade per Addendum 120: rebased PR #203 (Crisis patient-summary GET) onto current main `c27638c`, resolved the 2-file README/routes union conflict (kept main's PR 1 staff read + PR 2 initiate write + appended PR 5 patient read; preserved PR 2's merged-on-main doc detail verbatim), kept main's `/health`+`/ready` probe text to preserve the plugin-wiring gate, verified 55/55 crisis-response handler tests + 6/6 plugin-wiring tests green + tsc/prettier/eslint clean on an ephemeral PG 16. Force-pushed `5b83db0` → `62b1ddf`; PR is now conflict-free + CI-ready but stays `[CODEX-PENDING]` (no merge — Codex unauthenticatable in remote env). telecheck-app main untouched. progress.json revision 224 → 225.
+
+---
+
+## Addendum 122 — Queue cascade advanced: PR #204 (Crisis _sweep) rebased onto current main + 3-file union conflict resolved + 72 crisis-response + 6 plugin-wiring tests green locally; stays [CODEX-PENDING] (Codex unavailable in remote env) (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24
+**Repo:** telecheck-app (PR #204 branch force-push only; main untouched) + telecheckONE (this Addendum + progress bump).
+**Trigger:** Standing autonomous-work loop (remote-cron firing), per telecheckONE/CLAUDE.md "Autonomous-work authorization." Picks up the queue cascade exactly where Addendum 121 paused (#204 named as the next cascade item after #199 → #202 → #203).
+**progress.json:** r225 → r226
+**Codex:** re-checked in-env — `npx -y @openai/codex --version` → `codex-cli 0.133.0` (binary fetches), but `OPENAI_API_KEY` is **absent** (only `ANTHROPIC_BASE_URL` set) → review cannot authenticate; `codex review --base main` 403s on the `wss://api.openai.com/v1/responses` handshake (`api.openai.com` not in this env's network allowlist). The charter's canonical Codex plugin is a Windows path on Evans's machine, not present in this remote Linux container. Consistent with Addenda 105/107/110/113/114/116/117/119/120/121. Codex review **cannot run in remote-cron**; #204 stays `[CODEX-PENDING]`, no merge.
+
+### Cycle execution — cascade item #204 (the LAST Crisis Sprint-2 handler PR)
+
+Addendum 121 rebased #203 (patient-summary GET) and named **#204 (Crisis `_sweep`)** as the next cascade item. This firing executed the rebase + spec-aware conflict resolution so #204 is now **conflict-free + CI-ready**, awaiting only a Codex APPROVE. #204 is the **operator-invoked no-acknowledgement sweep** (`POST /v0/crisis-events/:id/_sweep`) — the last write-path handler in the Crisis Response Sprint-2 endpoint surface, and the FIRST operator-invoked-write-with-fencing-token pattern in the codebase.
+
+**Rebase:** PR #204's single commit (`65337ce`) sat on stale base `f6c5160` (pre-Sprint-2-PR-2 main). Rebased onto current main `c27638c`. 3 of 5 files conflicted (`audit.ts` add/add + `routes.ts` content + `README.md` content); the two new handler files (`post-crisis-sweep.{ts,test.ts}`, 1474 LOC) auto-merged clean.
+
+**Conflict resolution (spec-aware union of merged PR 2 `crisis.detected` + this PR's `crisis.no_acknowledgement_escalation`):**
+
+| File | Conflict class | Resolution |
+|---|---|---|
+| `audit.ts` | add/add | Kept **main's** `emitCrisisDetectedAudit` (incl. the Codex R1 #201 finding-2 `CrisisInitiatorActorIdentity` + `CRISIS_INITIATOR_ACTOR_TYPE` actor_type-derivation upgrade) **and appended** this PR's `emitCrisisNoAcknowledgementEscalationAudit` (`actor_type: 'system'`, sweep-execution detail payload). Placeholder union widened to `'crisis.detected' \| 'crisis.no_acknowledgement_escalation'`; the single `crisisAuditPlaceholder()` cast site is shared; header JSDoc generalized to describe both emitters + their distinct same-tx wrapper pairings (036 initiation vs 038 sweep). |
+| `routes.ts` | content | Body auto-merged to the union; resolved the import block to keep **both** handler imports (`import/order`: get-crisis-event → post-crisis-event → post-crisis-sweep) alongside both mounts (`POST /` initiate, `GET /:id` staff read, `POST /:id/_sweep`). **Critical parity with Add. 119/120/121:** kept main's `/health` + `/ready` probe text **verbatim** (`Sprint 2 of 4 at v0.3` + `reason: write_path_handlers_not_yet_implemented`) so the `crisis-response-plugin-wiring.test.ts` §1a/§1b assertions stay green. Reconciled the route-inventory doc comment so `_sweep` is documented as mounted (no longer in the "NOT mounted yet" list). |
+| `README.md` | content (2 conflict blocks) | Status header reframed to "Sprint 2 PR 6 — SWEEP HANDLER LANDED" naming all landed handlers (PR 1 staff read + PR 2 initiate, both on `main`; PR 6 sweep, this commit). **Preserved main's full PR 2 detail section verbatim** (relabeled "already merged on `main`"); appended this PR's PR 6 detail + follow-up-scope sections; marked `_sweep` DONE in the Sprint 2-4 work list. |
+
+No new migration in this PR (the sweep wrapper `execute_crisis_no_acknowledgement_sweep()` lives in migration 038, already on main) → no rollback file required. Final diff vs main: 5 files, +1796 / −62.
+
+**Local verification (ephemeral PG 16 + Redis, CI env mirrored — `telecheck_ci` superuser + provisioned `postgres` superuser role per the #218 migration-047 `OWNER TO postgres` fix; full `000→052` chain applied by `tests/setup.ts` `applyMigrations`):**
+- `tsc --noEmit`: **clean** (0 errors — validates the union: both emitters, both route mounts, both imports, widened placeholder type, the sweep handler's withDbRole composition against current main's helper signatures).
+- `prettier --check` (whole module) + `eslint --max-warnings 0`: **clean** (applied a pure printWidth reflow to the two new handler files — formatting-only, config drift since the branch was authored against old main; no logic touched).
+- `vitest run src/modules/crisis-response/`: **72/72 pass** (get + post-crisis-event + post-crisis-sweep handler suites — incl. the sweep's 33-section matrix: happy path + composition order + tenant/admin guards + path-param + body-validation matrix + 0-row pre-fetch 404 + 42501 for both withDbRole paths + 5 SQLSTATE outer-catch cases + 4 non-escalation outcomes skip audit + audit-emit failure propagates + fencing_token-echo discipline).
+- `crisis-response-plugin-wiring.test.ts`: **6/6 pass** (the new `_sweep` mount did not break the §1a v0.3 metadata / §1b BLOCKED-reason / §1c route-mount wiring assertions).
+
+**PR #204 state:** conflict-bearing (stale base) → now conflict-free, locally green, awaiting the required `Build, lint, typecheck, test` gate. Force-pushed `65337ce` → `842db7a`. A rebase-status comment was posted to the PR documenting the resolution + local verification for the next Codex-equipped session.
+
+### Discipline-floor compliance
+
+- **Codex APPROVE mandatory before merge** — honored; no merge attempted. Per Addenda 116/117/119/120/121 precedent, did NOT self-extend Evans's per-repo Codex-override autonomously.
+- **No net-new schema / canonical entity authored** — pure cascade-advance on an already-authored PR; zero duplication (the PR's commit content is preserved, only rebased + conflict-resolved + lint/format-cleaned).
+- **No STOP condition hit** — no architectural-judgment finding, no prohibited action, no ratification ceremony. The sweep's `requireAdminActorContext` closest-available role-gate + the SI-024 `crisis_sweep_scheduler` JWT-role-mapping gap are pre-existing, documented in the handler header + README follow-up scope, and already ratified-as-deferred — not introduced this firing.
+
+### Cascade status (refreshed)
+
+The conflict-free queue now holds **#199, #202, #203, #204** — the **entire Crisis Response Sprint-2 write-path surface** (acknowledge / respond+resolve / patient-summary read / sweep) rebased onto current main `c27638c` + locally green, ready for the next Codex-equipped session. Cascade merge order: #199 → #202 → #203 → #204 (each re-rebases after the prior merges land, since they share `audit.ts`/`routes.ts`/`README.md` union touchpoints).
+
+### Next critical-path items
+
+1. **Continue the queue cascade** — #206/#207 (admin Sprint 2 PR 3 decision + PR 4 dashboard reads) next, then #208/#209 (med-interaction PR 8/9 write handlers), #210 (AI Mode 2 case-prep). Each: rebase → resolve union → local-verify → leave `[CODEX-PENDING]`. The Crisis Sprint-2 block (#199/#202/#203/#204) is now fully cascade-prepped.
+2. **Evans: unblock the merge gate** — provision `OPENAI_API_KEY` for remote Codex, OR extend the per-repo Codex-override to the rebased queue, OR run Codex locally on the now-conflict-free PRs (the full Crisis Sprint-2 block #199 + #202 + #203 + #204 is ready).
+3. **CDM v1.3 ratifier ceremony** (Add. 117) — Phase B exit; biggest leverage on net-new work.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Advanced the queue cascade per Addendum 121: rebased PR #204 (Crisis `_sweep`) onto current main `c27638c`, resolved the 3-file audit.ts/routes.ts/README union conflict (kept main's Codex-upgraded `crisis.detected` emitter + appended `crisis.no_acknowledgement_escalation`; kept both route mounts + both imports; preserved main's `/health`+`/ready` probe text to hold the plugin-wiring gate; preserved PR 2's merged-on-main doc detail verbatim), verified 72/72 crisis-response handler tests + 6/6 plugin-wiring tests green + tsc/prettier/eslint clean on an ephemeral PG 16 + Redis with the full 000→052 chain applied. Force-pushed `65337ce` → `842db7a`; PR is now conflict-free + CI-ready but stays `[CODEX-PENDING]` (no merge — Codex unauthenticatable in remote env). The full Crisis Response Sprint-2 write-path surface (#199/#202/#203/#204) is now cascade-prepped. telecheck-app main untouched. progress.json revision 225 → 226.
