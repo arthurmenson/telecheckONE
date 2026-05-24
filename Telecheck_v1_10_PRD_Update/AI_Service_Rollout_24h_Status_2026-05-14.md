@@ -7082,3 +7082,86 @@ All Day-2 work items from Addendum 97 are now delivered. Day-3 work is gated on 
 The Forms-intake migration suite (PR 2) is the next no-infrastructure-needed deliverable.
 
 — Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), telecheck-forms-intake PR 1 shipped (scaffold: pool + auth plugin + RLS helper + migration runner; §12 P-1–P-7 compliant; tsc clean; [CODEX-PENDING] until May 26 cascade); 2026-05-23. progress.json revision 201 → 202.
+
+---
+
+## Addendum 99 — telecheck-forms-intake PR 2 — migration suite (9-file SQL schema: extensions → tenants → audit chain → RLS helpers → domain events → idempotency → forms tables → uniqueness constraints) (2026-05-23, Evans local session)
+
+**Date:** 2026-05-23 (Day-2 of pilot continued)
+**Trigger:** Evans's standing "continue till done" directive; next critical-path item after Addendum 98 (forms-intake PR 1 scaffold).
+
+### What landed
+
+**telecheck-forms-intake PR 2** opened at https://github.com/arthurmenson/telecheck-forms-intake/pull/2 (`[CODEX-PENDING]` until May 26 cascade).
+
+Branch: `pr-2-migration-suite` off `main` (commit `57eda57`).
+
+This is the complete SQL schema for the Forms/Intake slice — 9 migration files numbered 001–009 (forms-intake clean-room convention; no 000), ported from telecheck-app foundation migrations + forms-intake migrations with headers and precondition references updated to the new numbering scheme.
+
+### Files shipped
+
+| File | Origin | Purpose |
+|---|---|---|
+| `migrations/001_extensions.sql` | NEW | PostgreSQL extensions: uuid-ossp, pgcrypto, pg_trgm, btree_gin |
+| `migrations/002_tenants.sql` | telecheck-app/001_tenants.sql (exact port) | `tenants` table: TEXT PK (`Telecheck-{country}` format), `consumer_dba`, `legal_entity`, `consumer_subdomain`, `country_of_care`, `kms_key_alias`, `status`; C3 brand constraints; seeds Telecheck-US + Telecheck-Ghana with ON CONFLICT DO NOTHING |
+| `migrations/003_audit_chain.sql` | telecheck-app/002_audit_chain.sql (exact port) | `audit_records` table with v5.2 envelope (tenant_id, category A/B/C, audit_sensitivity_level, action, actor_type, ai_workload_type, autonomy_level, target_patient_id, payload, prev_hash, record_hash, sequence_number); hash-chain INSERT trigger; append-only UPDATE/DELETE guard; FORCE RLS + tenant_isolation policy; I-003 REVOKE UPDATE/DELETE |
+| `migrations/004_rls_helpers.sql` | WRITTEN FROM SCRATCH (not ported) | GUC-based `current_tenant_id()` SECURITY DEFINER STABLE function matching `rls.ts:withTenantContext`; reads `app.current_tenant_id` GUC (SET LOCAL = transaction-scoped); fail-closed with `tenant_context_not_set` exception; GRANT EXECUTE PUBLIC; SPEC ISSUE documented: GUC vs session-table security trade-off; Codex adversarial review will guide joint resolution with rls.ts |
+| `migrations/005_domain_events_outbox.sql` | telecheck-app/004_domain_events_outbox.sql (exact port) | `domain_events_outbox` table: UUID PK, tenant_id, aggregate_type, aggregate_id, event_type, partition_key (composite `tenant_id:aggregate_id`), payload JSONB, published_at, attempt_count; partial index on unpublished events; FORCE RLS |
+| `migrations/006_idempotency_keys.sql` | telecheck-app/005_idempotency_keys.sql (exact port) | `idempotency_keys` table: PRIMARY KEY (tenant_id, key, endpoint, actor_id) — 4-tuple per IDEMPOTENCY v5.1; plain btree index on expires_at; FORCE RLS |
+| `migrations/007_forms_intake.sql` | telecheck-app/006_forms_intake.sql (exact port) | 6 tables: `forms_template` (Pattern A versioning + I-030 research_consent_static_analysis_status), `forms_deployment`, `forms_submission`, `forms_snapshot` (append-only I-013: REVOKE + trigger), `forms_variant`, `forms_resume_state`; composite FK v0.2/v0.3 hardening throughout (tenant_id composite FKs on every child); FORCE RLS on all 6; triple-composite FK on forms_submission.variant_id |
+| `migrations/008_forms_submission_in_progress_uniqueness.sql` | telecheck-app/008 (exact port) | DO preflight check (aborts with copy-pasteable remediation query if duplicates exist); `CREATE UNIQUE INDEX uq_forms_submission_one_in_progress_per_tuple ON forms_submission (tenant_id, deployment_id, patient_id) WHERE status = 'in_progress' AND deleted_at IS NULL` |
+| `migrations/009_forms_snapshot_one_per_submission.sql` | telecheck-app/009 (exact port) | DO preflight check; `CREATE UNIQUE INDEX uq_forms_snapshot_one_per_submission ON forms_snapshot (tenant_id, submission_id)` |
+
+Note: `migrations/.gitkeep` from PR 1 deleted (no longer needed once real migration files exist).
+
+### Key design decisions
+
+**GUC-based RLS (004) vs session-table approach:**
+- telecheck-app's hardened approach uses `_session_tenant_context` table keyed on `pg_backend_pid()` (more secure; prevents GUC spoofing by arbitrary SQL)
+- forms-intake uses GUC approach (`set_config('app.current_tenant_id', $1, true)`) matching the already-authored `rls.ts` from PR 1
+- Decision: use GUC to match PR 1's `rls.ts`; document the security trade-off in the migration header; let Codex adversarial review drive joint resolution of both `rls.ts` and `004_rls_helpers.sql` in the same review round
+
+**Migration numbering:**
+- telecheck-app uses 000–NNN; forms-intake starts at 001 (clean-room repo, no prior migrations)
+- Precondition comments in all ported migrations updated to new numbering scheme
+
+**Composite FK v0.3 hardening:**
+- All child-to-parent FKs include tenant_id in the FK tuple: `FOREIGN KEY (tenant_id, parent_id) REFERENCES parent (tenant_id, id)` — makes cross-tenant binding structurally impossible at DB level
+
+### §12 Portability discipline compliance
+
+- **P-3** ✅ — all schema in `migrations/*.sql`; zero Supabase Dashboard-edit pattern; migration runner from PR 1 (`scripts/migrate.mjs`) applies these files
+
+### SPEC ISSUE documented in 004_rls_helpers.sql
+
+GUC-based `current_tenant_id()` is functional but less secure than telecheck-app's session-table approach. The trade-off is documented with a pointer to the Admin Backend slice break-glass discussion. Codex adversarial review will flag this (expected HIGH or MEDIUM) and the resolution will be implemented in the same review round before merge.
+
+### Codex review scope for May 26
+
+- GUC vs session-table RLS security trade-off (expected HIGH finding — joint resolution of `rls.ts` + `004_rls_helpers.sql`)
+- Composite FK v0.3 tenant-isolation hardening completeness across all 6 forms tables
+- `forms_snapshot` append-only invariant (I-013) — REVOKE + trigger correctness
+- `audit_records` hash-chain trigger correctness (I-003, I-027)
+- `idempotency_keys` 4-tuple PK scope (IDEMPOTENCY v5.1 §1)
+- DO preflight checks in 008 + 009 (operator-facing remediation query quality)
+- Partial unique index predicate in 008 (`WHERE status = 'in_progress' AND deleted_at IS NULL`)
+
+### Pilot status post PR 2
+
+| Track | Status |
+|---|---|
+| Cockpit UI (telecheck-cockpit) | ✅ Feature-complete (5 PRs, 9 screens, design-locked, build clean) |
+| Forms/Intake pilot slice (telecheck-forms-intake) | ✅ PR 1 (scaffold) + ✅ PR 2 (migration suite, 9 files, §12 P-3 compliant) both [CODEX-PENDING] |
+| Spec corpus (telecheckONE) | Day-1 skeleton shipped; 12 remaining canonical event schemas queued |
+| Supabase + Vercel + PostHog provisioning | Pending Evans's account auth (Day-3 critical-path) |
+| GitHub Actions PR-merge hooks | Pending (Day-3) |
+| Day-0 rollback dry-run | Pending (Day-4 obligation before Clinical Pilot Agent first firing) |
+| Clinical Pilot Agent first firing | Pending (Day-4) |
+
+### Next critical-path item
+
+- **forms-intake PR 3** — GET /v1/admin/templates (list + filter handler): first read handler; wires `src/modules/forms-intake/routes/templates.ts` + `src/modules/forms-intake/repos/template-repo.ts` against `forms_template` table; no DB needed to author (mock-able); unblocked.
+- **12 remaining canonical event schemas** in `telecheckONE/canonical-events/_schemas/` — no account dependencies; can ship in parallel.
+- **Day-3 critical-path** (needs Evans's accounts): Supabase provisioning + DATABASE_URL + Vercel link + PostHog + GitHub Actions hooks.
+
+— Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), telecheck-forms-intake PR 2 shipped (migration suite: 9 SQL files 001–009, §12 P-3 compliant, composite FK v0.3 hardening, GUC-based RLS with SPEC ISSUE documented, [CODEX-PENDING] until May 26 cascade); 2026-05-23. progress.json revision 202 → 203.
