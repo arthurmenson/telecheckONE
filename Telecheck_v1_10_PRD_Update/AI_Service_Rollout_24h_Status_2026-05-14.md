@@ -8175,3 +8175,51 @@ Third instance of the pattern:
 5. **Track-6 SI-024 (forms_template_review canonicalization)** — ratifier-gated spec-corpus work.
 
 — Claude (`claude-opus-4-7`, Evans's local session, 2026-05-24), telecheck-app PR #215+#216 combined merge landed at `cd30418`: rebased #215 + cherry-picked #216 + 2 local-fix amendments (prettier on routes.ts + import-order on post-forms-template-submit.test.ts:569) in one branch, force-pushed, ratifier-merged per Evans's Option A direction. 3 of 4 CI gates moved red→green (format/lint/typecheck); test gate remains red on pre-existing vitest 4 incompat (out of scope, requires separate vitest-3→4 migration). PR #216 closed as superseded. Pattern fix opportunity surfaced: add format:check + lint to branch-protection required checks. progress.json revision 218 → 219.
+
+## Addendum 116 — Corrected a misdiagnosis on main's critical path: the 4th CI gate (test) is red on 4 plugin-wiring assertions, NOT a "vitest 4 incompat"; the `test.poolOptions` line is a NON-FATAL deprecation warning (2058 tests run, 2021 pass). Shipped the real 4th-gate fix as PR #217; #215(merged cd30418)+#217 = fully green CI proven (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24
+**Repo:** telecheck-app (code PR #217) + telecheckONE (this Addendum + progress bump)
+**Trigger:** Standing autonomous-work loop (remote-cron firing). Concurrent with Evans's local session (Addendum 115 above), which merged #215+#216 → `cd30418` while this firing ran. This Addendum reconciles + corrects that Addendum's test-gate diagnosis.
+**progress.json:** r219 → r220
+**Codex:** re-checked in-env — **NOT available** (no key/binary/cache; `npx @openai/codex` cannot fetch). Consistent with Addenda 105/107/110/113/114.
+
+### Concurrency note + the correction
+
+Addendum 115 (Evans's local session) landed `#215`(rebased)+`#216`(cherry-picked) as merge `cd30418`, moving format/lint/typecheck red→green and closing `#216` as superseded. It reported the 4th gate (**test**) as red due to *"a pre-existing `vitest v4.1.6` deprecation (`'test.poolOptions' was removed in Vitest 4`) affecting 30+ test files"* and proposed a "vitest 3→4 migration workstream" as the highest-leverage next CI-greening play.
+
+**That diagnosis is incorrect.** Reproduced the full suite on the **actual merged main `cd30418`** against an ephemeral **PG16 full `000→052` chain + two-tenant seed**:
+
+- The `DEPRECATED test.poolOptions was removed in Vitest 4` line **is present but is a NON-FATAL warning** — the suite **ran to completion: 2058 tests executed, 2021 passed.** `poolOptions: { forks: { singleFork: true } }` (vitest.config.ts:167–172) is **standard, supported Vitest 4 config**, not a removed option; it does not error the run. (Vitest's wording is misleading — it deprecates the *nested* `test.poolOptions` location in favor of top-level `poolOptions`, a cosmetic move; the suite honors it either way.)
+- The test gate is red on **exactly 4 failures, all plugin-wiring assertions** — admin §1a + §1c, crisis §1a + §1c — **NOT 30+ files, NOT a vitest incompat.** These are the **PR-2 write-route residue** the #201/#205 merges left behind (`#200` only reconciled the skeleton tests to post-Sprint-2-PR-**1**/read-handler state). The `DEPRECATED` warning line was log noise misattributed as the failure cause.
+
+**Consequence:** the proposed "vitest 3→4 migration workstream" is **not a CI-greening blocker.** The single thing standing between `cd30418` and fully-green CI is **PR #217** (this firing's deliverable). (A cosmetic follow-up could silence the deprecation by hoisting `poolOptions` to top-level, but it changes no test outcome.)
+
+### The 4 stale assertions (shipped reality vs test)
+
+| File | Stale assertion | Shipped reality (on cd30418) | Fix in #217 |
+|---|---|---|---|
+| `crisis-response-plugin-wiring.test.ts` §1a | `blocked` ∋ `Sprint 2 of 4 at v0.2` | handler emits **v0.3** (#201) | → v0.3 |
+| `crisis-response-plugin-wiring.test.ts` §1c-route | `POST /v0/crisis-events` → **404** "not mounted" | mounted → **401** (crisis_initiator gate rejects actorless probe) | → 401 |
+| `admin-backend-plugin-wiring.test.ts` §1a | `blocked` ∋ `Sprint 2 PR 1 of N at v0.2` | handler emits **PR 2 … v0.3** (#205) | → PR 2 / v0.3 |
+| `admin-backend-plugin-wiring.test.ts` §1c-route | `POST .../submit-for-review` → **404** "not mounted" | mounted → **403** (admin-role gate rejects role-less probe) | → 403 |
+
+The §1c change is exactly the **forward-CHANGING wiring-honesty signal** the test's own comment block instructed the next toucher to advance. **Un-owned** — verified none of #199/#202/#203/#204/#206/#207 touch the plugin-wiring files.
+
+### Shipped — PR #217 [CODEX-PENDING]
+
+- **Branch:** `fix/ci-plugin-wiring-reconcile-sprint2-pr2-mounted-routes` → `main` (branched off `d287925`, pre-`cd30418`; rebases cleanly — tests-only, no overlap with the #215/#216 file sets).
+- **Commit:** `77ef849` (telecheck-app). **Tests only; no migrations → no rollback companion** (#216 precedent).
+- **Verification (ephemeral PG16, full `000→052` chain + two-tenant seed):**
+  - On merged main `cd30418` (no #217): full suite **2058 run / 2021 pass / 4 fail** (the 4 plugin-wiring) — proving tests RUN despite the poolOptions deprecation + isolating the failures.
+  - On `#215`+`#217` stacked: `format` ✓ · `lint` ✓ (0 errors) · `typecheck` ✓ · **full suite 2025 pass / 0 fail (142 files)** — the complete green-CI proof. Since `cd30418` ⊇ `#215`, **`cd30418`+`#217` = fully green CI.**
+- **Codex:** N/A in-env → opened **[CODEX-PENDING]**, **NOT merged**, per the discipline floor. (Note: Evans's per-repo "ignore codex till we are done with dev" override — invoked in Add. 115 to ratifier-merge #215 — would, if extended to #217, permit merging #217 to green main's last gate; left to Evans.)
+
+### Next critical-path items (refreshed, post-`cd30418`)
+
+1. **`cd30418` + PR #217 = fully green CI.** #217 is the real 4th-gate fix; the "vitest 3→4 migration" is NOT a CI blocker (cosmetic only). Merge #217 (Codex, or Evans's per-repo override per Add. 115) to land main's first all-green CI.
+2. **telecheck-app `[CODEX-PENDING]` queue** (post-#215/#216 merge): **#193/#199/#202/#203/#204/#206/#207/#208/#209/#210/#217** — same retarget+merge pattern; Codex-reachable or Evans-override gated.
+3. **Branch-protection hardening** (Add. 115's standing recommendation): add `format:check` + `lint` (+ now `test`) as REQUIRED checks to eliminate the wave-N residue trap permanently.
+4. **Async-Consult ratifier ceremony** (SI-004/SI-005). Evans + Engineering Lead + CDM owner. Evans-gated. **STOP condition 3.**
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex in this env), 2026-05-24. Ran concurrently with Evans's local session: while it merged #215+#216 (cd30418, 3/4 gates green), this firing independently diagnosed the 4th gate. Corrected its test-gate misdiagnosis — the failure is 4 stale plugin-wiring assertions (#201/#205 PR-2 residue), NOT a vitest-4 incompat; the `test.poolOptions` line is a non-fatal deprecation warning (2058 tests run, 2021 pass on cd30418). Shipped the real fix as PR #217 [CODEX-PENDING] and proved cd30418+#217 = fully green CI end-to-end (2025 pass/0 fail). progress.json revision 219 → 220.
