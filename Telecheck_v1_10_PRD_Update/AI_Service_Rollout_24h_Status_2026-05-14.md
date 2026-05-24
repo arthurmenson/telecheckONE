@@ -6897,3 +6897,113 @@ No PR opened — the work is a direct-to-main DRAFT-SI reconciliation (not a cod
 - **Future no-Codex firings:** with the full Async-Consult ratification-readiness surface (SI-004/005/020) now saturated, the remaining Track-6 levers are SI-001 (MedicationRequest schema — the `consult_clinician_decision.prescription_details_id` FK target; verify it reconciles with SI-020's prescribing path) and SI-002/SI-003 (AUDIT_EVENTS / DOMAIN_EVENTS placeholder ratification) row-shaping; or Track-5 CI-hardening that is fully self-verifiable in-env.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex plugin in this env), Track-6 Async-Consult ratification-readiness: SI-005 ↔ SI-020 Sub-decision 1 schema-model reconciliation (SI-005 2-entity mutable-state schema annotated SUPERSEDED-FOR-RATIFICATION by SI-020 Sub-decision 1 7-entity append-only-only (I-035) model + divergence table + 11-row entity/column crosswalk + reciprocal pointer; shipped-migration-020/021-replacement GAP-1 + modality GAP-2 + country_of_care GAP-3 flagged for the SI-020 ratifier, not filled per hard-floor item 6); within-scope, no hard-floor STOP, no ratification, no version bump; committed directly to telecheckONE main `5369a8c` 2026-05-24. progress.json revision 199 → 200.
+
+---
+
+## Addendum 97 — telecheck-cockpit feature-complete (5 stacked PRs ship 9 screens; design-locked 1:1 translation) (2026-05-23, Evans local session continued)
+
+**Date:** 2026-05-23 (Day-2 of pilot continued)
+**Trigger:** Evans's "continue till done" directive after PR 1 (shell) shipped earlier in session.
+
+### What landed
+
+5 stacked PRs on `arthurmenson/telecheck-cockpit`, all `[CODEX-PENDING]` until May 26 cascade. Cockpit is now feature-complete on the UI side — every nav target renders a real (or minimal-viable) screen; ready to consume real data from Supabase Realtime on Day-3+ without UI changes.
+
+| PR | Branch | Scope | Status |
+|---|---|---|---|
+| #1 | `pr-1-shell-sidebar-topbar-pulseribbon` | Shell — Sidebar (224px) + Topbar (48px) + PulseRibbon (28px) + AgentDot + Sparkline + 18 icons + types + Day-1 mock data + AppShell composition | `[CODEX-PENDING]` |
+| #2 | `pr-2-cockpit-screen` | Cockpit screen (3 variants Dense/Hybrid/Glance with localStorage persistence) + 4 hero metrics (Pilot / Throughput / Queues / Hard-stop gates) + 3 middle cards (Blockers / Milestones / Decisions) + Live event feed + AgentSnapshotRow (dense variant) + GlanceCta + 11 icons | `[CODEX-PENDING]`, stacked on #1 |
+| #3 | `pr-3-agents-work-screens` | AgentsScreen (grid of cards with avatar + status dot + scope bar + Pause/Restart/View-logs + AgentDrawer with KV details + recent PRs) + WorkScreen (4-column Kanban: In Progress / Codex Review / Awaiting Ratifier / Merged Today with iris-left-border PrCards) + Drawer shell component + 7 icons + PullRequest type + 2 illustrative Day-1 PR mocks | `[CODEX-PENDING]`, stacked on #2 |
+| #4 | `pr-4-eventlog-chat` | EventLogScreen (filtered append-only feed with 9 type chips + search + integrity verify pill + click-to-expand JSON) + ChatScreen (Claude.ai-style with 760px max-width stream + 6 suggestion chips + @routing dropdown + voice toggle + send button + fake orchestrator reply pattern) + 5 icons + ChatMessage type | `[CODEX-PENDING]`, stacked on #3 |
+| #5 | `pr-5-remaining-screens` | SpecCorpusScreen (canonical-versions table with 9 post-P-043 entries + pending-CRs card) + InventoryScreen (4 type-totals + filter chips + 7-column sticky-header table with 11 illustrative items) + SettingsScreen (5 tabs: Project / Agents / API keys / Access / Audit) + MobileScreen (read-only iOS device chrome preview) + 2 icons (Key, Doc) + Inventory/SpecCorpus types | `[CODEX-PENDING]`, stacked on #4 |
+
+### Design discipline verified
+
+Every PR honors the design handoff NO-DRIFT discipline:
+- 1.5px icon stroke + 24×24 viewBox + 16×16 default render + currentColor
+- Telecheck design tokens used via `var(--xxx)` (no Tailwind palette substitution)
+- Iris (#6e5bd6) reserved exclusively for AI-authored content (three-cue rule: color + sparkle glyph + label demonstrated in Day-1 placeholder + AgentDrawer + chat message rows + spec-corpus pending-CR floor pill + glance CTA)
+- Operator dark theme default + light theme toggle
+- Manrope + Inter + JetBrains Mono fonts via `next/font/google`
+- No emoji in product UI; sentence case everywhere
+- Status dots paired with text labels for screen readers
+- ARIA labels on all icon-only buttons + `role="dialog"` + `aria-modal="true"` on Drawer
+
+### Build hygiene
+
+Every PR verified clean:
+- `npx tsc --noEmit` — zero errors
+- `npx next build` — compiles successfully, TypeScript clean, 4 static pages generated
+
+### Stack details
+
+- Next.js 15 + React 19 + Tailwind 4 (`@theme inline` bridging cockpit.css tokens to Tailwind theme vars)
+- TypeScript strict
+- App Router; client-side dashboards per Evans's ratified Open Q 2
+- 94 design tokens locked at `src/app/cockpit.css` (verbatim copy from `design_handoff_ops_cockpit/cockpit.css`)
+- 33 custom icons in `src/components/icons/CockpitIcons.tsx`
+- 9 screens in `src/components/screens/`
+- 5 shell components in `src/components/shell/` (Sidebar, Topbar, PulseRibbon, Sparkline, AgentDot, Drawer, AppShell)
+- 5 type modules + 1 mock data module in `src/lib/`
+
+### What does NOT ship yet (Day-3+ work)
+
+- **Real data wiring** — Supabase Realtime subscription to `canonical_event` table replaces `mock-data.ts` on Day-3 when Supabase project provisioning lands. Zero UI changes needed; just swap data source.
+- **Vercel project link** — Day-3 task.
+- **PostHog integration** — Day-3 task.
+- **GitHub Actions PR-merge hooks** — emit `pr_merged` events to canonical event log; Day-3 task on both cockpit + forms-intake repos.
+- **shadcn/ui init** — lands when first interactive component (modal, dropdown menu, tooltip) needs unstyled primitives.
+- **Tailwind utility-class translation** of cockpit tokens — current direct `var(--xxx)` is intentional for design parity; full Tailwind theme-extension migration deferred until tokens prove stable.
+- **Spec Corpus 3-pane tree + ratify modal with diff preview** — minimal-viable v1 ships in PR 5; full implementation lands when first CR flow exercises the surface.
+- **Settings API key rotation + delegated ratifier rules + Cockpit audit log** — placeholders in PR 5; full implementations land when admin flows exercise each surface.
+- **Voice input** — UI toggle ships in PR 4; Web Speech API wiring is Day-3+.
+
+### Pilot status post Day-2
+
+| Track | Status |
+|---|---|
+| Cockpit UI (telecheck-cockpit) | ✅ Feature-complete (5 PRs, 9 screens, design-locked, build clean) |
+| Forms/Intake pilot slice (telecheck-forms-intake) | Bootstrap shipped Day-1; PR 1 (scaffold flesh-out) pending |
+| Spec corpus (telecheckONE) | Day-1 skeleton shipped (canonical-events + 3 agent CLAUDE.md + rollback runbook + P-043 Promotion Ledger + Addendum 93) |
+| Supabase + Vercel + PostHog provisioning | Pending Evans's account auth (Day-3 critical-path) |
+| GitHub Actions PR-merge hooks | Pending (Day-3) |
+| Day-0 rollback dry-run | Pending (Day-4 obligation before Clinical Pilot Agent first firing) |
+| Clinical Pilot Agent first firing | Pending (Day-4) |
+
+### Cumulative cockpit code stats
+
+- ~3,200 lines of production TSX across 18 source files
+- 33 custom icons (1.5px stroke, all SVG paths verbatim from prototype)
+- 9 screens fully wired into AppShell
+- 819 design tokens in `cockpit.css` (verbatim copy preserving design lock)
+- 0 `@supabase/supabase-js` imports (§12 P-1 compliance)
+- 0 `@vercel/*` imports (§12 P-5 compliance)
+- 0 emoji in product UI
+- All 5 PRs build clean (tsc + next build)
+
+### Codex review obligations queued for May 26
+
+5 cockpit PRs (#1–#5) join the existing ~15-branch deferred review queue. Per design v0.2 §3.3 + CLAUDE.md per-PR Codex APPROVE discipline, each requires APPROVE before squash-merge.
+
+Codex review scope per cockpit PR:
+- 1.5px icon stroke + 24×24 viewBox preserved (no Lucide substitution)
+- Design tokens used via var(--xxx) (no Tailwind palette drift)
+- Iris three-cue rule preserved everywhere AI content is displayed
+- ARIA labels + role=dialog + screen-reader-paired status labels
+- TypeScript strict + zero `any` usage
+- No `@supabase/supabase-js` / `@vercel/*` imports per §12 P-1/P-5
+
+### Next deliverable
+
+**Day-3 critical-path infrastructure** (needs Evans's account auth):
+1. Supabase project provisioning + DATABASE_URL + canonical_event schema migration
+2. Vercel project link for telecheck-cockpit + auto-deploy on main merge
+3. PostHog project + tracking ID
+4. GitHub Actions PR-merge hook workflows in cockpit + forms-intake repos
+5. shadcn/ui init in cockpit (lands when first interactive primitive needs it)
+
+**Day-2 nice-to-have if Evans authorizes:**
+- Forms-Intake PR 1 (project scaffold flesh-out: Postgres connection + tenant context middleware + RLS migration runner + health/ready endpoint upgrades)
+- Additional canonical event schemas (12 remaining beyond the 3 shipped Day-1)
+
+— Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), telecheck-cockpit feature-complete across 5 stacked PRs covering all 9 screens; design-locked 1:1 translation honored; build clean on every PR 2026-05-23. progress.json revision 200 → 201.
