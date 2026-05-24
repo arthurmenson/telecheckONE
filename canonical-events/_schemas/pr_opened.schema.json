@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/pr_opened.schema.json",
+  "title": "PR Opened Event",
+  "description": "Emitted by the authoring agent when it opens a pull request (before merge). Records the work entering the Codex-review queue. Pairs with pr_merged on the same repo+pr_number. Drives cockpit in-flight-PR counts + the [CODEX-PENDING] backlog view.",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$", "description": "ULID — sortable + unique across event log" },
+    "event_type": { "const": "pr_opened" },
+    "source": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*-agent$" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+    "payload": {
+      "type": "object",
+      "required": ["repo", "pr_number", "title", "author_agent_id", "branch", "base"],
+      "properties": {
+        "repo": { "type": "string", "description": "owner/repo format e.g. arthurmenson/telecheck-forms-intake" },
+        "pr_number": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 280 },
+        "author_agent_id": { "type": "string", "description": "Authoring agent's canonical agent ID" },
+        "ai_authored": { "type": "boolean", "description": "If true, cockpit applies iris 2px left-border + sparkle glyph per AI three-cue rule" },
+        "branch": { "type": "string", "minLength": 1, "description": "Head branch name" },
+        "base": { "type": "string", "default": "main", "description": "Base branch the PR targets" },
+        "codex_pending": { "type": "boolean", "default": false, "description": "True when opened with the [CODEX-PENDING] marker because Codex was unavailable at author time (per CLAUDE.md discipline floor: no merge without Codex APPROVE)" },
+        "lines_added": { "type": "integer", "minimum": 0 },
+        "lines_removed": { "type": "integer", "minimum": 0 },
+        "files_changed": { "type": "integer", "minimum": 0 },
+        "linked_cr_id": { "type": "string", "pattern": "^CR-[0-9]+$" },
+        "linked_dep_id": { "type": "string", "pattern": "^DEP-[0-9]+$" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

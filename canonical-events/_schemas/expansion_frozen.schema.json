@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/expansion_frozen.schema.json",
+  "title": "Expansion Frozen Event",
+  "description": "Emitted when a hard-stop expansion gate (HSG) fires during the 3-agent pilot, freezing the planned expansion to the 7-agent workforce (design v0.2 §7.2; the B+ ratification gates expansion on zero-gates-fired + 10 success criteria met). Distinct from workforce_pause_invoked: a freeze blocks growth but does not necessarily halt in-flight pilot work. Unfreezing is ratifier-gated.",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "expansion_frozen" },
+    "source": { "type": "string", "pattern": "^(orchestrator-agent|ratifier|engineering-lead)$" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["gate_id", "frozen_by", "gate_metric", "rationale"],
+      "properties": {
+        "gate_id": { "type": "string", "pattern": "^HSG-[0-9]+$", "description": "Hard-stop expansion gate that fired (HSG-1 .. HSG-7 per design v0.2 §7.2)" },
+        "frozen_by": { "type": "string" },
+        "gate_metric": { "type": "string", "description": "The metric the gate watches (e.g. severity-weighted defect rate, projection-integrity, agent-stall count)" },
+        "threshold": { "type": ["number", "string"], "description": "The gate's trip threshold" },
+        "observed_value": { "type": ["number", "string"], "description": "The observed value that breached the threshold" },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "triggering_incident_id": { "type": "string", "pattern": "^INC-[0-9]+$" },
+        "unfreeze_condition": { "type": "string", "maxLength": 2000, "description": "Ratifier-gated condition to lift the freeze" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

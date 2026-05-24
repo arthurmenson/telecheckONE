@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/canonical_version_bumped.schema.json",
+  "title": "Canonical Version Bumped Event",
+  "description": "Emitted ONLY by the Spec Corpus Agent (single-write-owner of canonical contracts) after a ratification_decision authorizes promoting an artifact to a new canonical version. Records the version transition + its Promotion Ledger entry. CI's single-writer gate rejects this event_type from any other source.",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "canonical_version_bumped" },
+    "source": { "const": "spec-corpus-agent" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["artifact", "from_version", "to_version", "promotion_ledger_entry", "ratification_event_id"],
+      "properties": {
+        "artifact": { "type": "string", "description": "Canonical artifact promoted (e.g. Telecheck_Canonical_Data_Model)" },
+        "from_version": { "type": "string", "description": "Prior canonical version, e.g. v1.2" },
+        "to_version": { "type": "string", "description": "New canonical version, e.g. v1.3" },
+        "promotion_ledger_entry": { "type": "string", "pattern": "^P-[0-9]+[a-z]?$", "description": "Append-only Promotion Ledger entry recording the bump" },
+        "ratification_event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$", "description": "event_id of the ratification_decision that authorized this bump" },
+        "driven_by_cr_id": { "type": "string", "pattern": "^(CR|P|HFI6)-[0-9]+[a-z]?$" },
+        "superseded_artifacts": { "type": "array", "items": { "type": "string" }, "description": "Prior-version files now Superseded (preserved for traceability, not deleted)" },
+        "registry_bump": { "type": "boolean", "default": false, "description": "Whether the Artifact Registry version also bumped (false for reconciliation/meta entries that absorb without bump)" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/dep_satisfied.schema.json",
+  "title": "Dependency Satisfied Event",
+  "description": "Emitted when a previously-filed dep_filed is resolved — the awaited artifact landed (PR merged, version bumped, ratification decided). The Orchestrator removes the dep from its open-dependency graph on reduction. May be emitted by the satisfying agent OR by the originally-blocked agent confirming receipt.",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "dep_satisfied" },
+    "source": { "type": "string", "pattern": "^([a-z][a-z0-9_-]*-agent|ratifier|engineering-lead)$" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["dep_id", "satisfied_by"],
+      "properties": {
+        "dep_id": { "type": "string", "pattern": "^DEP-[0-9]+$", "description": "Must match a prior dep_filed event's dep_id" },
+        "satisfied_by": { "type": "string", "description": "Agent ID / source that delivered the artifact" },
+        "satisfying_event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$", "description": "Optional event_id of the pr_merged / canonical_version_bumped / ratification_decision that satisfied the dep" },
+        "satisfying_artifact": { "type": "string", "description": "Path / version / PR reference of the delivered artifact" },
+        "resolution_note": { "type": "string", "maxLength": 2000 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

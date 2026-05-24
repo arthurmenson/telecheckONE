@@ -7670,3 +7670,64 @@ Per the briefing priority ladder (a–e), every item is **authored + queued** (#
 4. **12 remaining canonical event schemas** in `telecheckONE/canonical-events/_schemas/` — no account dependencies.
 
 — Claude (Opus 4.7, remote-cron autonomous firing), 2026-05-24. Diagnosed the stale-tracking-ref trap behind the Addendum-100 "stranded at 045" alarm; confirmed origin/main reconciliation landed (Option 2 FF to `f6c5160`); shipped a verified per-PR cascade-readiness runbook (docs PR #212) flagging 3 superseded PRs + 2 needs-rebase + 15 ready + the Tier-2-on-main discipline item; no new code PR (correctly — all pilot scope queued, Async-Consult ratification-blocked, Codex unavailable). progress.json revision 208 → 209.
+
+---
+
+## Addendum 107 — Closed Addendum-105 next-item #4: authored the 12 remaining canonical-event JSON schemas (P-043 agentic-workforce event log now schema-complete: 15/15); committed direct to telecheckONE:main; no telecheck-app code PR (pilot scope fully queued, Codex unavailable) (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24 (Day-3 window; remote-cron autonomous firing)
+**Repo:** telecheckONE (spec corpus)
+**Deliverable:** 12 new files under `canonical-events/_schemas/` — the agentic-workforce append-only event-log schema set is now complete (15/15 per `canonical-events/README.md` file-layout enumeration).
+**progress.json:** r210 → r211 (telecheckONE).
+
+### What shipped + why this is the in-floor critical-path item
+
+Booted (again) with the `telecheck-app` local `main` tracking ref stale at `baca008`/migration-045 — the exact Addendum-100/105 stale-ref trap. Re-verified the **live** remote with `git ls-remote origin refs/heads/main`: telecheck-app `origin/main` = **`f6c5160`** (full foundation chain: migrations 046–051 + Med-Interaction DB layer + foundation-051 `withDbRole` + Wave-1 read handlers + Mode 1 `chat.ts`). No continuity defect; Addendum 105's diagnosis holds. Synced local `main` to it (fetch + FF) and independently re-confirmed the priority-ladder (a–e) state against the 32 open PRs + the on-main route surfaces:
+
+- (a) Med-Interaction DB layer — on main (046–051); write handlers queued (#208/#209). **Done/queued.**
+- (b) Async-Consult clinician decision loop — **STOP.** SI-004/SI-005 annotated SUPERSEDED-FOR-RATIFICATION by SI-020; pending the spec-corpus ratifier ceremony. Spec-ratification-leads-implementation-by-≥1-sprint floor forbids starting the DB layer. SIs already filed.
+- (c) AI Service Mode 1 chat — on main (`src/modules/ai-service/internal/handlers/chat.ts`). **Done.**
+- (d) Crisis Sprint 2 — read on main (`get-crisis-event.ts`); all writes queued: #201 initiate, #199 acknowledge, #202 respond+resolve, #203 patient-summary, #204 sweep. Verified against `crisis-response/routes.ts` documented surface — **complete coverage, no gap.**
+- (e) Admin Sprint 2 — crisis-dashboard read on main; #205 submit, #206 decision, #207 dashboard reads queued. **Done/queued.**
+
+**Codex unavailable in remote-cron env** (no `OPENAI_API_KEY`, no `codex` binary; `npx @openai/codex --version` returns no version) — confirmed for the 3rd firing. → No queued telecheck-app PR is mergeable here (merge requires Codex APPROVE), and authoring any pilot handler would duplicate the [CODEX-PENDING] queue. Per the discipline floor, neither is permitted.
+
+The one **genuine, in-floor, non-duplicate, non-ratification-blocked** deliverable available was Addendum-105's own next-item **#4**: the **12 remaining canonical-event schemas**, repeatedly flagged across Addenda 101/104/105 as "no account dependencies." Authoring them **implements the already-ratified P-043 architecture** (Agentic Workforce v0.2 Option B+, ratified Addendum 93 / Promotion Ledger P-043) — the file layout is enumerated verbatim in `canonical-events/README.md` §File layout — so it is NOT a new ratification ceremony and NOT speculative.
+
+### The 12 schemas (modeled 1:1 on the 3 bootstrap schemas: draft-2020-12, base-field set, `additionalProperties:false` at top + payload, event_type `const`)
+
+| Schema | Source class | Purpose anchor |
+|---|---|---|
+| `pr_opened` | `*-agent` | PR enters Codex queue; pairs with `pr_merged`; drives [CODEX-PENDING] backlog view |
+| `codex_round_completed` | `*-agent` | Per-round verdict + findings-by-severity; `architectural_judgment_findings>0` ⇒ hard-floor item 6 STOP-and-escalate |
+| `dep_filed` | `*-agent` | Cross-agent dependency declared (DEP-N) |
+| `dep_satisfied` | `*-agent`/ratifier | DEP-N resolved; Orchestrator removes from open-dep graph |
+| `cr_filed` | `*-agent` | EHBG §12 Spec Issue / change request (CR-N); `requires_ratifier`/`is_architectural_judgment` flags |
+| `canonical_version_bumped` | `const spec-corpus-agent` | Single-write-owner artifact promotion; links P-NN + ratification event |
+| `incident_declared` | `*-agent`/ratifier | INC-N; categories incl. projection_mismatch/codex_outage; HSG mapping + auto-pause flag |
+| `workforce_pause_invoked` | orchestrator/ratifier | PAUSE-N fail-closed control; scope all/agent/repo + resume_condition |
+| `expansion_frozen` | orchestrator/ratifier | HSG-N freezes 3→7-agent expansion (design v0.2 §7.2) |
+| `conflict_resolved` | `const orchestrator-agent` | Source-priority/commit-order resolution audit (README §Concurrency) |
+| `portability_violation` | `*-agent`/`*-pr-merge-hook` | §12 P-1..P-7 breach; `blocking` gates the PR |
+| `human_orchestrator_dialogue` | orchestrator/ratifier | DLG-N human-in-the-loop audit; `dual_recommendation_attached` flag |
+
+ID patterns reuse the established conventions (CR-N, DEP-N, P-N, `(CR|P|HFI6)-N[a-z]?`, ULID `^[0-9A-HJKMNP-TV-Z]{26}$`) and add HSG-N, INC-N, PAUSE-N, CONFLICT-N, DLG-N. Source patterns honor `agent_heartbeat`'s `-agent$` discipline + `pr_merged`'s `-pr-merge-hook$` discipline + `ratification_decision`'s ratifier/engineering-lead enum.
+
+### Verification
+
+- All 15 `*.schema.json` parse as JSON; structural gate passes (base-required-field superset, top + payload `additionalProperties:false`, `event_type` const matches filename, `$schema` = draft-2020-12).
+- Directory now matches the README §File-layout enumeration exactly — 0 missing, 0 extra.
+- Meta-schema validation deferred: no `jsonschema`/`ajv` in the remote env; the schemas use only standard draft-2020-12 keywords identical to the 3 pre-existing (accepted) bootstrap schemas, and the `canonical-events-verify.yml` CI gate (lands separately per README §Forgery-prevention) will ajv-validate them on first real agent commit.
+
+### Discipline profile
+
+- 0 hard-floor item 6 invocations. 0 duplicate authoring. 0 ratification-blocked starts. 0 merges (none possible without Codex). Committed direct to `telecheckONE:main` (pushable; spec/docs, no Codex gate — the standing docs-to-main pattern; telecheck-app `main` remains branch-protected and untouched this firing).
+
+### Next critical-path item
+
+1. **May-26 Codex mass cascade** on the ~20-PR telecheck-app [CODEX-PENDING] queue per `telecheck-app/docs/CODEX_CASCADE_RUNBOOK_2026-05-24.md` §3 (close #192/#195/#196 superseded; rebase #193/#194; then 15 READY).
+2. **Async-Consult DB layer** — gated on SI-004/SI-005/SI-020 ratifier ceremony (STOP until ratified).
+3. **forms-intake slice-roadmap PR 6** (POST submit-for-review) + audit-outbox follow-on — Evans's local-session track (separate repo).
+4. **Projection Service** (`orchestrator/projection-service.mjs`) + telecheckONE CI gates (signed-commit + authorized-source + ajv schema validation) — schema-first; the schema set this firing completed is the input. Lands with the first real agent commit.
+
+— Claude (Opus 4.7, remote-cron autonomous firing), 2026-05-24. Closed Addendum-105 next-item #4: authored the 12 remaining canonical-event schemas, completing the P-043 agentic-workforce event-log schema set (15/15); validated structurally + against the README file-layout enumeration; committed direct to telecheckONE:main; no telecheck-app code PR (pilot scope fully queued + Codex unavailable — duplicating the queue or starting Async-Consult would both violate the discipline floor). progress.json revision 210 → 211.

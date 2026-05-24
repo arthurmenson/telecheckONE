@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/cr_filed.schema.json",
+  "title": "Change Request Filed Event",
+  "description": "Emitted by an agent when it files a Change Request (Spec Issue / SI) against a canonical artifact — the EHBG §12 escalation path. A CR routed to the Spec Corpus Agent is reviewed (Codex pre-approval) before the ratifier sees it; a CR flagged requires_ratifier proceeds to a Promotion Ledger ceremony. Agents may file CRs; only the ratifier may approve them (ratification_decision).",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "cr_filed" },
+    "source": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*-agent$" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["cr_id", "filed_by_agent_id", "target_artifact", "summary", "requires_ratifier"],
+      "properties": {
+        "cr_id": { "type": "string", "pattern": "^CR-[0-9]+$", "description": "Stable change-request identifier" },
+        "filed_by_agent_id": { "type": "string" },
+        "target_artifact": { "type": "string", "description": "Canonical artifact / spec file the CR proposes changing" },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 280 },
+        "proposed_change": { "type": "string", "maxLength": 8000, "description": "Concrete proposed edit / row shape / schema delta" },
+        "severity": { "enum": ["critical", "high", "medium", "low"] },
+        "requires_ratifier": { "type": "boolean", "description": "True when the change touches a canonical contract surface requiring a Promotion Ledger ceremony (Evans + Engineering Lead + CDM owner)" },
+        "is_architectural_judgment": { "type": "boolean", "default": false, "description": "True when this CR originates from a hard-floor item 6 STOP-and-escalate (net-new architecture/schema/invariant)" },
+        "escalation_artifact": { "type": "string", "description": "Path to the Engineering Review Request / Decision Memo, when requires_ratifier" },
+        "spec_refs": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

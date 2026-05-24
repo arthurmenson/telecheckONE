@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/conflict_resolved.schema.json",
+  "title": "Conflict Resolved Event",
+  "description": "Emitted by the Orchestrator when two or more sources contend for the same resource (e.g. two agents claim the same dependency, or two events target the same aggregate at the same instant). Records the winning source per the deterministic source-priority rule (Ratifier > Spec Corpus > Orchestrator > PR-merge-hook; commit-order otherwise) so the resolution is auditable per README §Concurrency model.",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "conflict_resolved" },
+    "source": { "const": "orchestrator-agent" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["conflict_id", "conflict_type", "contending_sources", "winning_source", "resolution_rule"],
+      "properties": {
+        "conflict_id": { "type": "string", "pattern": "^CONFLICT-[0-9]+$" },
+        "conflict_type": { "enum": ["dependency_double_claim", "aggregate_write_race", "duplicate_idempotency_key", "ordering_tie", "other"] },
+        "contending_sources": { "type": "array", "minItems": 2, "items": { "type": "string" }, "description": "Sources / agents that contended" },
+        "winning_source": { "type": "string", "description": "Source that prevailed under the resolution rule" },
+        "resolution_rule": { "enum": ["source_priority", "commit_order", "idempotency_dedup", "ratifier_override"], "description": "Which README §Concurrency rule decided the outcome" },
+        "affected_resource": { "type": "string", "description": "dep_id, aggregate id, or resource key under contention" },
+        "losing_event_ids": { "type": "array", "items": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" } },
+        "note": { "type": "string", "maxLength": 2000 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

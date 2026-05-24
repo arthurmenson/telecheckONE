@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/incident_declared.schema.json",
+  "title": "Incident Declared Event",
+  "description": "Emitted by the Orchestrator (or an agent detecting a fault) when an incident is declared — a projection mismatch, a stalled agent past SLA, a portability-violation breach, a Codex SPOF outage, or any condition mapped to a hard-stop gate. A critical incident mapped to a hard-stop gate auto-pauses the workforce (workforce_pause_invoked) per the fail-closed posture (design v0.2 §7.2).",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "incident_declared" },
+    "source": { "type": "string", "pattern": "^([a-z][a-z0-9_-]*-agent|ratifier|engineering-lead)$" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["incident_id", "severity", "declared_by", "category", "description"],
+      "properties": {
+        "incident_id": { "type": "string", "pattern": "^INC-[0-9]+$" },
+        "severity": { "enum": ["critical", "high", "medium", "low"] },
+        "declared_by": { "type": "string", "description": "Agent ID / human declaring the incident" },
+        "category": { "enum": ["projection_mismatch", "agent_stalled", "portability_violation", "codex_outage", "source_offline", "dependency_deadlock", "security", "other"] },
+        "description": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "affected_repos": { "type": "array", "items": { "type": "string" } },
+        "hard_stop_gate": { "type": "string", "pattern": "^HSG-[0-9]+$", "description": "Hard-stop expansion gate this incident maps to, if any (design v0.2 §7.2)" },
+        "auto_pause_triggered": { "type": "boolean", "default": false, "description": "Whether this incident auto-invoked workforce_pause_invoked" },
+        "triggering_event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

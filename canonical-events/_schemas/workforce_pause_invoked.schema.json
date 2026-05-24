@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/workforce_pause_invoked.schema.json",
+  "title": "Workforce Pause Invoked Event",
+  "description": "Emitted when the agentic workforce (or a scoped subset) is paused — the fail-closed control action. Triggered automatically by a critical incident mapped to a hard-stop gate, or manually by the Orchestrator / ratifier. While a pause with matching scope is open and unresumed, agents in scope must not commit. Resume requires the documented resume_condition to be met + a subsequent ratifier or orchestrator action.",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "workforce_pause_invoked" },
+    "source": { "type": "string", "pattern": "^(orchestrator-agent|ratifier|engineering-lead)$" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["pause_id", "invoked_by", "scope", "reason"],
+      "properties": {
+        "pause_id": { "type": "string", "pattern": "^PAUSE-[0-9]+$" },
+        "invoked_by": { "type": "string", "description": "Orchestrator / ratifier identity" },
+        "scope": { "enum": ["all", "agent", "repo"], "description": "Breadth of the pause" },
+        "scope_target": { "type": "string", "description": "Agent ID or repo when scope is agent/repo; omitted for scope=all" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "auto_invoked": { "type": "boolean", "default": false, "description": "True when triggered automatically by an incident_declared hard-stop mapping rather than a manual action" },
+        "triggering_incident_id": { "type": "string", "pattern": "^INC-[0-9]+$" },
+        "triggering_event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+        "resume_condition": { "type": "string", "maxLength": 2000, "description": "Explicit condition that must be satisfied before the workforce may resume" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

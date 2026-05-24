@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/codex_round_completed.schema.json",
+  "title": "Codex Round Completed Event",
+  "description": "Emitted by the authoring agent after each Codex adversarial-review round resolves (per CLAUDE.md per-PR adversarial-review cadence). Records the round verdict + findings-by-severity so the cockpit can render the round-by-round convergence trajectory and the severity-weighted defect metric (design v0.2 §7.2). A round whose verdict is needs-attention with an architectural_judgment_finding triggers the hard-floor item 6 STOP-and-escalate path — it MUST NOT be closed inline.",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "codex_round_completed" },
+    "source": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*-agent$" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["repo", "pr_number", "round_number", "verdict", "findings_total"],
+      "properties": {
+        "repo": { "type": "string", "description": "owner/repo format" },
+        "pr_number": { "type": "integer", "minimum": 1 },
+        "round_number": { "type": "integer", "minimum": 1, "description": "1-indexed Codex review round (R1, R2, ...)" },
+        "verdict": { "enum": ["approve", "approve-conditional", "needs-attention", "recommend-pass-1", "recommend-pass-2"], "description": "recommend-pass-1 / recommend-pass-2 are the dual-recommendation two-pass consult verdicts (CLAUDE.md 2026-05-20); approve/needs-attention are standard adversarial-review verdicts" },
+        "findings_total": { "type": "integer", "minimum": 0 },
+        "findings_by_severity": {
+          "type": "object",
+          "properties": {
+            "critical": { "type": "integer", "minimum": 0 },
+            "high": { "type": "integer", "minimum": 0 },
+            "medium": { "type": "integer", "minimum": 0 },
+            "low": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "architectural_judgment_findings": { "type": "integer", "minimum": 0, "default": 0, "description": "Count of hard-floor item 6 findings (net-new schema/invariant/platform-floor beyond ratified scope). > 0 means this round triggered STOP-and-escalate, not inline closure." },
+        "findings_closed_inline": { "type": "integer", "minimum": 0, "description": "Findings closed inline this round (within-scope corrections)" },
+        "escalation_artifact": { "type": "string", "description": "Path to the Engineering Review Request / Decision Memo authored if architectural_judgment_findings > 0" },
+        "duration_seconds": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

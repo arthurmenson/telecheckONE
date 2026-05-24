@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/human_orchestrator_dialogue.schema.json",
+  "title": "Human-Orchestrator Dialogue Event",
+  "description": "Records a message exchanged between the human ratifier/operator and the Orchestrator via the cockpit — a question, an answer, a directive, or a status query. This is the audit trail for human-in-the-loop control. A message with requires_response=true is an open obligation surfaced in the cockpit until a paired reply event references it via related_event_id.",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "human_orchestrator_dialogue" },
+    "source": { "type": "string", "pattern": "^(orchestrator-agent|ratifier|engineering-lead)$" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["dialogue_id", "direction", "participant", "message"],
+      "properties": {
+        "dialogue_id": { "type": "string", "pattern": "^DLG-[0-9]+$" },
+        "direction": { "enum": ["human_to_orchestrator", "orchestrator_to_human"] },
+        "participant": { "type": "string", "description": "Human identity (Evans / Engineering Lead) on the human side of the exchange" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 8000 },
+        "intent": { "enum": ["question", "answer", "directive", "status_query", "acknowledgement"], "description": "Pragmatic role of the message" },
+        "requires_response": { "type": "boolean", "default": false, "description": "True when this message opens an obligation that a paired reply must close" },
+        "related_event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$", "description": "event_id this message replies to / references" },
+        "dual_recommendation_attached": { "type": "boolean", "default": false, "description": "True when an orchestrator_to_human question carries the CLAUDE.md dual-recommendation two-pass evidence (Claude + Codex Pass-1 + Pass-2)" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/dep_filed.schema.json",
+  "title": "Dependency Filed Event",
+  "description": "Emitted by an agent when it declares a cross-agent dependency — its own work is blocked until another agent (or the ratifier) delivers a named artifact. The Orchestrator's dependency graph is the reduction over dep_filed minus dep_satisfied. A still-open dep older than its SLA surfaces as a cockpit blocker.",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "dep_filed" },
+    "source": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*-agent$" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["dep_id", "filed_by_agent_id", "blocks", "description"],
+      "properties": {
+        "dep_id": { "type": "string", "pattern": "^DEP-[0-9]+$", "description": "Stable dependency identifier; referenced by the matching dep_satisfied event" },
+        "filed_by_agent_id": { "type": "string", "description": "Agent that is blocked" },
+        "blocking_target": { "type": "string", "description": "Agent ID, repo, ratifier, or 'spec-corpus-agent' expected to satisfy the dependency" },
+        "blocks": { "type": "string", "minLength": 1, "maxLength": 280, "description": "What work of the filing agent is blocked" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "spec_refs": { "type": "array", "items": { "type": "string" }, "description": "Canonical artifact / SI / invariant references that define the dependency" },
+        "blocked_pr": { "type": "integer", "minimum": 1, "description": "Optional PR number that cannot proceed" },
+        "sla_hours": { "type": "integer", "minimum": 0, "description": "Expected satisfaction window before the dep escalates to a cockpit blocker" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

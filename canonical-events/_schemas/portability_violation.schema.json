@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://telecheck.dev/canonical-events/schemas/portability_violation.schema.json",
+  "title": "Portability Violation Event",
+  "description": "Emitted when an EHBG §12 portability rule (P-1 through P-7) is detected as violated in a pilot-slice repo — e.g. a @supabase/supabase-js import (P-1), Supabase Auth SDK instead of IAuthProvider (P-2), an edge function holding business logic (P-4), or a @vercel/* import (P-5). Detected by the authoring agent, the per-repo PR-merge hook, or the Orchestrator. A blocking violation must gate the PR (no merge).",
+  "type": "object",
+  "required": ["schema_version", "event_id", "event_type", "source", "wall_clock_ts", "client_idempotency_key", "project_id", "payload"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": { "const": "portability_violation" },
+    "source": { "type": "string", "pattern": "^([a-z][a-z0-9_-]*-agent|[a-z][a-z0-9_-]*-pr-merge-hook)$" },
+    "wall_clock_ts": { "type": "string", "format": "date-time" },
+    "client_idempotency_key": { "type": "string", "minLength": 8 },
+    "project_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["repo", "rule", "violation_detail", "detected_by", "blocking"],
+      "properties": {
+        "repo": { "type": "string", "description": "owner/repo where the violation was detected" },
+        "pr_number": { "type": "integer", "minimum": 1 },
+        "rule": { "enum": ["P-1", "P-2", "P-3", "P-4", "P-5", "P-6", "P-7"], "description": "Which §12 portability rule was violated" },
+        "violation_detail": { "type": "string", "minLength": 1, "maxLength": 4000, "description": "Offending import / pattern + file:line where possible" },
+        "detected_by": { "type": "string", "description": "Agent / hook / orchestrator that detected it" },
+        "blocking": { "type": "boolean", "description": "True when the violation must gate the PR merge" },
+        "remediation": { "type": "string", "maxLength": 2000 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
