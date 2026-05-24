@@ -8095,3 +8095,83 @@ Verified the interdependency precisely: **after PR #216, the ONLY remaining `for
 3. **Async-Consult ratifier ceremony** (SI-004/SI-005). Evans + Engineering Lead + CDM owner. Evans-gated. STOP condition 3.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex in this env), 2026-05-24. Corrected the stale-ref trap on BOTH repos; observed the queue is now draining (7 PRs + migration 052 merged since Add. 113, closing the four CI-infra defects); identified and fixed the genuine un-owned wave-2 residue — the format/lint defects the #201/#205 merges introduced after #215 branched — verified end-to-end against a local PG15 full-chain apply (55 touched-file tests pass) and proved the #215+#216 interdependency precisely; shipped PR #216 [CODEX-PENDING], not merged (Codex unavailable); routed nothing duplicate. progress.json revision 217 → 218.
+
+---
+
+## Addendum 115 — telecheck-app PR #215 (rebased) + #216 (cherry-picked) combined merge LANDED on main (`cd30418`); 3 of 4 CI gates green; test gate red on pre-existing vitest 4 incompat (out of scope)
+
+**Date:** 2026-05-24
+**Repo:** telecheck-app
+**Merge commit:** `cd30418` (PR #215, branched `fix/ci-restore-format-lint-green-recovery-chain-residue`); PR #216 closed as superseded.
+**Trigger:** Evans's chat directive **"a"** (Option A: merge despite red tests; pre-existing vitest 4 incompat is out of scope of this PR's format/lint focus). Explicit per-repo extension of the standing "ignore codex till we are done with dev" override to telecheck-app, matching the per-repo authorizations for cockpit (Add. 108) and forms-intake (Add. 109).
+**progress.json:** r218 → r219
+
+### Cycle execution
+
+| Step | Detail |
+|---|---|
+| 1. Diagnosed | PRs #215 + #216 each individually CI-red despite touching disjoint file sets. CI's `format:check` scans the FULL tree — each PR fails on the OTHER's untouched-by-it residue. Mutually interdependent at the CI gate even though scope-independent in commit content. |
+| 2. Rebased #215 | onto `origin/main` `d287925`. Single 2-region conflict in `src/modules/admin-backend/routes.ts` — both regions were stale `Sprint 2 PR 1 of N at v0.2` / single-line `app.get(...)` markers from before #205 landed; resolved by keeping HEAD (post-#205 multi-line block including the new POST submit handler). |
+| 3. Cherry-picked #216 | onto rebased #215. Zero-overlap file sets confirmed (`comm -12` empty intersection). Cherry-pick applied cleanly. |
+| 4. Full-tree verification | After cherry-pick, ran `npm run format:check` + `npm run lint` + `npm run typecheck`. Hit 2 residual defects: prettier on `routes.ts` (post-conflict-resolution single-line→multi-line drift) + lint import-order on `post-forms-template-submit.test.ts:569` (stray late import inside file body, after described tests block). Auto-fixed via `prettier --write` + manual relocation of the import to the top imports group (before `./post-forms-template-submit.js` per the `import/order` rule). Final local state: format ✅ + lint ✅ + typecheck ✅. |
+| 5. Force-pushed | `git push --force-with-lease` → `bc01180` → after amendment → `6c0e6e7`. |
+| 6. CI verdict | `Build, lint, typecheck, test` FAIL at 1m28s (vs prior 36s failure). The **format/lint/typecheck steps all passed** — failure was on the **test step**: pre-existing `vitest v4.1.6` deprecation (`'test.poolOptions' was removed in Vitest 4`) affects 30+ test files globally, none of which my PR touches. NOT introduced by this PR. |
+| 7. Ratifier-merged | Per Evans's Option A. `gh pr merge 215 --merge` → `cd30418`. PR #216 closed with supersession comment (same merge carries its 9-file content via the cherry-pick). |
+
+### What landed on telecheck-app main
+
+| Portion | Files | Change |
+|---|---|---|
+| #215 (rebased) | 12 | +82/-100 — `.eslintrc.cjs` test-file overrides; `with-db-role.{ts,test.ts}` + get-handler test reformats; `routes.ts` conflict resolution |
+| #216 (cherry-picked) | 9 | +146/-214 — prettier reformats on the 8 #201/#205 residue files; lint-fix on `post-forms-template-submit.ts` (no-floating-promises via `void reply.code().send()` form + import order) + `idempotency.ts` (`as const` removed) |
+| **Combined** | **21 files** | **net −86 lines** (most format/lint cleanup compresses) |
+
+### CI gate status on `cd30418`
+
+| Gate | telecheck-app main |
+|---|---|
+| Format (prettier) | ✅ GREEN — all files pass `prettier --check` |
+| Lint (eslint, `--max-warnings 0`) | ✅ GREEN — zero errors, zero warnings |
+| Typecheck (`tsc --noEmit`) | ✅ GREEN — zero output |
+| Test (vitest) | ❌ RED — vitest 4 incompat (pre-existing; affects 30+ files; NOT this PR) |
+| Dependency review, benchmarks, verify-metadata | ✅ pass |
+
+The 3 of 4 gates this PR set out to fix are now GREEN on main. The 4th (test) was already red before my push and requires a separate workstream (vitest 3→4 migration: `vitest.config.ts` top-level options + `test.poolOptions` reference cleanup across the test tree).
+
+### Discipline-floor accounting
+
+The standing "Squash-merge any PR with Codex APPROVE + green CI without asking" rule was bent for this merge:
+- Codex APPROVE: ❌ (overridden per Evans's per-repo "ignore codex till we are done with dev" extension — same pattern as Add. 108 cockpit + Add. 109 forms-intake)
+- Green CI: ❌ (test gate red on pre-existing vitest 4 incompat; NOT regression from this PR)
+
+This continues the #197-#211 ratifier-merge cascade pattern. **Net-positive for CI health:** 3 of 4 gates moved red → green; the 4th was already red.
+
+### Pattern observation — the wave-N CI-residue trap
+
+Third instance of the pattern:
+1. **Addendum 113** — wave-1 residue from foundation-chain FF (PR #215 was the recovery)
+2. **Addendum 114** — wave-2 residue from #201/#205 merges (PR #216 was the recovery)
+3. **This Addendum** — closes both via combined-and-rebased merge
+
+**Pattern fix opportunity:** add `format:check` + `lint` as REQUIRED branch-protection checks. Currently they're informational only — PRs merge with red CI because no required-status check is configured. 1-time CI config change that eliminates the wave-N residue trap permanently. Out of scope for this cycle; recommended for next ops cycle.
+
+### Pilot status post-merge
+
+| Track | State |
+|---|---|
+| Cockpit UI (telecheck-cockpit) | ✅ Feature-complete on main (Add. 108) |
+| Forms-Intake (telecheck-forms-intake) | ✅ Slice formally complete on main (Add. 109) |
+| telecheck-app backend | ✅ 7 PRs + migration 052 (Add. 114) + #215+#216 combined (this Add.) all on main. Format/lint/typecheck green; tests pending vitest-4-migration workstream. |
+| Canonical-events (telecheckONE) | ✅ 15/15 schemas (Add. 107) |
+| Day-3 provisioning | ⏳ Pending Evans's account auth |
+| Day-0 rollback dry-run | ⏳ Pending (Day-4 obligation) |
+
+### Next critical-path items
+
+1. **Vitest 3→4 migration PR** — highest-leverage CI-greening play. Tooling-config change with broad blast radius; needs proper review (not a ratifier-merge candidate).
+2. **Continue draining the [CODEX-PENDING] queue** — ~5-10 PRs remain post-#215+#216 per the Add. 114 inventory. Same retarget+merge pattern applies.
+3. **Day-3 provisioning** — Supabase/Vercel/PostHog/GitHub Actions PR-merge hooks.
+4. **Forms-intake audit-outbox follow-on micro-PR** — port `writeAuditEvent` + retrofit 3 write handlers for Cat A emission.
+5. **Track-6 SI-024 (forms_template_review canonicalization)** — ratifier-gated spec-corpus work.
+
+— Claude (`claude-opus-4-7`, Evans's local session, 2026-05-24), telecheck-app PR #215+#216 combined merge landed at `cd30418`: rebased #215 + cherry-picked #216 + 2 local-fix amendments (prettier on routes.ts + import-order on post-forms-template-submit.test.ts:569) in one branch, force-pushed, ratifier-merged per Evans's Option A direction. 3 of 4 CI gates moved red→green (format/lint/typecheck); test gate remains red on pre-existing vitest 4 incompat (out of scope, requires separate vitest-3→4 migration). PR #216 closed as superseded. Pattern fix opportunity surfaced: add format:check + lint to branch-protection required checks. progress.json revision 218 → 219.
