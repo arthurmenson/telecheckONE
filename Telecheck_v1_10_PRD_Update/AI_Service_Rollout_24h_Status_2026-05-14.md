@@ -8042,3 +8042,56 @@ Defect #1 was the only CI-red class with **no queue owner** — without it, even
 3. **Async-Consult ratifier ceremony** (SI-004/SI-005). Evans + Engineering Lead + CDM owner. Evans-gated.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex in this env), 2026-05-24. Surfaced and fixed the previously-unrecorded `main`-is-CI-red defect (format/lint, the only CI-red class with no queue owner), verified the fix end-to-end against a local PG16 full-chain apply (1932 tests pass), and routed the other four CI-red classes to their existing queued owners (#211/#197/#198/#200) rather than duplicating them. PR #215 opened [CODEX-PENDING], not merged (Codex unavailable). progress.json revision 216 → 217.
+
+## Addendum 114 — telecheck-app queue is DRAINING (7 [CODEX-PENDING] PRs merged since Addendum 113); shipped wave-2 CI green-recovery PR #216 for the format/lint residue introduced by the #201/#205 merges (post-#215-branch); Codex still unavailable → not merged (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24
+**Repo:** telecheck-app (code PR) + telecheckONE (this Addendum + progress bump)
+**Trigger:** Standing autonomous-work loop (remote-cron firing). Read both CLAUDE.md files + Master Completion Plan §Status-pointer/§Pilot-viable-scope + Addendum trail through #113 + migrations/ + the live open-PR queue.
+**progress.json:** r217 → r218
+**Codex:** re-checked in-env — **NOT available** (no `OPENAI_API_KEY`, no `codex` binary, npx cannot fetch `@openai/codex`). Consistent with the remote-cron profile of Addenda 105/107/110/113.
+
+### Live-state re-verification (stale-ref trap, BOTH repos — corrected)
+
+Booted with the firing briefing citing the stale `rev 175 / Addendum 71 / migration 045` numbers again. Corrected via `git ls-remote` + `git fetch origin main` on BOTH repos (local `main` AND local `origin/main` tracking refs both lagged — the fetch updated the tracking ref before the FF):
+
+| Repo | local stale ref | **live remote main** |
+|---|---|---|
+| telecheck-app | `baca008` | **`d287925`** — migrations 000→052, 11 modules; queue partially drained |
+| telecheckONE | `6adaae5` (rev 175 / Add. 71) | **`578f76b`** (rev 217 / Add. 113) |
+
+### NEW since Addendum 113: the telecheck-app [CODEX-PENDING] queue is DRAINING
+
+Addenda 110/113 recorded the queue as Evans-gated and undrained. It is now **partially merged.** Seven previously-queued PRs are on `main` as of `d287925`: **#211** (BOM guard), **#197** (test-role provisioning), **#198** (RLS count drift), **#200** (plugin-wiring tests), **#194** (clean-room migration gate), **#205** (admin submit-for-review handler), **#201** (crisis-events initiate handler) + migration **052** (admin submit draft-state guard). The four CI-infra defects Addendum 113 routed to their queued owners (#211/#197/#198/#200) are therefore **closed on main.**
+
+Remaining open `[CODEX-PENDING]` code queue (11): **#215** (format/lint wave-1), **#210** (Mode 2 case-prep), **#209/#208** (med-interaction writes), **#207/#206** (admin dashboards + decision), **#204/#203/#202/#199** (crisis sweep/patient-summary/respond+resolve/acknowledge), **#193** (ai-service health/ready). All on-main-or-queued → **re-authoring forbidden.** Async-Consult remains ratification-blocked (SI-004/SI-005) → STOP condition 3.
+
+### The genuine, un-owned, in-floor defect this firing: `main` is STILL CI-red, and #215 alone cannot green it
+
+Reproduced CI locally (ephemeral PG15 cluster, full `000→052` chain apply + two-tenant seed). `main`'s `format:check` step fails on **18 files**. Addendum 113's PR #215 was branched BEFORE #201/#205 merged, so it formats only its 10 files. The #201/#205 merges introduced **8 NEW format-broken files** + **real source-file lint violations that no open PR owns**:
+
+| Defect class | Owner |
+|---|---|
+| 10 format files (handlers/types/plugin/routes/with-db-role + tests) + `.eslintrc` test-override | #215 (wave-1) |
+| **8 residue format files** (`auth-context`, `idempotency-body-hash.test`, `admin-backend/audit`, `post-forms-template-submit{,.test}`, `crisis-response/audit`, `post-crisis-event{,.test}`) | **NONE → this firing (PR #216)** |
+| **`post-forms-template-submit.ts` — 5× `no-floating-promises` + import/order** (SOURCE) | **NONE → PR #216** |
+| **`idempotency.ts` — unnecessary `as const`** (SOURCE) | **NONE → PR #216** |
+| test-file `no-unsafe-*` / `unbound-method` / `no-unnecessary-type-assertion` | #215's `.eslintrc` test-override |
+
+Verified the interdependency precisely: **after PR #216, the ONLY remaining `format:check`/`lint` failures are #215's own 13 files + test-file errors that #215's `.eslintrc` override silences.** i.e. **#216 + #215 together = fully green CI; neither alone suffices.** This is the wave-2 analogue of Addendum 113's wave-1 find — scoped to NOT touch any of #215's files (Addendum-113 non-overlap precedent).
+
+### Shipped — PR #216 [CODEX-PENDING]
+
+- **Branch:** `feat/ci-green-residue-wave2-201-205-merge` → `main`
+- **Commit:** `8e49149` (telecheck-app)
+- **Scope:** `prettier --write` on the 8 residue files; `eslint --fix` import/order; 5× `void reply.code().send()` on `post-forms-template-submit.ts` mapServiceError (matches passing sibling `post-crisis-event.ts:273`; fire-and-forget intentional, behavior unchanged); removed unnecessary `as const` on `idempotency.ts:CANONICAL_EMPTY_BODY` (tsc confirms identical literal type). **No migrations touched → no rollback companion.**
+- **Local verification (ephemeral PG15, full `000→052` chain + two-tenant seed):** `format:check` + `lint` clean on all touched files; `tsc --noEmit` passes; **55 touched-file tests pass** (idempotency-body-hash + post-forms-template-submit + post-crisis-event).
+- **Codex outcome:** N/A in-env (unavailable) → opened **[CODEX-PENDING]**, **NOT merged**, per the discipline floor.
+
+### Next critical-path items (refreshed)
+
+1. **Full green CI on `main` now requires #215 + #216 (both format/lint).** The four CI-infra defects (#211/#197/#198/#200) are merged; format/lint is the last red class and is split across these two interdependent PRs. Slot both together.
+2. **telecheck-app `[CODEX-PENDING]` queue (11 PRs: #193/#199/#202/#203/#204/#206/#207/#208/#209/#210/#215 + #216)** — the queue is now demonstrably draining via Evans's merges. Needs Codex reachable (next local session) + continued merge authorization to complete the cascade.
+3. **Async-Consult ratifier ceremony** (SI-004/SI-005). Evans + Engineering Lead + CDM owner. Evans-gated. STOP condition 3.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — no Codex in this env), 2026-05-24. Corrected the stale-ref trap on BOTH repos; observed the queue is now draining (7 PRs + migration 052 merged since Add. 113, closing the four CI-infra defects); identified and fixed the genuine un-owned wave-2 residue — the format/lint defects the #201/#205 merges introduced after #215 branched — verified end-to-end against a local PG15 full-chain apply (55 touched-file tests pass) and proved the #215+#216 interdependency precisely; shipped PR #216 [CODEX-PENDING], not merged (Codex unavailable); routed nothing duplicate. progress.json revision 217 → 218.
