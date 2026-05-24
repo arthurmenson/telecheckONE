@@ -7007,3 +7007,78 @@ Codex review scope per cockpit PR:
 - Additional canonical event schemas (12 remaining beyond the 3 shipped Day-1)
 
 — Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), telecheck-cockpit feature-complete across 5 stacked PRs covering all 9 screens; design-locked 1:1 translation honored; build clean on every PR 2026-05-23. progress.json revision 200 → 201.
+
+---
+
+## Addendum 98 — telecheck-forms-intake PR 1 — project scaffold (Postgres pool + auth plugin + RLS helper + migration runner) (2026-05-23, Evans local session)
+
+**Date:** 2026-05-23 (Day-2 of pilot continued)
+**Trigger:** Evans's standing "continue till done" directive; next critical-path item after Addendum 97 (cockpit feature-complete).
+
+### What landed
+
+**telecheck-forms-intake PR 1** opened at https://github.com/arthurmenson/telecheck-forms-intake/pull/1 (`[CODEX-PENDING]` until May 26 cascade).
+
+Branch: `pr-1-scaffold-postgres-auth-middleware` off `main` (commit `ec3853e`).
+
+This is the Day-2 "nice-to-have" from Addendum 97 — the forms-intake scaffold flesh-out that turns the bootstrap shell into a real Fastify application with the §12 portability primitives in place.
+
+### Files shipped
+
+| File | Purpose |
+|---|---|
+| `src/lib/config.ts` | Zod env validation; `DATABASE_URL` optional (lazy fail-fast at `getPool()` — server starts without DB in Day-1/2 bootstrap state) |
+| `src/lib/db.ts` | `pg.Pool` singleton + `withTransaction` + `probe` + `closePool` (§12 P-1: plain pg, no Supabase SDK) |
+| `src/lib/rls.ts` | `withTenantContext` — `SET LOCAL app.current_tenant_id` via `set_config($1, $2, true)` (I-023 Layer 2; prevents GUC string-injection) |
+| `src/lib/auth/null.ts` | `NullAuthProvider` stub — throws `provider_unavailable`; mirrors `NullLLMProvider` pattern from telecheck-app; swapped out Day-3 |
+| `src/plugins/db.ts` | Fastify plugin (fp): decorates `fastify.pg` (lazy getter) + `fastify.dbProbe` + `onClose` hook |
+| `src/plugins/auth.ts` | Fastify plugin (fp): preHandler JWT verify + `req.actor` decoration; `requireActor()` helper (I-025 tenant-blind 401 — never 403) |
+| `scripts/migrate.mjs` | SQL migration runner — `up` / `status` commands; `schema_migrations` tracking table; each .sql wrapped in transaction |
+| `migrations/.gitkeep` | Placeholder — migration suite (forms_template* port from telecheck-app) lands in PR 2 |
+| `src/index.ts` (updated) | Registers db + auth plugins; `/health` with best-effort DB probe (null when DB not wired); `/ready` 503 scaffold state |
+| `package.json` (updated) | Adds `fastify-plugin ^5.0.1` |
+
+### §12 Portability discipline compliance
+
+- **P-1** ✅ — zero `@supabase/supabase-js` imports anywhere in the repo
+- **P-2** ✅ — auth fully behind `IAuthProvider`; handlers call `requireActor(req, reply)` → interface → never SDK directly
+- **P-3** ✅ — migration runner reads from `migrations/*.sql`; zero Supabase Dashboard-edit pattern
+- **P-4** ✅ — business logic in `src/modules/forms-intake/` (lands PR 3+); no edge functions
+- **P-5** ✅ — zero `@vercel/*` imports
+- **P-6** ✅ — N/A; cockpit handles observability
+- **P-7** ✅ — no RemoteTrigger primitives
+
+### Build hygiene
+
+`npx tsc --noEmit` — **zero errors** (strict + `noUncheckedIndexedAccess`).
+
+### Codex review scope for May 26
+
+- §12 P-1/P-2/P-3 compliance (primary check)
+- `withTenantContext` SET LOCAL scoping correctness (I-023 Layer 2)
+- `requireActor()` I-025 tenant-blind 401 enforcement
+- `probe()` graceful null path in `/health` (no DB = 200, not 500)
+- `NullAuthProvider` `provider_unavailable` path in preHandler hook
+- TypeScript strict compliance throughout
+
+### Pilot status post Day-2
+
+| Track | Status |
+|---|---|
+| Cockpit UI (telecheck-cockpit) | ✅ Feature-complete (5 PRs, 9 screens, design-locked, build clean) — Addendum 97 |
+| Forms/Intake pilot slice (telecheck-forms-intake) | ✅ PR 1 shipped (scaffold: pool + auth + RLS + migration runner, §12 P-1–P-7 compliant, tsc clean) |
+| Spec corpus (telecheckONE) | Day-1 skeleton shipped (canonical-events + 3 agent CLAUDE.md + rollback runbook + P-043 + Addendum 93) |
+| Supabase + Vercel + PostHog provisioning | Pending Evans's account auth (Day-3 critical-path) |
+| GitHub Actions PR-merge hooks | Pending (Day-3) |
+| Day-0 rollback dry-run | Pending (Day-4 obligation before Clinical Pilot Agent first firing) |
+| Clinical Pilot Agent first firing | Pending (Day-4) |
+
+### Next critical-path item
+
+All Day-2 work items from Addendum 97 are now delivered. Day-3 work is gated on Evans's accounts (Supabase, Vercel, PostHog). The only Day-2+ work remaining is:
+- **12 additional canonical event schemas** in `telecheckONE/canonical-events/_schemas/` (can be done without accounts)
+- **Forms-intake PR 2** (migration suite — port `telecheck-app/migrations/0XX_forms_template*` SQL files) — can be authored without DATABASE_URL but testing needs it
+
+The Forms-intake migration suite (PR 2) is the next no-infrastructure-needed deliverable.
+
+— Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), telecheck-forms-intake PR 1 shipped (scaffold: pool + auth plugin + RLS helper + migration runner; §12 P-1–P-7 compliant; tsc clean; [CODEX-PENDING] until May 26 cascade); 2026-05-23. progress.json revision 201 → 202.
