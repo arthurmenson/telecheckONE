@@ -7805,3 +7805,82 @@ With cockpit feature-complete on main:
 5. **Day-3 provisioning** — Supabase / Vercel / PostHog / GitHub Actions PR-merge hooks → cockpit live data + integration tests execute
 
 — Claude (Opus 4.7, 1M context, Evans's local session), telecheck-cockpit feature-complete merge cascade executed: 5 PRs merged to main via `gh pr edit --base main` + `gh pr merge --merge` per PR (retarget+merge pattern proven for stack-strand workaround); zero open cockpit PRs; 9 screens + shell live at `origin/main` `4588d0a`; Day-14 evaluation cockpit deliverable HIT; pattern now applicable to forms-intake PRs #7-#10 + telecheck-app [CODEX-PENDING] queue (20 PRs); 2026-05-24. **progress.json revision 211 → 212** (this Addendum was authored as 107 pre-rebase; renumbered to 108 after remote-cron Addendum 107 — canonical-events schemas at line ~7676 — claimed 107 first).
+
+---
+
+## Addendum 109 — telecheck-forms-intake slice formally COMPLETE on main (PRs #7-#10 cascade merged); both pilot repos now feature-complete
+
+**Date:** 2026-05-24
+**Repo:** telecheck-forms-intake
+**Trigger:** Evans's chat directive *"yes merge for me"* — second application of the per-repo ratifier-merge cascade pattern. Same incantation as the cockpit cascade (Addendum 108).
+**progress.json:** r212 → r213
+
+### Cascade execution
+
+| GitHub PR | Slice PR | Branch | Action | Result |
+|---|---|---|---|---|
+| #7 | PR 6 — POST /submit-for-review + migration 010 | `pr-6-submit-for-review` → `main` (already on main) | `gh pr merge 7 --merge` | ✅ MERGED `bfa7354` |
+| #8 | PR 7 — POST /reviews/:review_id/decision (I-015) | `pr-7-review-decision` → `pr-6-submit-for-review` → retargeted to `main` | edit base + merge | ✅ MERGED `7695b77` |
+| #9 | PR 8 — integration test harness + 26 e2e cases | `pr-8-integration-tests` → `pr-7-review-decision` → retargeted to `main` | edit base + merge | ✅ MERGED `16f2421` |
+| #10 | PR 9 — cockpit handshake — SLICE COMPLETE | `pr-9-cockpit-handshake` → `pr-8-integration-tests` → retargeted to `main` | edit base + merge | ✅ MERGED `66c0235` |
+
+**Final state:** `origin/main` HEAD = `66c0235`. Zero open PRs. **All 10 slice-roadmap PRs (GitHub PRs #1-#10) now on main.**
+
+### What's now live on forms-intake main
+
+| Component | Endpoint / Artifact |
+|---|---|
+| `GET /health` | health probe — `scaffold_state: "SLICE COMPLETE — all 9 PRs shipped"` |
+| `GET /v1/admin/templates` | keyset-paginated list of FormTemplateSummary |
+| `GET /v1/admin/templates/:id` | full FormTemplate detail (tenant-blind 404 per I-025) |
+| `POST /v1/admin/templates` | create draft (Zod body validation, ULID gen, 23505→409) |
+| `POST /v1/admin/templates/:id/submit-for-review` | atomic 2-step tx (review INSERT + status flip) |
+| `POST /v1/admin/templates/:id/reviews/:review_id/decision` | I-015 dual-control enforced (role gate + runtime); approved→published, rejected/revision_requested→draft |
+| `GET /v1/agents/clinical-pilot/status` | cockpit handshake matching `Agent` interface in `telecheck-cockpit/src/lib/cockpit-types.ts` |
+| migrations/001–010 | full schema chain incl. `forms_template_review` entity + `pending_review` status enum extension |
+| tests/integration/*.test.ts | 26 e2e test cases (DATABASE_URL-gated) covering all 5 handlers + I-015 + I-023 + I-025 + decision immutability |
+| README.md cockpit handshake section | contract documentation |
+
+### Both pilot repos now feature-complete on main
+
+| Repo | main HEAD | State |
+|---|---|---|
+| telecheck-cockpit | `4588d0a` | 9 screens + shell live (Addendum 108) |
+| telecheck-forms-intake | `66c0235` | All 10 PRs live; SLICE FORMALLY COMPLETE (this Addendum) |
+
+This is the **first time both pilot repos are simultaneously feature-complete on main.** The agentic-workforce pilot now has:
+
+- A canonical-shape control-plane UI (cockpit) consumable by operators
+- A canonical-shape per-slice repo (forms-intake) demonstrating the per-slice pattern works
+- A canonical cockpit↔slice handshake (`GET /v1/agents/clinical-pilot/status` → cockpit Agent card)
+
+### Day-14 evaluation criteria status
+
+| Criterion | State |
+|---|---|
+| Cockpit feature-complete | ✅ HIT (Addendum 108) |
+| Forms-Intake slice 9-PR roadmap complete | ✅ HIT (this Addendum) |
+| Canonical-events schema set complete (15/15) | ✅ HIT (Addendum 107) |
+| Day-0 rollback dry-run | ⏳ Pending (Day-4 obligation) |
+| Day-3 provisioning (Supabase / Vercel / PostHog / GitHub Actions) | ⏳ Pending Evans's account auth |
+| Clinical Pilot Agent first remote-cron firing | ⏳ Pending Day-3 + Day-0 |
+
+3 of 6 Day-14 criteria HIT. Remaining 3 all need either your account auth or Day-4 operational sign-off.
+
+### Pattern observation — the cascade is now repeatable
+
+The `gh pr edit <N> --base main` + `gh pr merge <N> --merge` two-command pattern has now executed successfully on:
+
+1. Cockpit 5-PR stack (Addendum 108)
+2. Forms-intake 4-PR stack (this Addendum)
+
+Same incantation will work for the **telecheck-app 20-PR [CODEX-PENDING] queue** (#192–#211) per the runbook in Addendum 105 (remote-cron cascade-readiness verification). That's the next big acceleration play, and the only reason it's not done yet is that telecheck-app has not been authorized via "merge them for me" yet — the cockpit + forms-intake authorizations were per-repo.
+
+### Next critical-path items (refreshed post-double-cascade)
+
+1. **telecheck-app [CODEX-PENDING] queue (20 PRs)** — biggest backend acceleration; requires your `"merge them for me"` extension to telecheck-app. Per the Addendum 105 runbook: 3 superseded PRs to close (#192/#195/#196), 2 needing rebase (#193/#194), 15 ready to merge in order. Single biggest pilot-velocity unlock available.
+2. **forms-intake audit-outbox follow-on micro-PR** — port `writeAuditEvent` from telecheck-app + retrofit 3 write handlers (`forms_template.created`, `.submitted_for_review`, `.review_decision_recorded`) for Cat A emission per I-027.
+3. **Track-6 SI-024 authoring** — canonicalize the `forms_template_review` entity in CDM v1.7 → v1.8 (Promotion Ledger P-N+1; migration 010 is the authoritative shape reference).
+4. **Day-3 provisioning** — Supabase / DATABASE_URL / Vercel / PostHog / GitHub Actions PR-merge hooks → integration tests actually execute + cockpit live data + production deploys.
+
+— Claude (Opus 4.7, 1M context, Evans's local session), telecheck-forms-intake slice formally COMPLETE on main: 4-PR cascade merged via `gh pr edit --base main` + `gh pr merge --merge` per PR; zero open PRs; main HEAD = `66c0235`; all 10 slice-roadmap PRs live; both pilot repos (cockpit + forms-intake) now simultaneously feature-complete on main for the first time; 3 of 6 Day-14 evaluation criteria HIT; same cascade pattern stands ready for the 20-PR telecheck-app queue when authorized; 2026-05-24. progress.json revision 212 → 213.
