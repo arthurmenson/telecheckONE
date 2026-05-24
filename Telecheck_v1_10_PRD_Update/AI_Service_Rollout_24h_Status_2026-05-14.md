@@ -7231,3 +7231,75 @@ Unchanged from Addendum 89's assessment, now with the origin/main defect as a ha
 4. Track-5 migration-chain CI gate ratification.
 
 — Claude (Opus 4.7, remote-cron autonomous firing), 2026-05-24. Preserved 51-commit Codex-APPROVED telecheck-app foundation as `origin/recovery/detached-work-through-051` (`f6c5160`); surfaced origin/main-stranded-at-045 continuity defect + reconciliation options; confirmed all pilot-scope handlers done/queued and next code item (Async-Consult) ratification-blocked; no new code PR (correctly, per discipline floor). progress.json revision 203 → 204.
+
+---
+
+## Addendum 101 — forms-intake PR 3 opened: GET /v1/admin/templates live
+
+**Date:** 2026-05-23
+**Repo:** telecheck-forms-intake
+**Branch:** pr-3-get-templates (commit ddf0aba)
+**PR:** https://github.com/arthurmenson/telecheck-forms-intake/pull/3
+**Status:** [CODEX-PENDING] — awaiting May 26 usage-limit reset cascade
+**progress.json:** r204 → r205
+
+### What shipped
+
+PR 3 of the 9-PR Forms/Intake slice roadmap. Wires `GET /v1/admin/templates` — the first live read handler — into the forms-intake Fastify server.
+
+**New files:**
+
+| File | Purpose |
+|---|---|
+| `src/modules/forms-intake/types.ts` | `FormTemplate` (full row, PR 4+) + `FormTemplateSummary` (list projection, this PR) |
+| `src/modules/forms-intake/repos/template-repo.ts` | `listTemplatesForTenant` (keyset) + `findTemplateById` stub (PR 4) |
+| `src/modules/forms-intake/routes/templates.ts` | `listTemplatesHandler` — RBAC gate + cursor encode/decode + `withTenantContext` call |
+| `src/modules/forms-intake/plugin.ts` | Fastify plugin; PR 4–7 stubs commented in |
+
+**Updated:** `src/index.ts` — registers `formsIntakePlugin`; `/health` probe updated to reflect PR-3 state.
+
+### Design decisions
+
+**tx-receiver pattern (vs telecheck-app self-contextualizing repos):**
+The handler owns the `withTenantContext(actor.tenantId, fn)` call and passes the resulting `DbTransaction` to repo functions. Repo functions accept `tx: DbTransaction` directly — they never set up their own context. This makes the transaction lifecycle explicit and mirrors §12 P-4 (business logic in `src/modules/forms-intake/`, not in edge functions or framework glue).
+
+**FormTemplateSummary projection:**
+`listTemplatesForTenant` returns summary rows (no JSONB columns: `presentation_content`, `branching_logic`, `eligibility_logic`, `approval_governance`) to prevent the list endpoint becoming a DoS vector. Full `FormTemplate` lands in PR 4's detail handler. Pattern mirrors Codex forms-admin-r1 MEDIUM closure from telecheck-app.
+
+**Keyset cursor SQL:**
+Uses PostgreSQL row-value comparison `(program_id, country_of_care, template_version, template_id) > ($1,$2,$3,$4)` directly rather than a CTE lookup. Resilient to concurrent inserts/deletes between pages (no OFFSET). Cursor = base64url-encoded JSON tuple; opaque to API callers.
+
+**401 not 403 discipline (I-025):**
+Both `requireActor` (PR 1's auth plugin) and the new `requireTemplateReadAccess` function return 401 for all auth/authz failures — never 403. Roles: `template_admin`, `template_reviewer`, `platform_admin` per RBAC v1.1 §2.
+
+### §12 portability discipline — all P-1..P-7 pass
+
+| Rule | Status |
+|---|---|
+| P-1: plain `pg` | ✅ zero `@supabase/supabase-js` |
+| P-2: IAuthProvider interface | ✅ auth via `requireActor`; no Supabase Auth SDK |
+| P-3: SQL migrations only | ✅ no schema changes in PR 3 (migration suite landed PR 2) |
+| P-4: no edge functions | ✅ business logic in `src/modules/forms-intake/` |
+| P-5: no `@vercel/*` | ✅ zero Vercel imports |
+
+### Pilot status post PR 3
+
+| Track | Status |
+|---|---|
+| Cockpit UI (telecheck-cockpit) | ✅ Feature-complete (5 PRs, 9 screens, design-locked) |
+| forms-intake — PR 1 (scaffold) | ✅ [CODEX-PENDING] |
+| forms-intake — PR 2 (migration suite, 9 SQL files) | ✅ [CODEX-PENDING] |
+| forms-intake — PR 3 (GET /v1/admin/templates) | ✅ OPEN [CODEX-PENDING] |
+| forms-intake — PR 4 (GET /v1/admin/templates/:id) | ⏳ next |
+| Spec corpus (telecheckONE) | Day-1 skeleton shipped; 12 remaining canonical event schemas queued |
+| Supabase + Vercel + PostHog provisioning | Pending Evans's account auth (Day-3 critical-path) |
+| GitHub Actions PR-merge hooks | Pending (Day-3) |
+| Day-0 rollback dry-run | Pending (Day-4 obligation) |
+
+### Next critical-path item
+
+- **forms-intake PR 4** — GET /v1/admin/templates/:id (detail handler): uses `findTemplateById(tx, tenantId, id)` from `template-repo.ts` (already authored as stub); tenant-blind 404 per I-025; branch from `pr-3-get-templates`.
+- **12 remaining canonical event schemas** in `telecheckONE/canonical-events/_schemas/` — no account dependencies; can ship in parallel.
+- **Day-3 critical-path** (needs Evans's accounts): Supabase provisioning + DATABASE_URL + Vercel link + PostHog + GitHub Actions hooks.
+
+— Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), telecheck-forms-intake PR 3 opened (GET /v1/admin/templates, tx-receiver pattern, keyset pagination, I-025 tenant-blind auth, [CODEX-PENDING] until May 26 cascade); 2026-05-23. progress.json revision 204 → 205.
