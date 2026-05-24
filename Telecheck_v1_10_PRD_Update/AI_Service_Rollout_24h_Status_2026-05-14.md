@@ -8428,3 +8428,42 @@ Per the discipline floor (**Codex APPROVE mandatory before any merge**) + the Ad
 3. **CDM v1.3 ratifier ceremony** (Add. 117) — Phase B exit; biggest leverage on net-new work.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Advanced the queue cascade per Addendum 119: rebased PR #202 (Crisis respond+resolve) onto current main `c27638c`, resolved the 3-file audit.ts/routes.ts/README union conflict (kept main's Codex-upgraded `crisis.detected` emitter + appended `crisis.responded` + `crisis.resolved`; dropped out-of-scope `crisis.acknowledged`), kept main's `/health`+`/ready` probe text to preserve the plugin-wiring gate, verified 92/92 tests green + tsc/prettier/eslint clean on an ephemeral PG 16. Force-pushed `6943e29` → `ffac0e1`; PR is now conflict-free + CI-ready but stays `[CODEX-PENDING]` (no merge — Codex unauthenticatable in remote env). telecheck-app main untouched. progress.json revision 223 → 224.
+
+---
+
+## Addendum 121 — Queue cascade advanced: PR #203 (Crisis patient-summary GET) rebased onto current main + 2-file union conflict resolved + 55 crisis-response tests green locally; stays [CODEX-PENDING] (Codex unavailable in remote env) (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24
+**Repo:** telecheck-app (PR #203 branch force-push only; main untouched) + telecheckONE (this Addendum + progress bump).
+**Trigger:** Standing autonomous-work loop (remote-cron firing), per telecheckONE/CLAUDE.md "Autonomous-work authorization." Picks up the queue cascade exactly where Addendum 120 paused (#203 named as the next cascade item after #199 → #202).
+**progress.json:** r224 → r225
+**Codex:** re-checked in-env — `npx -y @openai/codex review --base main` runs the CLI but the WebSocket handshake fails with `403 Forbidden — Host not in allowlist` against `wss://api.openai.com/v1/responses` (no `OPENAI_API_KEY`; `api.openai.com` not in this env's network allowlist). Consistent with Addenda 105/107/110/113/114/116/117/119/120. Codex review **cannot run in remote-cron**; #203 stays `[CODEX-PENDING]`, no merge.
+
+### Cycle execution — cascade item #203
+
+Addendum 120 rebased #202 (respond+resolve) and named **#203 (Crisis patient-summary GET)** as the next cascade item. This firing executed the rebase + spec-aware conflict resolution so #203 is now **conflict-free + CI-ready**, awaiting only a Codex APPROVE.
+
+**Rebase:** PR #203's single commit (`5b83db0`) sat on base `f6c5160` (pre-Sprint-2-PR-2 main). Rebased onto current main `c27638c`. 2 of 5 files conflicted (`README.md` + `routes.ts`); `internal/types.ts` + the two new handler files (`get-crisis-event-patient-summary.{ts,test.ts}`) auto-merged clean.
+
+**Conflict resolution (spec-aware union):**
+- `routes.ts` — 3 conflict blocks. Kept main's `POST /` initiate mount + `GET /:id` staff read (Sprint 2 PR 2 + PR 1, already landed) AND appended this PR's `GET /:id/patient-summary` patient-scoped read mount. Merged the doc-comment route inventory so all three mounted routes are documented; the "NOT mounted yet" list correctly narrows to acknowledge/respond/resolve/sweep. Kept BOTH handler imports (eslint `import/order` --fix reordered them: patient-summary before get-crisis-event before post-crisis-event).
+- `README.md` — 5 conflict blocks. Reframed the status header to "Sprint 2 PR 5 — PATIENT-SCOPED READ LANDED" with a status para naming all three landed handlers (PR 1 staff read, PR 2 initiate write, PR 5 patient read). **Preserved main's full PR 2 detail section verbatim** (relabeled "already merged on `main`") so no merged-on-main documentation was lost; PR 1 detail preserved; module-structure file-tree + Sprint-2-4 work list reconciled to show both reads DONE and the file inventory carrying all four handler files + `audit.ts`.
+- Per the Addenda 119/120 precedent, kept main's `/health` + `/ready` probe bodies untouched (they live outside the conflict markers) to preserve the `crisis-response-plugin-wiring` integration gate.
+
+**Local verification (ephemeral PG 16 + Redis):** `tsc --noEmit` clean; `npm run format:check` all-files-pass; `npm run lint` exit 0; `npx vitest run src/modules/crisis-response/` → **55/55 green** (get + post + get-patient-summary handler suites); `crisis-response-plugin-wiring.test.ts` → **6/6 green** (the new route mount did not break the wiring assertions). No new migration in this PR (read handler only) → no rollback file required.
+
+**No merge.** Force-pushed `5b83db0` → `62b1ddf` to `feat/crisis-response-sprint2-pr5-get-patient-summary-handler` (the PR #203 head branch); PR #203 now points at the conflict-free, CI-clean commit but stays `[CODEX-PENDING]` (Codex unauthenticatable in remote env). telecheck-app `main` = `c27638c`, untouched.
+
+### Discipline-floor compliance
+
+- **Codex APPROVE mandatory before merge** — honored; no merge attempted. Per Addenda 116/117/119/120 precedent, did NOT self-extend Evans's per-repo Codex-override autonomously.
+- **No net-new schema / canonical entity authored** — pure cascade-advance on an already-authored PR; zero duplication (no re-authoring; the PR's commit content is preserved, only rebased + conflict-resolved + lint/format-cleaned).
+- **No STOP condition hit** — no architectural-judgment finding, no prohibited action, no ratification ceremony.
+
+### Next critical-path items
+
+1. **Continue the queue cascade** — #204 (Crisis sweep) next, then #206/#207 (admin Sprint 2 PR 3/4), #208/#209 (med-interaction PR 8/9), #210 (AI Mode 2 case-prep). Each: rebase → resolve union → local-verify → leave `[CODEX-PENDING]`. The conflict-free queue now holds #199, #202, #203 ready for the next Codex-equipped session.
+2. **Evans: unblock the merge gate** — provision `OPENAI_API_KEY` for remote Codex, OR extend the per-repo Codex-override to the rebased queue, OR run Codex locally on the now-conflict-free PRs (#199 + #202 + #203 are all ready; cascade merge order #199 → #202 → #203 → #204).
+3. **CDM v1.3 ratifier ceremony** (Add. 117) — Phase B exit; biggest leverage on net-new work.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Advanced the queue cascade per Addendum 120: rebased PR #203 (Crisis patient-summary GET) onto current main `c27638c`, resolved the 2-file README/routes union conflict (kept main's PR 1 staff read + PR 2 initiate write + appended PR 5 patient read; preserved PR 2's merged-on-main doc detail verbatim), kept main's `/health`+`/ready` probe text to preserve the plugin-wiring gate, verified 55/55 crisis-response handler tests + 6/6 plugin-wiring tests green + tsc/prettier/eslint clean on an ephemeral PG 16. Force-pushed `5b83db0` → `62b1ddf`; PR is now conflict-free + CI-ready but stays `[CODEX-PENDING]` (no merge — Codex unauthenticatable in remote env). telecheck-app main untouched. progress.json revision 224 → 225.
