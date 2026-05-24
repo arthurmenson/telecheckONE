@@ -9051,3 +9051,58 @@ Significantly faster than PR #11's 6 rounds — most of PR #11's cycle was spent
 **No code branch created; telecheck-app main untouched by code this firing.** This Addendum + the progress bump are the only artifacts.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. 5th-consecutive parked-state firing: independently re-verified Codex unavailable, telecheck-app main unmoved (`c27638c`), the 9-PR `[CODEX-PENDING]` queue unchanged (#199/#202/#203/#204/#206/#207/#208/#209/#210), SI-003/004/005 still pre-ratification, migration high-water 052. This firing's incremental contribution: the first explicit cross-check of the parked conclusion against the **newest** primary source, Completion Plan **v1.1** — confirming it keeps implementation OUT OF SCOPE, adds 17 more ratifier-gated spec drafts, and routes the whole foundation through the Evans-gated batched ratifier ceremony (a charter STOP condition), thereby strengthening the parked conclusion. Escalated the loop-pacing recommendation from co-equal options to a prioritized **PAUSE-the-loop** primary recommendation given 5 consecutive Evans-gated no-ops. Authored NO duplicate/stacked PR; deliberately did NOT re-run the unmoved-main merge-tree triage. Caught + corrected the telecheckONE stale-tracking-ref trap (9th consecutive). progress.json revision 237 → 238.
+
+## Addendum 135 — telecheck-cockpit OperatorChip (Topbar operator identity + sign-out menu) SHIPPED on main (PR #13 merged `d59fc61`); closes the Bucket B activation UX gap from PRs #11/#12 with a 4-round Codex cycle
+
+**Context.** PRs #11 and #12 shipped the cockpit's `/auth/sign-out` route + Google OAuth sign-in flow, but there was no UI affordance for the operator to invoke sign-out + no surface telling them which account was currently signed in. PR #13 closes both gaps with a Topbar chip showing the operator's identity + a popover menu hosting the sign-out form. Pure cockpit UX work — no spec corpus changes, no auth-decision-contract changes.
+
+**What shipped (PR #13 → squash `d59fc61` on `arthurmenson/telecheck-cockpit`, 5 files / +488 / −5).**
+
+- **`src/components/shell/OperatorChip.tsx`** (new): client component reading `/api/auth/status`. Five explicit render states:
+  - **loading** — skeleton ("…") during the initial fetch.
+  - **authenticated** — initials-avatar + display name + ▾ caret. Click opens a popover with full identity (id, roles[]), an amber "Local dev session" banner pointing at BUCKET_B_CREDENTIALS.md when `provider === "null"`, and a sign-out form POSTing to `/auth/sign-out`.
+  - **unauthenticated** (`reason: "unauthenticated"`) — "Sign in" link to `/sign-in`. Reasonable fallback when the operator landed without a session.
+  - **forbidden** (`reason: "forbidden"`) — amber-bordered "Not authorized · Sign out" form button. The user HAS a valid session but lacks the `operator` role claim; sending them to /sign-in would just reproduce the forbidden state. Hover-title points at the BUCKET_B_CREDENTIALS.md step 7 recovery (set `app_metadata.roles` via SQL → sign out + back in).
+  - **provider_unavailable** (`reason: "provider_unavailable"` OR fetch error) — red-dot "auth offline" honest-failure indicator. Backend is unreachable; the recovery is operator-config, not a sign-in retry. Never silently renders a "signed in" fiction.
+- **`/api/auth/status` route** amended: response now carries a `reason: "unauthenticated" | "forbidden" | "provider_unavailable"` discriminator in the not-authenticated case. Prior shape collapsed `provider_unavailable` into `authenticated:false + actor:null` with no way to distinguish from a genuine "no session", which would have routed the operator into a /sign-in retry that fails identically.
+- **Topbar wiring**: `<OperatorChip />` appended after the theme toggle at the right edge of the Topbar.
+- **Test infra**: `vitest.setup.ts` (new) + `vitest.config.ts` amended with `setupFiles` to register `@testing-library/jest-dom/vitest` matchers globally (so component tests can use `toBeInTheDocument`, `toHaveAttribute`, etc. without per-file imports). Benefits future component tests too.
+- **Tests**: 13 new vitest cases across `OperatorChip.test.tsx` + `SignInForm.test.tsx`. Coverage spans every render state, popover open/close + outside-click dismissal, sign-out form action assertion, honest-failure on fetch reject + HTTP error, NullAuthProvider banner, AND reachable-flow coverage of `/sign-in?error=not_authorized` + `?error=oauth_failed` recovery copy (regression against the role-grant-path messaging that landed in PRs #11/#12).
+
+**Codex cycle (4 rounds).**
+
+| Round | Findings | Closure SHA |
+|---|---|---|
+| R1 | (1) `/api/auth/status` collapsed `provider_unavailable` into `authenticated:false`, causing the chip to show a misleading "Sign in" link when the auth backend was unreachable. (2) Chip subscribed to `cockpit:refresh` (5s polling) → 12 hits/min/tab on Supabase for no useful signal. | `37b4169` |
+| R-verify | The `reason: "forbidden"` case fell through to the same Sign-in-link branch as `unauthenticated`, but a forbidden user has a valid session — sending them to /sign-in reproduces the state. | `052c942` |
+| R-verify-2 | Recommended adding a reachable-flow regression around `/sign-in?error=not_authorized` to lock in the role-grant-path recovery copy. | `8c6faee` |
+| R-verify-3 | **APPROVE no material findings.** "The forbidden chip state now renders a POST sign-out form instead of a sign-in link, and the new SignInForm regression pins the /sign-in?error=not_authorized recovery copy to the actual role-grant path." | merged |
+
+The trajectory pattern was Codex finding under-specified surface in the auth-status response shape (R1) then progressively tightening the chip's render-state matrix (R-verify, R-verify-2). The architectural fix landed in R1's `reason` discriminator addition — every subsequent round was applying that discriminator to a missed branch or adding regression coverage. R-verify-3 returned a clean explicit APPROVE.
+
+**Final state.**
+- vitest: 59/59 passing (up from 46 at PR open; +13 tests covering OperatorChip render states + SignInForm error-message regression).
+- tsc: clean.
+- next build: clean (10 routes + middleware including the new chip's dependencies through Topbar).
+- main = `d59fc61` on `arthurmenson/telecheck-cockpit`.
+
+**Discipline anchors.**
+- **Honest failure preserved** — every render state distinguishes "operator action required" from "backend broken." No silently-misleading affordance.
+- **Single-path authorization contract preserved** — chip is a CONSUMER of `/api/auth/status`; it doesn't make auth decisions itself. The PR #11/#12 single-path role-claim contract (`app_metadata.roles ? 'operator'`) is untouched.
+- **No new env vars / no schema changes / no platform-floor amendments.** Pure UX surface.
+- **Test infra improvement (`vitest.setup.ts`)** — global jest-dom matchers will pay off on every future component test. Was a Day-2 obligation that finally got closed under this PR's scope.
+
+**Bucket B cockpit activation surface — status.** Code-side COMPLETE. The UX gap from PRs #11/#12 (no sign-out button, no operator-identity surface) is now closed. To activate:
+1. Provision Supabase + Google OAuth (per `BUCKET_B_CREDENTIALS.md`).
+2. Sign in once via cockpit `/sign-in` → creates Supabase user.
+3. Run the SQL from step 8 to grant the user `app_metadata.roles: ["operator"]`.
+4. Sign out + back in to pick up the role claim.
+5. OperatorChip should now show your initials + email; click → sign-out menu available.
+
+**Next critical-path items.**
+- **Bucket B activation** (Evans's credential provisioning): unchanged from prior Addenda.
+- **ChatScreen → real Anthropic API smoke** (cockpit follow-on): the chat backend reads `ANTHROPIC_API_KEY` (present in your shell env); end-to-end smoke vs. the fake-orchestrator fallback hasn't been exercised since PR #8.
+- **MJML / HTML email templates** (per Addendum-conversation today): parked as open sub-decision. Email vendor (Postmark) is in the canonical stack; authoring language is unprescribed.
+- **Bucket C** (ratifier-ceremony-gated): unchanged.
+
+— Claude (`claude-opus-4-7`, Evans's local session, 2026-05-24), telecheck-cockpit OperatorChip + sign-out menu SHIPPED on main (PR #13 → `d59fc61`); 4-round Codex cycle (R1 provider_unavailable + 5s spam → R-verify forbidden branch → R-verify-2 regression coverage → R-verify-3 APPROVE); 59 vitest tests + tsc + next build clean; Topbar now surfaces operator identity + sign-out without leaving the cockpit; vitest.setup.ts global jest-dom matchers retire a Day-2 obligation. progress.json revision 238 → 239.
