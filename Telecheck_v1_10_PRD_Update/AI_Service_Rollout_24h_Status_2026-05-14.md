@@ -8944,3 +8944,44 @@ R-verify-6 returned only a procedural rerun-checks step (no new finding text). R
 - **Day-3+ follow-on**: ingestion worker that tails the telecheckONE canonical_events NDJSON files + writes to the Supabase canonical_events table (telecheckONE-side; out of cockpit scope).
 
 — Claude (`claude-opus-4-7`, Evans's local session, 2026-05-24), telecheck-cockpit Bucket B continuation SHIPPED on main (PR #11 → `2f8b8ec`); 6-round Codex structural lockdown of the authorization-decision surface; final contract = single-path role-claim enforced at middleware + SupabaseAuthProvider + Postgres RLS identically; 46 vitest tests + tsc + next build clean; canonical_events Supabase migration ships RLS that requires `app_metadata.roles ? 'operator'` (matching the app gate exactly). progress.json revision 234 → 235.
+
+## Addendum 132 — telecheck-cockpit Google OAuth as the canonical sign-in flow SHIPPED on main (PR #12 merged `7201245`); 2-round Codex cycle; email+password retained as dev-only fallback with production hard-stop
+
+**Context.** Per Evans's directive 2026-05-24 (immediately after PR #11 merged), the cockpit's sign-in flow shifts from email+password to **Google OAuth** as the canonical path. Rationale (recommended in the conversation): the cockpit is an operator dashboard tied to a single Google Workspace (`cardinalfive.com`); inheriting Google identity gives MFA + security keys + domain restriction + no stored passwords — all for free. Email+password remains available as a collapsed `<details>`-rendered dev-only fallback gated by `NEXT_PUBLIC_COCKPIT_ENABLE_PASSWORD_AUTH=1`.
+
+**What shipped (PR #12 → squash `7201245` on `arthurmenson/telecheck-cockpit`, 3 files / +285 / −76).**
+
+- **`src/app/sign-in/SignInForm.tsx`**: rewritten. Primary button calls `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, queryParams: { prompt: 'select_account' }}})`. `redirectTo` is `window.location.origin + /auth/callback?next=...` with the same `/`-prefix open-redirect defense as PR #11's password path. `prompt: 'select_account'` forces Google's account-chooser display so multi-account operators don't auto-sign-in to the wrong account on a shared machine. Multi-colored Google "G" SVG inline (per Google brand guidelines). Email+password form is collapsed under `<details>` and only renders when `NODE_ENV !== "production" && NEXT_PUBLIC_COCKPIT_ENABLE_PASSWORD_AUTH === "1"` — production builds hard-disable the form regardless of the env flag (Codex R1 catch: a Vercel typo on the flag could otherwise silently re-enable the weaker auth path). New `ERROR_MESSAGES.oauth_failed` for the OAuth-specific failure mode.
+
+- **`.env.example`**: documented `NEXT_PUBLIC_COCKPIT_ENABLE_PASSWORD_AUTH` with the production hard-stop note + the Google OAuth setup pointer.
+
+- **`BUCKET_B_CREDENTIALS.md`** Step 6 rewritten end-to-end. The 2-hop redirect chain (cockpit → Google → Supabase → cockpit) is now explicitly explained, including the most-common Google-OAuth-with-Supabase setup mistake: mixing up which dashboard owns which allowlist. **Google Cloud Console gets ONLY `https://<ref>.supabase.co/auth/v1/callback`** (Google never redirects to the cockpit directly). **Supabase Dashboard → Authentication → URL Configuration owns the cockpit allowlist** (Site URL + Additional Redirect URLs for production / localhost / Vercel preview wildcard). The Workspace-domain restriction is documented as the recommended defense-in-depth on top of the `operator` role claim.
+
+**Codex cycle (2 rounds — tight).**
+
+| Round | Findings | Closure |
+|---|---|---|
+| R1 | (1) `NEXT_PUBLIC_COCKPIT_ENABLE_PASSWORD_AUTH` could silently re-enable email+password in production via a Vercel typo. (2) The OAuth setup walk-through told operators to add the cockpit's `/auth/callback` to Google Cloud Console — that's wrong; Google only knows about the Supabase callback. | `4bca8e7` |
+| R-verify | "Keep the NODE_ENV gate" + "Keep the Google Cloud Console instructions; the changed docs correctly say Google should only know the Supabase /auth/v1/callback URI" — both closures confirmed → **APPROVE** | merged |
+
+Significantly faster than PR #11's 6 rounds — most of PR #11's cycle was spent converging on the underlying auth-decision contract (single-path role-claim), which is now stable + unchanged by this PR. R1 here caught two genuinely-novel surfaces specific to OAuth setup that wouldn't have been flagged otherwise.
+
+**Final state.**
+- vitest: 46/46 passing (unchanged — auth-flow code-paths untouched; only the client-side button wiring + ERROR_MESSAGES dictionary changed).
+- tsc: clean.
+- next build: clean (9 routes + middleware).
+- main = `7201245` on `arthurmenson/telecheck-cockpit`.
+
+**Discipline anchors.**
+- **Defense in depth on the password-flag**: even with the env var set on Vercel, production builds refuse to render the form. `NODE_ENV` is inlined at build time by Next.js, so the gate is unsidesteppable post-deploy.
+- **Honest setup docs**: the 2-hop redirect-allowlist split was the most common Google-OAuth-with-Supabase mistake and would have stranded Evans during credential provisioning. The corrected docs preempt it.
+- **Single-path role-claim contract preserved**: PR #12 only changes how a fresh JWT gets *issued*. The role-claim authorization gate (middleware + SupabaseAuthProvider + Postgres RLS) is unchanged.
+
+**Bucket B activation status (post-#12).** ✅ All cockpit code paths ready. To activate end-to-end:
+1. Provision Supabase project (cf. `BUCKET_B_CREDENTIALS.md` Steps B1-B5).
+2. Enable Google OAuth in Supabase + create OAuth client in Google Cloud Console (Step 6, two dashboards).
+3. Sign in once via the cockpit `/sign-in` page to create your Supabase user.
+4. Grant the role: `UPDATE auth.users SET raw_app_meta_data = COALESCE(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object('roles', ARRAY['operator']::text[]) WHERE email = '<your-email>';` (Step 8).
+5. Run canonical_events migration.
+
+— Claude (`claude-opus-4-7`, Evans's local session, 2026-05-24), telecheck-cockpit Google OAuth as canonical sign-in SHIPPED on main (PR #12 → `7201245`); 2-round Codex cycle (R1 caught production-hard-stop gap + OAuth redirect-allowlist-split-misconfig → R-verify APPROVE); email+password retained as dev-only fallback with production hard-stop; BUCKET_B_CREDENTIALS.md Step 6 now correctly splits the 2-hop redirect-URI allowlist between Google Cloud Console (hop 1 → Supabase) and Supabase Dashboard URL Configuration (hop 2 → cockpit); single-path role-claim authorization contract from PR #11 preserved. progress.json revision 235 → 236.
