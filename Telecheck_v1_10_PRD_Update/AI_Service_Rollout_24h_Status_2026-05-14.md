@@ -7437,3 +7437,80 @@ Per autonomous-work authorization + Evans's standing directive (*"continue"*), C
 4. Continue down the slice roadmap (PR 6 submit-for-review → PR 7 review decision → PR 8 integration tests → PR 9 cockpit handshake)
 
 — Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), forms-intake PRs #1–#4 merged to main via Evans's ratifier merge cascade + #5 promotion fix; [CODEX-PENDING] retired for those 4 PRs; proceeding to slice-roadmap PR 5 (POST /v1/admin/templates — first write handler with Zod validation, template_admin write-scope role gate, Cat A audit event); 2026-05-24. progress.json revision 206 → 207.
+
+---
+
+## Addendum 104 — forms-intake slice-roadmap PR 5 opened: POST /v1/admin/templates (first WRITE handler with Zod body validation)
+
+**Date:** 2026-05-24
+**Repo:** telecheck-forms-intake
+**Branch:** pr-5-post-templates-create (commit 156d0e2)
+**PR:** https://github.com/arthurmenson/telecheck-forms-intake/pull/6 (GitHub PR #6 = slice-roadmap PR 5)
+**Status:** Ratifier-ready (Evans's standing approval pattern from PRs #1–#4); no [CODEX-PENDING] marker
+**progress.json:** r207 → r208
+
+### What shipped
+
+Slice-roadmap PR 5 = **first write handler** in the Forms/Intake Templates admin surface. Introduces the request-body validation pattern + write-scope role gate that PRs 6–7 will reuse.
+
+| File | Change |
+|---|---|
+| `src/modules/forms-intake/repos/template-repo.ts` | Added `createTemplate(tx, tenantId, templateId, createdBy, input)` + `CreateTemplateInput` interface; INSERT with RETURNING all columns; COALESCE to `'{}'::jsonb` for omitted JSONB layers |
+| `src/modules/forms-intake/routes/templates.ts` | Added `createTemplateBodySchema` (Zod) + `TEMPLATE_WRITE_ROLES` Set + `requireTemplateWriteAccess` + `createTemplateHandler` |
+| `src/modules/forms-intake/plugin.ts` | Uncommented PR 5 route; imported `createTemplateHandler`; updated docstring (Zod at handler level, not Fastify JSON Schema — matches telecheck-app pattern) |
+| `src/index.ts` | Updated `scaffold_state`, `endpoints_live` (now 3 entries), `next_pr`, `/ready` reason |
+
+### Design decisions
+
+**Zod at handler level, not Fastify JSON Schema:**
+Zod's `.refine()` + discriminated-union capabilities are richer for the FORMS_ENGINE four-layer JSONB schemas that land in PRs 6–7 (build/publish gate). Fastify JSON Schema would require an additional translation layer for those. Per-handler Zod calls match telecheck-app's pattern.
+
+**Write-scope role gate narrower than read:**
+`TEMPLATE_WRITE_ROLES = {template_admin, platform_admin}` excludes `template_reviewer` per RBAC v1.1 §2 (reviewers review, don't author). Same 401-not-403 discipline as the read gate (I-025).
+
+**ULID generated server-side:**
+Caller never supplies `template_id`. `ulid()` from the `ulid` package (already in dependencies). PK collision probability is negligible; the meaningful uniqueness constraint is the composite UNIQUE (tenant_id, program_id, country_of_care, template_version) which fires only on duplicate submission of the same draft scope.
+
+**SQLSTATE 23505 → 409 Conflict:**
+PostgreSQL unique_violation is mapped to a clean 409 rather than letting it bubble to 500. The composite UNIQUE constraint would only fire defensively for fresh drafts (template_version=1 with same program+country); behavioral test included in the PR's test plan.
+
+**JSONB layer columns typed `unknown`:**
+The Zod schema marks `presentation_content`, `branching_logic`, `eligibility_logic`, `approval_governance` as `z.unknown().optional()`. Per-layer schemas are FORMS_ENGINE-defined and land in PRs 6–7 (build/publish gate). Until then, the JSONB columns accept any structurally-valid JSON; the repo `JSON.stringify`s them and the DB stores. This matches the existing telecheck-app pattern.
+
+### Known deferral — Cat A audit event emission
+
+`forms_template.created` (Cat A audit per AUDIT_EVENTS v5.2) should emit same-tx alongside the INSERT per I-027 (audit append-only) + IDEMPOTENCY v5.1 (outbox same-tx). **Deferred for this PR.**
+
+**Why deferred:** the audit-outbox writer primitive is not yet wired in `telecheck-forms-intake` (currently only in `telecheck-app`). Migration 003 (`audit_records`) is present from PR 2; the application-layer writer that emits structured events into `domain_events_outbox` for downstream `audit_records` consumption is missing.
+
+**Plan:** follow-on micro-PR will add:
+1. `src/lib/audit.ts` — port the writer primitive from telecheck-app (`writeAuditEvent(tx, event)` shape)
+2. Update `createTemplateHandler` to emit `{ action_id: "forms_template.created", actor_id: actor.accountId, tenant_id, ... }` inside the existing `withTenantContext` transaction (same-tx outbox)
+3. Same pattern for all future write handlers in PRs 6–7
+
+Documented inline in `createTemplateHandler`'s docstring so the follow-on PR's review catches it.
+
+### §12 portability discipline — all P-1..P-7 pass
+
+Unchanged from PRs 3–4. No new imports outside the slice; Zod + ulid were already in `dependencies`. No edge functions, no `@vercel/*`, no `@supabase/*`.
+
+### Pilot status post PR 5 authoring
+
+| Track | Status |
+|---|---|
+| forms-intake — PR 1 (scaffold) | ✅ MERGED |
+| forms-intake — PR 2 (migration suite) | ✅ MERGED |
+| forms-intake — PR 3 (GET list) | ✅ MERGED |
+| forms-intake — PR 4 (GET detail) | ✅ MERGED |
+| forms-intake — PR 5 (POST create, first write) | ✅ OPEN (PR #6) ratifier-ready |
+| forms-intake — PR 6 (POST submit-for-review) | ⏳ NEXT |
+| forms-intake — audit-outbox follow-on | ⏳ queued (deferred from PR 5) |
+
+### Next critical-path items
+
+1. **Wait for Evans's PR #6 merge** (slice-roadmap PR 5). If pattern holds (~merge-on-receipt), proceed immediately to slice-roadmap PR 6.
+2. **forms-intake slice-roadmap PR 6** — POST /v1/admin/templates/:id/submit-for-review: transitions a `draft` template to `pending_review` status (introduces forms_template_review row, gates on `research_consent_static_analysis_status='pass'`, role gate = `template_admin`). Branches from main (no stacking).
+3. **Audit-outbox follow-on** — port `writeAuditEvent` primitive + retrofit `createTemplateHandler` (parallel-track; can ship before or after PR 6).
+4. **12 remaining canonical event schemas** in telecheckONE/canonical-events/_schemas/ — no account dependencies.
+
+— Claude (Opus 4.7, 1M context, Evans's local session, Day-2 continued), forms-intake slice-roadmap PR 5 (= GitHub PR #6) opened: POST /v1/admin/templates first write handler with Zod body validation, write-scope role gate narrower than read, ULID generation, 23505→409 mapping, audit emission deferred to follow-on; 2026-05-24. progress.json revision 207 → 208.
