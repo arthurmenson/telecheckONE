@@ -8519,3 +8519,60 @@ The conflict-free queue now holds **#199, #202, #203, #204** — the **entire Cr
 3. **CDM v1.3 ratifier ceremony** (Add. 117) — Phase B exit; biggest leverage on net-new work.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Advanced the queue cascade per Addendum 121: rebased PR #204 (Crisis `_sweep`) onto current main `c27638c`, resolved the 3-file audit.ts/routes.ts/README union conflict (kept main's Codex-upgraded `crisis.detected` emitter + appended `crisis.no_acknowledgement_escalation`; kept both route mounts + both imports; preserved main's `/health`+`/ready` probe text to hold the plugin-wiring gate; preserved PR 2's merged-on-main doc detail verbatim), verified 72/72 crisis-response handler tests + 6/6 plugin-wiring tests green + tsc/prettier/eslint clean on an ephemeral PG 16 + Redis with the full 000→052 chain applied. Force-pushed `65337ce` → `842db7a`; PR is now conflict-free + CI-ready but stays `[CODEX-PENDING]` (no merge — Codex unauthenticatable in remote env). The full Crisis Response Sprint-2 write-path surface (#199/#202/#203/#204) is now cascade-prepped. telecheck-app main untouched. progress.json revision 225 → 226.
+
+---
+
+## Addendum 123 — Queue cascade advanced: PR #206 (Admin Sprint 2 PR 3 — template-review decision handler) rebased onto current main + 3-file union conflict resolved + 30 admin-backend + 6 plugin-wiring tests green locally; stays [CODEX-PENDING] (Codex unavailable in remote env) (2026-05-24, remote-cron)
+
+**Date:** 2026-05-24
+**Repo:** telecheck-app (PR #206 branch force-push only; main untouched) + telecheckONE (this Addendum + progress bump).
+**Trigger:** Standing autonomous-work loop (remote-cron firing), per telecheckONE/CLAUDE.md "Autonomous-work authorization." Picks up the queue cascade exactly where Addendum 122 paused (#206 named as the next cascade item after the Crisis Sprint-2 block #199/#202/#203/#204).
+**progress.json:** r226 → r227
+**Codex:** re-checked in-env — `npx -y @openai/codex review --base main` runs the CLI but the WebSocket handshake fails with `403 Forbidden — Host not in allowlist` against `wss://api.openai.com/v1/responses` (no `OPENAI_API_KEY`; `api.openai.com` not in this env's network allowlist). Consistent with Addenda 105/107/110/113/114/116/117/119/120/121/122. Codex review **cannot run in remote-cron**; #206 stays `[CODEX-PENDING]`, no merge.
+
+### Continuity-trap caught this firing (worth recording)
+
+The container's telecheckONE local `main` branch label pointed at the **stale** `6adaae5` (Addendum 71 / progress r175) while the detached HEAD the container actually cloned at — and `git ls-remote origin refs/heads/main` — both reported the true remote tip `704851a` (Addendum 122 / progress r226). A naive `git checkout main` moved the working tree BACK to the stale r175 state. This is exactly the **"Stale-tracking-ref trap"** documented in telecheck-app/CLAUDE.md §"Implementation status." Recovery: `git fetch origin main` (origin/main force-updated `6adaae5 → 704851a`) + `git checkout -B main origin/main` to realign the local branch label to the authoritative remote. The 6adaae5 label was a divergent stale ref (NOT an ancestor of 704851a), missing Addenda 72–122. Lesson reinforced: trust `git ls-remote`/`origin/main`, never the local branch label, on a fresh container.
+
+### Cycle execution — cascade item #206 (first Admin Sprint-2 write-path PR after the Crisis block)
+
+Addendum 122 named **#206 (Admin Sprint 2 PR 3 — template-review decision)** as the next cascade item after the Crisis Sprint-2 block was fully prepped. This firing executed the rebase + spec-aware conflict resolution so #206 is now **conflict-free + CI-ready**, awaiting only a Codex APPROVE. #206 mounts the **second** admin write handler: `POST /v1/admin/templates/:template_id/reviews/:review_id/decision` (`approve | reject | request_revision`), wrapping the migration-043 §3 SECDEF `record_forms_template_admin_decision` under the `admin_template_reviewer` slice role (distinct from PR 2's `admin_basic_operator`); same-tx Category A audit `admin.template_review_decision` (I-003).
+
+**Rebase:** PR #206's single commit `36b435b` sat on stale base `f6c5160` (pre-Sprint-2-PR-2 main, which is where PR #205's submit handler had not yet landed). Rebased onto current main `c27638c`. 3 of 5 files conflicted (`README.md` content + `audit.ts` add/add + `routes.ts` content); the two new handler files (`post-forms-template-decision.{ts,test.ts}`, 827 LOC) auto-merged clean.
+
+**Conflict resolution (spec-aware union of merged PR 2 submit + this PR's decision):**
+
+| File | Conflict class | Resolution |
+|---|---|---|
+| `routes.ts` | content | Kept **main's** PR 1 crisis-dashboard GET mount + PR 2 `submit-for-review` POST mount, **appended** this PR's `POST /:id/reviews/:review_id/decision` mount. Both handler imports kept (eslint `import/order --fix`: get-crisis → decision → submit). **Parity with Add. 119–122:** kept main's `/health`+`/ready` probe bodies **verbatim** so the `admin-backend-plugin-wiring` gate (`reason: partial_handlers_mounted_full_surface_incomplete` + the submit-route §1c assertions) stays green. Header route-inventory doc reconciled: decision no longer in the "NOT mounted" list; 2 of 5 endpoints remain (both Option-2 deferred dashboard reads). |
+| `audit.ts` | add/add | Kept **main's** `emitTemplateSubmittedForReviewAudit` and **appended** this PR's `emitTemplateReviewDecisionAudit` (`admin.template_review_decision`, Cat A, `actor_type:'operator'`, target_patient_id null → PLATFORM hash-chain partition). Widened the `AdminBackendAuditActionPlaceholder` union to the 3 IDs (submit + decision + published-via-review-workflow); single `adminBackendAuditPlaceholder()` cast site shared; header JSDoc + union docstring reconciled to PR-3 state. |
+| `README.md` | content | Status header → "Sprint 2 PR 3 — DECISION HANDLER MOUNTED (second WRITE handler)"; **preserved main's PR 1 + PR 2 detail verbatim** (relabeled "already merged on `main`"); appended PR 3 detail; marked the decision endpoint ✅ DONE in the Sprint 2-4 work list. |
+
+No new migration in this PR (the decision wrapper `record_forms_template_admin_decision()` lives in migration 043 §3, already on main) → no rollback file required. Final diff vs main: 5 files, +980 / −39.
+
+**Local verification (ephemeral PG 16 + Redis, CI env mirrored — `postgres` bootstrap superuser per the #218 migration-047 `OWNER TO postgres` fix; roles self-provisioned by `tests/setup.ts`):**
+- `tsc --noEmit`: **clean** (0 errors — validates the union: both emitters, both route mounts, both imports, widened placeholder type).
+- `npm run format:check` (whole repo) + `npm run lint` (whole repo, `--max-warnings 0`): **clean / exit 0** (folded a formatting-only printWidth reflow + `void reply.code(...)` floating-promise parity with the PR 2 sibling's `mapServiceError` — config drift since the branch was authored against old main; no logic touched).
+- `vitest run src/modules/admin-backend/`: **30/30 pass** (get-crisis-operational-health + post-forms-template-submit + post-forms-template-decision handler suites).
+- `admin-backend-plugin-wiring.test.ts`: **6/6 pass** (the new decision mount did not break the §1a v0.3 metadata / §1b BLOCKED-reason / §1c submit-route wiring assertions).
+
+**PR #206 state:** conflict-bearing (stale base) → now conflict-free, locally green, awaiting the required `Build, lint, typecheck, test` gate. Force-pushed `36b435b` → `4db0961`. A rebase-status comment was posted to the PR documenting the resolution + local verification for the next Codex-equipped session.
+
+### Discipline-floor compliance
+
+- **Codex APPROVE mandatory before merge** — honored; no merge attempted. Per Addenda 116/117/119/120/121/122 precedent, did NOT self-extend Evans's per-repo Codex-override autonomously.
+- **No net-new schema / canonical entity authored** — pure cascade-advance on an already-authored PR; zero duplication (the PR's commit content is preserved, only rebased + conflict-resolved + lint/format-cleaned).
+- **No STOP condition hit** — no architectural-judgment finding, no prohibited action, no ratification ceremony. The decision handler's `requireAdminRole` LAYER-B shim + the deferred SI-024.1 JWT trust anchor are pre-existing, documented in the handler header + README follow-up scope, and already ratified-as-deferred (Option 2 carryforward) — not introduced this firing.
+- **Audit invariants** — emitter runs same-tx with the SECDEF wrapper (I-003); tenant_id carried (I-027); error envelopes tenant-blind (I-025, 42501 → 403). No bare suppression.
+
+### Cascade status (refreshed)
+
+The conflict-free queue now holds **#199, #202, #203, #204** (entire Crisis Sprint-2 write-path) **+ #206** (Admin Sprint-2 PR 3 decision) rebased onto current main `c27638c` + locally green, ready for the next Codex-equipped session. Cascade merge order: #199 → #202 → #203 → #204 (Crisis block) then #206 → #207 (Admin block), then #208/#209 (Med-Interaction), #210 (AI Mode 2). Each re-rebases after prior merges land where they share `audit.ts`/`routes.ts`/`README.md` union touchpoints.
+
+### Next critical-path items
+
+1. **Continue the queue cascade** — **#207 (Admin Sprint 2 PR 4 — consult-queue + mode1-volume dashboard reads, 503 fail-closed scaffolds)** next, then #208/#209 (med-interaction PR 8/9 write handlers), #210 (AI Mode 2 case-prep). Each: rebase → resolve union → local-verify → leave `[CODEX-PENDING]`.
+2. **Evans: unblock the merge gate** — provision `OPENAI_API_KEY` for remote Codex, OR extend the per-repo Codex-override to the rebased queue, OR run Codex locally on the now-conflict-free PRs (Crisis block #199/#202/#203/#204 + Admin #206 are all ready).
+3. **CDM v1.3 ratifier ceremony** (Add. 117) — Phase B exit; biggest leverage on net-new work.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-24. Advanced the queue cascade per Addendum 122: rebased PR #206 (Admin Sprint 2 PR 3 — template-review decision handler) onto current main `c27638c`, resolved the 3-file README/audit.ts/routes.ts union conflict (kept main's PR 1 crisis-dashboard read + PR 2 submit write + appended PR 3 decision write; widened the audit placeholder union + appended the `admin.template_review_decision` emitter; kept main's `/health`+`/ready` probe text to hold the plugin-wiring gate; preserved PR 1/PR 2 merged-on-main doc detail verbatim), verified 30/30 admin-backend handler tests + 6/6 plugin-wiring tests green + tsc/prettier/eslint clean on an ephemeral PG 16 + Redis. Force-pushed `36b435b` → `4db0961`; PR is now conflict-free + CI-ready but stays `[CODEX-PENDING]` (no merge — Codex unauthenticatable in remote env). Caught + corrected the stale-tracking-ref trap on telecheckONE local main (`6adaae5` r175 → realigned to authoritative `704851a` r226). telecheck-app main untouched. progress.json revision 226 → 227.
