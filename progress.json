@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 216,
+  "revision": 217,
   "updated": "2026-05-24",
   "lifecycle": {
     "current": "foundation-build",
@@ -543,14 +543,15 @@
       "id": "impl-scaffold",
       "name": "Repo scaffold + CI",
       "category": "Implementation",
-      "status": "shipped",
-      "progress": 100,
+      "status": "in-dev",
+      "progress": 95,
       "owner": "",
-      "notes": "EHBG §13 CLAUDE.md, ESLint/Prettier/Vitest, GitHub Actions.",
+      "notes": "EHBG §13 CLAUDE.md, ESLint/Prettier/Vitest, GitHub Actions. Addendum 113 (2026-05-24): the 'Build, lint, typecheck, test' CI job is RED on main (and on every [CODEX-PENDING] queue PR) — the Addendum-100 FF adopted the foundation chain onto main without a clean CI run, leaving format:check failing at the FIRST step (which masked all downstream steps). main has 5 independent CI-breaking defects: format+lint (PR #215 [CODEX-PENDING], this firing — the only class with no prior queue owner) + BOM #211 + test-role #197 + RLS-count #198 + plugin-wiring #200. Full green CI requires all 5 merged. Status flipped shipped→in-dev to reflect the red state.",
       "docs": [
         "Telecheck_Engineering_Handoff_Build_Guide_v1_3.md"
       ],
-      "stage": "eng-bootstrap"
+      "stage": "eng-bootstrap",
+      "updatedAt": "2026-05-24T18:40:00.000Z"
     },
     {
       "id": "impl-rls-baseline",
@@ -635,6 +636,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-24T18:00:00.000Z",
-  "lastSyncedSha": "f6c5160"
+  "updatedAt": "2026-05-24T18:40:00.000Z",
+  "lastSyncedSha": "24ed4ee"
 }
