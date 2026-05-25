@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "revision": 241,
-  "updated": "2026-05-24",
+  "revision": 242,
+  "updated": "2026-05-25",
   "lifecycle": {
     "current": "foundation-build",
     "stages": [
@@ -546,7 +546,7 @@
       "status": "in-dev",
       "progress": 95,
       "owner": "",
-      "notes": "EHBG \u00a713 CLAUDE.md, ESLint/Prettier/Vitest, GitHub Actions. Addendum 113 CI-RED state RESOLVED (Addendum 136, 2026-05-24, primary-source reconciliation): all 5 CI-fix PRs merged by Evans in local Codex-enabled sessions \u2014 #215 format+lint (merged 08:29) + #211 BOM + #197 test-role + #198 RLS-count + #200 plugin-wiring \u2014 plus #193 (main tip c27638c). main CI now GREEN: open queue PR #210's 'Build, lint, typecheck, test' + benchmarks + verify-metadata + dependency-review all success. The remaining open [CODEX-PENDING] queue is the 9 handler PRs (#199/202/203/204/206/207/208/209/210), being drained locally by Evans; remote-cron loop cannot merge (no Codex/OPENAI_API_KEY \u2192 codex review 403).",
+      "notes": "EHBG \u00a713 CLAUDE.md, ESLint/Prettier/Vitest, GitHub Actions. Addendum 113 CI-RED state RESOLVED (Addendum 136, 2026-05-24, primary-source reconciliation): all 5 CI-fix PRs merged by Evans in local Codex-enabled sessions \u2014 #215 format+lint (merged 08:29) + #211 BOM + #197 test-role + #198 RLS-count + #200 plugin-wiring \u2014 plus #193 (main tip c27638c). main CI now GREEN: open queue PR #210's 'Build, lint, typecheck, test' + benchmarks + verify-metadata + dependency-review all success. The remaining open [CODEX-PENDING] queue is the 9 handler PRs (#199/202/203/204/206/207/208/209/210), being drained locally by Evans; remote-cron loop cannot merge (no Codex/OPENAI_API_KEY \u2192 codex review 403). Addendum 138 (2026-05-25): per-member mergeability re-probe of ALL 9 (prior firings spot-checked only 2) surfaced 2 non-clean members: #204 was mergeable_state=unstable due to a REAL red 'Build, lint, typecheck, test' job (root cause = format:check/prettier failing on the 2 unformatted sweep files; reproduced locally then FIXED via prettier --write, pushed 842db7a\u21924464053 to the PR branch \u2014 full suite stays 2058 green, typecheck+lint+format all clean; PR stays [CODEX-PENDING], unmerged); #209 is mergeable_state=behind (head off stale base f6c5160, recommend Evans rebase onto current main c27638c before the Codex cascade). Other 7 queue PRs confirmed clean against c27638c.",
       "docs": [
         "Telecheck_Engineering_Handoff_Build_Guide_v1_3.md"
       ],
