@@ -9190,3 +9190,69 @@ The trajectory pattern was Codex finding under-specified surface in the auth-sta
 **Code pushed this firing: telecheck-app `4464053` (format-only fix to #204's branch; PR unmerged). telecheck-app main untouched.** This Addendum + the `progress.json` revision bump + queue-state note (telecheckONE repo) are the only other artifacts.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-25. 8th-consecutive parked-state firing, but with a substantive deliverable: a per-member mergeability re-probe of ALL 9 queue PRs (vs prior firings' 2-PR spot-checks) surfaced #204's REAL `format:check`/prettier CI red (sweep handler + test committed unformatted), which was reproduced in a CI-identical env, diagnosed (build/lint/typecheck/full-suite-2058 all green; only prettier red), FIXED prettier-only (`842db7a → 4464053`), and pushed — #204 stays `[CODEX-PENDING]`, unmerged. Also flagged #209 mergeable_state=behind (recommend rebase). telecheck-app main unmoved (`c27638c`), Codex unavailable (key absent, `api.openai.com` 403), SI-003/004/005 pre-ratification, migration high-water 052. Loop-pacing held at PAUSE. progress.json revision 241 → 242.
+
+## Addendum 139 — telecheck-cockpit SpecCorpus canonical-versions surface STRUCTURALLY HARDENED on main (PR #14 merged `69c2230`); auto-discovery + max-across-family + three-state provenance + UI badge + 19 regression tests after 7-round Codex cycle
+
+**Context.** Item 1 of the post-Bucket-B cockpit work plan was a live-data smoke of every cockpit screen. The smoke surfaced 3 stale-ahead version labels on the SpecCorpus screen (CDM v1.5 → on-disk v1.2, Contracts Pack v5.3 → v5.2, Artifact Registry v2.11 → v2.10). The 1-line stale-label patch evolved into a structural overhaul of the canonical-version surface across 7 Codex verify rounds.
+
+**What shipped (PR #14 → squash `69c2230` on `arthurmenson/telecheck-cockpit`, 5 files / +532 / −44; 79 vitest tests passing).**
+
+- **Header auto-discovery.** New helpers `readBundleVersion()` + `parseVersionFromHeader()` in `src/lib/server/load-cockpit-state.ts` read each canonical-bundle file's `**Version:**` header at load time. No more hardcoded version labels — ratifier ceremony amendments to file headers bump the cockpit surface automatically.
+- **Max-across-family resolution for wildcard paths.** Contracts Pack family (`Telecheck_Contracts_Pack_v5_00_*.md`) — files in the family don't always declare the same version (P-027 Phase B amended INVARIANTS to v5.3 + some files reached v5.4). The loader reads ALL matching files + returns the MAX header version; that's the authoritative state across the family. (Codex R-verify catch — original implementation only read the first-alphabetical file.)
+- **Three-state provenance discriminator** (`versionSource: "header" | "filename" | "missing"`). Added to `CanonicalVersion` in `src/lib/cockpit-types.ts`. The loader marks each entry by how the version was obtained — operators can distinguish header-derived (authoritative) from filename-fallback (degraded) from missing-on-disk (most-degraded). Codex R-verify-2 catch: prior version presented fallback values as if they were canonical truth.
+- **Visible UI provenance badge** on the SpecCorpusScreen canonical-versions table. Header-derived entries render plainly; `filename` entries get an amber "UNVERIFIED" badge with hover-title; `missing` entries get an amber "MISSING" badge. `aria-label="provenance: {filename,missing}"` for screen readers. Codex R-verify-3 catch: API discriminator was useless if UI didn't surface it.
+- **Hardened version-grammar regex** with word-boundary defense + same-line whitespace lockdown + patch-level support:
+  - `(?!\w)` lookahead after `**Version:**` rejects longer labels (`**Versioned:**`, `**Version:Number**`). R-verify-4.
+  - `[ \t]*` (not `\s*`) requires same-line whitespace — `**Version:**\n1.0` no longer mis-parses. R-verify-6.
+  - `(?:\.\d+){0,2}` supports MAJOR, MAJOR.MINOR, MAJOR.MINOR.PATCH (vital for the v1.10.1 hygiene-cycle pattern). R-verify-4.
+  - `versionRank()` encoding (major × 1e6 + minor × 1e3 + patch) — strictly orders v1.10.1 > v1.10, v2.0 > v1.99. R-verify-5.
+- **Strict guard tests** (`src/lib/server/load-cockpit-state.test.ts` — new file). No silent-skip on missing files. Asserts every entry resolves to a real header-parseable file with `versionSource === "header"`. Catches any future drift (label, file-rename, header-format-change, file-removal).
+- **UI test for the provenance badge** (`src/components/screens/SpecCorpusScreen.test.tsx` — new file). 3 vitest cases pin the visible "UNVERIFIED" / "MISSING" badge behavior across all three versionSource states.
+- **19 grammar + provenance regression tests** total: bare integer-minor, v-prefixed minor, patch-level (v1.10.1 + v5.3.0), Contracts Pack inline mid-line format, null on no header, no-match on longer labels, malformed continuations (pre-release suffixes, empty, non-version-shaped, newline-bridging), same-line-only whitespace (LF / CRLF / tab-then-LF rejection, tab acceptance), shape regex tolerance for patch-level, ranking order.
+
+**Codex cycle — the longest in the cockpit's lifecycle to date (7 verify rounds).**
+
+| Round | Catch | Closure |
+|---|---|---|
+| R1 | Header-auto-discovery recommendation + guard test recommendation | `67c28f9` (guard test only) |
+| R-verify | Tighten wildcard guard (forced full auto-discovery) | `88f6626` (auto-discovery + max-across-family) |
+| R-verify-2 | Silent-skip on missing files + no fallback provenance | `67a0726` (versionSource + strict guard) |
+| R-verify-3 | versionSource not surfaced to UI + no UI test | `ba4bc1b` (provenance badge + UI tests) |
+| R-verify-4 | Parser boundary + patch-level versions | `5db6ce3` (grammar fix + 7 regression tests) |
+| R-verify-5 | Shape guard regex too strict; need negative-continuation tests | `4a69430` (relax shape regex + 4 negative tests) |
+| R-verify-6 | `\s*` bridges LF/CRLF — same-line whitespace lockdown | `8cbc3f3` (`[ \t]*` + 4 LF/CRLF tests) |
+| R-verify-7 | _(would have come — Evans authorized merge given diminishing-returns trajectory)_ | merged |
+
+The trajectory: every round found ONE more real edge case (each technically correct), getting progressively smaller — LF vs CRLF vs tab-then-LF in regex grammar by the end. The visible operator-state outcome (correct on-disk header versions surfaced on the SpecCorpus screen) was achieved at R-verify-2; rounds 3-6 hardened the grammar + tests around that outcome. Evans authorized merge at R-verify-7 territory: "the structural surface is hardened well past what the original 1-line stale-label catch warranted."
+
+**Discovered actual canonical state (cockpit live state today).** Auto-discovery shows the FILE-HEADER versions, which differ from the project CLAUDE.md "Current canonical versions" table in three places:
+
+| Artifact | CLAUDE.md says | File header declares | Filename |
+|---|---|---|---|
+| Master PRD | v1.10 | v1.10 | v1_10 |
+| **CDM** | v1.2 | **v1.4** | v1_2 |
+| OpenAPI | v0.2 | v0.2 | v0_2 |
+| **State Machines** | v1.1 | **v1.2** | v1_1 |
+| RBAC | v1.1 | v1.1 | v1_1 |
+| **Contracts Pack** | v5.2 | **v5.4** (MAX across family) | v5_00_* (intra-family v5.2 / v5.3 / v5.4) |
+| **Artifact Registry** | v2.10 | **v2.29** | v2_10 |
+
+This drift is the spec-corpus-side action item Evans flagged ("canonicalise the highest versions for spec corpus") — a separate Promotion Ledger entry will reconcile the CLAUDE.md table to the file-header reality.
+
+**Final state.**
+- vitest: 79/79 passing (61 → 79; +18 grammar/provenance/UI regression tests).
+- tsc: clean.
+- next build: clean.
+- main = `69c2230` on `arthurmenson/telecheck-cockpit`.
+
+**Discipline anchors.**
+- **Structural fix completed iterative paint-fix.** A 1-line stale-label patch could have been merged at R1 ("just change the numbers"). Codex's R-verify catches forced the structural realization that hardcoded labels are the wrong shape — auto-discovery + provenance + visible UI affordance is the right shape. The 7-round cost was justified by the resulting structural surface.
+- **Diminishing returns recognized + merged.** R-verify-6 → R-verify-7 territory was finding incrementally smaller edge cases. Evans's "merge" authorization at that point reflects the rule "ship when the structural surface is sound + remaining catches are incremental tooling polish."
+- **Live-state outcome preserved.** The visible operator-state — correct on-disk header versions on the SpecCorpus screen — was achieved at R-verify-2 (commit `67a0726`). Subsequent rounds hardened the underlying grammar + tests but didn't change what operators see.
+- **No hard-floor item 6 triggers.** All findings were within-scope correctness, parsing grammar, or test discipline — none proposed net-new schema, invariants, or platform-floor primitives. No ratifier escalation needed.
+
+**Bonus memory artifact.** During the smoke that surfaced this PR, hit a Python-stdin cp1252 false-mojibake debugging detour (~45 min). The cockpit was producing correct UTF-8 on the wire; `python -c "json.load(sys.stdin)"` was decoding as Windows-1252. Saved to memory as `reference_python_stdin_cp1252.md` — future sessions know to read `sys.stdin.buffer.read().decode("utf-8")` explicitly.
+
+**Pending: spec-corpus canonicalisation work.** Evans's "canonicalise the highest versions for spec corpus" directive (mid-PR-#14) requires reconciling the project CLAUDE.md table + Promotion Ledger to the file-header reality the cockpit now surfaces. Awaiting Evans's clarification on (a) unilateral ratifier authorization vs. ERR ceremony, and (b) Contracts Pack intra-family inconsistency resolution shape.
+
+— Claude (`claude-opus-4-7`, Evans's local session, 2026-05-25), telecheck-cockpit canonical-versions surface SHIPPED on main (PR #14 → `69c2230`); 7-round Codex cycle hardened the surface from "stale hardcoded labels" to "header auto-discovery + max-across-family + three-state provenance + visible UI badge + 19 regression tests"; 79 vitest tests + tsc + next build clean; visible operator state preserved at correct on-disk header versions; project CLAUDE.md canonical-versions table drift surfaced as separate ratifier-action item. progress.json revision 242 → 243.
