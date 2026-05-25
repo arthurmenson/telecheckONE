@@ -9291,3 +9291,47 @@ This drift is the spec-corpus-side action item Evans flagged ("canonicalise the 
 **Code pushed this firing: telecheck-app `2b5c48a` (rebase of #209 onto `c27638c` + format/lint/fixture CI-green repair; PR unmerged, `[CODEX-PENDING]`). telecheck-app main untouched.** This Addendum + the `progress.json` revision bump (telecheckONE repo) are the only other artifacts.
 
 — Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-25. 9th-consecutive parked-state firing, with a substantive deliverable: executed Addendum 138's deferred #209 rebase (cleared `behind`) and repaired a three-layer CI-red deeper than #204's — format (6 unformatted files) + lint (`import/order` auto-fix + 11 `no-floating-promises` `void` annotations matching the canonical cross-module pattern) + 10 failing tests caused by invalid-Crockford-ULID fixtures (`VALID_*` constants contained forbidden I/L/O/U). Verified on a CI-identical PG16 cluster: format/lint/typecheck/build clean + full suite 2035-green (2068 total). Force-pushed `62fe013 → 2b5c48a` (rebased onto `c27638c`); #209 stays `[CODEX-PENDING]`, unmerged. Flagged the queue-premise correction (#209 was never green on arrival; recommend spot-checking remaining members for the same class). telecheck-app main unmoved (`c27638c`), Codex unavailable (key absent, `api.openai.com` 403), SI-003/004/005 pre-ratification, migration high-water 052. Loop-pacing held at PAUSE. progress.json revision 243 → 244.
+
+## Addendum 141 — remote-cron firing: 10th-consecutive parked-state re-verification; **Addendum 140's open spot-check CLOSED** — all 9 `[CODEX-PENDING]` queue members independently confirmed CI-green-on-HEAD (uniformly drainable-clean); zero red to repair; no net-new mergeable item; loop-pacing held at PAUSE (2026-05-25, remote-cron)
+
+**Context.** Standing remote-cron autonomous firing against the Master Completion Plan. Codex remains unavailable in this environment, so per the discipline floor the firing's job is to (a) re-verify queue-health premises from primary sources, (b) identify any genuinely-new, non-duplicative, spec-ratified, mergeable-or-PR-able critical-path item, and (c) if none exists, advance queued work toward drainable-clean rather than manufacture make-work. This is the **10th consecutive firing** to land on the parked state (cf. Addenda 127/128/129-130/133/134/136/137/138/140). It discharges the one open action Addendum 140 left behind: the recommended spot-check of the 7 un-probed queue members for the same gate-1 CI-red class that had silently bitten both #204 (format) and #209 (format + lint + invalid-ULID fixtures).
+
+**Primary-source re-verification this firing (not trusting prior addenda):**
+
+| Premise | Method | Result |
+|---|---|---|
+| Codex availability | `$OPENAI_API_KEY` UNSET + `curl api.openai.com/v1/models` | **UNAVAILABLE** — key absent; network probe returns **`403`**. Same wall as Addenda 136/137/138/140. |
+| telecheck-app main | `git ls-remote origin refs/heads/main` (local was 69 commits stale — corrected via fetch+reset per CLAUDE.md stale-ref guidance) | **`c27638c`** — unmoved since Addendum 130. |
+| `[CODEX-PENDING]` queue membership | GitHub MCP `list_pull_requests state=open` (20 open total) | **exactly 9 handler PRs, unchanged**: #199/#202/#203/#204 (Crisis S2); #206/#207 (Admin S2); #208/#209 (Med-Interaction); #210 (AI Mode 2). All 9 base on `c27638c` (current main tip → none `behind`). |
+| Priority coverage (a)-(e) | module-tree inspection + queue map | All covered: Med-Interaction DB layer = migrations 046-050 (high-water **052**); AI Mode 1 chat handler = `src/modules/ai-service/internal/handlers/chat.ts` present; Async-Consult module present; Crisis S2 = #199/#202/#203/#204 + initiate merged; Admin S2 = #206/#207 + submit merged. Zero un-queued un-merged priority item. |
+| SI ratification | open PR queue | SI-003/004/005 still pre-ratification (#137/#138/#139 open). |
+| progress.json | telecheckONE (NOT telecheck-app — brief path stale) | revision **244** (Addendum 140). |
+
+**Incremental contribution this firing — Addendum 140's deferred spot-check, executed in full.** Addendum 140 flagged that the queue's "authored, just needs Codex review + merge" premise was *partially false* (#209 was placed in-queue never-green) and recommended spot-checking the 7 remaining un-probed members (#199/#202/#203/#206/#207/#208/#210) for the same format/lint/fixture-validity class. This firing probed CI `check_runs` on the HEAD commit of **all 9** queue members via GitHub MCP `pull_request_read get_check_runs`:
+
+| PR | head | `Build, lint, typecheck, test` | benchmarks | verify-metadata | dependency-review |
+|---|---|---|---|---|---|
+| #199 | `485933b` | success | success | success | success |
+| #202 | `ffac0e1` | success | success | success | success |
+| #203 | `62b1ddf` | success | success | success | success |
+| #204 | `4464053` | success | success | success | success |
+| #206 | `4db0961` | success | success | success | success |
+| #207 | `9f1fabe` | success | success | success | success |
+| #208 | `09a8712` | success | success | success | success |
+| #209 | `2b5c48a` | success | success | success | success |
+| #210 | `e24f830` | success | success | success | success |
+
+**All 9 PRs are CI-green on their current HEAD across all 4 required checks.** The Addendum-140 queue-premise concern is hereby **CLOSED**: whatever red #204 and #209 shipped with was repaired in prior firings (Addenda 138/140), and no remaining member carries latent gate-1 red. The queue is **uniformly drainable-clean** — the moment a Codex-enabled session runs the adversarial review, the cascade can merge with no further CI-hygiene blockers from this firing's knowledge.
+
+**No net-new PR authored this firing — deliberately.** With the queue confirmed green and every priority (a)-(e) mapping 1:1 onto a queued PR or merged commit, there is no un-queued, non-duplicative, ratified, buildable item to author, and no red to repair. Authoring or re-touching any queue member would be make-work and/or duplication — forbidden by the discipline floor. The substantive deliverable is the completed queue-health audit itself, which converts Addendum 140's "to-the-best-of-this-firing's-knowledge clean" into a directly-verified "all-9-green-on-HEAD" fact for whoever drains the cascade.
+
+**Conclusion: still no un-queued, non-duplicative, ratified, buildable+mergeable PR available in this environment**, and Codex unavailable → nothing merges from here regardless. The loop retains zero self-unblock levers for merging.
+
+**Loop-pacing recommendation — held at PAUSE.** 10th consecutive Evans-gated parked firing. Priority-ordered operator actions (all human-gated; unchanged from Addendum 140, now with the queue fully audited-green):
+1. **PAUSE the remote-cron loop** until (2) or (3) lands — continued firings can only re-verify, not advance, and risk make-work drift.
+2. **Drain the 9-PR `[CODEX-PENDING]` queue** in a Codex-enabled local session — the full queue is now directly-verified CI-green-on-HEAD and based on current main; nothing blocks the Codex→merge cascade but Codex availability.
+3. **Run the CDM + SI-003/004/005 + Plan-v1.1 batched ratifier ceremony** (charter STOP condition — Evans + Engineering Lead + CDM owner).
+
+**Code pushed this firing: NONE** (no telecheck-app branch/commit — nothing to author or repair; queue confirmed green). telecheck-app main untouched (`c27638c`). This Addendum + the `progress.json` revision bump (telecheckONE repo) are the only artifacts.
+
+— Claude (`claude-opus-4-7`, remote-cron autonomous firing — Codex unavailable in this env), 2026-05-25. 10th-consecutive parked-state firing. Discharged Addendum 140's deferred queue spot-check: probed CI `check_runs` on all 9 `[CODEX-PENDING]` HEADs (#199/#202/#203/#204/#206/#207/#208/#209/#210) — **all 4 checks green on every one**; queue uniformly drainable-clean, premise-correction CLOSED. No net-new PR (no buildable/non-duplicative item; no red to repair — authoring would be make-work). telecheck-app main unmoved (`c27638c`), Codex unavailable (key absent, `api.openai.com` 403), SI-003/004/005 pre-ratification, migration high-water 052. Loop-pacing held at PAUSE. progress.json revision 244 → 245.
