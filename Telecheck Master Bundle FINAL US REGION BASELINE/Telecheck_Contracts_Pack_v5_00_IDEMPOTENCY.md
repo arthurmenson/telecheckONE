@@ -1,6 +1,6 @@
 # 00 · Idempotency
 
-**Status:** canonical · **Version:** 5.1 · **Owner:** engineering lead · **Consumers:** all state-changing endpoints, client SDKs
+**Status:** canonical · **Version:** 5.4 · **Owner:** engineering lead · **Consumers:** all state-changing endpoints, client SDKs
 
 This document defines idempotency key requirements, terminal state handling, reconciliation, crash semantics, retry backoff, and client edge cases for all state-changing Telecheck API operations.
 

@@ -1,6 +1,6 @@
 # 00 · Domain Events
 
-**Status:** canonical · **Version:** 5.3 · **Owner:** engineering lead · **Consumers:** all backend services, event consumers, observability
+**Status:** canonical · **Version:** 5.4 · **Owner:** engineering lead · **Consumers:** all backend services, event consumers, observability
 
 **v5.3 hygiene cycle 2026-05-20 (P-027 Phase B):** 6 new consent domain events added per Sprint 14 §3 SD1 same-tx outbox pattern: `ConsentGrantedDomainEvent` (none → granted); `ConsentRevokedDomainEvent` (granted → revoked); `ConsentScopeAmendedDomainEvent` (granted → scope_amended); `DelegationGrantedDomainEvent`; `DelegationRevokedDomainEvent`; `ConsentExpiredDomainEvent` (auto-transition at expires_at). Subscribers per Sprint 14 §3 SD6: ai-service-mode1, ai-service-mode2, forms-engine, research-pipeline. Full subscriber-registration + delivery-ledger semantics in `Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md` §4. v1.10.1 hygiene-cycle pattern preserved (filename stable; header bumps).
 

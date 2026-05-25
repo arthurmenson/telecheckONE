@@ -1,6 +1,6 @@
 # 00 · Country Configuration Registry (CCR) Runtime
 
-**Status:** canonical · **Version:** 5.3 · **Owner:** engineering lead · **Consumers:** all country-specific behavior, all services
+**Status:** canonical · **Version:** 5.4 · **Owner:** engineering lead · **Consumers:** all country-specific behavior, all services
 
 **v5.3 hygiene cycle 2026-05-20 (P-027 Phase B):** 11 new tenant config keys added (full key catalog with types + defaults + scope in `Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md` §5):
 - **Sprint 13 KMS:** `tenant.kms_residency_policy` (`us_only` | `us_with_dr_fallback` | `multi_region_active_active`).

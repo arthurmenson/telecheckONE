@@ -1,6 +1,6 @@
 # 00 · Type Definitions
 
-**Status:** canonical · **Version:** 5.3 · **Owner:** engineering lead · **Consumers:** all services consuming CCR, Forms Engine, Market Launch; all schema authors
+**Status:** canonical · **Version:** 5.4 · **Owner:** engineering lead · **Consumers:** all services consuming CCR, Forms Engine, Market Launch; all schema authors
 
 **v5.3 hygiene cycle 2026-05-20 (P-027 Phase B):** 4 new canonical types added (full type-spec in `Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md` §6):
 - **`dispatch_obligation_state`** enum (per Sprint 16 §3 SD2 8-state machine: `accepted | accepted_partition_degraded | provider_invocation_pending | provider_invoked | delivery_confirmed | provider_invocation_failed | terminal_failed | reconciled`).

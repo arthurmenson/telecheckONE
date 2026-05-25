@@ -1,6 +1,6 @@
 # 00 · Forms Engine
 
-**Status:** canonical · **Version:** 5.2 · **Owner:** product lead + clinical safety officer · **Consumers:** intake authoring, provider review, operator tooling
+**Status:** canonical · **Version:** 5.4 · **Owner:** product lead + clinical safety officer · **Consumers:** intake authoring, provider review, operator tooling
 
 This document defines the four-layer architecture of the Forms Engine, the intake lifecycle, provider feedback model, and patient visibility rules. Per I-006, form layers have separate permissions. Per I-013, published versions are immutable.
 

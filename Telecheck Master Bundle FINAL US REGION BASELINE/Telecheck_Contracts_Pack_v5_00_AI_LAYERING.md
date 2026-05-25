@@ -1,6 +1,6 @@
 # 00-AI-LAYERING.md — Contracts Pack v5
 
-**Version:** 5.2
+**Version:** 5.4
 **Supersedes:** v5.1 (Adversarial Counsel Review remediation 2026-04-25); v4.2 00-AI-LAYERING.md
 **Change summary (v5.2 added 2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact `Phase3_Group2_Contracts_v1_10_Edits_2026-05-01.md` §AI_LAYERING):** Adds §10 Future Workload Expansion per ADR-029 — AI-ARCH-001 supersession scope statement (single source of truth: WORKLOAD_TAXONOMY contract §5); Mode 1/Mode 2 ↔ workload taxonomy mapping (Mode 1 → `conversational_assistant`; Mode 2 → `protocol_execution`); ADR-002 + ADR-005 preservation rules (current workloads remain bound by ADR-002 and ADR-005 at autonomy_level ≤ `action_with_confirm` per I-012); I-012 preservation rule mirroring Master PRD §13.7 v0.3 reject-unless three-clause normative wording exactly. Two-mode architecture (§2 AI-ARCH-001, AI-ARCH-002) preserved without modification — all five guardrail invariants, AI boundaries, audit, resilience, agreement tracking sections preserved.
 

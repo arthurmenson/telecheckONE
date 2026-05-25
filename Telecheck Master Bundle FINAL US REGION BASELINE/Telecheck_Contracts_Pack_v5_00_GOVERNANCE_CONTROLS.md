@@ -1,6 +1,6 @@
 # 00-GOVERNANCE-CONTROLS.md — Contracts Pack v5
 
-**Status:** canonical · **Version:** 5.2 · **Owner:** product lead + clinical safety officer + market operations lead · **Consumers:** admin configuration surfaces, AI governance, moderation governance, market rollout
+**Status:** canonical · **Version:** 5.4 · **Owner:** product lead + clinical safety officer + market operations lead · **Consumers:** admin configuration surfaces, AI governance, moderation governance, market rollout
 
 **Source:** Net-new contracts from consolidated Contracts Pack, reconciled into modular structure per Artifact Registry v2.3 §2 Decision 1.
 

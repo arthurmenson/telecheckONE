@@ -1,6 +1,6 @@
 # 00 · Source of Truth
 
-**Status:** canonical · **Version:** 5.1 · **Owner:** engineering lead · **Consumers:** everyone resolving contradictions
+**Status:** canonical · **Version:** 5.4 · **Owner:** engineering lead · **Consumers:** everyone resolving contradictions
 
 This document defines what is authoritative for what, and what to do when documents disagree. It also defines what is and is not authoritative for each kind of decision.
 

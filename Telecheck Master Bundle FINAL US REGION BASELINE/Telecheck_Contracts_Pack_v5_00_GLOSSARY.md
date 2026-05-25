@@ -1,6 +1,6 @@
 # 00 · Glossary
 
-**Status:** canonical · **Version:** 5.2 · **Owner:** product · **Consumers:** all engineering, design, clinical, ops
+**Status:** canonical · **Version:** 5.4 · **Owner:** product · **Consumers:** all engineering, design, clinical, ops
 
 The single source of truth for terminology across Telecheck. Every document, UI string, database column, API field, and prompt uses these terms exactly as defined here. Drift is a defect.
 

@@ -1,6 +1,6 @@
 # 00 · Error Model
 
-**Status:** canonical · **Version:** 5.1 · **Owner:** engineering lead · **Consumers:** all API endpoints, client SDKs, error UX
+**Status:** canonical · **Version:** 5.4 · **Owner:** engineering lead · **Consumers:** all API endpoints, client SDKs, error UX
 
 This document defines the standard error envelope, error code structure, HTTP mapping, locale resolution, and client display rules for all Telecheck APIs.
 

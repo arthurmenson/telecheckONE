@@ -1,6 +1,6 @@
 # 00 · Platform Invariants
 
-**Status:** canonical · **Version:** 5.3 · **Owner:** engineering lead + clinical safety officer · **Consumers:** everyone
+**Status:** canonical · **Version:** 5.4 · **Owner:** engineering lead + clinical safety officer · **Consumers:** everyone
 
 **v5.3 hygiene cycle 2026-05-20 (P-027 Phase B):** 3 new invariants added (definitions in `Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md`):
 - **I-033 — Multi-region ACK channel partition-degraded provenance** (Sprint 7 R5 + Sprint 16 R1 HIGH-2): under W=1 partition fallback, writes tagged `partition_degraded=true` are first-class pending obligations until quorum promotion.

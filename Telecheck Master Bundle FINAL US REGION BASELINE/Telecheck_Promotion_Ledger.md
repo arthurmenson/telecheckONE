@@ -37,6 +37,61 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-044 — 2026-05-25 — Canonical-versions reconciliation: project CLAUDE.md "Current canonical versions" table re-flowed to match file-header reality surfaced by telecheck-cockpit PR #14 + Contracts Pack family headers normalised to v5.4
+
+**Classification:** **Reconciliation entry** — no semantic change to any canonical artifact's CONTENT. Aligns the project CLAUDE.md authority-table label with the bundle-file `**Version:**` header reality. The cockpit's SpecCorpus screen (PR #14 → `69c2230` on `arthurmenson/telecheck-cockpit`) implemented header auto-discovery + max-across-family resolution + visible provenance badges, which surfaced four canonical artifacts whose file headers had drifted past the CLAUDE.md table since the v1.10 promotion (2026-05-01) without the table being re-flowed.
+
+**Decision class:** Within-scope ratifier action (Evans-authorised unilateral). Not hard-floor item 6: no net-new schema, no new invariants, no new platform-floor primitives. The amendment activity that bumped the file headers (CDM v1.2 → v1.4, State Machines v1.1 → v1.2, intra-Contracts-Pack-family v5.2 → v5.3 → v5.4, Artifact Registry v2.10 → v2.29) already happened in prior Promotion Ledger entries (P-027 et al through P-042; the v1.10.1 hygiene cycle P-009; subsequent amendment cycles). This entry only reconciles the CLAUDE.md table that documents them.
+
+**Dual-recommendation discipline:** N/A — Evans's chat-message authorisation 2026-05-25 was direct ("1. i sign-off"); the only judgment question (normalize the Contracts Pack family to one version, which version, header-only vs body) was surfaced + answered ("2. normalize the whole family to one declared version first" + Option 1 "Bump all headers to v5.4 (family-canonical)") before any edit. No Codex consult needed for a within-scope CLAUDE.md table reconciliation.
+
+**What changed in the bundle:**
+
+1. **`Telecheck_Contracts_Pack_v5_00_*.md` × 14 files** — `**Version:**` header normalised UP to **v5.4** across the family. Each file's body content unchanged. The 14 files modified (was → now):
+   - AI_LAYERING: 5.2 → 5.4
+   - AUTONOMY_LEVELS: 5.2 → 5.4 (preserved Phase-6-promoted parenthetical)
+   - CCR_RUNTIME: 5.3 → 5.4
+   - DOMAIN_EVENTS: 5.3 → 5.4
+   - ERROR_MODEL: 5.1 → 5.4
+   - FORMS_ENGINE: 5.2 → 5.4
+   - GLOSSARY: 5.2 → 5.4
+   - GOVERNANCE_CONTROLS: 5.2 → 5.4
+   - IDEMPOTENCY: 5.1 → 5.4
+   - INVARIANTS: 5.3 → 5.4
+   - MARKET_LAUNCH: 5.1 → 5.4
+   - SOURCE_OF_TRUTH: 5.1 → 5.4
+   - TYPES: 5.3 → 5.4
+   - WORKLOAD_TAXONOMY: 5.2 → 5.4 (preserved Phase-6-promoted parenthetical)
+   - AUDIT_EVENTS was already at v5.4 — no edit needed.
+
+2. **`Telecheck Project/CLAUDE.md` "Current canonical versions" block** — re-flowed:
+   - CDM v1.2 → **v1.4** (matches file header)
+   - State Machines v1.1 → **v1.2** (matches file header)
+   - Contracts Pack v5.2 → **v5.4** (whole family normalised; no longer per-file drift)
+   - Artifact Registry v2.10 → **v2.29** (matches file header)
+   - Other 4 artifacts (Master PRD v1.10, OpenAPI v0.2, RBAC v1.1, System Architecture v1.2) already in sync.
+   - Filename versions (`v1_2.md`, `v1_1.md`, `v5_00_*.md`, `v2_10.md`) preserved as historical naming-convention anchors per `Telecheck_Active_Document_Index_v1_0.md` discipline. The canonical version is the header-declared one.
+
+3. **No content edits** to any file body. The version-header bumps are pure declarative-state changes.
+
+**Why this entry exists (Evans's directive 2026-05-25):** the cockpit's PR #14 was originally a 1-line "stale label v1.5 → v1.2" fix triggered by a live-data smoke. Codex's 7-round R-verify cycle forced the structural realization that hardcoded labels were the wrong shape — the cockpit now reads file headers directly (with max-across-family for wildcards). When that landed on main, the cockpit's SpecCorpus screen showed v1.4 / v1.2 / v5.4 / v2.29 — the actual file-header state. Evans's "canonicalise the highest versions for spec corpus" directive 2026-05-25 acknowledged that the CLAUDE.md authority table had drifted from this reality + asked for the table to be re-flowed so future Claude sessions (which load CLAUDE.md as part of their boot context) get the correct canonical-versions table.
+
+**Verification (post-edit):**
+- All 15 Contracts Pack family files declare `**Version:** 5.4` in their headers.
+- `Telecheck Project/CLAUDE.md` line 194 reads "CDM v1.4 · State Machines v1.2 · Contracts Pack v5.4 ... Artifact Registry v2.29".
+- The cockpit's SpecCorpus screen (telecheck-cockpit PR #14 surface) was already showing the file-header reality before this entry; no cockpit code change needed by P-044.
+
+**Cumulative cycle statistics:** N/A — this is a reconciliation entry not a new architectural cycle.
+
+**Codex review (Step C of cockpit cycle, retroactively applied):** the cockpit PR #14 underwent 7 Codex R-verify rounds (R1 → R-verify → R-verify-2 → R-verify-3 → R-verify-4 → R-verify-5 → R-verify-6; Evans authorised merge at R-verify-7 territory). The reconciliation entry itself (P-044) is a within-scope ratifier action that does not require its own Codex round — the amendment activity it reconciles was already Codex-reviewed in its respective prior P-NNN entries.
+
+**Cross-reference:**
+- Cockpit PR #14: https://github.com/arthurmenson/telecheck-cockpit/pull/14
+- Addendum 139 in `Telecheck_v1_10_PRD_Update/AI_Service_Rollout_24h_Status_2026-05-14.md` documents the cockpit-side trajectory.
+- Prior amendment entries this reconciles: P-009 (v1.10.1 hygiene cycle) + various downstream Phase B amendments (P-029 through P-042) that touched bundle file headers without re-flowing the CLAUDE.md table.
+
+---
+
 ### Entry P-043 — 2026-05-23 — Agentic Workforce Architecture v0.2 (Option B+) RATIFIED via Evans's chat-message ratification ("Go with your recommendations. remember to keep this project git separate from main telecheck corpus. ratify B+")
 
 **Classification:** **Reconciliation / meta-architecture entry** (no canonical-artifact content change; absorbs into existing Registry version without bump). Records a platform-floor decision on HOW the Telecheck platform gets BUILT (multi-agent workforce + canonical event log + Orchestrator + per-pilot-slice repos with Codex-per-repo adversarial review), NOT a change to WHAT the platform IS (no CDM / OpenAPI / State Machines / RBAC / AUDIT_EVENTS delta).

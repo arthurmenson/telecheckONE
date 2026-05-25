@@ -1,6 +1,6 @@
 # Telecheck — Contracts Pack v5.2 · WORKLOAD_TAXONOMY
 
-**Version:** 5.2 (Phase 6 promoted 2026-05-01 per Evans's "authorized" instruction; promoted from v0.4 DRAFT after Codex Phase 3 group-1 EXIT + Phase 6 plan EXIT v0.4 CLOSED)
+**Version:** 5.4 (Phase 6 promoted 2026-05-01 per Evans's "authorized" instruction; promoted from v0.4 DRAFT after Codex Phase 3 group-1 EXIT + Phase 6 plan EXIT v0.4 CLOSED)
 **Status:** canonical — new contract added in v1.10 cycle per ADR-029 (AI Workload Taxonomy)
 **Owner:** Engineering Lead + Product Lead + Clinical Safety Officer
 **Parent documents:** Master PRD v1.10 §13 (workload taxonomy reframe), ADR-029 (AI Workload Taxonomy)

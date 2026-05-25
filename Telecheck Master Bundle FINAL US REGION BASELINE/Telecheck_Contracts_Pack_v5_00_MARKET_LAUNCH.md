@@ -1,6 +1,6 @@
 # 00 · Market Launch
 
-**Status:** canonical · **Version:** 5.1 · **Owner:** market operations lead + regulatory lead · **Consumers:** all program activation, all patient-facing surfaces
+**Status:** canonical · **Version:** 5.4 · **Owner:** market operations lead + regulatory lead · **Consumers:** all program activation, all patient-facing surfaces
 
 This document defines the Market Launch governance model — the sole authority for whether a program is available in a market. Per I-020, no other system overrides Market Launch's offerability decisions.
 
