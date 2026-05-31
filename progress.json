@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "revision": 384,
-  "updated": "2026-05-30",
+  "revision": 385,
+  "updated": "2026-05-31",
   "lifecycle": {
     "current": "foundation-build",
     "stages": [
@@ -636,6 +636,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-30T00:00:00.006Z",
+  "updatedAt": "2026-05-31T00:00:00.006Z",
   "lastSyncedSha": "c27638c"
 }
