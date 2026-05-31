@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 405,
+  "revision": 406,
   "updated": "2026-05-31",
   "lifecycle": {
     "current": "foundation-build",
@@ -546,12 +546,12 @@
       "status": "in-dev",
       "progress": 95,
       "owner": "",
-      "notes": "EHBG \u00a713 CLAUDE.md, ESLint/Prettier/Vitest, GitHub Actions. Addendum 113 CI-RED state RESOLVED (Addendum 136, 2026-05-24, primary-source reconciliation): all 5 CI-fix PRs merged by Evans in local Codex-enabled sessions \u2014 #215 format+lint (merged 08:29) + #211 BOM + #197 test-role + #198 RLS-count + #200 plugin-wiring \u2014 plus #193 (main tip c27638c). main CI now GREEN: open queue PR #210's 'Build, lint, typecheck, test' + benchmarks + verify-metadata + dependency-review all success. Addendum 300 (2026-05-31): QUEUE-DRAIN INFLECTION \u2014 168-firing parked-state pattern breaks; main advanced c27638c \u2192 44b563c via Evans's local-Codex merges of #199 (Crisis Sprint 2 PR 3 acknowledge, 6d8f487) + #202 (Crisis Sprint 2 PR 4 respond+resolve, 44b563c); [CODEX-PENDING] queue REDUCED 9 \u2192 7 (remaining: #203 patient-summary, #204 sweep, #206 admin-decision, #207 admin-dashboard-reads, #208 med-int-PR8, #209 med-int-PR9, #210 ai-mode2-case-prep); ALL 7 remaining queue PRs now stale-base'd against new main tip (base.sha=c27638c queue-wide \u2014 rebase required before next Codex pass). Remote-cron loop still cannot merge (no Codex/OPENAI_API_KEY \u2192 codex review 403); Evans's local sessions remain the active drain mechanism. Addendum 138 (2026-05-25) #204 prettier-fix + #209 rebase-needed observations subsumed under queue-wide stale-base'd status post-A300. Addendum 301 (2026-05-31): STALE-BASE PARTIAL DRAIN \u2014 PR #203 rebased onto new main between A300 + A301 (base.sha c27638c \u2192 44b563c, head.sha 62b1ddf6 \u2192 3e563d7, CI 4/4 green on new main); remaining 6 stale-base'd: #204, #206, #207, #208, #209, #210. #203 is now LEADING-EDGE for next Codex-merge pass (rebased + CI-green + first in Sprint 2 PR 5/6 patient-summary\u2192sweep sequence). Main unmoved at 44b563c. Codex unavailability in remote-cron unchanged (extends streak to 169 firings).",
+      "notes": "EHBG \u00a713 CLAUDE.md, ESLint/Prettier/Vitest, GitHub Actions. Addendum 113 CI-RED state RESOLVED (Addendum 136, 2026-05-24, primary-source reconciliation): all 5 CI-fix PRs merged by Evans in local Codex-enabled sessions \u2014 #215 format+lint (merged 08:29) + #211 BOM + #197 test-role + #198 RLS-count + #200 plugin-wiring \u2014 plus #193 (main tip c27638c). main CI now GREEN: open queue PR #210's 'Build, lint, typecheck, test' + benchmarks + verify-metadata + dependency-review all success. Addendum 300 (2026-05-31): QUEUE-DRAIN INFLECTION \u2014 168-firing parked-state pattern breaks; main advanced c27638c \u2192 44b563c via Evans's local-Codex merges of #199 (Crisis Sprint 2 PR 3 acknowledge, 6d8f487) + #202 (Crisis Sprint 2 PR 4 respond+resolve, 44b563c); [CODEX-PENDING] queue REDUCED 9 \u2192 7 (remaining: #203 patient-summary, #204 sweep, #206 admin-decision, #207 admin-dashboard-reads, #208 med-int-PR8, #209 med-int-PR9, #210 ai-mode2-case-prep); ALL 7 remaining queue PRs now stale-base'd against new main tip (base.sha=c27638c queue-wide \u2014 rebase required before next Codex pass). Remote-cron loop still cannot merge (no Codex/OPENAI_API_KEY \u2192 codex review 403); Evans's local sessions remain the active drain mechanism. Addendum 138 (2026-05-25) #204 prettier-fix + #209 rebase-needed observations subsumed under queue-wide stale-base'd status post-A300. Addendum 301 (2026-05-31): STALE-BASE PARTIAL DRAIN \u2014 PR #203 rebased onto new main between A300 + A301 (base.sha c27638c \u2192 44b563c, head.sha 62b1ddf6 \u2192 3e563d7, CI 4/4 green on new main); remaining 6 stale-base'd: #204, #206, #207, #208, #209, #210. #203 is now LEADING-EDGE for next Codex-merge pass (rebased + CI-green + first in Sprint 2 PR 5/6 patient-summary\u2192sweep sequence). Main unmoved at 44b563c. Codex unavailability in remote-cron unchanged (extends streak to 169 firings). Addendum 302 (2026-05-31): SI-025 RATIFIER ESCALATION ARRIVES \u2014 PR #219 spec(SI-025) opened 20:00:29Z on branch spec/si-023-crisis-actor-patient-identity-model with [RATIFIER] tag (NOT [CODEX-PENDING]), authored against base 44b563c (true main tip, not stale-base'd), 81-line SI doc docs/SI-025-Crisis-Actor-Patient-Identity-Model-Gap.md surfaces a systemic identity-model gap: crisis slice models patient_id/actor_principal_id as UUID but canonical platform identity is accounts.account_id VARCHAR(26) ULID; ::UUID casts in view 034 + wrappers 036/037 raise invalid_text_representation on real ULIDs (CI green only via UUID-shaped test fixtures). Hard-floor item 6 STOP \u2014 CDM amendment + Track 6 ratifier ceremony (Evans + Engineering Lead + CDM owner) required; dual recommendation Claude+Codex R1 favors Option A (re-type to VARCHAR(26)). Crisis PRs #203/#204 NOW HELD pending ratification (no longer drainable even if Codex returns). [CODEX-PENDING] queue depth unchanged at 7 but DRAINABLE-queue subset REDUCED 7 \u2192 5 (#206/#207/#208/#209/#210 unaffected by SI-025; #203/#204 ratifier-blocked AND Codex-availability-blocked). Already-merged crisis surface (#199/#202/initiate + wrappers in migrations 033/034/036/037) carries identical defect class until SI-025 remediation lands as forward migration 053+. Codex unavailability streak extends to 170 firings. Main unmoved at 44b563c.",
       "docs": [
         "Telecheck_Engineering_Handoff_Build_Guide_v1_3.md"
       ],
       "stage": "eng-bootstrap",
-      "updatedAt": "2026-05-31T20:00:00.000Z"
+      "updatedAt": "2026-05-31T20:30:00.000Z"
     },
     {
       "id": "impl-rls-baseline",
@@ -636,6 +636,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-05-31T20:00:00.000Z",
+  "updatedAt": "2026-05-31T20:30:00.000Z",
   "lastSyncedSha": "44b563c"
 }
