@@ -37,6 +37,51 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-045 — 2026-06-01 — SI-025 Crisis slice actor/patient identity-model gap RATIFIED via Evans's chat-message ratification ("ratify"), Option A: re-type crisis identity to canonical VARCHAR(26) account_id
+
+**Classification:** **Content-change promotion** — amends the crisis CDM entity identity-model, downstream migrations, and handler patterns. Artifact Registry absorbs as part of the next CDM/spec amendment cycle (no bump at ledger-entry time; bump deferred to the forward-migration PR that implements Option A, following the post-P-029 SI-spec-first pattern).
+
+**Verbatim user instruction:** "ratify" (2026-06-01 in response to the SI-025 dual-recommendation surface: Claude = Option A, Codex R1 = Option A)
+
+**Raised by:** Engineering (autonomous queue-drain session 2026-05-31; surfaced by Codex R1 adversarial review of crisis Sprint 2 PR #203 patient-summary — the first handler to consume the patient self-scoping view `crisis_event_patient_summary_v`). Filed as SI-025 in `telecheck-app` docs/SI-025-Crisis-Actor-Patient-Identity-Model-Gap.md + opened as telecheck-app PR #219 for ratifier review.
+
+**Decision — Option A RATIFIED:**
+
+Re-type the crisis slice's identity model to the platform-canonical `accounts.account_id VARCHAR(26)` (ULID). The crisis slice currently models `crisis_event.patient_id` and `crisis_event_lifecycle_transition.actor_principal_id` as **UUID**, and the patient self-scoping view (mig 034) + SECURITY DEFINER wrappers (mig 036/037) cast `current_actor_account_id()::UUID`. This diverges from the platform-canonical identity pattern:
+
+- `accounts.account_id VARCHAR(26)` PRIMARY KEY (mig 012)
+- `current_actor_account_id()` RETURNS TEXT — the VARCHAR(26) account id (mig 031)
+- `forms_submission.patient_id → accounts.account_id` composite FK (mig 012)
+- `medication_requests.patient_account_id VARCHAR(26)` FK to accounts (mig 025)
+
+A real ULID `account_id` (26 chars) cannot cast to UUID → raises `invalid_text_representation`. CI green only via UUID-shaped test fixtures.
+
+**Option A scope (implementation to follow):**
+1. Forward migration re-typing `crisis_event.patient_id` → `VARCHAR(26)` (rename to `patient_account_id` for cross-slice consistency, FK to `accounts(tenant_id, account_id)`), and `crisis_event_lifecycle_transition.actor_principal_id` → `VARCHAR(26)`.
+2. Amend derived view `034` predicate to drop `::UUID` cast — compare account_id TEXT to TEXT.
+3. Amend SECURITY DEFINER wrappers `036`/`037` to drop `v_actor_principal_id := v_actor_account_id_text::UUID` cast.
+4. Update crisis handler test fixtures to use real `VARCHAR(26)` ULID account_ids (removes UUID-shaped masking).
+5. Re-validate already-merged crisis Sprint 2 PRs (#199 acknowledge, #202 respond/resolve, initiate) against the corrected identity model; re-open HELD crisis PRs (#203 patient-summary, #204 sweep) once the canonical surface is fixed.
+6. Forward migration numbered as the next available slot after mig 051 in `telecheck-app`.
+
+**Dual recommendation (both Claude and Codex R1 → Option A):**
+- Claude (queue-drain session 2026-05-31): Option A — collapses the crisis slice onto the one canonical identity keyspace already used by forms + pharmacy, removes the failure mode at the root, avoids inventing a second patient keyspace.
+- Codex R1 (adversarial review, PR #203): "a real patient/account mapping predicate, or a documented guarantee that patient account IDs are UUIDs plus validation at auth/bind time" — consistent with Option A (canonical account identity); Option C disqualified by the `VARCHAR(26)` schema.
+
+**Option B rejected:** Net-new canonical `patient_directory(account_id VARCHAR(26), patient_uuid UUID)` mapping table — heavier, second identity keyspace, contradicts forms/pharmacy canonical pattern.
+
+**Option C rejected:** "Guarantee patient account_ids are UUIDs" — factually false; `accounts.account_id VARCHAR(26)` is the canonical schema and cannot store 36-char UUIDs.
+
+**Blast radius (already merged, requires remediation):** Crisis Sprint 2 PR #199 (acknowledge, merged main 6d8f487) + PR #202 (respond/resolve, merged main 44b563c) + initiate PR (merged earlier) — all share the `::UUID` actor cast. The forward migrations under Option A will correct the DB layer; the handler remediations (drop `::UUID` casts from wrappers) will correct the application layer.
+
+**SI-025 PR:** telecheck-app PR #219 (`spec/si-023-crisis-actor-patient-identity-model` branch, `docs/SI-025-Crisis-Actor-Patient-Identity-Model-Gap.md`). Status changes from OPEN DRAFT → **RATIFIED** as of this entry.
+
+**Artifact Registry:** Deferred to the forward-migration PR per post-P-029 SI-spec-first promotion pattern (SI ratified here; CDM amendment + version bump happen when the forward-migration PR merges). Expected: CDM amendment adding `patient_account_id VARCHAR(26)` to `crisis_event` + `actor_principal_id VARCHAR(26)` to `crisis_event_lifecycle_transition` → CDM v1.X.
+
+**Cross-references:** SI-025 (telecheck-app docs); crisis CDM entities from P-040 (CDM v1.9→v1.10 Amendment §3.3/§3.4/§3.5); crisis wrappers from P-039/P-040 (migrations 033–037); canonical account identity from P-027 et seq; the `patient_account_id VARCHAR(26)` pattern established by P-034 (SI-019 Med-Interaction CDM).
+
+---
+
 ### Entry P-044 — 2026-05-25 — Canonical-versions reconciliation: project CLAUDE.md "Current canonical versions" table re-flowed to match file-header reality surfaced by telecheck-cockpit PR #14 + Contracts Pack family headers normalised to v5.4
 
 **Classification:** **Reconciliation entry** — no semantic change to any canonical artifact's CONTENT. Aligns the project CLAUDE.md authority-table label with the bundle-file `**Version:**` header reality. The cockpit's SpecCorpus screen (PR #14 → `69c2230` on `arthurmenson/telecheck-cockpit`) implemented header auto-discovery + max-across-family resolution + visible provenance badges, which surfaced four canonical artifacts whose file headers had drifted past the CLAUDE.md table since the v1.10 promotion (2026-05-01) without the table being re-flowed.
