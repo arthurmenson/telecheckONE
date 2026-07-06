@@ -37,6 +37,26 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-046 — 2026-07-06 — SI-007 Refill + Dispensing + Shipment schema gap RATIFIED via Evans's chat-message ratification ("SI-007 ratification approved")
+
+**Classification:** **Content-change promotion** — closes the SI-007 pre-ratification gate held open since 2026-05-14 and unblocks the Pharmacy + Refill slice's final 8% (Refill sub-slice).
+
+**Verbatim ratifier instruction (Evans, 2026-07-06, chat):** *"SI-007 ratification approved."*
+
+**Canonical content source:** `telecheck-app/docs/SI-007-Refill-Dispensing-Shipment-Schema-Gap.md` **v0.19** (18-round Codex pre-ratification convergence completed 2026-05-14; merged to telecheck-app main as `5ce0719` via PR #132). The SI doc's DDL + state machines + event enumerations are canonical as ratified; a physical CDM/AUDIT_EVENTS/DOMAIN_EVENTS body-merge follows at the next hygiene cycle per the post-P-029 SI-spec-first promotion pattern (ELEVENTH instance).
+
+**Scope ratified:**
+- **CDM → §4.17 Refill + §4.18 Dispensing + §4.19 Shipment** (entities #19/#20/#21; tenant-scoped composite FK invariant per R18 closure) + amended `audit_i012_workload_evidence_required` CHECK (adds `refill.{clinician_approved, protocol_approved, bridge_supply_dispensed, execution_rejected}` to the I-012 authoritative set).
+- **AUDIT_EVENTS (family-canonical header v5.4 per P-044 normalisation):** 38 net-new Category A action IDs — 20 `refill.*` + 8 `dispensing.*` + 10 `shipment.*` (per R16/R17 dedup closures).
+- **DOMAIN_EVENTS (in-place):** 20 net-new event types with the ratified audit-only carve-outs (FULFILLING→READY et al.).
+- **Registry absorption:** Artifact Registry v2.29 → **v2.30**; coverage counts: entities +3 (Refill/Dispensing/Shipment).
+
+**Historical note:** the SI doc's proposed ledger target was "P-013" (reserved 2026-05-14, never consumed — the intervening Q2 cycle allocated P-013…P-045 to other promotions). This entry (P-046) is the actual ratification record; references to "P-013" in SI-007 v0.19 and progress.json notes resolve here.
+
+**Operating mode:** ratified under the 2026-07-06 build-phase directive (Codex per-PR review waived until pre-go-live; the SI's own 18-round pre-ratification convergence predates and satisfies the adversarial-review intent for this content). Implementation (migrations + handlers, telecheck-app) proceeds immediately per the Master Completion Plan Track 1.
+
+**Author:** Claude (Fable 5), sole implementing engineer per the 2026-07-06 directive; ratified by Evans (workstream lead) via chat message.
+
 ### Entry P-045 — 2026-06-01 — SI-025 Crisis slice actor/patient identity-model gap RATIFIED via Evans's chat-message ratification ("ratify"), Option A: re-type crisis identity to canonical VARCHAR(26) account_id
 
 **Classification:** **Content-change promotion** — amends the crisis CDM entity identity-model, downstream migrations, and handler patterns. Artifact Registry absorbs as part of the next CDM/spec amendment cycle (no bump at ledger-entry time; bump deferred to the forward-migration PR that implements Option A, following the post-P-029 SI-spec-first pattern).
