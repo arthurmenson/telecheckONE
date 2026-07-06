@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 431,
+  "revision": 432,
   "updated": "2026-07-06",
   "lifecycle": {
     "current": "foundation-build",
@@ -164,10 +164,10 @@
       "id": "slice-async-consult",
       "name": "Async Consult",
       "category": "Slice PRD",
-      "status": "in-dev",
+      "status": "in-review",
       "progress": 100,
       "owner": "",
-      "notes": "Sprint 10 DB layer SHIPPED (A326, 2026-07-06): migrations 055 (13 RBAC roles, renumbered 053-collision fix) + 056 (7 entities, SI-025 VARCHAR(26) identity) + 057 (caller-class views) + 058 (raw writer) merged; 059 (6 SECDEF wrappers) PR #227 in CI. Codex waived until pre-go-live per Evans 2026-07-06 directive. Next: PR 6+ Fastify handlers + async_consult.* audit emission.",
+      "notes": "Sprint 10 COMPLETE at pilot scope (A328, 2026-07-06): DB layer 055-059+061 + six live /v1/async-consults handlers (PR #230, 100 unit tests) — intake→queue→claim→decision loop end-to-end. TODOs: delegate writes, app-side KMS envelope, CCR claim TTL, remaining lifecycle wrappers (needs small ratifier decision), AI-prep wiring, integration suite.",
       "docs": [
         "Telecheck_Async_Consult_Slice_PRD_v1_0.md"
       ],
@@ -639,5 +639,5 @@
     }
   ],
   "updatedAt": "2026-07-06T00:00:00.000Z",
-  "lastSyncedSha": "f5327ff"
+  "lastSyncedSha": "95c1132"
 }

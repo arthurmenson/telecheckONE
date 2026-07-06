@@ -14390,3 +14390,15 @@ This drift is the spec-corpus-side action item Evans flagged ("canonicalise the 
 - **telecheck-clinician-console** — Vite/React 18/TS strict + TanStack Query; tokens verbatim; screens: login shell, review queue (filter/sort), consult detail (AI summary three-cue + interaction signals BEFORE decision form — I-002 enforced in UI and mock 422 interaction_block_unresolved; block-severity disables prescribe-confirm until override rationale), claim w/ expiry countdown + 409 claim_already_held path, crisis operational dashboard, template review. 20/20 tests, tsc + build clean.
 
 **Still in flight:** Async-Consult Sprint 10 PR 6 handler agent (initiate/intake/queue/get/claim/decision routes + async_consult.* audit emission). telecheck-app main at `f5327ff` (#227 wrappers + #228 infra + #229 refill merged post-A326).
+
+---
+
+## Addendum 328 — 2026-07-06 — Sprint 10 HANDLER LAYER MERGED (PR #230): Async-Consult slice END-TO-END COMPLETE at pilot scope
+
+**PR #230 MERGED** (main `95c1132`): six core `/v1/async-consults` endpoints live — initiate / intake / queue / get (caller-class routed) / claim / decision — all under the canonical composition with same-tx `async_consult.*` audit emission (7 IDs via module-local placeholder casts; SPEC-ISSUE noted for AUDIT_EVENTS catalog sync), 42501→tenant-blind 403, 55006→409 claim_already_held, Idempotency-Key on all POSTs. 100 unit tests; legacy `/v0/async-consult` surface untouched. Includes **migration 061** app-role-bridge (renumbered from 060 after the pharmacy refill PR #229 consumed it — second instance of the migration-number-collision class; both caught pre-merge) granting telecheck_app_role membership in the 5 async-consult slice roles per the 051 §2 pattern; SLICE_ROLES 13→18.
+
+**Recorded handler-layer TODOs (from PR #230):** delegate-initiated writes (fail-closed 403 until a delegate-principal HTTP primitive lands; read path honors delegates via the 057 view predicate); app-side KMS envelope encryption (wire accepts pre-encrypted envelopes); claim TTL from CCR config (default 30 min); pharmacist queue access pending ActorRole widening; AI-preparation + reassign endpoints in follow-on PRs.
+
+**Dependabot sweep concluded:** #90 (pino 10) + #91 (eslint-import-resolver-ts 4) green → merged via watcher; #189/#190 (eslint 10 + parser 8) DEFERRED pending the flat-config migration chore; #224 (minor group) DEFERRED, build-job failure needs investigation.
+
+**Sprint 10 exit state:** Async-Consult = 055 roles + 056 entities + 057 views + 058 raw writer + 059 wrappers + 061 role bridge + 6 live handlers. The Ghana-pilot clinician decision loop (intake → AI-prep hook → queue → claim → decision → outcome transition) is implemented end-to-end at the API layer. Remaining slice work: remaining lifecycle wrappers (abandon/resume/expire/follow-up/completed — needs a small ratifier decision since P-038 §3 defines only 7 procedures), AI-prep endpoint wiring to the Mode 1/2 service, follow-up-message endpoints, integration test suite vs live PG.
