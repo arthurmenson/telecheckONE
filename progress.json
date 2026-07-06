@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 430,
+  "revision": 431,
   "updated": "2026-07-06",
   "lifecycle": {
     "current": "foundation-build",
@@ -288,13 +288,13 @@
       "name": "Pharmacy + Refill",
       "category": "Slice PRD",
       "status": "in-dev",
-      "progress": 92,
+      "progress": 95,
       "owner": "Evans",
-      "notes": "feat(pharmacy): TLC-055 PRs C–K shipped 2026-05-13. /ready returns 200. Final 8% (Refill sub-slice) is now BLOCKED on SI-007 ratification (telecheck-app/docs/SI-007 v0.19, merged on main as 5ce0719 via PR #132 on 2026-05-14 after 18 Codex pre-ratification rounds; awaiting spec-corpus Engineering Lead + Clinical Lead + Pharmacy Lead sign-offs → Promotion Ledger P-013 → CDM v1.4 §4.17 Refill + §4.18 Dispensing + §4.19 Shipment + AUDIT_EVENTS v5.4 + DOMAIN_EVENTS in-place amendments). See AI_Service_Rollout_24h_Status_2026-05-14.md Addendum 3.",
+      "notes": "SI-007 RATIFIED (P-046, Evans 2026-07-06) — Refill sub-slice DB layer MERGED same day (PR #229, migration 060: refills/dispensings/shipments + RLS + terminal-immutable triggers). DB layer COMPLETE; final work = refill service/handler layer (canonical write composition) + emitters for the 38 ratified refill.*/dispensing.*/shipment.* audit IDs. Deferred FKs recorded: subscription_id/pickup_location_id/delivery_proof_artifact_id.",
       "docs": [
         "Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md"
       ],
-      "updatedAt": "2026-05-14T22:12:39Z",
+      "updatedAt": "2026-07-06T00:00:00.000Z",
       "stage": "slice-build"
     },
     {
@@ -477,11 +477,12 @@
       "status": "spec-final",
       "progress": 100,
       "owner": "",
-      "notes": "",
+      "notes": "IMPLEMENTATION STARTED (A327): telecheck-patient-app scaffolded — Expo/TS strict, mock-API-first, Patient mock v7 parity, three-cue AI rule tested, 12/12 tests. Local repo; GitHub remote pending operator creation.",
       "docs": [
         "Telecheck_Patient_App_IA_v1_0.md"
       ],
-      "stage": "spec-baseline"
+      "stage": "slice-build",
+      "updatedAt": "2026-07-06T00:00:00.000Z"
     },
     {
       "id": "ux-clinician",
@@ -490,11 +491,12 @@
       "status": "spec-final",
       "progress": 100,
       "owner": "",
-      "notes": "",
+      "notes": "IMPLEMENTATION STARTED (A327): telecheck-clinician-console scaffolded — Vite/React/TS strict, queue + decision + crisis dashboard + template review, I-002 interaction-before-commit enforced in UI, 20/20 tests. Local repo; GitHub remote pending operator creation.",
       "docs": [
         "Telecheck_Clinician_Portal_IA_v1_0.md"
       ],
-      "stage": "spec-baseline"
+      "stage": "slice-build",
+      "updatedAt": "2026-07-06T00:00:00.000Z"
     },
     {
       "id": "ux-admin-ia",
@@ -637,5 +639,5 @@
     }
   ],
   "updatedAt": "2026-07-06T00:00:00.000Z",
-  "lastSyncedSha": "469804c"
+  "lastSyncedSha": "f5327ff"
 }
