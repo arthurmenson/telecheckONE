@@ -14402,3 +14402,15 @@ This drift is the spec-corpus-side action item Evans flagged ("canonicalise the 
 **Dependabot sweep concluded:** #90 (pino 10) + #91 (eslint-import-resolver-ts 4) green → merged via watcher; #189/#190 (eslint 10 + parser 8) DEFERRED pending the flat-config migration chore; #224 (minor group) DEFERRED, build-job failure needs investigation.
 
 **Sprint 10 exit state:** Async-Consult = 055 roles + 056 entities + 057 views + 058 raw writer + 059 wrappers + 061 role bridge + 6 live handlers. The Ghana-pilot clinician decision loop (intake → AI-prep hook → queue → claim → decision → outcome transition) is implemented end-to-end at the API layer. Remaining slice work: remaining lifecycle wrappers (abandon/resume/expire/follow-up/completed — needs a small ratifier decision since P-038 §3 defines only 7 procedures), AI-prep endpoint wiring to the Mode 1/2 service, follow-up-message endpoints, integration test suite vs live PG.
+
+---
+
+## Addendum 329 — 2026-07-06 — STAGING ENVIRONMENT LIVE: full stack deployed on Hetzner, /health green over public HTTPS
+
+**Evans directive:** *"herzner account api is global. do all for me and deploy"* — token provisioned; Claude executed provisioning + deploy end-to-end.
+
+**Live endpoint:** `https://87.99.159.214.sslip.io/health` → `{"status":"ok","service":"telecheck-app"}` (Caddy auto-TLS via sslip.io wildcard DNS; no manual DNS record needed). Hetzner CX22, Docker Compose stack: PG16-alpine (**SHOW ssl → on**, 61/61 migrations applied 000→061), Redis 7, app container (SI-010 bind-pool boot probe PASSING), Caddy. `/ready` returns the tenant-resolution envelope (`internal.request.unresolvable_tenant`) — correct fail-closed behavior pre-tenant-seeding; tenant seeding (Telecheck-US + Telecheck-Ghana rows + CCR config) is the next app-level staging step.
+
+**Deploy debug chain (8 PRs merged this arc, #231–#238):** #231 provisioner, #232 provisioner fix, #233 cert persistence, #234 ssl-via-conf (superseded), #235 migration runner --single-transaction parity with CI (026 SET LOCAL/LOCK TABLE), #236 cluster-global role bootstrap (telecheck_app_role pre-047 + postgres ownership anchor for non-postgres-superuser environments), #237 pg driver dev-flagged in lockfile (runtime image lacked it — dup deps entry), #238 **final TLS design: host-side cert generation in deploy.sh + bind mount** (design 1 command-flags+initdb.d = temp-server chicken-and-egg; design 2 initdb.d conf-append = alpine runs init scripts non-root, apk unavailable, silent first-boot death) + one-shot `run --rm` migration step (exec-into-crash-looping-app defect).
+
+**Recorded for pre-go-live AWS review:** (a) migrations pin SECURITY DEFINER ownership to role `postgres` — RDS forbids SUPERUSER; needs an RDS-compatible ownership redesign (flagged in apply-migrations.sh + runbook); (b) self-signed DB cert with rejectUnauthorized:false satisfies encrypted-transport only — RDS CA bundle at AWS migration; (c) deploy.sh self-update race (git reset mid-run swaps compose under the executing script) — rerun-once discipline documented.

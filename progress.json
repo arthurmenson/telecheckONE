@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 432,
+  "revision": 434,
   "updated": "2026-07-06",
   "lifecycle": {
     "current": "foundation-build",
@@ -530,10 +530,10 @@
       "id": "ops-readiness",
       "name": "Operational Readiness",
       "category": "Operations",
-      "status": "blocked",
-      "progress": 89,
+      "status": "in-dev",
+      "progress": 91,
       "owner": "",
-      "notes": "docs(sprint): Sprint 21 PARTIAL ACCEPTANCE — TLC-040 §3a closed; §3b + TLC-041 share root-cause; Sprint 22 combined investigation",
+      "notes": "STAGING LIVE (A329, 2026-07-06): Hetzner CX22 + Docker Compose; PG16 TLS-on with 61/61 migrations; app /health green over public HTTPS (87.99.159.214.sslip.io); SI-010 boot probe passing. Next: tenant seeding (Telecheck-US/Ghana + CCR), then E2E smoke vs live endpoints. Prior TLC-040/041 root-cause investigation still open.",
       "docs": [
         "Telecheck_Operational_Readiness_Todo_v1_5.md",
         "Telecheck_Consolidated_Launch_Tracker_v1_0.md"
@@ -638,6 +638,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-07-06T00:00:00.000Z",
+  "updatedAt": "2026-07-06T19:40:00.000Z",
   "lastSyncedSha": "95c1132"
 }
