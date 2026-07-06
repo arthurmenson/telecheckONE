@@ -14414,3 +14414,17 @@ This drift is the spec-corpus-side action item Evans flagged ("canonicalise the 
 **Deploy debug chain (8 PRs merged this arc, #231–#238):** #231 provisioner, #232 provisioner fix, #233 cert persistence, #234 ssl-via-conf (superseded), #235 migration runner --single-transaction parity with CI (026 SET LOCAL/LOCK TABLE), #236 cluster-global role bootstrap (telecheck_app_role pre-047 + postgres ownership anchor for non-postgres-superuser environments), #237 pg driver dev-flagged in lockfile (runtime image lacked it — dup deps entry), #238 **final TLS design: host-side cert generation in deploy.sh + bind mount** (design 1 command-flags+initdb.d = temp-server chicken-and-egg; design 2 initdb.d conf-append = alpine runs init scripts non-root, apk unavailable, silent first-boot death) + one-shot `run --rm` migration step (exec-into-crash-looping-app defect).
 
 **Recorded for pre-go-live AWS review:** (a) migrations pin SECURITY DEFINER ownership to role `postgres` — RDS forbids SUPERUSER; needs an RDS-compatible ownership redesign (flagged in apply-migrations.sh + runbook); (b) self-signed DB cert with rejectUnauthorized:false satisfies encrypted-transport only — RDS CA bundle at AWS migration; (c) deploy.sh self-update race (git reset mid-run swaps compose under the executing script) — rerun-once discipline documented.
+
+---
+
+## Addendum 330 — 2026-07-06 — BOTH TENANTS RESOLVING ON STAGING: multi-tenant request path verified end-to-end over public HTTPS
+
+**Delivered:** `https://87.99.159.214.sslip.io` → Telecheck-US and `https://ghana.87.99.159.214.sslip.io` → Telecheck-Ghana both resolve tenant context and enforce auth (401 fail-closed on `/v1/async-consults/queue` without JWT; module readiness endpoints reporting honest gated status). Verified chain per host: Caddy TLS (per-host Let's Encrypt certs) → Fastify → tenant-context resolution (DB-authoritative) → auth hook → module routes.
+
+**PRs #239 + #240 (TENANT_HOST_OVERRIDES):** staging hostnames aren't canonical consumer subdomains, so resolution 400'd. #239 added env-driven `hostname=TenantId` aliases (boot-fail-fast parsing; canonical tenants only; 12 unit tests) + Caddy `STAGING_DOMAINS` multi-host support. #240 completed it: in production the static map is deliberately dead (foundation-wiring-r2/r3 closures — DB authoritative), so the override now redirects the authoritative DB lookup itself (`WHERE id = <aliased tenant>` instead of `WHERE consumer_subdomain = <host>`), preserving every fail-closed property (status='active' gate, country union check, tri-state semantics, no tenant minting, deactivated tenant stops resolving).
+
+**Env-file gotcha recorded:** `STAGING_DOMAINS` contains a space — must be quoted in `infra/staging/.env` because deploy.sh `source`s the file (docker-compose env-file parsing doesn't care, bash does).
+
+**Root `/ready` observation:** there is no root-level `/ready` route — readiness is per-module (`/v0/<module>/ready`, honest `slice_hardening_pending` reasons). A root aggregate readiness endpoint is a small follow-up for LB health checks at AWS pre-go-live.
+
+**Staging state after this arc:** infra COMPLETE for pilot-scope testing — multi-tenant HTTPS, PG16 TLS, 61 migrations, Redis, SI-010 bind pool, both tenants live. **Next critical-path item: staging JWT issuance (test tokens per role) → authenticated E2E consult-flow smoke (initiate → intake → queue → claim → decision) against Telecheck-US.**
