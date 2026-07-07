@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+> **New team / zero context?** Start with `TELECHECK_TEAM_HANDOFF.md` (repo root) — it maps all 6 repos, the live staging environment, the credentials an operator must provision, and the first-session checklist. This CLAUDE.md is the spec-corpus operating contract; the handoff doc is the front door.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What this repo is
