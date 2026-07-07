@@ -14445,3 +14445,15 @@ This drift is the spec-corpus-side action item Evans flagged ("canonicalise the 
 **Method note for the pre-go-live review:** this is the exact defect class the Track 5 staging directive existed to catch — a fully CI-green, 18-Codex-round-reviewed subsystem that was structurally unexecuted. The pre-go-live checklist gains: "every SECDEF wrapper exercised at least once with a BOUND actor context on staging" (the E2E smoke now provides this for the consult flow; remaining slices need equivalent smokes).
 
 **Also this arc:** PR #241 root `/` API index + aggregate `/ready` (per-module honest readiness — pharmacy READY, six gated); PR #242 E2E smoke kit; PR #243 image ships scripts/. Staging URL front door now self-describing.
+
+---
+
+## Addendum 332 — 2026-07-07 — E2E CONSULT FLOW PASSED ON STAGING: first complete pilot revenue loop over live infrastructure
+
+**Milestone:** `staging-e2e-smoke.sh` completed the authenticated pilot loop against `https://87.99.159.214.sslip.io`: **initiate (201) → intake (201) → AI-prep transitions → clinician queue (staff summary view live) → claim (201, claim_id) → clinician decision recorded (201, decision_id)**. Every step exercised the full production stack: JWT → SI-010 bind → tenant resolution → SET LOCAL ROLE → SECURITY DEFINER wrappers → RLS-forced tables → same-tx audit emission. Consult `01KWXK826TW26X40S6CW7GT52C` is the first synthetic patient journey to complete on real infrastructure.
+
+**Iteration chain this arc (each failure = a real gate doing its job):** template composite-FK 409 → seed synthetic forms_template (#245/#246; Crockford-alphabet lesson: L/O invalid in ULIDs — both the DB CHECK and handler validator caught it independently); intake state gate auto-advance verified (initiated→intake in-wrapper); claim state gate exposed the **deliberate AI-prep hole** — `submitted→processing→queued` belongs to the unexposed Mode-1 AI-preparation endpoint (PR #230 TODO), smoke now simulates it with canonical transition triples under a bound ai_service actor context (stand-in documented in-script); raw-writer enforced bound-actor + tenant-context requirements exactly as designed.
+
+**Residual (PR #248, migration 063):** step 8 patient GET 403 — second consumer class of the SI-010 helpers: VIEW predicates execute as the querying slice role (SET LOCAL ROLE target), not the view owner; 062 covered only owner-class. 063 grants helpers to the SLICE_ROLES set (derived from pg_auth_members). PR also lands the smoke's AI-prep simulation + template created_by seed fix.
+
+**Pre-go-live checklist additions from this arc:** (a) wire the real Mode-1 AI-prep endpoint and remove the smoke's stand-in; (b) SI-010 consumer-class grant audit — three classes now known: app login role (031/062), SECDEF owner roles (062), slice app/reader roles (063); any future consumer class needs explicit grants; (c) the smoke becomes the per-deploy regression gate on staging.
