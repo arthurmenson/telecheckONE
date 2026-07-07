@@ -139,7 +139,7 @@ These are **not doable by an agent** and are the blocking items for a clean hand
    cd telecheck-patient-app && git remote add origin <url> && git push -u origin main
    cd telecheck-clinician-console && git remote add origin <url> && git push -u origin main
    ```
-   Until this happens, that code exists on **one machine only.**
+   **Interim safety net (committed to this repo):** both apps are bundled with full history at `_handoff_bundles/*.bundle` (telecheckONE root). A fresh clone of telecheckONE therefore already contains both apps — restore with `git clone _handoff_bundles/telecheck-patient-app.bundle telecheck-patient-app` (same for the console). See `_handoff_bundles/README.md`. Delete the folder once both apps are pushed to real repos. Bundles carry no secrets.
 2. **Grant the team account access** to all repos + the staging VPS + share/rotate the credentials in §6.
 3. **Decide whether the Codex-review waiver carries** to the new team/model (§4).
 4. Pre-go-live (later): AWS provisioning, the SUPERUSER-ownership migration redesign (§7), production secrets.
