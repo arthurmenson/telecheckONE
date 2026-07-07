@@ -20,3 +20,10 @@ node_modules/
 # Sibling code repo — has its own remote (arthurmenson/telecheck-app),
 # read by /api/code-activity but not tracked by this spec repo.
 telecheck-app/
+telecheck-app/
+telecheck-app-worktrees/
+telecheck-clinician-console/
+telecheck-cockpit/
+telecheck-forms-intake/
+telecheck-patient-app/
+Software Design Cockpit.zip
