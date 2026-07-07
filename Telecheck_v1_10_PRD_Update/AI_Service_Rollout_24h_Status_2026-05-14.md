@@ -14465,3 +14465,17 @@ This drift is the spec-corpus-side action item Evans flagged ("canonicalise the 
 Migration 063 (PR #248) MERGED + deployed: slice application/reader roles hold helper EXECUTE (third and final SI-010 consumer class). Full smoke rerun: **8/8 steps pass** — the patient's GET returns the decided consult (`current_state: advised`, `decision_type: recommend`, prior run's consult also correctly showing advised in the queue). The pilot loop is now closed end-to-end AND patient-visible on live staging infrastructure. `staging-e2e-smoke.sh` is the standing per-deploy regression gate.
 
 **Session totals (2026-07-06 → 07-07):** telecheck-app main advanced `ab6a35d` → `f39c4ac`+ across **26 merged PRs** (queue drain #206-#210/#220-renumber; Sprint 10 handlers #230; SI-007 P-046 + refill DB #229; staging infra #228/#231-#238; tenant host overrides #239/#240; root index #241; smoke kit #242/#243/#245/#246/#248; SI-010 repair #244). Staging: Hetzner CX22, PG16+TLS, 63 migrations, multi-tenant HTTPS, E2E green. Track 4: both apps scaffolded (repos pending operator creation). Codex waived per Evans build-phase directive; pre-go-live adversarial sweep + wrapper-bound-context audit booked for Phase D entry.
+
+---
+
+## Addendum 334 — 2026-07-07 — ZERO-CONTEXT TEAM HANDOFF PREPARED
+
+Operator directive: *"log everything to github for continuation on a separate team account with no context here. prepare."*
+
+**Delivered:**
+- **`TELECHECK_TEAM_HANDOFF.md`** at telecheckONE root (commit `c74fb84`) — the zero-context bootstrap: 6-repo map, current state, live continuity sources, credential inventory (names only, no secrets), staging deploy/smoke procedure, carry-over invariants + rules, first-session checklist, operator-only pending actions. Pointer added to both `telecheckONE/CLAUDE.md` and `telecheck-app/CLAUDE.md` front doors (`8dd6e9a`).
+- **Repo state verified all-clean-and-pushed:** telecheckONE `25ce8b4`, telecheck-app `8dd6e9a`, telecheck-cockpit `69c2230`, telecheck-forms-intake `a5010b3`.
+- **Secret hygiene audited:** no SSH keys, `.env`, or credential literals tracked in any repo; `infra/staging/.keys`, `.env`, `tls/server.key` confirmed gitignored.
+- **Track-4 apps (no dedicated remote yet):** committed as full-history git bundles at `_handoff_bundles/*.bundle` (commit `25ce8b4`) — a fresh telecheckONE clone now carries both apps; restore per `_handoff_bundles/README.md`. Removes single-machine risk pending operator repo creation.
+
+**Operator-only actions still pending (documented in handoff §10):** (1) create GitHub repos for `telecheck-patient-app` + `telecheck-clinician-console` under the target org and push (bundles are the interim backup); (2) grant the new team account access to all repos + the staging VPS + share/rotate the §6 credentials; (3) confirm whether the Codex-review waiver carries to the new team/model. Codex remains waived for the build phase per the 2026-07-06 directive; pre-go-live adversarial sweep still booked for Phase D.
