@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 435,
+  "revision": 436,
   "updated": "2026-07-06",
   "lifecycle": {
     "current": "foundation-build",
@@ -575,11 +575,12 @@
       "status": "in-dev",
       "progress": 95,
       "owner": "",
-      "notes": "App-side tenant-blind, PLATFORM sentinel, recursive tenant_id key scan in tests; binding-table over GUC.",
+      "notes": "App-side tenant-blind, PLATFORM sentinel, recursive tenant_id key scan in tests; binding-table over GUC. A331: SI-010 read-back path repaired (migration 062) — three latent defects found by first bound-path execution on staging; withTenantContext 25P02 carve-out ends 4xx→500 masking.",
       "docs": [
         "Telecheck_Contracts_Pack_v5_00_INVARIANTS.md"
       ],
-      "stage": "foundation-build"
+      "stage": "foundation-build",
+      "updatedAt": "2026-07-07T03:30:00.000Z"
     },
     {
       "id": "impl-audit-chain",
@@ -638,6 +639,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-07-06T23:00:00.000Z",
+  "updatedAt": "2026-07-07T03:30:00.000Z",
   "lastSyncedSha": "95c1132"
 }

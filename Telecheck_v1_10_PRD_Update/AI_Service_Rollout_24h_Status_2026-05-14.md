@@ -14428,3 +14428,20 @@ This drift is the spec-corpus-side action item Evans flagged ("canonicalise the 
 **Root `/ready` observation:** there is no root-level `/ready` route — readiness is per-module (`/v0/<module>/ready`, honest `slice_hardening_pending` reasons). A root aggregate readiness endpoint is a small follow-up for LB health checks at AWS pre-go-live.
 
 **Staging state after this arc:** infra COMPLETE for pilot-scope testing — multi-tenant HTTPS, PG16 TLS, 61 migrations, Redis, SI-010 bind pool, both tenants live. **Next critical-path item: staging JWT issuance (test tokens per role) → authenticated E2E consult-flow smoke (initiate → intake → queue → claim → decision) against Telecheck-US.**
+
+---
+
+## Addendum 331 — 2026-07-07 — STAGING'S BIGGEST CATCH: SI-010 actor-context read-back NEVER worked in any environment — three latent defects found by the first authenticated E2E smoke
+
+**Finding:** the first authenticated E2E consult-flow smoke (PR #242 kit: seed + JWT mint + full flow) failed at initiate with a 500. Layer-by-layer live reproduction on the staging DB proved the SI-010 bound actor-context READ path (`current_actor_*()` inside SECURITY DEFINER wrappers) has **never executed successfully in any environment**: CI configures no bind pool (handlers take the unbound branch; wrappers never invoked with a bound nonce), unit tests mock the DB, and the migration-chain gate applies DDL without calling wrappers. Staging is the first environment to run JWT → bind → SET LOCAL nonce → SECDEF wrapper → helper read-back end-to-end.
+
+**Three defects (PR #244, migration 062 + rls.ts):**
+1. **`_current_actor_context_row()` RETURN QUERY type mismatch since migration 031** — declares `RETURNS TABLE(... TEXT ...)` but selects VARCHAR(26)/VARCHAR(50) columns uncast; plpgsql requires exact type identity, so ANY row return raised `structure of query does not match function result type`. Fixed with ::TEXT casts (signature unchanged).
+2. **Wrapper owners lack EXECUTE on the helpers** — the SECURITY INVOKER helpers execute as the wrapper OWNER inside SECDEF; 036 (crisis, R2 HIGH-1) granted outer helpers to its owner and 043/044/057 followed, but **nobody anywhere granted the inner `_current_actor_context_row()`**, and 049/050/058/059 (med-interaction + async-consult) granted nothing at all. Migration 062 grants inner+outer to all owner-class roles (`%wrapper_owner`, `%writer_owner`, view owners) with a `has_function_privilege` verification sweep + functional INSERT→read-back→DELETE round-trip.
+3. **Environment-conditional grants silently skip** — 031's `IF EXISTS(telecheck_app_role)` grant blocks were skipped on staging because the role was created mid-chain during the first-deploy debug; `proacl` showed owner-only. 062 re-asserts unconditionally (role now guaranteed by the apply-migrations bootstrap).
+
+**Fourth defect (app layer, same PR):** `withTenantContext` restore-on-aborted-tx (25P02) wrapped typed 4xx handler errors into AggregateError 500s — the restore is *expectedly* impossible in an aborted tx and the tx-scoped binding rolls back with the transaction; original error now rethrown (fail-closed discard path untouched for the non-tx case).
+
+**Method note for the pre-go-live review:** this is the exact defect class the Track 5 staging directive existed to catch — a fully CI-green, 18-Codex-round-reviewed subsystem that was structurally unexecuted. The pre-go-live checklist gains: "every SECDEF wrapper exercised at least once with a BOUND actor context on staging" (the E2E smoke now provides this for the consult flow; remaining slices need equivalent smokes).
+
+**Also this arc:** PR #241 root `/` API index + aggregate `/ready` (per-module honest readiness — pharmacy READY, six gated); PR #242 E2E smoke kit; PR #243 image ships scripts/. Staging URL front door now self-describing.
