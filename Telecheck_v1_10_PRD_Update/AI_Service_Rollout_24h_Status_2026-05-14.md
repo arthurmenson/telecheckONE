@@ -14457,3 +14457,11 @@ This drift is the spec-corpus-side action item Evans flagged ("canonicalise the 
 **Residual (PR #248, migration 063):** step 8 patient GET 403 — second consumer class of the SI-010 helpers: VIEW predicates execute as the querying slice role (SET LOCAL ROLE target), not the view owner; 062 covered only owner-class. 063 grants helpers to the SLICE_ROLES set (derived from pg_auth_members). PR also lands the smoke's AI-prep simulation + template created_by seed fix.
 
 **Pre-go-live checklist additions from this arc:** (a) wire the real Mode-1 AI-prep endpoint and remove the smoke's stand-in; (b) SI-010 consumer-class grant audit — three classes now known: app login role (031/062), SECDEF owner roles (062), slice app/reader roles (063); any future consumer class needs explicit grants; (c) the smoke becomes the per-deploy regression gate on staging.
+
+---
+
+## Addendum 333 — 2026-07-07 — E2E SMOKE FULLY GREEN (8/8): patient reads back the decided consult; SI-010 grant-class trilogy complete
+
+Migration 063 (PR #248) MERGED + deployed: slice application/reader roles hold helper EXECUTE (third and final SI-010 consumer class). Full smoke rerun: **8/8 steps pass** — the patient's GET returns the decided consult (`current_state: advised`, `decision_type: recommend`, prior run's consult also correctly showing advised in the queue). The pilot loop is now closed end-to-end AND patient-visible on live staging infrastructure. `staging-e2e-smoke.sh` is the standing per-deploy regression gate.
+
+**Session totals (2026-07-06 → 07-07):** telecheck-app main advanced `ab6a35d` → `f39c4ac`+ across **26 merged PRs** (queue drain #206-#210/#220-renumber; Sprint 10 handlers #230; SI-007 P-046 + refill DB #229; staging infra #228/#231-#238; tenant host overrides #239/#240; root index #241; smoke kit #242/#243/#245/#246/#248; SI-010 repair #244). Staging: Hetzner CX22, PG16+TLS, 63 migrations, multi-tenant HTTPS, E2E green. Track 4: both apps scaffolded (repos pending operator creation). Codex waived per Evans build-phase directive; pre-go-live adversarial sweep + wrapper-bound-context audit booked for Phase D entry.

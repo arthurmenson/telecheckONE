@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 437,
+  "revision": 438,
   "updated": "2026-07-06",
   "lifecycle": {
     "current": "foundation-build",
@@ -531,9 +531,9 @@
       "name": "Operational Readiness",
       "category": "Operations",
       "status": "in-dev",
-      "progress": 93,
+      "progress": 94,
       "owner": "",
-      "notes": "STAGING E2E GREEN (A332): first complete synthetic patient journey on real infra. staging-e2e-smoke.sh = per-deploy regression gate. Remaining: Mode-1 AI-prep wiring, remaining module readiness gates, TLC-040/041 investigation.",
+      "notes": "E2E SMOKE 8/8 GREEN (A333): full pilot loop incl. patient read-back on live staging. Smoke = per-deploy regression gate. Next: Mode-1 AI-prep endpoint wiring (removes smoke stand-in), remaining module readiness gates, TLC-040/041.",
       "docs": [
         "Telecheck_Operational_Readiness_Todo_v1_5.md",
         "Telecheck_Consolidated_Launch_Tracker_v1_0.md"
@@ -639,6 +639,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-07-07T06:20:00.000Z",
+  "updatedAt": "2026-07-07T06:50:00.000Z",
   "lastSyncedSha": "95c1132"
 }
