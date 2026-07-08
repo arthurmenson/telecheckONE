@@ -14568,3 +14568,13 @@ Operator "Yes" to real-API wiring. **https://patient.87.99.159.214.sslip.io now 
 - Spec-gated deferrals (in-code): crisis-positive detector rows (signal FK target), ai.mode1.* action-ID registration, no ratified read endpoint (state view + reader role unconsumed), I-026 column encryption rides Track-5 KMS.
 
 **NEXT: PR-3 — migration 069 admin mode1-volume dashboard unlock** (041 §3/044 §4 prescription; §4.NEW7/§4.NEW8d ratified bodies, Option-2 adapted against 067's actual columns + code-repo audit action names) → admin /ready narrows further. Then med-interaction evidence validation, crisis-response Sprint 4, Ghana smoke variant. Operator-gated: LLM keys + AI-Safety classifier sign-off (ai-service /ready), SI-001 (subscription).
+
+---
+
+## Addendum 342 — 2026-07-08 — SI-023 ADMIN SURFACE 5/5 COMPLETE: mode1-volume dashboard unlocked (migration 069; PR #261)
+
+**PR #261 MERGED + deployed; smoke green.** Migration 069 executes the LAST 041 §3/044 §4 deferral: `admin_mode1_volume_health_v` (P-042 §4.NEW7, Option-2 adapted) + `read_admin_mode1_volume_health()` (§4.NEW8d, 044-§1 conventions). Admin /ready now reads "5 of 5 SI-023 §5 endpoints are live" — remaining admin gates are the Sprint-4 hardening set only (Cat A dashboard audits, LAYER B tightening, cross-tenant tests, admin.* catalog ratification).
+
+Two adaptation judgments flagged for the Phase-D Codex sweep: (1) duration percentiles anchor on archived-in-last-24h (ended_at→archival_event adaptation — 067 has no ended_at column); (2) safety-floor count uses the `ai_chat_response_emitted` payload `escalation_triggered` proxy until the `ai.mode1.*` AUDIT_EVENTS registration lands (named follow-up).
+
+**Session batch summary (Addenda 335-342, one 24h window):** 13 PRs merged (#249-#251, #253-#261), 6 migrations (064-069), staging deployed 6×, smoke green every time. Platform now: async-consult READY, pharmacy READY, admin at Sprint-4-hardening-only, Mode 1 persisting, patient app LIVE with real login + consult + intake at patient.87.99.159.214.sslip.io. **Remaining build queue:** med-interaction app-layer evidence validation → /ready flip; crisis-response Sprint 4 (KMS + cross-tenant tests) → /ready flip; admin Sprint-4 hardening → /ready flip; Ghana smoke variant. **Operator-gated:** LLM provider keys + AI-Safety classifier sign-off (ai-service); SI-001 ratification (subscription).
