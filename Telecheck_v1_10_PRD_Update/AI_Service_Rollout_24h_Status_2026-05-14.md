@@ -14578,3 +14578,15 @@ Operator "Yes" to real-API wiring. **https://patient.87.99.159.214.sslip.io now 
 Two adaptation judgments flagged for the Phase-D Codex sweep: (1) duration percentiles anchor on archived-in-last-24h (ended_at→archival_event adaptation — 067 has no ended_at column); (2) safety-floor count uses the `ai_chat_response_emitted` payload `escalation_triggered` proxy until the `ai.mode1.*` AUDIT_EVENTS registration lands (named follow-up).
 
 **Session batch summary (Addenda 335-342, one 24h window):** 13 PRs merged (#249-#251, #253-#261), 6 migrations (064-069), staging deployed 6×, smoke green every time. Platform now: async-consult READY, pharmacy READY, admin at Sprint-4-hardening-only, Mode 1 persisting, patient app LIVE with real login + consult + intake at patient.87.99.159.214.sslip.io. **Remaining build queue:** med-interaction app-layer evidence validation → /ready flip; crisis-response Sprint 4 (KMS + cross-tenant tests) → /ready flip; admin Sprint-4 hardening → /ready flip; Ghana smoke variant. **Operator-gated:** LLM provider keys + AI-Safety classifier sign-off (ai-service); SI-001 ratification (subscription).
+
+---
+
+## Addendum 343 — 2026-07-08 — MED-INTERACTION OVERRIDE UNLOCKED (migration 070; PR #262): 4 latent defects fixed on the slice's first live-PG exercise
+
+**PR #262 MERGED + deployed; smoke green.** The migration 050 §6.NEW7 deferral executed per its own 3-step closure text: `record_interaction_signal_override` UNLOCKED (STEP 3 medication-still-on-active-list vs the pharmacy medication_requests chain; STEP 4 LAYER B via the ratified SI-010 substitution). Resolve + expiry wrappers STAY fail-closed with precisely-named gates (washout-config source absent; resolution-subscriber role ungranted; VARCHAR(26)-vs-UUID event-id reconciliation needs a ratified answer; CCR cadence table absent). /ready stays 503 honestly narrowed — NOT flipped because LAYER B on the 7 non-override endpoints is deferred-PERMISSIVE (not fail-closed), which fails the PR-#254 flip criterion.
+
+**Latent defects found + fixed in-branch:** (1) PR8 handlers emitted Cat A audit inside withDbRole — slice role lacks audit_records privileges → every live request would 403; (2) emission_wrapper_owner lacked SELECT on interaction_signal → live emissions would fail inside the SECDEF body; (3) fail-closed handlers emitted rejection audit into an aborted tx (25P02→500, no I-003 attestation persisted) — SAVEPOINT-recovery + committed-503 pattern; (4) glossary I-014 term fix. New live-PG override integration suite.
+
+**Flagged for Phase-D Codex:** STEP 3 predicate reading (product_catalog identities; EVERY-involved quantifier; I-002 status set); non-medication_request signal entries fail closed; audit rationale carries KMS-envelope reference only.
+
+**Remaining build queue:** crisis-response Sprint 4 (KMS + cross-tenant tests) → next agent; admin Sprint-4 hardening; Ghana smoke variant. Operator-gated: LLM keys + AI-Safety sign-off; SI-001.
