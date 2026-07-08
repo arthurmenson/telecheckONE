@@ -14590,3 +14590,17 @@ Two adaptation judgments flagged for the Phase-D Codex sweep: (1) duration perce
 **Flagged for Phase-D Codex:** STEP 3 predicate reading (product_catalog identities; EVERY-involved quantifier; I-002 status set); non-medication_request signal entries fail closed; audit rationale carries KMS-envelope reference only.
 
 **Remaining build queue:** crisis-response Sprint 4 (KMS + cross-tenant tests) → next agent; admin Sprint-4 hardening; Ghana smoke variant. Operator-gated: LLM keys + AI-Safety sign-off; SI-001.
+
+---
+
+## Addendum 344 — 2026-07-08 — CRISIS-RESPONSE READY (PR #263 + migration 071): third module green; a wrapper defect that survived 18 Codex rounds caught on first live-PG execution
+
+**PR #263 MERGED + deployed; smoke green; staging /ready now: pharmacy + async-consult + crisis-response READY (3/7).**
+
+Sprint 4 closed per the module README resume path: crisis intake KMS envelope adopted (platform-standard pre-encrypted 8-field wire posture, crisis-specific 033 §4 field shapes); 25-test live-PG integration suite (idempotency-replay, FLOOR-020 atomic rollback, I-023/I-025 tenant-blind denials, I-019 always-mounted). /ready flipped 503→200 per the PR-#254 criterion with gap-by-gap rationale in KNOWN_FOLLOWUPS.md.
+
+**4 more latent defects fixed:** (1) patient-summary route never mounted (dropped in a rebase; /ready claimed 7 handlers); (2) sweep pre-fetch still selected the pre-053 column name → 500 on every live sweep; (3) **migration 071**: the sweep SECDEF wrapper referenced RETURNS-TABLE OUT params unqualified → 42702 ambiguous-column on EVERY live execution since migration 038 — survived 18 Codex adversarial rounds because the path had never run on live PG; (4) PR-#262-class sweep clean elsewhere.
+
+**Phase-D Codex sweep items (accumulating list):** corpus-wide scan of SECDEF wrappers using RETURNS TABLE for unqualified OUT-param collisions (the 42702 class is likely not crisis-unique); migration-038 outcome-vocabulary prose; sweep Layer B admin gate pending the Phase-A JWT successor SI; INTEGER/BIGINT fencing-token alignment; plus the PR #261/#262 flagged adaptations.
+
+**Remaining:** Ghana smoke variant (next agent — LAST buildable queue item); admin Sprint-4 hardening. Operator-gated: LLM keys + AI-Safety sign-off (ai-service); SI-001 (subscription); med-interaction resolve/expire spec gates.
