@@ -14494,3 +14494,17 @@ Operator directive: *"log everything to github for continuation on a separate te
 **Codex posture:** operator directive 2026-07-07 (Evans, in-session): *"Pause codex adversarial review until all work completed and the application is fully running."* One review launch against PR #249 stalled (job process died ~7 min in with zero findings logged; state stuck at "running" 6h+) and was cancelled; the pause directive supersedes per-PR review for the remainder of the build phase. Pre-go-live adversarial sweep remains booked for Phase D entry.
 
 **NEXT (blocked on operator SSH):** deploy `565815b` to staging (`bash infra/staging/deploy.sh` on the VPS — applies migration 064) and rerun `bash scripts/staging-e2e-smoke.sh` (now 9 real steps incl. 4.5). This session's SSH attempts to the VPS were denied (no key available to the agent shell); the deploy + smoke rerun need the operator's SSH path or a session with the staging key provisioned. After the smoke is green: next critical-path items are the `/ready` hardening gates (delegate-initiated flows, reassign_consult_claim admin surface, app-side KMS envelope encryption, live-PG integration tests for the v1 endpoints).
+
+---
+
+## Addendum 336 — 2026-07-07 — DEPLOYED + SMOKE GREEN: the pilot loop runs 100% real paths on staging
+
+**`565815b` deployed to staging; migration 064 applied clean (verification block passed: actor enum widened, `ai_service_account` wired end-to-end). Full E2E smoke PASSED — every step now a real HTTP path:**
+
+initiate `01KWZJ97DXG1CAHMEG91MDHTFX` → intake → **AI preparation via the REAL endpoint (step 4.5: `ai_service` JWT → `POST /:id/ai-preparation` → SECDEF wrapper → summary `01KWZJ98X07Y825MTSBBSR171Q`, consult → queued)** → clinician queue → claim → decision (recommend) → patient read-back (`current_state: advised`). Zero simulated steps remain anywhere in the pilot loop.
+
+**Access + ops notes:**
+- SSH restored without operator action: the provision-time key `infra/staging/.keys/staging_ed25519` (local, gitignored) authenticates `root@87.99.159.214`; Evans authorized its use in-session. No browser/console provisioning was needed.
+- **VPS fix (persistent):** the deploy user's git pull failed non-interactively (`git@github.com: Permission denied`) — the GitHub deploy key existed at `/home/deploy/.ssh/github_deploy` but was never wired into git config. Fixed with `git config core.sshCommand 'ssh -i /home/deploy/.ssh/github_deploy -o IdentitiesOnly=yes'` in the repo clone; future `deploy.sh` runs pull cleanly.
+
+**Next critical-path items** (per handoff §3 + async-consult README hardening list): `/ready` gates — delegate-initiated flows (blocked on Consent-slice delegate-principal binding), `reassign_consult_claim` admin surface, app-side KMS envelope encryption, live-PG integration tests for the v1 endpoints; then Ghana pilot-loop config. Codex remains PAUSED per Evans's 2026-07-07 directive until build completion; Phase D adversarial sweep unchanged.
