@@ -14539,3 +14539,20 @@ Operator "Go" (2026-07-08) unblocked the merge queue. **PRs #250, #251, #253, #2
 **Staging /ready now:** pharmacy READY + **async-consult READY**; med-interaction/crisis-response/admin/ai-service/subscription still gated on their hardening lists (admin's narrowed to: mode1 dashboard [needs P-036 ai_mode1_conversation entity], Cat A dashboard audits, Layer B tightening).
 
 **Next critical path:** (1) P-036 ai_mode1_conversation entity slice — ratified, unblocks the mode1-volume dashboard + Mode 1 persistence; (2) admin-backend Sprint-4 hardening (Cat A audits + Layer B) → /ready flip; (3) med-interaction evidence-source migrations; (4) crisis-response Sprint 4 (KMS + cross-tenant tests); (5) Ghana-tenant smoke variant. External-gated: LLM provider keys (operator), clinical NLP classifier (AI Safety sign-off).
+
+---
+
+## Addendum 340 — 2026-07-08 — PATIENT APP WIRED TO THE REAL API: browser-verified login → consult → intake against live staging
+
+Operator "Yes" to real-API wiring. **https://patient.87.99.159.214.sslip.io now runs EXPO_PUBLIC_API_MODE=real against the staging platform** — verified by driving a real headless browser through the full journey: OTP login (auto-filled staging dev_otp) → home → Start a consult (primary care + reason) → `POST /v1/async-consults` **201** → intake questionnaire → `POST .../intake` **201** (consult `01KWZZQRCDBXHESAQXG8QRCJ0X`), zero console errors.
+
+**telecheck-app PRs merged this batch:**
+- **#256** — staging-gated OTP echo (`AUTH_DEV_OTP_ECHO`; login/start returns `dev_otp`) since no SMS provider is wired; production fail-fast in config.
+- **#257** — `DEPLOY_ENV` label: staging pins NODE_ENV=production for parity, which would have crash-looped the app on #256's NODE_ENV-keyed gate; the gate now keys on DEPLOY_ENV (fail-closed default = NODE_ENV). Caught pre-deploy.
+- **#258** — same-origin API proxy on the patient host (/v0, /v1, /health reverse-proxied by Caddy): the API deliberately has NO CORS surface; same-origin avoids opening one. `TENANT_HOST_OVERRIDES` maps patient.<host> → Telecheck-US (staging .env).
+
+**telecheck-patient-app `aade092`** (bundle refreshed): `HttpTelecheckApi` real client (consults, intake, follow-ups, Mode 1 chat, pharmacy list), single-flight 401-refresh-retry token handling, staging synthetic-KMS envelope (smoke parity), LoginScreen with dev_otp auto-fill, AuthGate, Me-screen sign-out. Login verify contract confirmed from the handler source: body `{phone_e164, code}`; response `{account, session, access_token, refresh_token}` — a REAL session row backs the app (requireLiveSession surfaces work). Typecheck + 18 tests green.
+
+**Deploy gotchas pinned:** Metro does not cache-bust on EXPO_PUBLIC_* env changes — `expo export --clear` required when the baked URL changes (first upload served the stale cross-origin bundle); Caddy needs an explicit restart to re-read a mounted Caddyfile.
+
+**Documented gaps (all honest-copy in-app):** no ratified patient consult-list endpoint (locally-tracked ids; SI candidate); no patient-callable refill endpoint (typed NotAvailable); no Mode 1 history read; app-side KMS envelope encryption remains the standing TODO; OTP echo removed in lockstep with the SMS-provider SI.
