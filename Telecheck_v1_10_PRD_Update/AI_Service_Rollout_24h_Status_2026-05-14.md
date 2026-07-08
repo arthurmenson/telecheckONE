@@ -14604,3 +14604,16 @@ Sprint 4 closed per the module README resume path: crisis intake KMS envelope ad
 **Phase-D Codex sweep items (accumulating list):** corpus-wide scan of SECDEF wrappers using RETURNS TABLE for unqualified OUT-param collisions (the 42702 class is likely not crisis-unique); migration-038 outcome-vocabulary prose; sweep Layer B admin gate pending the Phase-A JWT successor SI; INTEGER/BIGINT fencing-token alignment; plus the PR #261/#262 flagged adaptations.
 
 **Remaining:** Ghana smoke variant (next agent — LAST buildable queue item); admin Sprint-4 hardening. Operator-gated: LLM keys + AI-Safety sign-off (ai-service); SI-001 (subscription); med-interaction resolve/expire spec gates.
+
+---
+
+## Addendum 345 — 2026-07-08 — BUILD QUEUE EXHAUSTED: multi-tenant pilot loop green on BOTH operating tenants; cross-tenant isolation verified live
+
+**PR #264 MERGED + deployed. First live execution of the Ghana smoke variant: PASSED** — the full 9-step pilot loop on Telecheck-Ghana (consult `01KX1JGM634XRW1V66YZGHC23F`: initiate → intake → REAL ai-preparation → queue → claim → decision → patient read-back) PLUS the new step 9: a US patient token probing the Ghana consult gets a tenant-blind 404 with explicit leak-checks — **I-023/I-025 proven on live infrastructure across tenants**. The standing US gate ran byte-compatible and green. Smoke is now parameterized (`--tenant Telecheck-Ghana`); Ghana synthetic identities (P02/C02, +233, GHS) + Ghana forms template seeded idempotently (Pattern A porting shape — same platform-level program_id).
+
+**THE CONTINUE-UNTIL-COMPLETE RUN IS AT ITS HONEST COMPLETION STATE.** Batch totals across Addenda 335-345 (one operator-directed run): **16 PRs merged (#249-#251, #253-#264), 8 migrations (064-071), 9 clean staging deploys, smoke green every time, 8 latent live-PG defects found + fixed** (incl. the 18-Codex-round-survivor 42702). Platform state: **pharmacy + async-consult + crisis-response READY; admin at 5/5 endpoints (Sprint-4 hardening set remains); Mode 1 persisting; patient app LIVE with real login/consult/intake; both tenants' pilot loops green.**
+
+**Nothing buildable remains without operator or ratifier input:**
+1. **Operator (Evans):** LLM provider API keys + AI-Safety Lead sign-off on the crisis classifier → ai-service /ready; SMS provider decision (retires the OTP echo).
+2. **Ratifier (Track 6):** SI-001 (subscription); med-interaction resolve/expire gates (washout config, subscriber role, VARCHAR/UUID event-id reconciliation); patient consult-list endpoint SI; abandon-wrapper SI; reassign-endpoint SI; follow-up admin-read grant SI.
+3. **Phase-D Codex sweep list** (accumulated in Addenda 342-344): corpus-wide RETURNS-TABLE OUT-param scan, dashboard adaptation judgments, wrapper-bound-context audit, admin Sprint-4 hardening review.
