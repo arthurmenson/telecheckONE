@@ -14556,3 +14556,15 @@ Operator "Yes" to real-API wiring. **https://patient.87.99.159.214.sslip.io now 
 **Deploy gotchas pinned:** Metro does not cache-bust on EXPO_PUBLIC_* env changes — `expo export --clear` required when the baked URL changes (first upload served the stale cross-origin bundle); Caddy needs an explicit restart to re-read a mounted Caddyfile.
 
 **Documented gaps (all honest-copy in-app):** no ratified patient consult-list endpoint (locally-tracked ids; SI candidate); no patient-callable refill endpoint (typed NotAvailable); no Mode 1 history read; app-side KMS envelope encryption remains the standing TODO; OTP echo removed in lockstep with the SMS-provider SI.
+
+---
+
+## Addendum 341 — 2026-07-08 — MODE 1 PERSISTENCE LIVE: P-035/P-036 entities deployed; chat turns persisting on staging
+
+**PRs #259 + #260 MERGED + deployed** (migrations 066/067/068 applied clean; smoke green; live verification: one authenticated chat POST via the patient host → 1 conversation + 1 turn-admission + 1 turn-result row in the staging DB with the canonical AI envelope).
+
+- **#259 (migrations)**: 5 ratified ai_mode1_* entities with all R1-R4 composite tenant-FK closures verbatim + plain state view (owner-only column-level base grants per R6/R7) + 2 RBAC roles; Option-2 adaptations + deferrals documented in headers (i019_enqueue_ack_log FK target ratifier-deferred; jwt_migration seed deferred with 033 precedent). I-023 lockdown inventory deliberately extended 49 → 54.
+- **#260 (wiring)**: migration 068 creates `ai_service_mode1` (spec R-3; ratified basis quoted from P-035 §5.1 Layer 1 + P-036 R6 deliberate-deferral prose) with INSERT+SELECT on exactly the 4 lifecycle tables; chat handler persists conversation/admission/detector-result/turn-result same-tx with all existing discipline preserved (crisis-gate-first, fail-soft, audit-503-rollback, deterministic retry-identical IDs); optional `ai_chat_session_id` threading with tenant-blind ownership 404. Three CI rounds: test-principal slice-role membership (shared grant-slice-roles helper — also removed a fork-order-luck dependency), 19→20 role pin, and a harness-only ORDER BY tie-break on identical transaction_timestamp (assertion restructured to per-turn identity; handler untouched — agent-diagnosed from the CI log).
+- Spec-gated deferrals (in-code): crisis-positive detector rows (signal FK target), ai.mode1.* action-ID registration, no ratified read endpoint (state view + reader role unconsumed), I-026 column encryption rides Track-5 KMS.
+
+**NEXT: PR-3 — migration 069 admin mode1-volume dashboard unlock** (041 §3/044 §4 prescription; §4.NEW7/§4.NEW8d ratified bodies, Option-2 adapted against 067's actual columns + code-repo audit action names) → admin /ready narrows further. Then med-interaction evidence validation, crisis-response Sprint 4, Ghana smoke variant. Operator-gated: LLM keys + AI-Safety classifier sign-off (ai-service /ready), SI-001 (subscription).

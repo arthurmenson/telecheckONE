@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "revision": 445,
+  "revision": 446,
   "updated": "2026-07-07",
   "lifecycle": {
     "current": "foundation-build",
@@ -639,6 +639,6 @@
       "updatedAt": "2026-05-05T21:40:56.023Z"
     }
   ],
-  "updatedAt": "2026-07-08T04:55:00.000Z",
+  "updatedAt": "2026-07-08T13:40:00.000Z",
   "lastSyncedSha": "95c1132"
 }
