@@ -14668,3 +14668,22 @@ The subscription slice (SI-001/P-011; CDM v1.2 §4.7 subscriptions + §4.8 Subsc
 - **Patient app screens built** (`telecheck-patient-app`): `AuthScreen` (signin / signup+set-PIN / reset modes, consumer-DBA branding, honest copy, no emoji per DIC), 5 wired API methods, `AuthGate` renders it in real-API mode. Committed locally at `670d41a`; the patient-app repo has **no git remote yet** (operator must provision one before it can be pushed/deployed).
 
 **Honest status / ratifier + operator follow-ups:** (1) Identity-spec ratification of the PIN policy constants + passcode disciplines + the 5 new placeholder audit action IDs (AUDIT_EVENTS catalog) — Track 6, fail-conservative placeholder-casts, zero runtime impact (async-consult/admin precedent). (2) Patient-app remote provisioning to push the auth screens. (3) An email delivery provider for real passcode emails (dev echo is gated behind `AUTH_DEV_OTP_ECHO` with production fail-fast — no code emailed in prod until wired).
+
+---
+
+## Addendum 349 — 2026-07-09 — SI-025 PHASE 1 (admin-managed AI provider credentials) LIVE + security-verified end-to-end
+
+**PR #272 MERGED + deployed (migration 079); smoke green.** Evans's 2026-07-09 directive ("LLM keys applied on the admin UI") is implemented backend-first per SI-025 v0.1 (ratified forks: app-DB KMS-enveloped storage, platform scope).
+
+**Live-verified on staging (platform_admin round-trip):**
+- `PUT /v1/admin/ai-providers/anthropic` {api_key: sk-ant-STAGINGTEST-...} → 200 masked `{provider, key_last4: "sk-...f456", status: active}` — plaintext NEVER returned.
+- `GET /v1/admin/ai-providers` → masked list only.
+- `DELETE` (revoke) → 200; idempotency-key required (guard fires before routing).
+- Cat B audits: `ai_provider_credential.set` + `.revoked` emitted, **plaintext_absent = true** (only last4 in payload). LAYER B: patient token → 403, unauth → 401.
+- Test credential revoked → staging back to clean NullLLMProvider.
+
+**Shipped:** `ai_provider_credential` entity (migration 079 — platform-scoped/role-locked, deliberate non-tenant-RLS exception allow-listed in the I-023 lockdown test; 8-field KMS envelope, one-active-per-provider EXCLUDE; SECDEF `read_active_ai_provider_key` reader-only, OUT-params qualified per the 071/074 lesson); 3 RBAC roles; `/v1/admin/ai-providers` GET-masked/PUT/DELETE/test handlers (Cat B audit after withDbRole; server-side envelope-encrypt); real `AnthropicLLMProvider` + `resolveClinicalProvider` reading the DB credential OR env fallback → NullLLMProvider only when neither (AI-RESIL-001 preserved); live-PG test suite. Rate-limit interrupt cost only one uncommitted test fix (detail→payload column), verified + pushed.
+
+**Honest /ready:** ai-service stays 503 — SI-025 made the provider-credential gate SATISFIABLE (runtime-configurable), so the remaining gate is cleanly + solely the **crisis-classifier AI-Safety Lead sign-off** (keyword stub → I-019 platform-floor; operator gate), NOT the key. The split is machine-readable in the /ready body. ai-service did NOT falsely flip.
+
+**Codex open items (SI-025 §9):** platform-scoped non-RLS lockdown airtightness; key_fingerprint (SHA-256) non-reversibility; /test decrypt-oracle rate-limit; dual-control-on-mutations posture. **NEXT: Phase 2 — Settings → AI Providers admin console UI screen.**
