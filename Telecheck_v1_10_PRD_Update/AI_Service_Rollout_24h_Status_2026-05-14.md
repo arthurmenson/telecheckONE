@@ -14617,3 +14617,14 @@ Sprint 4 closed per the module README resume path: crisis intake KMS envelope ad
 1. **Operator (Evans):** LLM provider API keys + AI-Safety Lead sign-off on the crisis classifier → ai-service /ready; SMS provider decision (retires the OTP echo).
 2. **Ratifier (Track 6):** SI-001 (subscription); med-interaction resolve/expire gates (washout config, subscriber role, VARCHAR/UUID event-id reconciliation); patient consult-list endpoint SI; abandon-wrapper SI; reassign-endpoint SI; follow-up admin-read grant SI.
 3. **Phase-D Codex sweep list** (accumulated in Addenda 342-344): corpus-wide RETURNS-TABLE OUT-param scan, dashboard adaptation judgments, wrapper-bound-context audit, admin Sprint-4 hardening review.
+
+---
+
+## Addendum 346 — 2026-07-09 — CODEX PHASE-D SWEEP R1 CLOSED (2 findings) + corpus-wide 42702 audit landed; subscription slice foundation preserved
+
+**Codex resumed (operator directive 2026-07-08).** Phase-D sweep over the full batch diff (base 8dd6e9a; PRs #249-#264) returned **needs-attention with 2 R1 findings — both closed + deployed:**
+
+- **PR #265 (migration 073) — HIGH:** the mode1-volume dashboard anchored its final projection on conversation_volume, so a tenant whose only in-window Mode 1 activity is audit-emitted crisis responses WITHOUT persisted conversation rows (the chat handler's documented skipped-persistence path for crisis-positive requests with a malformed/unowned session id) returned NO row — a crisis-observability blind spot. Re-anchored on tenant_scope + COALESCE-to-zero. Plus the MEDIUM: the patient-host TENANT_HOST_OVERRIDES mapping existed only in the live .env — now checked into .env.example + STAGING_RUNBOOK.
+- **PR #266 (migration 074) — corpus-wide 42702 audit** (prescribed by migration 071's closure, reinforced by the sweep): audited all 6 RETURNS TABLE functions in the chain; found a SECOND live-only ambiguous-column defect in `read_admin_crisis_operational_health` (migration 044, predating the alias-qualify convention) that would 42702 on every crisis dashboard read. 065/069 already clean. Rebuilt v.-qualified; new live-PG admin-dashboards integration test pins all three dashboard wrappers. Both deployed; smoke green.
+
+**Subscription slice (SI-001 closed — confirmed by Evans; P-011 landed medication_requests at migration 025 back in May, the module's blocker text was stale):** a build agent completed a strong DB + service + state-machine + audit + branded-types foundation (~2150 lines: migrations 074-076 [renumber to 075-077 pending], canonical composition w/ audit-after-withDbRole already baked in, full transition table + guards per State Machines §14) but stalled on Fable credit exhaustion before handlers/repos/tests/README/ready-flip. WIP preserved + pushed on `feat/subscription-slice`. Completion dispatched to a fresh Opus agent. Model switched to opus-4-8 mid-session.
