@@ -14642,3 +14642,18 @@ The subscription slice (SI-001/P-011; CDM v1.2 §4.7 subscriptions + §4.8 Subsc
 **Spec-gap SI candidates recorded (§12; fail-closed, placeholder-cast — established async-consult pattern, NOT silent forks):** CDM §4.8 event_type enum lacks values for §15 emissions fulfilled/switch_declined/terminated_clinical/period_end (audit-only); AUDIT_EVENTS has no subscription.* action IDs (placeholder-cast); RBAC names no subscription roles (minimal-set per 055 precedent); CDM prescription_id column vs GLOSSARY medication_request (schema CDM-verbatim, wire canonical).
 
 **Module state 4/7 READY. Remaining gates:** admin (Sprint-4 hardening — partly spec-gated: admin.* catalog ratification + LAYER B JWT-successor SI); med-interaction (resolve/expire spec-gated); ai-service (operator-gated: LLM keys + AI-Safety sign-off). The buildable queue is effectively exhausted; remaining work is spec-ratification (Track 6) or operator-provisioning.
+
+---
+
+## Addendum 348 — 2026-07-09 — ADMIN READY: 5/7 modules green; build phase honestly exhausted
+
+**PRs #269 (admin Sprint-4 hardening) + #270 (aggregate-ready path fix) MERGED + deployed.** Staging readiness board: **subscription + async-consult + crisis-response + pharmacy + admin READY (5/7).**
+
+- **#269** closed the buildable admin hardening set: Cat A audit emission for all 4 admin.* IDs (after withDbRole, same-tx); a genuinely fail-closed LAYER B via `requireSliceRoleMembership` (mirroring crisis-response's ratified slice-role gate, DB EXECUTE-grant floor as enforcer — NOT the med-interaction permissive counter-example); live-PG cross-tenant isolation suite. /ready flipped 503→200; the sole remaining gap (admin.* AUDIT_EVENTS catalog ratification) is Track-6 spec-gated + fail-conservative (placeholder-cast, zero runtime impact — async-consult precedent). CI green first round.
+- **#270** fixed a genuine aggregate bug the flip exposed: the root /ready MODULE_READY_PATHS probed `/v0/admin/ready` (the SEPARATE legacy admin-write surface, Admin Backend slice v1.1, out of pilot scope, still not_ready) instead of the SI-023 surface at `/v1/admin/ready`. Repointed + normalized the admin status string to 'ready'.
+
+**BUILD PHASE COMPLETE — the buildable queue is exhausted.** The two remaining not-ready modules are genuinely blocked on inputs Claude cannot provide:
+1. **med-interaction (unavailable):** the resolve + expiry wrappers stay fail-closed on Track-6 spec ratification (washout-period config source, medication_interaction_resolution_subscriber role, VARCHAR(26)-vs-UUID event-id reconciliation) — SI candidates, not buildable.
+2. **ai-service (not_ready):** operator-gated — real LLM provider API keys + AI-Safety Lead sign-off on the crisis classifier (the keyword stub is a documented v1.0 floor).
+
+**Full continue-run tally (Addenda 335-348):** 22 PRs merged (#249-#270 minus operator-blocked), 11 migrations (064-077), ~12 staging deploys all smoke-green, 10+ latent live-PG defects found + fixed (incl. two 42702 wrapper defects that survived Codex review because the paths had never run on live PG), Codex Phase-D sweep R1 closed. Platform: 5/7 modules READY, both operating tenants' pilot loops green + cross-tenant isolation live-verified, patient app real-API-wired end-to-end. Remaining work is exclusively ratifier (Track 6) or operator (keys + sign-off).
