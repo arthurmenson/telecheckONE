@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "revision": 453,
-  "updated": "2026-07-07",
+  "revision": 454,
+  "updated": "2026-07-09",
   "lifecycle": {
     "current": "foundation-build",
     "stages": [
