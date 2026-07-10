@@ -14697,3 +14697,18 @@ The subscription slice (SI-001/P-011; CDM v1.2 §4.7 subscriptions + §4.8 Subsc
 **Honest /ready:** ai-service stays 503 — SI-025 made the provider-credential gate SATISFIABLE (runtime-configurable), so the remaining gate is cleanly + solely the **crisis-classifier AI-Safety Lead sign-off** (keyword stub → I-019 platform-floor; operator gate), NOT the key. The split is machine-readable in the /ready body. ai-service did NOT falsely flip.
 
 **Codex open items (SI-025 §9):** platform-scoped non-RLS lockdown airtightness; key_fingerprint (SHA-256) non-reversibility; /test decrypt-oracle rate-limit; dual-control-on-mutations posture. **NEXT: Phase 2 — Settings → AI Providers admin console UI screen.**
+
+---
+
+## Addendum 350 — 2026-07-09 — SI-025 PHASE 2 LIVE + BROWSER-VERIFIED: LLM keys now applied through the admin UI (Evans's directive complete end-to-end)
+
+**The directive — "LLM keys applied on the admin application UI" — is DONE end to end.** Live at **https://admin.87.99.159.214.sslip.io** → **Settings → AI providers**.
+
+- **telecheck-app PR #273 MERGED + deployed:** Caddy static-host + same-origin `/v0,/v1,/health` proxy for the admin console at admin.<host> (patient-host precedent); `ADMIN_APP_DOMAIN` env; `.env.example` + runbook host-mapping requirement; platform_admin staging seed (+15550100003). Deployed; VPS .env updated (STAGING_DOMAINS/TENANT_HOST_OVERRIDES/ADMIN_APP_DOMAIN + admin host); console dist uploaded; smoke green.
+- **telecheck-clinician-console (committed locally + bundle refreshed):** real-API layer (httpClient + tokenStore + AdminApi + OTP login + AuthGate; VITE_API_MODE mode switch, mock default preserved), `AiProvidersScreen` (per-provider masked input, Save/rotate, Test connection, Revoke; plaintext never rendered after Save). 27 tests green.
+
+**Browser-verified full click-through (gstack /browse, platform_admin +15550100003):** login → Settings → AI providers → Save `sk-ant-UITEST-...` → screen shows **only** masked `sk-...5v4u` (Configured/Active/updated-by A02); **leak check: plaintext appears NOWHERE on the page**; Cat B `ai_provider_credential.set` audit `plaintext_absent=true`; Test-connection present; **Revoke → 200, persisted (providers:[]), staging clean**.
+
+**Latent defect found + fixed via browser verification (the httpClient LOOKED correct on paper):** the console set `Content-Type: application/json` on the bodyless DELETE → Fastify `FST_ERR_CTP_EMPTY_JSON_BODY` 400 → revoke silently no-op'd (UI optimistic + first session's token had also expired, masking it). Fixed: content-type only when a body is present. Affects ANY bodyless mutation — a genuine catch the live click-through earned that unit tests + typecheck missed. Rebuilt + redeployed + re-verified revoke persists.
+
+**SI-025 COMPLETE (both phases).** Provider credentials are runtime-managed through the admin UI, KMS-enveloped, masked, audited, leak-proof. ai-service's sole remaining readiness gate is the crisis-classifier AI-Safety Lead sign-off (operator). Only genuinely-remaining items platform-wide: that sign-off + the med-interaction resolve/expire Track-6 SIs + the paused Codex adversarial pass on the SI-025 surface.
