@@ -14723,3 +14723,14 @@ The subscription slice (SI-001/P-011; CDM v1.2 §4.7 subscriptions + §4.8 Subsc
 - **First CI failure was Prettier** (the one gate not run locally pre-push) — 3 files reformatted; note for future firings: run `npm run format:check` alongside tsc + eslint before pushing.
 
 **MERGE IS BEHAVIOR-NEUTRAL:** `EMAIL_PROVIDER=noop` default → passcodes still issue/persist, staging still echoes `dev_passcode`; no external send anywhere. **Operator activation steps (staging):** (1) obtain a VALID Resend API key (the key in the connected Resend MCP is invalid — "API key is invalid" — so agent-side provisioning was impossible) with `heroshealth.com` verified as a sending domain matching `EMAIL_FROM`; (2) on the VPS set in `infra/staging/.env`: `EMAIL_PROVIDER=resend`, `RESEND_API_KEY=<key>`, `EMAIL_FROM=Heros Health <no-reply@heroshealth.com>`; (3) run the standard deploy (this addendum's merge has NOT yet been deployed to staging — the deploy was declined as out-of-scope for the wiring request; next routine deploy picks it up); (4) optionally keep `AUTH_DEV_OTP_ECHO=true` during transition (echo + email coexist). Rollback: flip `EMAIL_PROVIDER` back to `noop`.
+
+## Addendum 352 — 2026-07-11 — PR #274 deployed to staging; email dispatch path live-verified in noop mode
+
+**Staging deploy of `be4f9d0e` complete** (Evans's explicit "deploy it to staging"). `infra/staging/deploy.sh` run on the VPS: image rebuilt from main, **0 new migrations** (78 already applied), SI-010 bind-pool reprovisioned, app restarted, `/health` ok. Two VPS-side one-time fixes en route: `git config --global --add safe.directory /home/deploy/telecheck-app` (root vs deploy-user repo ownership) and `ssh-keyscan github.com >> ~/.ssh/known_hosts` (root's known_hosts lacked GitHub) — both idempotent, now persistent.
+
+**Post-deploy verification — all green:**
+- `scripts/staging-e2e-smoke.sh`: **E2E SMOKE PASSED** (initiate → intake → queue → claim → decision, Telecheck-US).
+- Email+PIN through the patient host: `registration/email/start` → 200 + `dev_passcode` (noop mode unchanged); Addendum-350 account `login/pin` → 200.
+- **New dispatch path proven live:** app log shows `passcode_email_skipped_no_provider` with the designed shape — recipient logged as domain-only (`@example.com`), no passcode, purpose + operator hint present. The fire-and-forget post-commit dispatch executes on staging; delivery is one config flip away.
+
+**Remaining to activate real email:** valid Resend key (MCP-held key is invalid) + `heroshealth.com` verified as sending domain → set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM` in `infra/staging/.env` → `docker compose up -d app` (or rerun deploy.sh). Rollback: flip back to `noop`.
