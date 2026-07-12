@@ -14734,3 +14734,14 @@ The subscription slice (SI-001/P-011; CDM v1.2 §4.7 subscriptions + §4.8 Subsc
 - **New dispatch path proven live:** app log shows `passcode_email_skipped_no_provider` with the designed shape — recipient logged as domain-only (`@example.com`), no passcode, purpose + operator hint present. The fire-and-forget post-commit dispatch executes on staging; delivery is one config flip away.
 
 **Remaining to activate real email:** valid Resend key (MCP-held key is invalid) + `heroshealth.com` verified as sending domain → set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM` in `infra/staging/.env` → `docker compose up -d app` (or rerun deploy.sh). Rollback: flip back to `noop`.
+
+## Addendum 353 — 2026-07-12 — REAL EMAIL DELIVERY LIVE on staging: Resend activated, first passcode email delivered end-to-end
+
+**The email+PIN auth path now delivers real passcode emails.** Evans provided a valid Resend API key via a local Notepad handoff (scratch file in the session temp dir — never in a repo, chat, or log; shredded after install).
+
+- **Key validated read-only first:** `GET /domains` → 200; verified sending domain is **`em.heroshealth.com`** (us-east-1) — NOT bare `heroshealth.com`, so `EMAIL_FROM` was set to `Heros Health <no-reply@em.heroshealth.com>` (the .env.example default would have been rejected by Resend).
+- **Install:** key piped via SSH stdin (never on argv) into `/home/deploy/telecheck-app/infra/staging/.env` (`EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM`; chmod 600; prior .env backed up). App service uses `env_file: .env` so no compose change was needed. `docker compose up -d --force-recreate app` — config fail-fast passed, container env confirmed by name (key presence asserted, value never printed).
+- **Live end-to-end proof:** `registration/email/start` for `media@heroshealth.com` → 200; Resend API shows the send **status: delivered** (subject "Your Heros Health verification code", from the verified domain, 1s after trigger); app logs show zero `passcode_email` errors and no noop-skip marker; the emailed code matches the staging `dev_passcode` echo (both channels agree).
+- The Resend account also shows unrelated marketing sends from `care@em.heroshealth.com` — the domain + account are production-active for Heros; the staging passcode sender coexists cleanly.
+
+**State:** staging now runs `EMAIL_PROVIDER=resend` with `AUTH_DEV_OTP_ECHO=true` still on (echo + email coexist during transition; drop the echo whenever testers no longer need it). Rollback: flip `EMAIL_PROVIDER=noop` in `infra/staging/.env` + recreate app. The SI-EMAIL-DELIVERY-PROVIDER ratification items (canonical notification contract, per-country provider selection, delivery-status auditing) remain open for Track 6.
