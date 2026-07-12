@@ -14745,3 +14745,12 @@ The subscription slice (SI-001/P-011; CDM v1.2 §4.7 subscriptions + §4.8 Subsc
 - The Resend account also shows unrelated marketing sends from `care@em.heroshealth.com` — the domain + account are production-active for Heros; the staging passcode sender coexists cleanly.
 
 **State:** staging now runs `EMAIL_PROVIDER=resend` with `AUTH_DEV_OTP_ECHO=true` still on (echo + email coexist during transition; drop the echo whenever testers no longer need it). Rollback: flip `EMAIL_PROVIDER=noop` in `infra/staging/.env` + recreate app. The SI-EMAIL-DELIVERY-PROVIDER ratification items (canonical notification contract, per-country provider selection, delivery-status auditing) remain open for Track 6.
+
+## Addendum 354 — 2026-07-12 — dev echo dropped: staging email+PIN auth now runs production-shaped (email-only passcode delivery)
+
+**`AUTH_DEV_OTP_ECHO=false` set on staging** (Evans's "drop the dev echo"; .env backed up as `.env.bak-echodrop`, app recreated, container env confirmed).
+
+- **Verified live:** `recovery/pin/start` for `media@heroshealth.com` returns a bare `{"status":"ok"}` — no `dev_passcode` — and Resend shows the "Your Heros Health PIN reset code" email **delivered** at the same second (15:49:09Z). This also live-proves the second template (pin_recovery); registration was proven in Addendum 353. App log: zero failure/skip markers.
+- **Staging auth is now production-shaped for email+PIN:** the passcode reaches the user ONLY via email, exactly as production will behave.
+- **Known consequence (flagged at execution):** the echo flag also gated the phone-OTP `dev_otp`; with no SMS provider wired, **phone-OTP login on staging is now unusable** (OTP issued + discarded). Unblocking it is the open SMS-provider SI (Telnyx MCP is connected as a candidate provider when that work is picked up). Email+PIN is the working staging auth path.
+- Rollback: set `AUTH_DEV_OTP_ECHO=true` in `infra/staging/.env` + recreate app.
