@@ -14787,3 +14787,41 @@ The subscription slice (SI-001/P-011; CDM v1.2 §4.7 subscriptions + §4.8 Subsc
 **Then (mine, ~2 min once approved):** flip `SMS_PROVIDER=telnyx` in `infra/staging/.env` (+ set `TELNYX_MESSAGING_PROFILE_ID` if using pool sending), recreate app, and live-verify a real OTP text to a destination number Evans provides. Rollback stays `noop`.
 
 **State unchanged at runtime:** staging auth is email+PIN (Resend live) + phone-OTP wired-but-noop. This addendum changes no behavior; it records the staged key + the 10DLC blocker for continuity.
+
+## Addendum 358 — 2026-08-30 — PATH A RATIFIED (Path α) + Pilot 1 substrate work landed
+
+**Ratifier decision:** Evans 2026-08-30 chat message *"go with your recommendation and continue working nonstop"* ratifies Path α — Option A (synthetic-only closed beta as Pilot 1; real-PHI Ghana chronic-care as Pilot 2 gated on Phase E/F) with Codex Pass-2's three additional gates baked in as first execution work (not required as pre-ratification revision).
+
+**Cycle context:** Post-2026-07-12 (Addendum 357), Evans requested a completion assessment. Path A recommendation surfaced 2026-08-30. First runbook draft (commit e86719f, PATH_A_PILOT_COMPLETION_RUNBOOK.md) triggered Codex R1 NO-SHIP finding: Hetzner staging is synthetic-data-only; loading real PHI is a compliance violation before pilot starts. STOP + escalate per hard-floor item 6 → Engineering Review Request filed (bc769d2 → c84fe51) with dual-recommendation cycle. Codex Pass-2 conditionally concurred with Option A over B/C, flagging three additional gates: (1) "zero compliance exposure" too categorical → enforceable synthetic-only technical gates; (2) Pilot 2 prereqs missed cross-border + full subprocessor authorization; (3) Pilot 1 needs measurable exit criteria + coverage matrix + workflow-rehearsal framing (not clinical validation).
+
+**Landed under Path α ratification (7 doc changes; branch feat/path-a-option-a-ratified-pilot-1-substrate):**
+1. PATH_A_PILOT_COMPLETION_RUNBOOK.md — REWRITTEN with Pass-2 gates baked in (Pilot 1 workflow rehearsal frame; Pilot 2 as separate gated pilot)
+2. PILOT_1_TO_PILOT_2_GATING_CHECKLIST.md — 10 gates, exhaustive: exit criteria, PHI-capable substrate, vendor procurement per subprocessor (BAAs + Ghana counsel approval), Ghana regulatory (DPC + counsel-approved cross-border basis), US regulatory (if any US-person or US-route), operational readiness (24/7 on-call + IR runbook full version + tabletop rehearsal), clinical safety (SI-013 Ghana helplines + SI-014 Twi coverage), payment, consent, ratifier decision
+3. PII_SCREENING_AND_LOG_REDACTION_SPEC.md — 5-layer defense-in-depth: input screener (regex + LLM), output screener, log redaction, AI-vendor payload sanitization, backup redaction. Plus env-purge script spec.
+4. PILOT_1_SYNTHETIC_PARTICIPANT_CONSENT.md — plain-English one-pager + 10 consent statements; off-repo signed-copy storage
+5. PILOT_1_COVERAGE_MATRIX.md — 10 scripted scenarios (S1-S10) + 20 adversarial scenarios (A1-A20); success + abort thresholds; independent issue capture requirement (≥3 non-engineering reporters); Ghana-population representativeness limitations explicit
+6. PILOT_1_INCIDENT_RESPONSE_MINI_RUNBOOK.md — named roles (Evans owner + Claude technical), 5 incident categories, rehearsed STOP procedure, forensic-evidence preservation
+7. Engineering-Review-Request-Path-A-Compliance-Reframe-2026-08-30.md — updated with Pass-2 synthesis appended + ratifier decision recorded
+
+**Autonomous-work mode active:** Evans authorized "continue working nonstop" alongside ratification. Auto-proceed rule active for Pilot 1 substrate implementation + parallel Track 5 (Pilot 2 substrate) initiation. STOP conditions unchanged (hard-floor items 1-6 in CLAUDE.md).
+
+**Next autonomous cycles (in order, parallelizable via subagent orchestration where the surface admits):**
+- Sprint 1.1a-d: PII-screener implementation (Layers 1+2), each PR through Codex convergence
+- Sprint 1.2a-c: Log-redaction (Layer 3) + AI-vendor sanitization (Layer 4) + backup redaction (Layer 5)
+- Sprint 1.3: env-purge script + baseline-seed migration
+- Sprint 1.4: adversarial test suite for the 5 layers
+- Sprint 1.5: Codex Phase-D corpus-wide 42702 sweep resume (paused-work from Addendum 345 continuation)
+- Sprint 2 kickoff (gated on Evans O-2 signal: AWS root account + Ghana counsel engagement): Track 5 Pilot 2 substrate — AWS Terraform skeleton + Ghana counsel prep + HIPAA BAA vendor inventory + SIEM design + IR full runbook draft
+
+**Operator gates surfaced for Evans (Path α unblocked; these unblock Pilot 1 execution):**
+- O-1: Pilot 1 participant recruitment (~10 volunteers, signed synthetic-consent, mix of Heros team + friendly clinicians + contracted UX researchers with ≥3 non-engineering)
+- O-2: Track 5 kickoff signal (AWS account provisioning path + Ghana counsel engagement + region selection deferring to counsel + budget approval)
+- O-5: VPS reachability confirmation (curl to 87.99.159.214.sslip.io/* timed out from Claude's machine 2026-08-30; Evans to verify from browser or own network)
+
+**Deferred to Pilot 2 (unchanged from Addendum 357):**
+- O-3: Telnyx 10DLC (Pilot 1 uses synthetic identities + email-only auth; 10DLC becomes Pilot 2 gate)
+- O-4: ghana.heroshealth.com DNS cutover (Pilot 2 gate; Pilot 1 stays on sslip.io)
+
+**Cockpit:** rev 462 → 463 (Path α ratification + 7-doc drop landed as one PR under Codex convergence).
+
+**Codex adversarial-review status:** R1 on original runbook completed (NO-SHIP; drove escalation). Pass-2 synthesis on ERR completed (conditional concurrence). R1 on the 7-doc Path α landing being invoked in this cycle.
