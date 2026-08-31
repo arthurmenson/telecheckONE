@@ -14825,3 +14825,63 @@ The subscription slice (SI-001/P-011; CDM v1.2 §4.7 subscriptions + §4.8 Subsc
 **Cockpit:** rev 462 → 463 (Path α ratification + 7-doc drop landed as one PR under Codex convergence).
 
 **Codex adversarial-review status:** R1 on original runbook completed (NO-SHIP; drove escalation). Pass-2 synthesis on ERR completed (conditional concurrence). R1 on the 7-doc Path α landing being invoked in this cycle.
+
+## Addendum 359 — 2026-08-30 — PATH α PILOT-1 SUBSTRATE PR MERGED (22-round Codex convergence; APPROVE)
+
+**Merge:** telecheck-app `1974ef3` — merges branch `feat/path-a-option-a-ratified-pilot-1-substrate` into `main`. 7 documentation files landed (1452 insertions):
+
+1. `PATH_A_PILOT_COMPLETION_RUNBOOK.md` — RATIFIED, Pass-2 gates baked in
+2. `PILOT_1_TO_PILOT_2_GATING_CHECKLIST.md` — 10 exhaustive gates for Pilot 2 authorization
+3. `PII_SCREENING_AND_LOG_REDACTION_SPEC.md` — 5-layer defense-in-depth + env-purge + incident scripts + three-state cohort classification + fail-closed at every enforcement surface
+4. `PILOT_1_SYNTHETIC_PARTICIPANT_CONSENT.md` — plain-English + explicit subprocessor disclosure (Anthropic + Resend + Hetzner)
+5. `PILOT_1_COVERAGE_MATRIX.md` — 10 scripted (S1-S10) + 21 adversarial (A1-A20 + A6b) scenarios + exit gate
+6. `PILOT_1_INCIDENT_RESPONSE_MINI_RUNBOOK.md` — named owner + STOP procedure + fail-closed forensic capture + manifest-bound purge + explicit incident closure
+7. `Engineering-Review-Request-Path-A-Compliance-Reframe-2026-08-30.md` — ratifier decision record + Pass-1 R1 NO-SHIP + Pass-2 conditional concurrence + Evans Path α ratification
+
+**Codex convergence trajectory (22 rounds → APPROVE):**
+- R1 (on original runbook): 1 CRITICAL + 3 HIGH — NO-SHIP → escalate per hard-floor item 6 → ERR filed → Pass-2 conditional concurrence on Option A → Evans ratifies Path α
+- R1 (on 7-doc landing): 4 HIGH → R2 fixes (PII layer no external LLM classification, encrypted forensic evidence, ⬜ status legend, full processor inventory)
+- R3: 3 HIGH → R4 fixes (Low-conf NER blocks AI-bound + Sprint 1 plan Anthropic → local NER + single fail-closed capture script)
+- R4: 2 HIGH → R5 fixes (env-purge no raw capture + structural verification public-key-only)
+- R5: 1 HIGH → R6 fix (manifest-bound purge two modes + freshness + identity + single-use)
+- R6: 1 HIGH → R7 fix (incident-lock file machine-enforced state + explicit disposition to clear)
+- R7: 1 HIGH → R8 fix (single-writer discipline for incident-logs; lock preserved from all wipes)
+- R8: 1 HIGH → R9 fix (audit-event attestation not manifest mutation; stale wipe refs removed)
+- R9: 1 HIGH → R10 fix (PII spec stale contradictions resolved)
+- R10: 1 HIGH → R11 fix (Category 5 uses defined incident-mode flow)
+- R11: 2 HIGH + 1 MED → R12 fix (audit_records preserved; A6 local-NER; consent subprocessor disclosure)
+- R12: 1 HIGH → R13 fix (purge allowlist reconciled against migrations 000-079 + schema-drift + canary tests)
+- R13: 1 HIGH → R14 fix (purge classification is POLICY; Sprint 1.3 owns FK-graph resolution)
+- R14: 1 HIGH → R15 fix (FK-aware atomic transaction; scoped-delete in policy from start)
+- R15: 1 HIGH → R16 fix (accounts is scoped-delete not allowlist)
+- R16: 1 HIGH → R17 fix (accounts scoping uses pilot_1_cohort_marker not role/type)
+- R17: 1 HIGH → R18 fix (markerless explicit outcome + marker-integrity CI + Day-0 gate)
+- R18: 1 HIGH → R19 fix (marker-integrity wired across 4 enforcement surfaces)
+- R19: 1 HIGH → R20 fix (fail-closed containment: schema constraint + rollback + remediation)
+- R20: 1 HIGH → R21 fix (three-state cohort classification: participant/baseline/unclassified — architectural close-out)
+- R21: 1 HIGH → R22 fix (Sprint 1.3 enforcement section reconciled to three-state contract)
+- R22: **APPROVE — no material findings. Ship.**
+
+**Cockpit:** rev 463 → 464.
+
+**Autonomous-work mode:** continues under Evans's 2026-08-30 "continue working nonstop" authorization. Auto-proceed rule active.
+
+**Next autonomous cycles (Sprint 1 implementation begins):**
+
+1.1a — Layer 1 input screener regex core (`src/lib/pii-screener/index.ts`)
+1.1b — Layer 1 local NER classifier (Presidio / spaCy / Node-native)
+1.1c — Layer 1 wired to remaining routes
+1.1d — Layer 2 output screener
+1.2a — Layer 3 log-redaction extension
+1.2b — Layer 4 AI-vendor sanitization
+1.2c — Layer 5 backup redaction wrapper
+1.3 — Env-purge + incident-scripts package + three-state cohort classification (migration adding cohort_classification column with NOT NULL + CHECK) + verify-pilot-1-baseline.sh + pilot-1-marker-remediation.sh + FK-graph purge plan + schema-drift + preserved→purged FK-edge + seeded-canary + attestation-transaction CI tests
+
+Each ships as separate PR through Codex convergence.
+
+**Operator gates surfaced for Evans (unchanged from Addendum 358):**
+- O-1 Pilot 1 participant recruitment (~10 volunteers, 3+ non-engineering)
+- O-2 Track 5 kickoff signal (AWS + Ghana counsel + region + budget)
+- O-5 VPS reachability confirmation
+
+**Deferred to Pilot 2 (unchanged):** O-3 Telnyx 10DLC + O-4 DNS cutover.
