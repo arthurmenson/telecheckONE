@@ -15039,3 +15039,63 @@ PII spec §Layer 1 rewritten with the four-route table + client-side gap · Runb
 **Sprint 1 remaining:** 1.1d (Layer 2 output screener) · 1.2a-c (Layer 3/4/5) · 1.3 phase B (env-purge + incident scripts + baseline-seed + CI suite) · 1.4 (adversarial suite)
 
 **Operator gates:** O-1 participant recruitment · O-2 Track 5 kickoff · O-5 VPS reachability · **NEW: client-side screener decision (Track 4 build vs. accept interim training-only risk)**
+
+## Addendum 364 — 2026-08-31 — SPRINT 1.1d MERGED: Layer 2 egress screener + audit_bound route class (Codex R2 APPROVE)
+
+**Merge:** telecheck-app `2eda6dd` — merges `feat/pilot-1-1d-layer2-output-screener` into `main`. 6 files, 531 insertions.
+
+### Part A — Layer 2 egress screener (the planned work)
+
+Egress inventory established with the same discipline as the 1.1c ingress sweep; again the assumed surface was wider than the real one:
+
+| Egress surface | Content | Screenable? |
+|---|---|---|
+| Mode 1 `response_text` | model-generated prose | ✅ wired |
+| async-consult reads | pre-encrypted KMS envelopes (I-026) | ❌ ciphertext |
+| admin dashboards (3) | aggregate counts | ❌ no free-text echo |
+| Mode 1 crisis sentinel | fixed server constant | ❌ not user-derived |
+
+**Threat model clarified.** Layer 2 is NOT about participant PII round-tripping — Layer 1 blocks that at ingress (`ai_bound` blocks ANY hit), so the provider never sees it. Verified independently that conversation history is **not** replayed to the provider: the prompt is `messages: [{ role: 'user', content: rawMessageText }]`, current turn only, so crisis-path-persisted PII cannot leak forward into a later completion either.
+
+What Layer 2 defends against is **the model emitting PII-shaped text of its own accord** — a hallucinated name, a plausible SSN, an invented email. Not real PII, but indistinguishable from it to the reader and hazardous if it coincides with a real identifier.
+
+**REDACT-ONLY, never block.** At egress the LLM call has already happened and rows are written; blocking would cost the participant their turn while leaving upstream state intact. `screenOutput()` deliberately exposes no `action` field — outcomes are redacted-or-not, pinned by test. Both `responseText` and `persistedAssistantMessage` receive the redacted output so a later reader of the stored turn sees exactly what the participant saw.
+
+### Part B — `audit_bound` route class (gap found during 1.1d scoping)
+
+`POST /v1/admin/templates/:id/reviews/:id/decision` accepts plaintext `decision_payload` (`review_notes`, `required_revisions[]`, forward-extensible). **The Sprint 1.1c sweep missed it** because that sweep searched patient-facing routes; this one is reviewer-facing. The payload is echoed verbatim into the Category B audit record.
+
+**Why a new class rather than `internal`:** the audit chain is append-only per I-003, and the Pilot 1 env-purge allowlist explicitly **PRESERVES** `audit_records` (it carries the `env.purge.executed` attestation). PII reaching an audit row therefore **survives the environment purge entirely** — the capture-then-purge mitigation Pilot 1 relies on everywhere else does not apply. Redact-inline is unavailable too: rewriting an audit payload would itself violate I-003.
+
+So `audit_bound` blocks on ANY hit, high or low confidence, before the row is written. Reason code `match_any_audit_bound`. Strictly stricter than `internal` for identical input — pinned by test.
+
+### Complete decision matrix (all three classes)
+
+| Class | Any hit | Rationale |
+|---|---|---|
+| `ai_bound` | BLOCK | reaches external provider, no BAA |
+| `audit_bound` | BLOCK | reaches append-only, purge-exempt storage |
+| `internal` + high | BLOCK | persists to DB, but purgeable |
+| `internal` + low only | REDACT | preserves workflow; purgeable |
+
+### Codex convergence (2 rounds → APPROVE)
+
+**R1: 1 HIGH — two real bypasses into purge-exempt storage.**
+1. **Object KEYS unscreened** — the walker used `Object.values()`, so `{ "john.smith@example.com": "ok" }` carried PII in the key entirely unscreened.
+2. **Depth exhaustion failed OPEN** — past the bound the walker returned `[]`, silently under-screening. My comment had claimed downstream wrapper shape-validation would catch over-deep payloads; Codex checked and no such validation exists — the wrapper persists `p_decision_payload` as JSONB directly.
+
+**Fixes:** walk `Object.entries()` emitting keys alongside recursed values; throw `DecisionPayloadTooDeepError` past the bound, caught by the handler → 422 with actionable guidance. Walker, error class, and depth constant exported so bypass regressions test the walker directly.
+
+**R2: APPROVE** — *"both audit_bound bypasses are closed. Object keys are screened alongside recursively collected values, and traversal beyond the depth limit throws before persistence; the handler converts that failure to 422. The focused regression suite pins key collection, nested keys, depth-bound failure, and PII detection."*
+
+### Tests
+
+`audit_bound`: high-confidence block · low-confidence block · strictly-stricter-than-`internal` comparison · clean prose passes.
+`screenOutput`: high/low-confidence redact · never-blocks shape assertion · clean verbatim passthrough · empty string · hallucinated-PERSON redaction.
+Bypass regressions (new file): traversal exhaustiveness incl. keys and nested-in-array keys · depth fail-closed at/past bound · end-to-end key + nested-value blocking.
+
+**Cockpit:** rev 468 → 469.
+
+**Sprint 1 remaining:** 1.2a-c (Layer 3 log-redaction / Layer 4 AI-vendor sanitization / Layer 5 backup redaction) · 1.3 phase B (env-purge + incident scripts + baseline-seed + CI suite) · 1.4 (adversarial suite)
+
+**Operator gates:** O-1 participant recruitment · O-2 Track 5 kickoff · O-5 VPS reachability · client-side screener decision (Track 4 build vs. accept interim training-only risk)
