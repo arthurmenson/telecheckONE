@@ -14930,3 +14930,57 @@ R9 explicitly categorized R8-and-later analyzer refinements as category-(b) impl
 **Cockpit:** rev 464 → 465.
 
 **Operator gates status:** unchanged from Addendum 359 (O-1 pilot participant recruitment, O-2 Track 5 kickoff signal, O-5 VPS reachability confirmation).
+
+## Addendum 361 — 2026-08-31 — SPRINT 1.3 PHASE A MERGED: cohort_classification schema + verify-baseline gate (Codex R3 APPROVE)
+
+**Merge:** telecheck-app `a54bb91` — merges branch `feat/pilot-1-3-envpurge-cohort` into `main`. 3 files, 349 insertions.
+
+**Files landed:**
+- `migrations/080_pilot_1_cohort_classification.sql` — adds `accounts.cohort_classification` NOT NULL + CHECK constraint (participant/baseline/unclassified); backfill splits by account_type (clinician/tenant_admin/platform_admin/service → baseline; patient/delegate → unclassified forcing operator review); no DEFAULT (future INSERTs must specify explicitly); two partial indexes on the hot queries; DO block enforces the invariant
+- `migrations/rollback/080_rollback.sql` — drops column + indexes with data-loss caveat
+- `scripts/verify-pilot-1-baseline.sh` — three-surface cohort integrity gate (Day-0 checklist item + env-purge preflight + provisioning post-hook); JSON + human output; fail-closed if migration 080 not applied
+
+**Codex convergence (3 rounds → APPROVE):**
+- R1: 1 HIGH — blanket-baseline backfill violated the ratified operator-review contract for pre-existing patient/delegate rows
+- R2: fix applied; hung mid-review at "stress-testing whether the invariant is enforced for future writes"
+- R3 retry (tight prompt, no-test): **APPROVE** — "migration 080 has no DEFAULT and enforces both NOT NULL and the three-value CHECK, so omitted or invalid classifications fail. The verifier's COUNT query fails closed on psql errors and, under the specified cross-tenant operator DSN, evaluates all relevant accounts without a false-green path."
+
+**Sprint 1.3 phase B follow-ups (separate PR):** env-purge scripts (routine-reset + incident-id modes), incident-capture / incident-clear / incident-log-gc / pilot-1-close-wipe / pilot-1-marker-remediation / pii-scrub, pilot-1-baseline-seed.sql with canaries, full CI test suite (schema-drift + preserved→purged FK-edge + seeded-canary + attestation-transaction).
+
+**Cockpit:** rev 465 → 466.
+
+## Addendum 362 — 2026-08-31 — SPRINT 1.1b MERGED: Layer 1 local NER via wink-nlp (Codex R6 APPROVE after 6-round convergence)
+
+**Merge:** telecheck-app `3db62b7` — merges branch `feat/pilot-1-pii-screener-ner-wink` into `main`. 5 files, 381 insertions.
+
+**Files landed:**
+- `src/lib/pii-screener/ner.ts` (new) — wink-nlp entity classifier with fail-closed offset derivation
+- `src/lib/pii-screener/index.ts` — extended pipeline: regex → NER → decision; catches NerOffsetDerivationError as whole-input high-confidence block
+- `src/lib/pii-screener/index.test.ts` — NER coverage tests (A1/A5/A6/A6b) + SAFETY allowlist extension for ner.ts (wink-nlp + wink-eng-lite-web-model only)
+- `package.json` — wink-nlp ^2.4.0 + wink-eng-lite-web-model ^1.6.0 as production dependencies
+
+**Design (Evans-ratified 2026-08-31 as "B"):** wink-nlp with wink-eng-lite-web-model
+- MIT-licensed, no native bindings, ~4MB model
+- Runs entirely in Node — matches SAFETY invariant
+- Covers PERSON / GPE / LOCATION / DATE / ORG entity types
+
+**Confidence classification:** PERSON → high_confidence; GPE / LOCATION / DATE / ORG → low_confidence
+
+**Codex convergence (6 rounds → APPROVE):**
+- R1: 1 MEDIUM — A6b test accepted pass OR redact (broken NER wouldn't fail)
+- R2: hung mid-review on span semantics
+- R3 retry: interim APPROVE + concern that wink-nlp span→char offset semantics were the merge-critical risk; hung
+- R4: refactored to indexOf lookup → 1 HIGH — indexOf misassigns entity to wrong identical earlier substring (Rose is a flower / Patient Rose has HIV example)
+- R5: replaced with token-span+slice-verify → 1 HIGH — `its.span` is NOT defined for tokens (only for docs/sentences/entities); every entity was being skipped, disabling NER
+- R6: reconstruct token char offsets deterministically from `its.precedingSpaces` + `its.value`; verify text.slice(start,end)===value; fail-closed via NerOffsetDerivationError caught in screenInput as whole-input high-confidence block → **APPROVE** — "token offsets correctly reconstructed in UTF-16 character coordinates, entity spans map through inclusive token indices, slice verification prevents incorrect localization, derivation mismatch becomes whole-input high-confidence hit blocking both routes."
+
+**Cockpit:** rev 466 → 467.
+
+**Sprint 1 slate remaining (after this landing):**
+- 1.1c — Layer 1 wired to remaining routes (chat.ts + async-consults intake + decision)
+- 1.1d — Layer 2 output screener
+- 1.2a-c — Layer 3/4/5 (log-redaction + AI-vendor sanitization + backup redaction)
+- 1.3 phase B — env-purge scripts + incident-scripts + pilot-1-baseline-seed + full CI test suite
+- 1.4 — Adversarial test suite for the full 5-layer defense
+
+**Operator gates status:** unchanged (O-1 pilot participant recruitment, O-2 Track 5 kickoff signal, O-5 VPS reachability).
