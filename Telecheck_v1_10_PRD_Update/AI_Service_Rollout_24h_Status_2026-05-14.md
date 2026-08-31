@@ -14885,3 +14885,48 @@ Each ships as separate PR through Codex convergence.
 - O-5 VPS reachability confirmation
 
 **Deferred to Pilot 2 (unchanged):** O-3 Telnyx 10DLC + O-4 DNS cutover.
+
+## Addendum 360 — 2026-08-31 — SPRINT 1.1a MERGED: Layer 1 PII screener regex core (Codex 10-round convergence → APPROVE)
+
+**Merge:** telecheck-app `0445186` — merges branch `feat/pilot-1-pii-screener-regex-core` into `main`. 3 files, 1338 insertions.
+
+**Files landed:**
+- `src/lib/pii-screener/patterns.ts` — regex pattern library (9 patterns: us_ssn, ghana_card, us_passport [context-bound], credit_card [Luhn-validated], email, us_phone, ghana_phone, ipv4, ipv6, medical_record_number)
+- `src/lib/pii-screener/index.ts` — `screenInput(text, routeClass) → ScreeningResult` — decision-neutral library returning block/redact/pass
+- `src/lib/pii-screener/index.test.ts` — unit + safety tests, including a shared `checkSafety()` static analyzer used by both production-source assertion and 36-case negative-fixture regression suite
+
+**Decision matrix implemented (per PII spec §Layer 1):**
+- `ai_bound` route + any hit → BLOCK (422)
+- `internal` route + high-confidence hit → BLOCK
+- `internal` route + low-confidence-only → REDACT INLINE with `[REDACTED:<label>]`
+
+**SAFETY invariant enforced by multi-layer static + runtime guard:**
+- AST-based strict import allowlist (per-file authorized specifiers only)
+- Element access on global-like receivers (globalThis/self/window/global/Reflect/Object) — rejected regardless of key form
+- Reflect.* / Object.getOwnPropertyDescriptor(s)/entries/values on global-like — rejected
+- Category-aware alias taint sets (globalRootAliases + reflectAliases + objectAliases) with fixed-point iteration for multi-hop propagation
+- Runtime traps on fetch/WebSocket/EventSource/XMLHttpRequest asserting zero calls
+
+**Codex convergence trajectory (10 rounds → APPROVE):**
+- R1: 2 HIGH + 3 MEDIUM defects on shipped patterns (Ghana phone `\b` bug on `+` boundary; SSN compact form → low-confidence passport classification; passport regex over-blocked ordinary text; credit-card regex included trailing separator; SAFETY test only checked return-type sync)
+- R2: 4/5 accepted; import-boundary test was a no-op (defined prohibited list, never checked it) → R3 fix
+- R3: added regex import blacklist → R4 finding: blacklist bypassable via bare-name / comment-in-decl / novel SDK
+- R4: shifted to AST-based strict allowlist → R5 finding: fetch as bare global bypasses import check
+- R5: extended checker to prohibited-globals identifier detection + runtime traps → R6 finding: computed access (globalThis['fetch'], template-literal keys) bypasses identifier-only check
+- R6: fail-closed on any element access rooted at global-like receivers → R7 finding: single-hop alias tracking; multi-hop bypasses
+- R7: variable-binding taint pre-pass → R8 finding: aliased Reflect/Object not tracked by category; alias taint not transitive
+- R8: category-aware taint (3 sets) + fixed-point iteration → R9 finding: **one actual shipped-code defect remaining — IPv6 pattern missing per spec**
+- R9: IPv6 added → R10 **APPROVE** (retry after sandbox hang; explicit "no test execution" prompt)
+
+R9 explicitly categorized R8-and-later analyzer refinements as category-(b) implementer-hygiene defects scoped to Sprint 1.1b (NER integration) / 1.1c (route wiring) / Track 6 (audit ratification), not Sprint 1.1a merge blockers.
+
+**Sprint 1 next slate (unchanged; each PR through Codex convergence):**
+- 1.1b — Local NER classifier (Presidio / spaCy / Node-native; must satisfy the same SAFETY invariant; extends allowlist via its own PR)
+- 1.1c — Layer 1 wired to remaining routes (chat.ts + async-consults intake + decision)
+- 1.1d — Layer 2 output screener
+- 1.2a-c — Layer 3/4/5 (log-redaction + AI-vendor sanitization + backup redaction)
+- 1.3 — Env-purge + incident-scripts + cohort_classification migration + verify-baseline + remediation script + full CI test suite
+
+**Cockpit:** rev 464 → 465.
+
+**Operator gates status:** unchanged from Addendum 359 (O-1 pilot participant recruitment, O-2 Track 5 kickoff signal, O-5 VPS reachability confirmation).
