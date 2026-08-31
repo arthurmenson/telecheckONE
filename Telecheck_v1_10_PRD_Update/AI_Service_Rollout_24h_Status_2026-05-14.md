@@ -14984,3 +14984,58 @@ R9 explicitly categorized R8-and-later analyzer refinements as category-(b) impl
 - 1.4 — Adversarial test suite for the full 5-layer defense
 
 **Operator gates status:** unchanged (O-1 pilot participant recruitment, O-2 Track 5 kickoff signal, O-5 VPS reachability).
+
+## Addendum 363 — 2026-08-31 — SPRINT 1.1c MERGED: Layer 1 wired into Mode 1 chat; client-side screening gap surfaced (Codex R2 APPROVE)
+
+**Merge:** telecheck-app `a77a36a` — merges `feat/pilot-1-1c-screener-route-wiring` into `main`. 6 files, 257 insertions.
+
+### Material architectural finding — ONE screenable route, not four
+
+The PII spec (authored during the Path α ratification cycle) enumerated four routes for Layer 1 screening. Sprint 1.1c implementation established that only **one** exposes plaintext to the server:
+
+| Route | Free-text posture | Server-side screenable? |
+|---|---|---|
+| `POST /v0/ai/chat` (Mode 1) | plaintext `message_text` | ✅ wired this PR |
+| `POST /v1/async-consults/:id/intake` | pre-encrypted 8-field KMS envelope (I-026) | ❌ ciphertext only |
+| `POST /v1/async-consults/:id/decision` | pre-encrypted 8-field KMS envelope (I-026) | ❌ ciphertext only |
+| `POST /v1/async-consults/:id/follow-up-messages` | pre-encrypted 8-field KMS envelope (I-026) | ❌ ciphertext only |
+
+The async-consult family encrypts client-side per I-026. The backend receives ciphertext + DEK id + IV + tag and stores it verbatim. There is no plaintext for a server-side screener to inspect — the architecture working as designed, not a wiring gap.
+
+**Consequence:** screening for those three routes must run **client-side before encryption** in `telecheck-patient-app` (intake + follow-up composer) and `telecheck-clinician-console` (decision-rationale composer). **That is Track 4 work.** Recorded in the runbook as a Day-0-blocking gate item — it blocks *unless the ratifier explicitly accepts the interim risk* (participant training as the sole control for those three routes). **This is a live operator decision for Evans.**
+
+### Ordering invariant (non-negotiable, test-pinned)
+
+Screener runs **AFTER** the I-019 crisis gate, **BEFORE** Stage-2 validation / persistence / LLM call.
+
+- *After the crisis gate:* I-019 / FLOOR-013 is platform-floor — crisis detection must run on raw text and must not be suppressible. A distressed participant who also typed real PII still gets the crisis sentinel + Category A audit. The crisis path makes no LLM call (AI_LAYERING §6 crisis-write exception), so no PII crosses the provider boundary on it.
+- *Before persistence + LLM call:* a blocked turn never persists and the provider never sees the text.
+
+Route class `ai_bound` → ANY hit (high OR low confidence) blocks.
+
+**Accepted residual risk (documented + test-pinned):** a crisis-positive turn that also contains real PII persists the raw `user_message` into `ai_mode1_conversation_turn_admission`. The crisis floor outranks the PII block by design. Mitigations: Layer 3 log redaction, Layer 5 backup redaction, IR runbook Category 1 CRITICAL capture→purge. Test PII-6 asserts BOTH halves — the sentinel surfaces AND the raw message persists verbatim — so a future scrubbing change breaks the test and forces the spec paragraph to be updated in the same PR.
+
+### Implementation
+
+- 422 Unprocessable Entity on block; body carries `PARTICIPANT_BLOCK_MESSAGE`, never the input
+- Log line records pattern IDs + hit count only (Layer 3 discipline)
+- `LOG_REDACT_PATHS` extended with `req.body.message_text` as defense-in-depth (verified: no active leak — Fastify's default serializer does not emit `req.body`, no custom serializers, no handler logs the raw text)
+
+### Tests — Group PII (7 cases)
+
+PII-1 SSN → 422 · PII-2 email → 422 · PII-3 NER PERSON → 422 · PII-4 low-confidence IPv4 → 422 (ai_bound blocks ANY hit) · PII-5 clean → 200 · PII-6 crisis+PII → 200 sentinel + raw persisted · PII-7 422 body does not echo input
+
+### Codex convergence (2 rounds → APPROVE)
+
+- R1: 1 HIGH — PII-5/PII-6 minted JWTs for unseeded `acct_${ulid()}`; both are success paths reaching persistence where `patient_id` has an accounts FK, so neither could exercise its assertions. Codex additionally recommended PII-6 assert the persisted-row half of the tradeoff.
+- R2: **APPROVE** — *"PII-5 and PII-6 now use valid persisted-account fixtures. PII-6 genuinely pins both crisis-over-PII outcomes: the crisis sentinel wins instead of a 422, and the complete crisis-plus-PII input is persisted verbatim as the documented residual risk."*
+
+### Doc updates
+
+PII spec §Layer 1 rewritten with the four-route table + client-side gap · Runbook §Technical gates: backend portion complete, new ⬜ Track-4 item that blocks Day-0 · Coverage matrix A2/A4/A5 revised to client-side scenarios with new A2b/A4b/A5b Mode-1 equivalents + A5c ordering-invariant row
+
+**Cockpit:** rev 467 → 468.
+
+**Sprint 1 remaining:** 1.1d (Layer 2 output screener) · 1.2a-c (Layer 3/4/5) · 1.3 phase B (env-purge + incident scripts + baseline-seed + CI suite) · 1.4 (adversarial suite)
+
+**Operator gates:** O-1 participant recruitment · O-2 Track 5 kickoff · O-5 VPS reachability · **NEW: client-side screener decision (Track 4 build vs. accept interim training-only risk)**
