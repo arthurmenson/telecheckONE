@@ -77,9 +77,31 @@ Two things should be explicit in whatever is ratified, because they are true und
 
 ---
 
+## Three-way outcome (dual-recommendation, two-pass)
+
+| View | Position |
+|---|---|
+| **Claude** | Option C — ship #279 now, structural control as scoped follow-on |
+| **Codex Pass-1** (source-first, no Claude framing) | Option C — ship regex-only, add structural prohibition on free text in logs. Independently enumerated the same A/B/C plus a D (narrow screening at risky seams). |
+| **Codex Pass-2** (contrast-and-synthesize) | **C-prime** — same architecture, different sequencing: the structural control is a merge *prerequisite*, not follow-on |
+
+**Unanimous on the architectural question.** All three views reject adding NER to the log hot path. The governing spec's ratified "Regex-only — NER is deliberately NOT used at Layer 3" decision **stands unamended**. There is therefore no architectural amendment for the ratifier to approve — the hard-floor item 6 escalation resolves in favour of the status quo spec.
+
+Worth recording: Pass-1's independent recommendation **contradicted Codex's own adversarial finding** issued minutes earlier, which had said NO-SHIP until Layer 3 gains unstructured-PII coverage. Pass-2 reckoned with that divergence explicitly and concluded its adversarial position was right about ship status but wrong if read as requiring NER. This is the source-first framing working as intended: the same reviewer reached a different conclusion when it read the source and the question without a defect-hunting frame.
+
+**The one disagreement was sequencing, and Claude concedes it.** Pass-2:
+
+> Option C as written neither supplies unstructured-PII detection nor enforces the boundary offered as its substitute. Claude correctly reframes NER as a probabilistic hot-path solution to a structurally preventable problem, but that reasoning supports landing the structural control *first*; it does not justify merging without it.
+
+That is correct and it is a genuine hole in Claude's framing. "Merge now, enforce later" leaves a window in which the acknowledged HIGH is mitigated by nothing — the audit assertion stays an assertion. Claude's own argument for a deterministic control over a probabilistic one applies just as much to *when* the control lands as to *what* it is.
+
+**Adopted path — C-prime.** Layer 3 stays regex-only. The machine-enforced no-user-controlled-free-text logging boundary is built and stacked into PR #279, with acceptance tests, before merge. The async-consult client-side screening gap remains a separate Pilot 1 startup-authorization gate and Layer 3 is not represented as compensating for it.
+
+Because all three views converge on this path once the sequencing correction is accepted, and because it is strictly more conservative than either alternative — more work before merge, nothing foreclosed — it proceeds under the auto-proceed rule as a post-action report rather than a pre-action ask.
+
 ## Ratifier decision
 
-*(to be completed by Evans + Engineering Lead)*
+*(Evans + Engineering Lead — confirm or override the adopted path)*
 
 **Decision:**
 
