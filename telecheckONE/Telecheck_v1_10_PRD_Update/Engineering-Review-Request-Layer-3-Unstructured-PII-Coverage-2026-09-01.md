@@ -77,6 +77,27 @@ Two things should be explicit in whatever is ratified, because they are true und
 
 ---
 
+---
+
+## ⚠️ AMENDMENT 2026-09-01 — a central premise of this document is FALSE
+
+**Everything below this heading was written on the assumption that Layers 1 and 2 detect unstructured PII via local NER. They do not. The reasoning that follows is therefore unsound where it relies on that, and the recommendation it reaches must not be actioned as written.**
+
+Verified by direct execution: `src/lib/pii-screener/ner.ts` filters `doc.entities()` for `PERSON` / `GPE` / `ORG`, but `wink-eng-lite-web-model` emits only pattern-based entity types (`DATE`, `MONEY`, `TIME`, `CARDINAL`, `ORDINAL`, `PERCENT`, `EMAIL`, `URL`). It has no statistical person/place/organisation recogniser at all. `classifyEntities` returns `[]` for "My name is Sarah Whitfield", "Patient Michael Thompson has diabetes" and "John Smith lives in Accra". The five tests asserting otherwise had **never been executed**, because the vitest global setup requires Postgres and no local run was possible.
+
+So **no layer detects person names or prose addresses today.**
+
+Two things follow:
+
+1. **The "case that it is a scope boundary" argument below is withdrawn.** It rested on "the five-layer model assigns unstructured-PII detection to Layers 1 and 2, which do run local NER". That sentence is false.
+2. **Codex's original HIGH against Sprint 1.2a lands considerably harder than assessed here.** Unstructured PII reaching the log destination can no longer be treated as covered elsewhere in the model.
+
+This does not automatically make NER-on-every-log-line correct — the cost and false-redaction objections to that are unchanged, and all reviewers still reject it. But unstructured-PII handling can no longer be dismissed as redundant, and the Layer 3 decision should be re-taken **after** the Layer 1 remedy is chosen, because what Layer 1 ends up doing determines what is left for Layer 3 to cover.
+
+**Superseding artifact:** `Decision-Request-Layer-1-NER-Capability-Gap-2026-09-01.md`. Decide that first.
+
+---
+
 ## Three-way outcome (dual-recommendation, two-pass)
 
 | View | Position |
