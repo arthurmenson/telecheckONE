@@ -15099,3 +15099,49 @@ Bypass regressions (new file): traversal exhaustiveness incl. keys and nested-in
 **Sprint 1 remaining:** 1.2a-c (Layer 3 log-redaction / Layer 4 AI-vendor sanitization / Layer 5 backup redaction) · 1.3 phase B (env-purge + incident scripts + baseline-seed + CI suite) · 1.4 (adversarial suite)
 
 **Operator gates:** O-1 participant recruitment · O-2 Track 5 kickoff · O-5 VPS reachability · client-side screener decision (Track 4 build vs. accept interim training-only risk)
+
+---
+
+## Addendum 365 — 2026-09-02 — SPRINT 1.2a MERGED: Layer 3 log redaction + build-time logging boundary + DB-free unit runner (Codex APPROVE) — **and a HIGH finding that blocks Pilot 1 Day-0**
+
+**Merged:** `telecheck-app` PR #279 → `90de80a` (squash). Codex APPROVE; CI fully green.
+
+### What landed
+
+**Layer 3 — redaction at the pino DESTINATION STREAM.** Not `hooks.logMethod`: that runs *before* serializers (so it never sees query-string PII in `req.url`) and rebuilding objects there corrupts Fastify's prototype-getter-backed request. Screening the serialized bytes is the only seam that sees everything.
+
+Design points, each of which closed a Codex finding: `JSON.parse` used purely as a *validity gate* with the result discarded (a parse/stringify round trip is lossy past 2^53, and malformed JSON-like text bypassed the fallback); numeric lexemes screened **whole and never parsed**; property **names** screened, not just values; **no shape-inferred trust** — the UUID/ULID carve-out was removed entirely after a valid ULID containing a nine-digit run was emitted verbatim; chunk-boundary carry with `StringDecoder`; oversized records **dropped with a sentinel** rather than partially emitted. Numeric preservation requires an exact case-sensitive **root-relative path AND a value inside the field's domain** — position alone is not provenance, since a merge object can collide with a root field name.
+
+**Build-time logging boundary.** `scripts/check-log-call-sites.mjs`, wired into CI ahead of the suite. Enforces that a log message cannot interpolate and that no merge value is rooted in `req.body/query/params/headers/raw`, with taint following locals, destructuring, spreads and identity-ish re-encodings. A function call is a *derivation* boundary, which is what keeps the rule usable. Reasoned `// pii-log-allow:` opt-out, reason mandatory; four legitimate sites use it.
+
+This is the Pass-2 sequencing correction, adopted: it landed **with** the PR, not as follow-on. "Merge now, enforce later" supplies neither the detection nor the boundary offered in its place.
+
+**`npm run test:unit`.** The global vitest setup requires Postgres, so pure-function tests could not be run locally **at all**. That gap is the headline lesson of this addendum — see below.
+
+### Defects found by finally RUNNING the suite
+
+- **`us_ssn` ordered ahead of `ghana_card`.** A Ghana Card's 9-digit run is hyphen-bounded, so `GHA-123456789-0` was scrubbed as an SSN — right value, wrong identity, in a pilot whose Ghana testers are exactly who produce one.
+- **Migration 080 broke every account INSERT.** NOT NULL with no DEFAULT; `createAccount` is the single INSERT site and does not supply the column, so it failed not *loudly* but *totally* — 55 test files, 23502. Now `DEFAULT 'unclassified'`, the explicit defect state the purge preflight refuses on, so a forgetful INSERT is still caught fail-closed.
+- **A toothless assertion.** `/\[REDACTED:.*\[REDACTED/` was meant to detect nested redaction, but `.*` spans the closing bracket, so two correct sibling redactions matched it.
+
+### ⚠️ HIGH — Layer 1 / Layer 2 NER is inert. **Pilot 1 Day-0 authorization is BLOCKED.**
+
+`ner.ts` filters `doc.entities()` for `PERSON` / `GPE` / `ORG`. `wink-eng-lite-web-model` emits only pattern-based types and ships **no statistical recogniser for any of them**. So **no layer detects person names or prose addresses.**
+
+It was broken in *both* directions: of five configured entity types the model emits exactly one — `DATE` — the only one that is not identity-bearing. Since `ai_bound` blocks on any hit, `'What time should I take my medication today?'` returned **422 on the Mode 1 chat route**. DATE removed; replaced by a context-bound `date_of_birth` pattern that catches labelled birth dates and leaves ordinary dates alone.
+
+Five tests asserting PERSON detection **had never executed**. They are now `it.fails` — a ratchet, not a mute: they fail the moment a remedy lands, forcing removal of the marker.
+
+**Remedy is a ratifier decision** (four options, three-way consult): `Telecheck_v1_10_PRD_Update/Decision-Request-Layer-1-NER-Capability-Gap-2026-09-01.md`. Claude and Codex Pass-1 recommend a PROPN-run heuristic; Pass-2 rejects it as a trust boundary and recommends exact approved-corpus admission — which buys containment by removing free-form conversational input, a product judgment about what Pilot 1 is for.
+
+The companion `Engineering-Review-Request-Layer-3-Unstructured-PII-Coverage-2026-09-01.md` is **amended**: its central premise — that Layers 1 and 2 cover the unstructured classes — was false.
+
+### Discipline note
+
+PR #279 was represented through most of this cycle as "Sprint 1.2a". It was not: **80 commits, 32 files, ~7,400 lines** — the entire Path α workstream. Nothing from Sprints 1.1a–d or 1.3-A had ever reached `main`; those merges were into this branch chain. Codex's review was scoped to individual files, so its APPROVE never covered the whole diff. Future sprints get their own branch off `main`.
+
+**Cockpit:** rev 469 → 470.
+
+**Sprint 1 remaining:** 1.2b (Layer 4 AI-vendor sanitization; seam is `resolveClinicalProvider`) · 1.2c (Layer 5 backup redaction) · 1.3 phase B (env-purge + incident scripts + baseline-seed + CI suite; **also owes `createAccount` a real classification argument** — until then every app-created account is `unclassified` and the purge gate refuses) · 1.4 (adversarial suite)
+
+**Operator gates:** O-1 participant recruitment · O-2 Track 5 kickoff · O-5 VPS reachability · client-side screener decision (Track 4) · **NEW: NER remedy decision — blocks Day-0**
