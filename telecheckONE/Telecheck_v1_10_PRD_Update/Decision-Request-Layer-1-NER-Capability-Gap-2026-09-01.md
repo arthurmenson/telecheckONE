@@ -33,6 +33,24 @@ This directly contradicts the spec's stated Layer 1 invariant:
 
 They trigger nothing.
 
+## Second defect, same root cause — it was ALSO over-blocking (2026-09-02)
+
+The layer was configured for five entity types: `PERSON`, `GPE`, `LOCATION`, `DATE`, `ORG`. The model emits exactly one of them — `DATE`.
+
+So the classifier detected precisely the one configured class that is **not** identity-bearing, and none of the four that are. It was broken in both directions simultaneously: it blocked date words and missed every real name.
+
+Because `ai_bound` blocks on ANY hit:
+
+```
+'What time should I take my medication today?'   ->  422
+```
+
+The Mode 1 chat route — the primary surface Pilot 1 exists to exercise — rejected ordinary language on the word "today". CI surfaced this across three integration files.
+
+**Actioned without escalation:** `DATE` removed from the surfaced set. A bare date is not PII, and this layer's stated remit is prose-form names and addresses. A date of birth *is* PII, but blocking every occurrence of "today" is not a usable control for it — that needs a date-adjacent-to-identity rule, which belongs to whichever remedy is chosen below. This was treated as a straightforward product-breaking bug rather than a policy question, because under **every** option below "today" must not 422 a chat message.
+
+**Consequence, stated plainly:** the classifier now surfaces nothing at all, because the other four types never fire. That does not change the risk posture — no layer detected names before that change either — but it does mean the layer is now a documented no-op rather than one masked behind spurious DATE blocks. **This makes the decision below more urgent, not less.**
+
 ## Why it went unnoticed
 
 Five tests assert exactly this behaviour (`A1`, `A5`, `A6`, `A6b`, and the Layer 2 PERSON case). **They had never run.** `vitest.config.ts` applies `tests/setup.ts` as a *global* setup that opens Postgres and applies migrations, so every test file — including pure-function ones — fails to collect without a live database, and none was available locally.
