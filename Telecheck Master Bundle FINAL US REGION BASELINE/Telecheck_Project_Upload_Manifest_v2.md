@@ -1,3 +1,149 @@
+# Telecheck — Project Upload Manifest
+
+**Version:** 3
+**Generated:** 2026-09-06 for P-047, mechanically from the top-level bundle filesystem.
+**Status:** Current filesystem inventory; canonicality remains governed by Active Document Index v1.3 and Artifact Registry v2.31.
+**Final file count:** **126 markdown files**. This includes historical/superseded artifacts and the manifest itself; it is not a count of active canonical contracts or entities. Layer 4 adds no new bundle file.
+**Method:** enumerate and sort every top-level `*.md` filename and read its declared header. No recursive workstream files, archives, or generated viewer data are counted. Absence of a declared version is recorded without inventing one.
+**Current affected pointers:** AUDIT_EVENTS v5.5; other 14 family contract headers v5.4; Registry v2.31; Index v1.3; Promotion Ledger P-047. Stable filenames retain historical version suffixes. The header-derived inventory below supersedes the older filesystem snapshot preserved afterward.
+
+## Current filesystem inventory
+
+| Filename | Declared header version |
+|---|---|
+| `CLAUDE_CODE_BOOT_SEQUENCE.md` | not declared |
+| `TELECHECK_RELEASE_NOTES_FINAL_REMEDIATED.md` | not declared |
+| `TELECHECK_RELEASE_NOTES_US_REGION_BASELINE.md` | not declared |
+| `TELECHECK_VALIDATION_REPORT_US_REGION_BASELINE.md` | ` field; check both against the canonical version map in `Telecheck_Project_Upload_Manifest_v2.md`. |
+| `Telecheck_ADR_027_Country_Conditional_DTC_Marketing.md` | not declared |
+| `Telecheck_ADR_028_Research_Data_Partnership_Posture_A.md` | not declared |
+| `Telecheck_ADR_029_AI_Workload_Taxonomy.md` | not declared |
+| `Telecheck_ADR_Addendum_016_to_019.md` | 1.0 |
+| `Telecheck_ADR_Addendum_020_to_025.md` | 1.0 |
+| `Telecheck_ADR_Addendum_026.md` | 1.0 |
+| `Telecheck_ADR_Set_v1_0.md` | 1.0 |
+| `Telecheck_AI_Clinical_Assistant_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_AI_Service_Mode_1_Handler_Spec_v0_1.md` | 0.4 DRAFT |
+| `Telecheck_AI_Service_Mode_1_Handler_Spec_v1_0.md` | 0.1 DRAFT |
+| `Telecheck_AI_Service_Mode_2_Handler_Spec_v1_0.md` | 0.1 DRAFT |
+| `Telecheck_Acquisition_Engagement_Tools_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_Active_Document_Index_v1_0.md` | 1.3 |
+| `Telecheck_Admin_Backend_Slice_PRD_v1_1.md` | 1.1 |
+| `Telecheck_Admin_Configuration_Surfaces_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_Admin_Operator_IA_v1_1.md` | 1.1 |
+| `Telecheck_Adversarial_Counsel_Review_Sessions_1_to_3.md` | 1.0 |
+| `Telecheck_Adversarial_Counsel_Review_Sessions_1_to_3_Post_Remediation.md` | 1.0 |
+| `Telecheck_Adverse_Event_Reporting_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_Artifact_Registry_v2_10.md` | 2.31 |
+| `Telecheck_Async_Consult_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_CDM_v1_10_to_v1_11_Amendment.md` | 1.0 RATIFIED |
+| `Telecheck_CDM_v1_2_to_v1_3_Amendment.md` | 1.3 amendment v0.1 |
+| `Telecheck_CDM_v1_4_to_v1_5_Amendment.md` | 0.8 DRAFT |
+| `Telecheck_CDM_v1_5_to_v1_6_Amendment.md` | 0.13 DRAFT |
+| `Telecheck_CDM_v1_6_to_v1_7_Amendment.md` | 0.8 DRAFT |
+| `Telecheck_CDM_v1_7_to_v1_8_Amendment.md` | 0.8 DRAFT |
+| `Telecheck_CDM_v1_8_to_v1_9_Amendment.md` | 1.0 RATIFIED |
+| `Telecheck_CDM_v1_9_to_v1_10_Amendment.md` | 1.0 RATIFIED |
+| `Telecheck_Canonical_Data_Model_v1_2.md` | 1.4 |
+| `Telecheck_Clinician_Portal_IA_v1_0.md` | 1.0 |
+| `Telecheck_Cold_DR_Runbook_v1_0.md` | 0.1 DRAFT |
+| `Telecheck_Community_Platform_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_Consent_Delegated_Access_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_Consent_Delegated_Access_Slice_PRD_v1_1.md` | 0.1 DRAFT |
+| `Telecheck_Consolidated_Launch_Tracker_v1_0.md` | 1.0 |
+| `Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md` | 5.5 |
+| `Telecheck_Contracts_Pack_v5_00_AUTONOMY_LEVELS.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_CCR_RUNTIME.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_DOMAIN_EVENTS.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_ERROR_MODEL.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_FORMS_ENGINE.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_GLOSSARY.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_GOVERNANCE_CONTROLS.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_IDEMPOTENCY.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_INVARIANTS.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_MARKET_LAUNCH.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_SOURCE_OF_TRUTH.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_TYPES.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_00_WORKLOAD_TAXONOMY.md` | 5.4 |
+| `Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md` | Contracts Pack v5.3 |
+| `Telecheck_Contracts_Pack_v5_README.md` | not declared |
+| `Telecheck_Contracts_Pack_v5_Update_Spec.md` | 5.0 |
+| `Telecheck_Country_Regulatory_Contracts.md` | 1.0 |
+| `Telecheck_Cross_SI_Publish_State_Decision_Record_v1_0.md` | 0.1 DRAFT |
+| `Telecheck_DSA_Template.md` | 1.0 |
+| `Telecheck_Design_Implementation_Contract_v1_0.md` | 1.0 |
+| `Telecheck_Design_Implementation_Contract_v1_1.md` | 1.1 |
+| `Telecheck_Design_System_v1_1.md` | 1.1 |
+| `Telecheck_Engineering_Handoff_Build_Guide_v1_3.md` | 1.3 |
+| `Telecheck_F4_Deploy_Runbook_v1_0.md` | 0.1 DRAFT |
+| `Telecheck_Fake_Medication_Detection_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_Flagged_Items_Resolution_v1_0.md` | 1.0 |
+| `Telecheck_Forms_Intake_Engine_Slice_PRD_v2_1.md` | 2.1 |
+| `Telecheck_Future_Scope_USSD_AI_Bridge_v0_1.md` | 0.1 |
+| `Telecheck_Ghana_Launch_Playbook_v1_2.md` | 1.2 |
+| `Telecheck_Guardrail_Templates_v1_0.md` | 1.0 |
+| `Telecheck_Herb_Drug_Interaction_Engine_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_Identity_Authentication_Spec_v1_0.md` | 1.0 |
+| `Telecheck_Identity_Authentication_Spec_v1_1.md` | 0.1 DRAFT |
+| `Telecheck_Implementation_State_Audit_2026-05-15.md` | not declared |
+| `Telecheck_Investor_One_Pager.md` | not declared |
+| `Telecheck_KMS_Architecture_Spec_v1_0.md` | 0.1 DRAFT |
+| `Telecheck_Labs_Document_Interpretation_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_Market_Rollout_Cockpit_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_Master_Completion_Plan_v1_0.md` | not declared |
+| `Telecheck_Master_Completion_Plan_v1_1.md` | 0.1 DRAFT |
+| `Telecheck_Master_Platform_PRD_v1_10.md` | 1.10 |
+| `Telecheck_Master_Platform_PRD_v1_9.md` | 1.9 |
+| `Telecheck_Medication_Interaction_Engine_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_Medication_Interaction_Engine_Slice_PRD_v2_0.md` | 0.8 DRAFT |
+| `Telecheck_Messaging_Inbox_Spec_v1_0.md` | 1.0 |
+| `Telecheck_Notification_Spec_v1_1.md` | 1.1 |
+| `Telecheck_Notification_Spec_v1_2.md` | 0.1 DRAFT |
+| `Telecheck_OpenAPI_v0_2.md` | 0.2 |
+| `Telecheck_Operational_Readiness_Todo_v1_5.md` | 1.5 |
+| `Telecheck_Operational_Readiness_Todo_v1_6.md` | 0.1 DRAFT |
+| `Telecheck_Operational_Readiness_v1_6_Evidence_Rubric_Catalog_v1_0.md` | 0.1 DRAFT |
+| `Telecheck_Patient_App_IA_v1_0.md` | 1.0 |
+| `Telecheck_Payment_Billing_Spec_v1_0.md` | 1.0 |
+| `Telecheck_Pharmacy_Council_Guidance.md` | 1.0 |
+| `Telecheck_Pharmacy_Refill_Slice_PRD_v2_1.md` | 2.1 |
+| `Telecheck_Program_Porting_Checklist_GLP1_v1_0.md` | not declared |
+| `Telecheck_Project_Upload_Manifest_Post_Remediation.md` | Final Remediated |
+| `Telecheck_Project_Upload_Manifest_v2.md` | 3 |
+| `Telecheck_Promotion_Ledger.md` | 1.0 |
+| `Telecheck_Protocol_Library_Ghana_v1_0.md` | 1.0 |
+| `Telecheck_RBAC_Permissions_Matrix_v1_1.md` | 1.1 |
+| `Telecheck_RBAC_Permissions_Matrix_v1_2.md` | 0.1 DRAFT |
+| `Telecheck_REC_IRB_Engagement.md` | 1.0 |
+| `Telecheck_RPM_CCM_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_Red_Team_Review.md` | not declared |
+| `Telecheck_Reviewer_Brief_v1_0.md` | 1.0 |
+| `Telecheck_SIEM_Integration_Spec_v1_0.md` | 0.2 DRAFT |
+| `Telecheck_SI_015_MarketingCopy_Option_B_Follow_On_Amendment_v1_0.md` | 1.0 |
+| `Telecheck_SI_015_MarketingCopy_v1_0.md` | 0.2 DRAFT |
+| `Telecheck_SI_016_AIWorkflowHandlerRegistry_Option_C_Follow_On_Amendment_v1_0.md` | 1.0 |
+| `Telecheck_SI_016_AI_Workflow_Handler_Registry_v1_0.md` | 0.1 DRAFT |
+| `Telecheck_SI_019_MedInteractionSignal_Option_B_Follow_On_Amendment_v1_0.md` | 1.0 |
+| `Telecheck_SI_020_Async_Consult_v2_0_Implementation_Readiness.md` | 0.12 DRAFT |
+| `Telecheck_SI_020_Forms_Engine_I030_Static_Analyzer_v1_0.md` | 0.1 DRAFT |
+| `Telecheck_SI_021_SIEM_Hash_Chain_Archival_v1_0.md` | 1.0 RATIFIED |
+| `Telecheck_SI_022_Crisis_Response_v1_0.md` | 1.0 RATIFIED |
+| `Telecheck_SI_023_Admin_Backend_Basics_v1_0.md` | 1.0 RATIFIED |
+| `Telecheck_SI_024_1_Cryptographic_JWT_Binding_v1_0.md` | 1.0 v0.8 DRAFT |
+| `Telecheck_SI_024_Canonical_Hardened_Tenant_Platform_RLS_Helper_v1_0.md` | 1.0 v0.17 DRAFT |
+| `Telecheck_State_Machines_v1_1.md` | 1.2 |
+| `Telecheck_Sync_Video_Consult_Slice_PRD_v1_0.md` | 1.0 |
+| `Telecheck_System_Architecture_v1_2.md` | 1.2 |
+| `Telecheck_Tenant_Threading_Addendum_v1_0.md` | 1.0 |
+| `Telecheck_Unified_Admin_Sidebar_v1_0.md` | 1.0 |
+
+---
+
+## Historical manifest snapshot (preserved)
+
+The following prior manifest and its cycle/version/count claims are retained as history. They are superseded as current inventory by the mechanically generated table above. P-047 does not assert that these past counts were current at any later date.
+
 # Telecheck — Project Upload Manifest v2
 
 **Version:** 2 (mechanically rebuilt from filesystem inventory in v1.10 PRD Update Cycle Phase 6 promotion ceremony 2026-05-01; previously regenerated in Cycle U-004 Round 3)

@@ -1,6 +1,8 @@
 # 00 · Audit Events
 
-**Status:** canonical · **Version:** 5.4 · **Owner:** engineering lead + compliance officer · **Consumers:** all services, compliance, clinical safety, patient-access
+**Status:** canonical · **Version:** 5.5 · **Owner:** engineering lead + compliance officer · **Consumers:** all services, compliance, clinical safety, patient-access
+
+**v5.5 Layer 4 amendment (2026-09-06, P-047):** registers two unsampled Category B local vendor-screening decisions under the existing tenant-governance P2 partition. The normative [Layer 4 section](#layer-4-vendor-boundary-decisions-p-047) below defines their exact detail, current Mode 1 attribution, pre-send durability, failure behavior, and retry unit. This is a file-local content revision from the P-044 family baseline v5.4; other Contracts Pack family headers remain v5.4. Historical amendment-cycle labels and existing action contracts are preserved. User-directed adoption of the independently reviewed Option A is recorded in [the decision packet](../Telecheck_v1_10_PRD_Update/Layer-4-Audit-Decision-2026-09-06/Layer-4-ratification-request.md#decision-record--2026-09-06). It does not claim implementation completion or production activation.
 
 **v5.4 hygiene cycle 2026-05-20 (P-027 Phase B):** ~30 net-new audit events added across Sprints 8-18 (full taxonomy + Cat A/B/C classification + SI-018 partition routing in `Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md` §3). Event groups: Identity v1.1 (12 events including `identity.middleware_guc_set` + `identity.patient_session_revoked` + `identity.session_jwt_tenant_id_mismatch`); AI Mode 1 (8 events including `ai.mode1.crisis_signal_emitted` Cat A); AI Mode 2 (~10 events covering invocation lifecycle); KMS (~6 events including `kms.break_glass_decrypt`); Consent v1.1 (6 events including `consent.outbox_drain_failed`); Notification v1.2 (~8 events including `notification.crisis_dispatched`); Operational Readiness (~3 events including `chaos.drill_initiated/completed/aborted`); RBAC v1.2 (5 events including `rbac.role_assumed_privileged` Cat A unsampled).
 
@@ -190,6 +192,82 @@ Like all Category A records, rejection events are tenant-scoped per `tenant_id`,
 | `incident_opened` | operator | incident_id, severity, affected_services[], patient_impact_estimate |
 | `incident_resolved` | operator | incident_id, resolution_detail, root_cause, preventive_actions[] |
 | `signal_enforcement_trigger` | system | signal_type, threshold_exceeded, enforcement_action_taken |
+| `pii.screener.egress_block` | system | Layer 4 only: exact detail and closed high-confidence / screening-failure reasons below; B, standard, unsampled, P2 tenant governance. |
+| `pii.screener.egress_redact` | system | Layer 4 only: exact detail and low-confidence-redaction reason below; B, standard, unsampled, P2 tenant governance. |
+
+#### Layer 4 vendor-boundary decisions (P-047)
+
+These records attest a local refusal or sanitization decision before possible external clinical-provider dispatch. They do not attest successful dispatch, vendor receipt, or completed chat persistence. Both actions are **Category B, `actor_type: system`, `audit_sensitivity_level: standard`, unsampled**. Category B retention and operator/compliance access apply. Use the existing **P2 tenant-governance partition** deterministically; do not route through a patient partition or invent a new partition. This explicit mapping uses the existing SI-018 partition extension carried by [the canonical amendment §3](Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md), and governs these two actions over the older patient-only summary in this file's Hash chain section.
+
+##### Current Mode 1 envelope and caller scope
+
+- `tenant_id` and `country_of_care` come from the authenticated request's resolved operating-tenant context. `actor_tenant_id` equals that real tenant.
+- `actor_id` is the existing service identity `system:ai_mode_1`. The system actor denotes the local control, not an AI-authored clinical action. Never label the patient's account ID as a system actor.
+- `target_patient_id` is null, selecting P2. The verified affected patient remains correlated in detail.
+- `resource_type: ai_chat_session`; `resource_id` is the validated or server-derived conversation ID. This identifies attempted context and does not imply that a conversation INSERT later committed.
+- Populate `ai_workload_type: conversational_assistant` and `autonomy_level: advisory` in the existing envelope. All other existing required envelope fields retain their meanings; no fabricated tenant, patient, credential, or missing-resource sentinel is permitted.
+
+| Caller | Scope |
+|---|---|
+| Live Mode 1 patient completion | The mapping above, plus verified `patient_id` and deterministic `message_id` in detail. Applies to external adapters serving this path. |
+| Future tenant-scoped nonpatient candidate | No such live caller exists at this amendment's baseline. It requires a trusted service actor/resource mapping and a slice-defined nonpatient detail variant before activation. Do not default to Mode 1 patient/turn identifiers. Missing attribution fails closed. |
+| Existing platform-admin fixed `ping` probe | Literal-only operational probe with no candidate content. It does not emit synthetic Layer 4 match events or patient/message identifiers. Its provider-request `PLATFORM` placeholder is never a Layer 4 audit tenant. |
+| Current Mode 2 case-prep | Null provider: no external send. This amendment does not activate a real Mode 2 provider or claim its attribution is complete. Preserve its existing `system:ai_mode_2_case_prep`, `protocol_execution` / `action_with_confirm` context; do not transplant Mode 1 IDs onto a workflow. |
+
+Every live outbound clinical candidate remains subject to resolver-owned screening. New caller activation must supply its approved trusted attribution; the probe exception is not permission for an unscreened candidate path. This registration is explicitly Layer 4 vendor-outbound: the name also appearing in Layer 2 prose does not authorize a Layer 2 emitter under this detail contract.
+
+##### Exact Mode 1 detail
+
+| Key | Required value / meaning |
+|---|---|
+| `layer` | Exactly `4`. |
+| `provider` | Selected trusted external clinical adapter identifier: `anthropic`, `bedrock_claude`, or `azure_openai`. Only Anthropic is a real adapter at the baseline. Do not use credential-store aliases such as `aws_bedrock`, arbitrary caller strings, `null`, or `llama_self_hosted`. Enumeration does not activate an adapter. |
+| `patient_id` | Verified affected patient account ID from authenticated Mode 1 context, never patient text. |
+| `message_id` | Existing deterministic Mode 1 turn/message ID, retaining attribution with the conversation resource after business rollback. |
+| `pattern_ids` | Sorted distinct identifiers from the checked-in regex library observed across the bounded screening process that reached a definitive result, including matches exposed in intermediate redacted text. No matched values or free-text property paths. Empty on `screening_failed`. |
+| `hit_count` | Positive integer for a definitive match-based decision: total pattern-match observations across the bounded passes over the assembled candidate and its successive redacted forms. Each occurrence reported in a pass contributes one observation; patterns may overlap and later passes may expose more matches. This is not a count of people, unique original PII tokens, or replacement operations. Null on `screening_failed` means unassessed. |
+| `reason` | Exactly one of the action-specific combinations below. No raw exception text. |
+
+The seven keys above form the exact detail surface for the current emitter. `workload_type` is not duplicated in detail: the envelope already has `ai_workload_type` and `autonomy_level`. Do not store prompt text, matched strings, unknown field names, arbitrary errors, API keys, raw request bodies, or standalone candidate-text hashes in these events. An internal candidate-derived dedupe fingerprint remains opaque within the existing marker key, not an additional audit field.
+
+| Action | Reason | Decision and required counts |
+|---|---|---|
+| `pii.screener.egress_block` | `high_confidence_match` | At least one high-confidence hit at any pass. `hit_count > 0`; nonempty `pattern_ids` includes a high-confidence pattern and all earlier low-confidence observations. High confidence wins over coexisting low confidence. No redaction event is required for this never-authorized candidate. |
+| `pii.screener.egress_block` | `screening_failed` | Inspection or supported-candidate validation could not safely complete, including bounded-pass exhaustion without a match-free result or definitive high-confidence block. `hit_count: null`, `pattern_ids: []`, even when partial passes observed low matches. This is a failed-closed decision, not a claim that PII was detected or that inspection had zero hits. |
+| `pii.screener.egress_redact` | `low_confidence_redacted` | Only low-confidence matches were observed and removed; a final match-free pass made the immutable sanitized candidate eligible for possible dispatch. `hit_count > 0`; every listed pattern is low confidence. Include lower-confidence matches exposed and removed in later passes. |
+
+The action/reason combinations are closed. There is no event for an initially no-hit candidate, no fourth reason, and no best-effort sampling allowance. Here “inspection” means the full bounded process. Do not double-count both unassembled components and the same assembled original candidate. Deduplicate pattern identifiers across all passes; count match observations across those passes. A redaction may expose a new context or word boundary: inspect again, block if it reveals high confidence, otherwise redact further until a match-free pass. A candidate cannot be released merely because its original text was inspected.
+
+##### Screening, durability, and failure behavior
+
+Use the local regex library only; never send candidate content to an external classifier or NER service. Inspect the stable supported payload the adapter serializes, including the assembled system prompt, history/current messages, and any supported tool content. Unsupported candidate fields fail closed. Replace lower-confidence matches with `[REDACTED:PII]`; high confidence detected at any pass blocks. No-hit requests may proceed. This detailed decision table supersedes the PII engineering spec's contradictory unconditional-send non-goal.
+
+Before returning a handled block or sending a redacted candidate, evidence must commit in a **fresh tenant-bound audit transaction separate from the chat business transaction**. If deduping, claim the marker and INSERT the audit event in that same transaction; commit them atomically. A prior marker may prove evidence only if produced by this discipline. Use existing audit storage, hash-chain machinery, permissions, and partition algorithms unchanged.
+
+- Recorded high-confidence block or screening failure: no provider call; throw the local block error after durable evidence so business work and its reservation roll back. Map to tenant-blind **`500 ai.provider.egress_blocked`**.
+- Recorded redaction: dispatch only the immutable locally inspected sanitized snapshot after evidence commits. Subsequent provider failure or outer business rollback cannot erase that evidence.
+- Required audit cannot commit: no provider call and no claim that recording succeeded. Return a safe generic **503** through the existing Mode 1 `ai_chat.audit_emission_unavailable` path. This must not fall through the provider-unavailable 200 fail-soft branch.
+- Lost audit COMMIT acknowledgement: commit outcome is unknown. Fail closed for that attempt; on retry, the atomically committed marker distinguishes prior evidence from a rolled-back attempt.
+
+The crisis audit-failure exception does not authorize vendor dispatch. Total database failure or process death before audit commit promises no dispatch, not impossible evidence durability; a retry can later record evidence. An outbox is outside this amendment. Preserve crisis-first and Layer 1 ordering, current supported prompts, and ordinary provider-outage behavior. If attribution is invalid, fail closed with safe diagnostics rather than inventing identifiers to force an audit row through.
+
+##### Equivalent-decision retries
+
+The event unit is **one equivalent local screening decision for a logical outbound candidate within the existing endpoint's idempotency window**, not an HTTP invocation, network attempt, or vendor receipt.
+
+- Completed idempotent replay performs no new send and emits no new Layer 4 decision.
+- After business rollback, screen again. A committed marker may suppress equivalent evidence emission, never screening itself.
+- Tenant, originating authenticated actor, endpoint, idempotency key, original request-body identity, Layer 4 surface/action, and material candidate/decision identity distinguish unrelated evidence. Changed system prompt, history, supported tool content, provider, rule version, or decision must not inherit materially different old evidence.
+- When the effective idempotency window expires and the key is accepted as new, a stale marker must not suppress a new event. Equal TTL durations alone do not establish equal expiry boundaries.
+- Concurrent equivalent claims commit at most one matching decision event. Audit failure rolls back the marker, allowing retry. Distinct tenant/actor/body/action/candidate decisions remain independent.
+
+Fingerprint construction, safe encoding, expiry reclamation within the existing marker schema, and helper signatures are implementation choices. This does not provide external exactly-once: a sanitized send can succeed before the business transaction rolls back, and retry can send another sanitized request. Do not present the local-decision event as proof against duplicate external completions.
+
+##### Verification gate
+
+Use real independent PostgreSQL connections and committed fixtures to prove that audit evidence survives actual outer rollback; nested savepoints on one shared test connection do not prove independent durability or lock contention. Assert committed `audit_records` and intact stored hash chains. Cover high/low/mixed decisions, screening failure, safe actual serialized bodies including joined-system boundaries, audit-failure zero dispatch, marker rollback, lost-ack/retry where practical, later outer rollback, send failure, completed replay, concurrent equivalent claims, distinct actor/body/tenant/candidate decisions, and expiry recovery. Verify mutation attempts across the awaited audit cannot alter the dispatch snapshot, and preserve crisis-ordering regressions.
+
+Avoid parent/child self-deadlock, including audit-chain locks held by the outer transaction, and new foreign keys to uncommitted admission rows. Keep pre-send evidence before outer response-audit writes. Exercise bounded pool acquisition/transaction timeouts and concurrency so an outer transaction awaiting an independent connection cannot wait unboundedly under pool saturation. Use existing connection/transaction facilities; no new pool service, schema, roles, partitions, outbox, or delivery coordinator is authorized. Complete normal CI and fresh independent full-diff counsel review before implementation merge. This contract amendment alone does not open Pilot 1 Day-0, activate reserved workloads, change NER policy, authorize real-PHI processing, or deploy production.
 
 #### Research events (added v5.2 per ADR-028)
 
@@ -373,6 +451,8 @@ Records past retention are archived, not deleted. Archived records are retrievab
 ---
 
 ## Document control
+
+- **v5.5 (2026-09-06, P-047)** — File-local Layer 4 amendment: two unsampled B/system/standard actions, exact Mode 1/P2 attribution, bounded-pass match counts, pre-send independent durability, equivalent-decision retry semantics, and verification gate. Existing envelope/storage/roles/invariants unchanged; other family headers remain v5.4.
 
 - **v5.2 (2026-05-02 per v1.10.1 hygiene cycle physical merge of v1.10 PRD Update Cycle delta artifact)** — Adds workload-taxonomy envelope fields (`ai_workload_type`, `autonomy_level`) per ADR-029; reserved nullable agentic-context fields (`agent_id`, `agent_version`, `tool_call_id`, `memory_read_set_id`, `memory_write_set_id`, `supervising_policy_id`, `knowledge_source_versions[]`); `audit_sensitivity_level` field with `standard` / `high_pii` enum (`high_pii` for research exports per I-031); new `actor_type = ai_workload` (with `ai_mode_1` / `ai_mode_2` preserved as backward-compat aliases); 6 new research events (`research.consent_granted`, `research.consent_revoked`, `research.dsa_activated`, `research.cohort_defined`, `research.export_initiated`, `research.export_completed`) — the `export_*` family at `audit_sensitivity_level = high_pii` per I-031, carrying `status` enum (`completed | invalidated`) + `invalidation_reason` for failed-completion audit per I-003; 2 new marketing events (`marketing.surface_rendered`, `marketing.surface_drift`) per ADR-027; research-export tenant-scope rule (operating-tenant ID, parent-level DSA reference); I-012 preservation rule mirroring Master PRD §13.7 v0.3 reject-unless three-clause normative wording. Per ADR-027, ADR-028, ADR-029. No existing fields modified or removed; v5.2 is purely additive. Substantive content originally documented in `Telecheck_v1_10_PRD_Update/Phase3_AUDIT_EVENTS_v1_10_Edits_2026-05-01.md`; physical merge applied 2026-05-02 per v1.10.1 hygiene cycle.
 - **v5.0** — Initial Audit Events contract.

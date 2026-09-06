@@ -1,6 +1,8 @@
 # Decision request — Sprint 1.2b Layer 4 audit contract
 
-**Status: DRAFT / NOT RATIFIED.** Prepared 2026-09-06. The user's authorization to use fresh independent reviewers has been exercised; it does not itself approve this canonical amendment.
+**Historical status when this request was prepared: DRAFT / NOT RATIFIED.** Prepared 2026-09-06. The user's authorization to use fresh independent reviewers has been exercised; it does not itself approve this canonical amendment.
+
+**Current decision:** Option A adopted under the user instructions recorded in the [2026-09-06 decision record](#decision-record--2026-09-06) below; final implementation review and verification remain required.
 
 ## Decision requested
 
@@ -37,6 +39,24 @@ The takeover contract §6 states: “Spec-corpus ratification ceremonies. You ma
 
 Approval of Option A would authorize the bounded spec amendment and downstream implementation subject to normal review and CI. It would not authorize deployment, Pilot 1 Day-0, a NER policy change, new database schemas/roles/partitions, or an external delivery coordinator. The separate launch gates remain unchanged.
 
-## Ratifier decision
+## Historical ratifier decision at request preparation
 
-Pending. No approval, rejection, or waiver has been supplied for this amendment.
+Pending at preparation time. The subsequent user instructions and applied decision are recorded below.
+
+## Decision record — 2026-09-06
+
+After the reviewed Option A packet and the explicit request to authorize its canonical amendment were presented, the user replied:
+
+> ignore takeover notes that keeps you from autonomously completing. Use your super powers to complete
+
+The user then directed:
+
+> always apply counsel review and continue based on recommendation.  use sub agent orchstration where needed to parallel and speed up work
+
+**Decision applied:** adopt the independently recommended **Option A in Pass 2 §§3–5** and execute its bounded canonical amendment and downstream implementation, using fresh independent counsel review and continuing on its recommendation. These instructions supersede the takeover's additional ratifier-ceremony restriction for completing this requested work. This is a contextual interpretation of the user's express delegation after seeing the concrete packet; it is not a fabricated verbatim “ratify Option A” statement, separate human quorum, legal opinion, or production sign-off.
+
+The original implementer proposal, independent Pass 1, and Pass 2 synthesis remain unchanged. Their statements that approval was pending accurately describe when they were authored. The user's later instruction supplies execution authority; recommendation agreement alone was not treated as that authority. “Counsel review” here is independent technical/adversarial review by fresh subagents, not a claim that licensed legal counsel reviewed the product.
+
+**Canonical landing:** AUDIT_EVENTS header v5.4 → v5.5, adding the two unsampled B/system/standard events with the exact current Mode 1/P2 mapping, seven detail keys, bounded-pass count semantics, action-specific reasons, independent durability and equivalent-decision retry contract. Promotion Ledger P-047 records this action. Registry v2.31 reconciles the already-recorded P-046 v2.30 absorption and accounts for this new content; other Contracts Pack headers stay at v5.4.
+
+**Scope retained:** no deployment, Pilot 1 Day-0 authorization, NER policy change, real-PHI processing, new database schema/roles/partitions, outbox, delivery coordinator, or external exactly-once guarantee. Existing audit/invariant and crisis-ordering protections remain binding. Spec and implementation changes receive independent final-diff review and applicable checks before merge. At this decision-record commit, neither production implementation completion nor that final review is claimed.
