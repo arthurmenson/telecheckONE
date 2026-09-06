@@ -15175,3 +15175,63 @@ The required `pii.screener.egress_block` and `pii.screener.egress_redact` action
 **Sprint 1 remaining:** 1.2b (Layer 4 vendor-boundary completion) · 1.2c (Layer 5 backup redaction) · 1.3 phase B (env-purge, incident scripts, baseline-seed, CI suite, and real account classification argument) · 1.4 (adversarial suite).
 
 **Operator gates unchanged:** O-1 participant recruitment · O-2 Track 5 kickoff · O-5 VPS reachability · client-side screener decision (Track 4) · NER remedy decision (blocks Pilot 1 Day-0). No deployment or pilot authorization occurred.
+
+---
+
+## Addendum 367 — 2026-09-06 — Layer 4 audit contract merged under counsel-reviewed delegated authority
+
+**Merged:** `telecheckONE` [PR #20](https://github.com/arthurmenson/telecheckONE/pull/20) → `cc8bedc818f279eb299beee24dbfb1fabb9f93e9` (squash). Fresh independent technical/adversarial review APPROVE on exact head `d00a1e5cfcfe8c462c2ce73ed1e208c9afa19505`, after verification of the manifest correction. This entry records the canonical merge; the separate implementation merge and its completion evidence are recorded in Addendum 368.
+
+### Canonical decision and user authority
+
+The independently reviewed Option A registered `pii.screener.egress_block` and `pii.screener.egress_redact` in AUDIT_EVENTS v5.5 as unsampled B/system/standard records on the existing tenant-governance P2 chain. P-047 records the exact current Mode 1 attribution, seven detail fields, bounded-pass match counts, failure semantics, independent durability, and equivalent-decision retries. Registry v2.31 explicitly reconciles P-046's recorded v2.30 absorption, whose header update had been omitted, before accounting for the new amendment. Other Contracts Pack family headers remain v5.4.
+
+After receiving the concrete decision packet and recommendation, the user instructed:
+
+> ignore takeover notes that keeps you from autonomously completing. Use your super powers to complete
+
+Then:
+
+> always apply counsel review and continue based on recommendation.  use sub agent orchstration where needed to parallel and speed up work
+
+This delegated execution authority superseded the takeover's additional ratifier-ceremony restriction for the requested work. The [preserved decision record](Layer-4-Audit-Decision-2026-09-06/Layer-4-ratification-request.md#decision-record--2026-09-06) distinguishes this contextual interpretation from a fabricated separate quorum or verbatim “ratify Option A” statement. The original implementer proposal and both independent consult passes remain unchanged. Counsel review here means independent technical/adversarial review by fresh subagents; no licensed legal opinion or production sign-off is claimed.
+
+### Independent review and validation
+
+The reviewer inspected the complete PR #20 diff from `9fd71a5553a401235205d36ce86698368cd451fd`, then verified the final correction. One finding was closed: manifest extraction had mistaken body prose mentioning a version field for an actual version declaration. The fix restricts extraction to leading version/status metadata before the first section or divider, records `not declared` for that source, and regenerates the embedded viewer data.
+
+Independent verification confirmed all 126 top-level bundle markdown files occur exactly once in Manifest v3, every embedded document equals its committed source, AUDIT_EVENTS is v5.5 and the other 14 family contracts remain v5.4. The prior Promotion Ledger content, protected Active Document Index §4, and all three original proposal/consult artifacts remain unchanged. Complete diff whitespace checks passed. This specification review did not substitute for downstream implementation review or PostgreSQL CI.
+
+**Cockpit:** rev 471 → 472, recording the canonical PR #20 merge. The streaming prerequisite and its baseline evidence remain in Addendum 366; the implementation merge has its own entry below. Neither this canonical amendment nor its review authorizes deployment or Pilot 1 Day-0.
+
+---
+
+## Addendum 368 — 2026-09-06 — Sprint 1.2b merged: Layer 4 clinical vendor boundary with independently durable audit evidence
+
+**Merged:** `telecheck-app` [PR #283](https://github.com/arthurmenson/telecheck-app/pull/283) → `79b0fbf1c99f2a35b8b2f5a4cb92dfa1968427e9` (squash), following two fresh independent counsel reviews of exact head `ffd419fda9cab4e50aad4a3af1b21833e2a51c2f` and green required workflows. This implements AUDIT_EVENTS v5.5 / P-047, whose canonical PR #20 merge is recorded in Addendum 367. The streaming prerequisite remains app [PR #282](https://github.com/arthurmenson/telecheck-app/pull/282) → `bbfbe534bdfb111b824de3aa409a03259fb5756d`, recorded in Addendum 366.
+
+### What landed
+
+`resolveClinicalProvider` now owns the boundary for the active Mode 1 clinical completion path, covering both the admin-managed database credential and environment fallback. Trusted Mode 1 attribution and a matching pending idempotency reservation are required before dispatch. The existing Null provider, credential healthcheck, fixed literal admin `ping`, and current Null-provider Mode 2 behavior retain their defined scope.
+
+The local regex scanner snapshots supported data properties, rejects unsupported/accessor fields and mismatched context, and inspects the adapter's assembled system text plus supported messages. High-confidence matches block with no vendor call. Lower-confidence matches become `[REDACTED:PII]`; subsequent passes inspect identifiers exposed by replacement, and only a match-free pass releases the candidate. Pass-budget exhaustion fails closed. The component review's redaction-boundary bypass is closed without adding NER or an external classifier.
+
+`vendor-audit.ts` commits decision evidence in a fresh tenant-bound transaction before a redacted send or handled block. An atomic marker-plus-event operation deduplicates equivalent local decisions within the original idempotency window; retries still rescreen, and changed trusted identity, raw candidate, or rule/model/control values cannot silently reuse different evidence. An equivalent retry with a later reservation may reuse the original unexpired marker without extending it; once the original window expires, the marker is reclaimed. Unassessed screening failures do not deduplicate. Candidate text, matched values, standalone candidate fingerprints, credentials, and raw errors are excluded from the audit detail. Screening failure uses `hit_count: null` and an empty pattern inventory. Pool acquisition and SQL waits are bounded.
+
+Recorded blocks map to the tenant-blind `500 ai.provider.egress_blocked`; required-audit failures prevent dispatch and use `503 ai_chat.audit_emission_unavailable`. Genuine provider outages retain Mode 1's existing fail-soft behavior. The raw-text crisis gate remains before Layer 1. This delivers the current Mode 1 Layer 4 scope without new database schema, roles, audit partitions, an outbox, or a provider-delivery coordinator.
+
+### Independent review and validation
+
+Two fresh independent reviewers inspected the complete implementation diff from the merged streaming baseline to `ffd419fda9cab4e50aad4a3af1b21833e2a51c2f`, against AUDIT_EVENTS v5.5 / P-047. Both returned APPROVE with no actionable findings. Each independently ran the two boundary/resolver unit suites: 112 tests passed. Reviewer A additionally ran 2,736 composition/equivalence cases, captured 1,491 released payloads through the real Anthropic serializer into a fake transport, and checked 144 split-system/assembled-system equivalents. Review artifacts and the PR body retain the evidence; this is not represented as a GitHub-account review submission.
+
+Local build, typecheck, lint, format:check, check:log-call-sites (210 files), and diff checks passed. The DB-free unit suite passed with 269 tests and the same 5 documented expected NER failures.
+
+[Full PostgreSQL CI](https://github.com/arthurmenson/telecheck-app/actions/runs/34041289986) passed on the reviewed head: 188 files; 2,965 tests passed, 6 documented expected failures, 3 skipped, and 30 TODOs. The test suite completed in 66.27 seconds (job `101508401559`). CI, Performance benchmarks, Baseline refresh guard, and Dependency Review all passed on the first attempt for this integrated head; no rerun was needed. Earlier draft results do not substitute for these final-head checks.
+
+Acceptance coverage uses real independent PostgreSQL connections and committed audit rows to prove evidence survives outer rollback, marker/event rollback is atomic, retry and expiry semantics hold, and the stored chain remains valid. It exercises lost COMMIT acknowledgement, provider failure after audit commit, concurrent equivalent claims, distinct tenant/actor/body/candidate decisions, pool saturation, and audit-chain contention. HTTP tests use the real handler/resolver/adapter with a local fake transport and a selective test-only Layer 1 bypass, while separate cases retain Layer 1/crisis behavior. Actual serialized payloads and mutation attempts across the awaited audit are covered. The final CI run executed 18 real-connection audit integration tests and 9 HTTP boundary integration tests, alongside 88 screening/boundary and 24 resolver unit tests.
+
+**Cockpit:** rev 472 → 473, recording implementation PR #283 separately from canonical PR #20. This bookkeeping PR carries the two substantive merge records; it does not recursively create a third record for itself. No prior Addendum is rewritten.
+
+**Sprint 1 remaining:** 1.2c (Layer 5 backup redaction) · 1.3 phase B (env-purge, incident scripts, baseline-seed, CI suite, and real account classification argument) · 1.4 (adversarial suite).
+
+**Operator gates unchanged:** O-1 participant recruitment · O-2 Track 5 kickoff · O-5 VPS reachability · client-side screener decision (Track 4) · NER remedy decision (blocks Pilot 1 Day-0). Regex-only Layer 4 does not identify every person name or prose address. Completing this sprint does not claim zero PHI for arbitrary natural language, authorize Pilot 1 Day-0 or real-PHI processing, or deploy production.
