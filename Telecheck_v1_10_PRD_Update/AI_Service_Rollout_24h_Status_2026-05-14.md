@@ -15178,9 +15178,9 @@ The required `pii.screener.egress_block` and `pii.screener.egress_redact` action
 
 ---
 
-## Addendum 367 — 2026-09-06 — Sprint 1.2b merged: Layer 4 clinical vendor boundary with independently durable audit evidence
+## Addendum 367 — 2026-09-06 — Layer 4 audit contract merged under counsel-reviewed delegated authority
 
-**Merged:** `telecheck-app` [PR #283](https://github.com/arthurmenson/telecheck-app/pull/283) → `79b0fbf1c99f2a35b8b2f5a4cb92dfa1968427e9` (squash), following fresh independent counsel review of exact head `ffd419fda9cab4e50aad4a3af1b21833e2a51c2f` and green required workflows. The canonical audit amendment landed through `telecheckONE` [PR #20](https://github.com/arthurmenson/telecheckONE/pull/20) → `cc8bedc818f279eb299beee24dbfb1fabb9f93e9` (squash). The streaming prerequisite remains app [PR #282](https://github.com/arthurmenson/telecheck-app/pull/282) → `bbfbe534bdfb111b824de3aa409a03259fb5756d`, recorded in Addendum 366.
+**Merged:** `telecheckONE` [PR #20](https://github.com/arthurmenson/telecheckONE/pull/20) → `cc8bedc818f279eb299beee24dbfb1fabb9f93e9` (squash). Fresh independent technical/adversarial review APPROVE on exact head `d00a1e5cfcfe8c462c2ce73ed1e208c9afa19505`, after verification of the manifest correction. This entry records the canonical merge; the separate implementation merge and its completion evidence are recorded in Addendum 368.
 
 ### Canonical decision and user authority
 
@@ -15195,6 +15195,20 @@ Then:
 > always apply counsel review and continue based on recommendation.  use sub agent orchstration where needed to parallel and speed up work
 
 This delegated execution authority superseded the takeover's additional ratifier-ceremony restriction for the requested work. The [preserved decision record](Layer-4-Audit-Decision-2026-09-06/Layer-4-ratification-request.md#decision-record--2026-09-06) distinguishes this contextual interpretation from a fabricated separate quorum or verbatim “ratify Option A” statement. The original implementer proposal and both independent consult passes remain unchanged. Counsel review here means independent technical/adversarial review by fresh subagents; no licensed legal opinion or production sign-off is claimed.
+
+### Independent review and validation
+
+The reviewer inspected the complete PR #20 diff from `9fd71a5553a401235205d36ce86698368cd451fd`, then verified the final correction. One finding was closed: manifest extraction had mistaken body prose mentioning a version field for an actual version declaration. The fix restricts extraction to leading version/status metadata before the first section or divider, records `not declared` for that source, and regenerates the embedded viewer data.
+
+Independent verification confirmed all 126 top-level bundle markdown files occur exactly once in Manifest v3, every embedded document equals its committed source, AUDIT_EVENTS is v5.5 and the other 14 family contracts remain v5.4. The prior Promotion Ledger content, protected Active Document Index §4, and all three original proposal/consult artifacts remain unchanged. Complete diff whitespace checks passed. This specification review did not substitute for downstream implementation review or PostgreSQL CI.
+
+**Cockpit:** rev 471 → 472, recording the canonical PR #20 merge. The streaming prerequisite and its baseline evidence remain in Addendum 366; the implementation merge has its own entry below. Neither this canonical amendment nor its review authorizes deployment or Pilot 1 Day-0.
+
+---
+
+## Addendum 368 — 2026-09-06 — Sprint 1.2b merged: Layer 4 clinical vendor boundary with independently durable audit evidence
+
+**Merged:** `telecheck-app` [PR #283](https://github.com/arthurmenson/telecheck-app/pull/283) → `79b0fbf1c99f2a35b8b2f5a4cb92dfa1968427e9` (squash), following two fresh independent counsel reviews of exact head `ffd419fda9cab4e50aad4a3af1b21833e2a51c2f` and green required workflows. This implements AUDIT_EVENTS v5.5 / P-047, whose canonical PR #20 merge is recorded in Addendum 367. The streaming prerequisite remains app [PR #282](https://github.com/arthurmenson/telecheck-app/pull/282) → `bbfbe534bdfb111b824de3aa409a03259fb5756d`, recorded in Addendum 366.
 
 ### What landed
 
@@ -15212,11 +15226,11 @@ Two fresh independent reviewers inspected the complete implementation diff from 
 
 Local build, typecheck, lint, format:check, check:log-call-sites (210 files), and diff checks passed. The DB-free unit suite passed with 269 tests and the same 5 documented expected NER failures.
 
-[Full PostgreSQL CI](https://github.com/arthurmenson/telecheck-app/actions/runs/34041289986) passed on the reviewed head: 188 files; 2,965 tests passed, 6 documented expected failures, 3 skipped, and 30 TODOs. The run completed in 66.27 seconds (job `101508401559`). CI, Performance benchmarks, Baseline refresh guard, and Dependency Review all passed on the first attempt for this integrated head; no rerun was needed. Earlier draft results do not substitute for these final-head checks.
+[Full PostgreSQL CI](https://github.com/arthurmenson/telecheck-app/actions/runs/34041289986) passed on the reviewed head: 188 files; 2,965 tests passed, 6 documented expected failures, 3 skipped, and 30 TODOs. The test suite completed in 66.27 seconds (job `101508401559`). CI, Performance benchmarks, Baseline refresh guard, and Dependency Review all passed on the first attempt for this integrated head; no rerun was needed. Earlier draft results do not substitute for these final-head checks.
 
 Acceptance coverage uses real independent PostgreSQL connections and committed audit rows to prove evidence survives outer rollback, marker/event rollback is atomic, retry and expiry semantics hold, and the stored chain remains valid. It exercises lost COMMIT acknowledgement, provider failure after audit commit, concurrent equivalent claims, distinct tenant/actor/body/candidate decisions, pool saturation, and audit-chain contention. HTTP tests use the real handler/resolver/adapter with a local fake transport and a selective test-only Layer 1 bypass, while separate cases retain Layer 1/crisis behavior. Actual serialized payloads and mutation attempts across the awaited audit are covered. The final CI run executed 18 real-connection audit integration tests and 9 HTTP boundary integration tests, alongside 88 screening/boundary and 24 resolver unit tests.
 
-**Cockpit:** rev 471 → 472. This paired continuity entry records canonical PR #20 and implementation PR #283; no prior Addendum is rewritten.
+**Cockpit:** rev 472 → 473, recording implementation PR #283 separately from canonical PR #20. This bookkeeping PR carries the two substantive merge records; it does not recursively create a third record for itself. No prior Addendum is rewritten.
 
 **Sprint 1 remaining:** 1.2c (Layer 5 backup redaction) · 1.3 phase B (env-purge, incident scripts, baseline-seed, CI suite, and real account classification argument) · 1.4 (adversarial suite).
 
