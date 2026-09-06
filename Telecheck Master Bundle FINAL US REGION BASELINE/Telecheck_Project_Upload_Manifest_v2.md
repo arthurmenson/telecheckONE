@@ -4,7 +4,7 @@
 **Generated:** 2026-09-06 for P-047, mechanically from the top-level bundle filesystem.
 **Status:** Current filesystem inventory; canonicality remains governed by Active Document Index v1.3 and Artifact Registry v2.31.
 **Final file count:** **126 markdown files**. This includes historical/superseded artifacts and the manifest itself; it is not a count of active canonical contracts or entities. Layer 4 adds no new bundle file.
-**Method:** enumerate and sort every top-level `*.md` filename and read its declared header. No recursive workstream files, archives, or generated viewer data are counted. Absence of a declared version is recorded without inventing one.
+**Method:** enumerate and sort every top-level `*.md` filename and read its leading version/status metadata before the first section or horizontal divider. Prose mentions of a version field are not declarations. No recursive workstream files, archives, or generated viewer data are counted. Absence of a declared version is recorded without inventing one.
 **Current affected pointers:** AUDIT_EVENTS v5.5; other 14 family contract headers v5.4; Registry v2.31; Index v1.3; Promotion Ledger P-047. Stable filenames retain historical version suffixes. The header-derived inventory below supersedes the older filesystem snapshot preserved afterward.
 
 ## Current filesystem inventory
@@ -14,7 +14,7 @@
 | `CLAUDE_CODE_BOOT_SEQUENCE.md` | not declared |
 | `TELECHECK_RELEASE_NOTES_FINAL_REMEDIATED.md` | not declared |
 | `TELECHECK_RELEASE_NOTES_US_REGION_BASELINE.md` | not declared |
-| `TELECHECK_VALIDATION_REPORT_US_REGION_BASELINE.md` | ` field; check both against the canonical version map in `Telecheck_Project_Upload_Manifest_v2.md`. |
+| `TELECHECK_VALIDATION_REPORT_US_REGION_BASELINE.md` | not declared |
 | `Telecheck_ADR_027_Country_Conditional_DTC_Marketing.md` | not declared |
 | `Telecheck_ADR_028_Research_Data_Partnership_Posture_A.md` | not declared |
 | `Telecheck_ADR_029_AI_Workload_Taxonomy.md` | not declared |
