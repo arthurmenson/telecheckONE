@@ -1,7 +1,7 @@
 # Telecheck — Active Document Index
 
-**Version:** 1.3 — refreshed 2026-09-06 for P-047 Layer 4 audit amendment. **Previous version history:** 1.2 (refreshed 2026-05-20, Q2 2026 Batched Ratifier Ceremony Phase B + Wave 4 hygiene cycle per Evans's "merge and continue" instruction — Promotion Ledger P-027; Artifact Registry v2.13 → v2.14; CDM v1.3 → v1.4; Contracts Pack v5.2 → v5.3 across 5 amended files; SI-021 R2 ratifier-ready filed; 3 per-SI Option-pattern follow-on amendments landed; Phase A + Phase B exit gates SATISFIED). Previously v1.1 refreshed 2026-05-20 (Phase A; P-026; Registry v2.12 → v2.13).
-**Status:** Canonical companion to Artifact Registry v2.31 (`Telecheck_Artifact_Registry_v2_10.md`; header governs).
+**Version:** 1.4 — refreshed 2026-09-06 for P-048 initial classified-key audit registration (v1.3 covered P-047 Layer 4). **Previous version history:** 1.2 (refreshed 2026-05-20, Q2 2026 Batched Ratifier Ceremony Phase B + Wave 4 hygiene cycle per Evans's "merge and continue" instruction — Promotion Ledger P-027; Artifact Registry v2.13 → v2.14; CDM v1.3 → v1.4; Contracts Pack v5.2 → v5.3 across 5 amended files; SI-021 R2 ratifier-ready filed; 3 per-SI Option-pattern follow-on amendments landed; Phase A + Phase B exit gates SATISFIED). Previously v1.1 refreshed 2026-05-20 (Phase A; P-026; Registry v2.12 → v2.13).
+**Status:** Canonical companion to Artifact Registry v2.32 (`Telecheck_Artifact_Registry_v2_10.md`; header governs).
 **Bundle reference:** Telecheck_Master_Bundle_FINAL_US_REGION_BASELINE.zip — **~105 markdown files post-Q2-2026-batched-ratification** (87 prior + 18 newly added at P-026: 11 NEW canonical artifacts + 7 supersession-version artifacts superseding prior versions preserved at existing paths)
 **Date:** 2026-05-20 (Q2 2026 Batched Ratifier Ceremony; P-026)
 **v1.1 ratifier ceremony summary:** 13 architectural-judgment OQ-groups (OQ-A..OQ-M) RATIFIED per Sprint 20 Master Completion Plan v1.0 → v1.1 amendment §10 + §11; 19 ratifier-ready spec drafts (Sprints 1-20) promoted to canonical bundle; Cold-DR OQ2 RESOLVED via Sprint 13 KMS Architecture Spec; Phase A spec-corpus exit gate SATISFIED. **New canonical files added:** `Telecheck_AI_Service_Mode_1_Handler_Spec_v1_0.md`; `Telecheck_AI_Service_Mode_2_Handler_Spec_v1_0.md`; `Telecheck_KMS_Architecture_Spec_v1_0.md`; `Telecheck_F4_Deploy_Runbook_v1_0.md`; `Telecheck_SIEM_Integration_Spec_v1_0.md`; `Telecheck_Cold_DR_Runbook_v1_0.md`; `Telecheck_Cross_SI_Publish_State_Decision_Record_v1_0.md`; `Telecheck_Operational_Readiness_v1_6_Evidence_Rubric_Catalog_v1_0.md`; `Telecheck_SI_015_MarketingCopy_v1_0.md` (Option B per OQ-A); `Telecheck_SI_016_AI_Workflow_Handler_Registry_v1_0.md` (Option C per OQ-A); `Telecheck_SI_020_Forms_Engine_I030_Static_Analyzer_v1_0.md` (with SI-011b filing). **Supersession files added:** `Telecheck_Identity_Authentication_Spec_v1_1.md` (supersedes v1.0); `Telecheck_Consent_Delegated_Access_Slice_PRD_v1_1.md` (supersedes v1.0); `Telecheck_Notification_Spec_v1_2.md` (supersedes v1.1); `Telecheck_RBAC_Permissions_Matrix_v1_2.md` (supersedes v1.1); `Telecheck_Operational_Readiness_Todo_v1_6.md` (supersedes v1.5); `Telecheck_Master_Completion_Plan_v1_1.md` (supersedes v1.0); `Telecheck_Medication_Interaction_Engine_Slice_PRD_v2_0.md` (supersedes v1.0; Option B per OQ-A). **4 follow-up SIs filed (NOT promoted in this entry):** SI-021 SIEM hash-chain archival per OQ-C split; SI-022 session_state CDM v1.3 entity per OQ-F; SI-023 ai_mode1_conversation CDM v1.3 entities per OQ-G; Quantum-resistance migration roadmap SI Phase 3+ per OQ-I. **Phase B = CDM v1.2 → v1.3 batched promotion (Path B1 per OQ2) is the next gating ceremony.** Previously refreshed 2026-05-01 (v1.10 PRD Update Cycle Phase 6 promotion per Evans's "authorized" instruction)
@@ -15,14 +15,14 @@
 
 ---
 
-**Current Layer 4 pointers (2026-09-06, P-047):** AUDIT_EVENTS v5.5; the other 14 Contracts Pack family headers stay v5.4 per P-044. Registry v2.31 reconciles P-046's recorded v2.30 before the P-047 addition. Manifest v3 is the current mechanical filesystem inventory. These explicit pointers supersede older snapshot version labels below for the affected artifacts; unrelated historical metadata is preserved.
+**Current affected pointers (2026-09-06, P-048):** AUDIT_EVENTS v5.6, including P-047 Layer 4 and P-048 initial classified-key creation; the other 14 family headers stay v5.4. Registry v2.32; Manifest v3 is the current refreshed filesystem inventory. These pointers supersede older snapshot labels for affected artifacts; historical metadata is preserved.
 
 ## 0. Authority hierarchy (READ THIS FIRST)
 
 When two documents conflict, resolve in this order — top wins:
 
 1. **Active Document Index** (this document) — entry-point canonicality reference
-2. **Artifact Registry v2.31** — canonical mapping with rationale and status
+2. **Artifact Registry v2.32** — canonical mapping with rationale and status
 3. **Project Upload Manifest** — bundle inventory
 4. **Engineering Handoff & Build Guide v1.3** — execution guide with sprint plan
 5. **All other documents** — substantive specs in their domain
@@ -68,7 +68,7 @@ When you encounter a Telecheck document file:
 | **Canonical data model** | Canonical Data Model **v1.3** (bumped v1.2 → v1.3 at P-011 / SI-001 closure 2026-05-11: §4.16 MedicationRequest added; audit_events CHECK amended) | v1.0, v1.1, v1.2 superseded |
 | **State machines** | State Machines **v1.2** (bumped v1.1 → v1.2 at P-011 / SI-001 closure 2026-05-11: §19 MedicationRequest lifecycle added) | v1.0 and v1.1 superseded |
 | **API surface** | OpenAPI v0.2 | — |
-| **Cross-cutting contracts** | AUDIT_EVENTS **v5.5** at `Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md`; other 14 family contracts **v5.4** (P-044 / P-047); README and Update Spec ancillary | Layer 4 normative section and Promotion Ledger P-047 |
+| **Cross-cutting contracts** | AUDIT_EVENTS **v5.6** at `Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md`; other 14 family contracts **v5.4** (P-044 / P-048); README and Update Spec ancillary | Layer 4 / initial classified-key sections and Promotion Ledger P-047 / P-048 |
 | **RBAC / permissions** | RBAC Permissions Matrix v1.1 | — |
 | **AI Clinical Assistant** | AI Clinical Assistant Slice PRD v1.0 | Tenant Threading Addendum v1.0 §3.1 |
 | **Async consult** | Async Consult Slice PRD v1.0 | Tenant Threading Addendum v1.0 §3.2 |
@@ -106,8 +106,8 @@ When you encounter a Telecheck document file:
 | **Reviewer Brief** | Reviewer Brief v1.0 | — |
 | **Red Team Review** | Red Team Review (latest) | — |
 | **Flagged Items Resolution** | Flagged Items Resolution v1.0 | — |
-| **Artifact Registry** | Artifact Registry v2.31 | — |
-| **Promotion Ledger** | Append-only ledger through **P-047**: Layer 4 audit Option A and explicit P-046 Registry reconciliation | Original user directions and authority interpretation in P-047 |
+| **Artifact Registry** | Artifact Registry v2.32 | — |
+| **Promotion Ledger** | Append-only ledger through **P-048**: initial classified-key action; P-047 Layer 4 and earlier reconciliation retained | Delegated authority and review record in P-047 / P-048 |
 | **Country regulatory contracts (placeholder)** | Telecheck_Country_Regulatory_Contracts.md (placeholder per ADR-027 Tier 2; populated per per-country activation gate) | — |
 | **Pharmacy Council guidance (placeholder)** | Telecheck_Pharmacy_Council_Guidance.md (placeholder per ADR-027 Tier 2) | — |
 | **Data Sharing Agreement template (placeholder)** | Telecheck_DSA_Template.md (placeholder per ADR-028; legal-reviewed pre-launch per Master PRD §24 row 13) | — |
@@ -165,6 +165,8 @@ These files exist in the corpus for traceability but are NOT canonical. If you f
 ---
 
 ## 5. Document control
+
+- **v1.4 — 2026-09-06 (P-048)** — Current AUDIT_EVENTS v5.6 / Registry v2.32 pointers; initial classified-key event registration. Protected §4 and prior history unchanged.
 
 - **v1.3 — 2026-09-06 (P-047)** — Current affected pointers: AUDIT_EVENTS v5.5; other family contracts v5.4; Registry v2.31; Manifest v3; Ledger P-047. Protected §4 superseded records and earlier cycle metadata preserved.
 

@@ -1,11 +1,11 @@
 # Telecheck — Project Upload Manifest
 
 **Version:** 3
-**Generated:** 2026-09-06 for P-047, mechanically from the top-level bundle filesystem.
-**Status:** Current filesystem inventory; canonicality remains governed by Active Document Index v1.3 and Artifact Registry v2.31.
-**Final file count:** **126 markdown files**. This includes historical/superseded artifacts and the manifest itself; it is not a count of active canonical contracts or entities. Layer 4 adds no new bundle file.
+**Generated:** 2026-09-06 for P-048, mechanically from the top-level bundle filesystem.
+**Status:** Current filesystem inventory; canonicality remains governed by Active Document Index v1.4 and Artifact Registry v2.32.
+**Final file count:** **126 markdown files**. This includes historical/superseded artifacts and the manifest itself; it is not a count of active canonical contracts or entities. The P-047 and P-048 additions create no new bundle file.
 **Method:** enumerate and sort every top-level `*.md` filename and read its leading version/status metadata before the first section or horizontal divider. Prose mentions of a version field are not declarations. No recursive workstream files, archives, or generated viewer data are counted. Absence of a declared version is recorded without inventing one.
-**Current affected pointers:** AUDIT_EVENTS v5.5; other 14 family contract headers v5.4; Registry v2.31; Index v1.3; Promotion Ledger P-047. Stable filenames retain historical version suffixes. The header-derived inventory below supersedes the older filesystem snapshot preserved afterward.
+**Current affected pointers:** AUDIT_EVENTS v5.6; other 14 family contract headers v5.4; Registry v2.32; Index v1.4; Promotion Ledger P-048. Stable filenames retain historical suffixes. This header-derived inventory supersedes the older filesystem snapshot preserved afterward.
 
 ## Current filesystem inventory
 
@@ -27,14 +27,14 @@
 | `Telecheck_AI_Service_Mode_1_Handler_Spec_v1_0.md` | 0.1 DRAFT |
 | `Telecheck_AI_Service_Mode_2_Handler_Spec_v1_0.md` | 0.1 DRAFT |
 | `Telecheck_Acquisition_Engagement_Tools_Slice_PRD_v1_0.md` | 1.0 |
-| `Telecheck_Active_Document_Index_v1_0.md` | 1.3 |
+| `Telecheck_Active_Document_Index_v1_0.md` | 1.4 |
 | `Telecheck_Admin_Backend_Slice_PRD_v1_1.md` | 1.1 |
 | `Telecheck_Admin_Configuration_Surfaces_Slice_PRD_v1_0.md` | 1.0 |
 | `Telecheck_Admin_Operator_IA_v1_1.md` | 1.1 |
 | `Telecheck_Adversarial_Counsel_Review_Sessions_1_to_3.md` | 1.0 |
 | `Telecheck_Adversarial_Counsel_Review_Sessions_1_to_3_Post_Remediation.md` | 1.0 |
 | `Telecheck_Adverse_Event_Reporting_Slice_PRD_v1_0.md` | 1.0 |
-| `Telecheck_Artifact_Registry_v2_10.md` | 2.31 |
+| `Telecheck_Artifact_Registry_v2_10.md` | 2.32 |
 | `Telecheck_Async_Consult_Slice_PRD_v1_0.md` | 1.0 |
 | `Telecheck_CDM_v1_10_to_v1_11_Amendment.md` | 1.0 RATIFIED |
 | `Telecheck_CDM_v1_2_to_v1_3_Amendment.md` | 1.3 amendment v0.1 |
@@ -52,7 +52,7 @@
 | `Telecheck_Consent_Delegated_Access_Slice_PRD_v1_1.md` | 0.1 DRAFT |
 | `Telecheck_Consolidated_Launch_Tracker_v1_0.md` | 1.0 |
 | `Telecheck_Contracts_Pack_v5_00_AI_LAYERING.md` | 5.4 |
-| `Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md` | 5.5 |
+| `Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md` | 5.6 |
 | `Telecheck_Contracts_Pack_v5_00_AUTONOMY_LEVELS.md` | 5.4 |
 | `Telecheck_Contracts_Pack_v5_00_CCR_RUNTIME.md` | 5.4 |
 | `Telecheck_Contracts_Pack_v5_00_DOMAIN_EVENTS.md` | 5.4 |
