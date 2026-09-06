@@ -15235,3 +15235,41 @@ Acceptance coverage uses real independent PostgreSQL connections and committed a
 **Sprint 1 remaining:** 1.2c (Layer 5 backup redaction) · 1.3 phase B (env-purge, incident scripts, baseline-seed, CI suite, and real account classification argument) · 1.4 (adversarial suite).
 
 **Operator gates unchanged:** O-1 participant recruitment · O-2 Track 5 kickoff · O-5 VPS reachability · client-side screener decision (Track 4) · NER remedy decision (blocks Pilot 1 Day-0). Regex-only Layer 4 does not identify every person name or prose address. Completing this sprint does not claim zero PHI for arbitrary natural language, authorize Pilot 1 Day-0 or real-PHI processing, or deploy production.
+
+---
+
+## Addendum 369 — 2026-09-06 — Gated AWS envelope primitive merged
+
+**Merged:** `telecheck-app` [PR #284](https://github.com/arthurmenson/telecheck-app/pull/284) → `1f663865a81922d75bc34a1a463af68891e19c6a` (squash). Fresh independent full-diff engineering counsel approved exact head `0b37ea3f61ec7290a150ac67e2deb76fe87f5aa3` and independently passed 51 focused tests. This is a prerequisite within the user's expanded full-platform request, not completion of that request or production activation.
+
+The primitive uses authenticated AES-256-GCM envelopes, explicit tenant/key/context checks, bounded requests and parsing, safe failures and cleanup of owned plaintext key buffers. The ordinary non-test public entry remains fail-closed because classified caller context, tenant-specific STS/CMK policy and mandatory decrypt audit were not part of this package. The initial design's automatic activation was corrected before review approval. Controlled SDK transports prove local behavior; no live AWS authorization is claimed.
+
+[CI run 34054384229](https://github.com/arthurmenson/telecheck-app/actions/runs/34054384229) passed on the reviewed head: 189 test files, 2,995 passed, six documented expected failures, three skipped and 30 TODO. Typecheck, lint, formatting, dependency and spec checks passed. Classified encryption, key lifecycle, deployment policy verification and operational restore evidence remain required work.
+
+**Cockpit:** rev 473 → 474 records this implementation merge. The next two entries record separate migration-runtime and NER merges. Earlier addenda remain unchanged; this bookkeeping change does not create another record for itself.
+
+---
+
+## Addendum 370 — 2026-09-06 — PostgreSQL-contained migration runner merged
+
+**Merged:** `telecheck-app` [PR #285](https://github.com/arthurmenson/telecheck-app/pull/285) → `07c0062961028da53577e0c8204c3cf4bbbd5185` (squash). Fresh independent full-diff review approved exact head `c3754adeceef94f0b3a91c90633c0c87b7fc46d9` after earlier counsel probes demonstrated transaction escapes in lexical-only containment.
+
+Each migration executes within a PostgreSQL function call inside the runner-owned transaction. The database prevents nested migration text from committing that transaction. Migration effects and raw-source checksum tracking commit together; advisory serialization and checksum refusal preserve history integrity. The lexical screen remains an early validation layer. Windows path normalization fixes the existing glossary check without changing its allowlist.
+
+The reviewer passed six standard migration tests and eight independent PostgreSQL probe groups covering transaction escapes, failure rollback, checksum integrity and replay. [CI run 34055932542](https://github.com/arthurmenson/telecheck-app/actions/runs/34055932542) applied all 79 then-current migrations, replayed zero new files, passed the six migration tests and passed 189 Vitest files with 2,995 passed, six documented expected failures, three skipped and 30 TODO. Formatting, lint, typecheck, log-call-site and migration-encoding checks passed. This is runtime and migration evidence, not production infrastructure certification.
+
+**Cockpit:** rev 474 → 475. Local development now has a reproducible PostgreSQL path. Docker Desktop's local stale-socket repair was blocked by automatic approval review; isolated PostgreSQL was used instead. This host limitation does not replace the separate production-image verification recorded below.
+
+---
+
+## Addendum 371 — 2026-09-06 — Real local NER and offline production-image verification merged
+
+**Merged:** `telecheck-app` [PR #286](https://github.com/arthurmenson/telecheck-app/pull/286) → `538b5781cc27403b6ea5f70c03720f81c68fa532` (squash). The original implementation and final integration received fresh independent full-diff reviews. Final approval covers exact head `52f87b6a5bead866b463d71107391b033d7236e9`; CI tested its merge with the approved migration-runtime main.
+
+The local classifier uses pinned OpenMedClinicalE5Small33M assets at revision `79f7db205869b1be4be23ac4f42aa95bdedc5aee`, verified hashes and real ONNX inference. Explicit overlapping windows cover the complete admitted token sequence; source-offset validation and bounded attached-name expansion correct independently observed truncation and surname defects. Admission, input/token/window limits, asynchronous execution and deadline handling bound resource use. Assets download during explicit setup/build; runtime inference requires no network. Readiness reports screening capability separately so screening failure does not remove the crisis surface. The production image uses the verified glibc runtime.
+
+[CI run 34056225446, job 101548506048](https://github.com/arthurmenson/telecheck-app/actions/runs/34056225446/job/101548506048) passed: 191 files, 3,037 tests, zero expected failures, three skipped and 30 TODO. All 79 migrations applied, replay applied zero, and six migration/history tests passed. A fresh production Docker image completed real inference with networking denied and a read-only filesystem. The independent reviewer also checked native offset/token coverage and integration with the approved KMS primitive; all five workflows were green.
+
+The model remains statistical. A finite 234-case development corpus is not population certification; a held-out organization example still produced partial redaction. Multilingual efficacy, operational load and real-data egress qualification remain acceptance work. This merge closes the prior deterministic NER stub/expected-failure implementation gap; it does not assert universal PHI removal or authorize real-PHI processing, Pilot 1 Day-0 or production deployment.
+
+**Cockpit:** rev 475 → 476. The full-platform goal remains active across all 18 slices and 118 baseline screens plus required additions. Identity isolation, classified KMS, patient integration and the complete care journey are active separate packages; their unmerged results are not counted here as released capabilities.
