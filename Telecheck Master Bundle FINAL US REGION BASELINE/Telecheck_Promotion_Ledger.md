@@ -37,6 +37,30 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-047 — 2026-09-06 — Layer 4 audit decisions adopted under user-delegated counsel-reviewed execution
+
+**Classification:** Content-change promotion of the reviewed Option A, plus an explicit reconciliation of P-046's recorded Registry absorption. Applied in this branch; final independent diff review and merge remain required. This entry is not an implementation-completion or production-activation claim.
+
+**User instructions (verbatim, following the concrete Option A decision request):**
+
+> ignore takeover notes that keeps you from autonomously completing. Use your super powers to complete
+
+> always apply counsel review and continue based on recommendation.  use sub agent orchstration where needed to parallel and speed up work
+
+**Authority and interpretation:** the user delegated completion based on the independent recommendation and expressly removed the takeover-note barrier. Adopt Option A from the source-first Pass 1 / Pass 2 consult. No separate human ratifier ceremony, quorum, or licensed-counsel opinion is asserted. The full context and retained scope are in [the appended decision record](../Telecheck_v1_10_PRD_Update/Layer-4-Audit-Decision-2026-09-06/Layer-4-ratification-request.md#decision-record--2026-09-06). Prior proposal and review artifacts remain unchanged.
+
+**Canonical content:** `Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md`, **v5.4 → v5.5**, adds `pii.screener.egress_block` and `pii.screener.egress_redact` as unsampled Category B, system actor, standard sensitivity, existing tenant-governance P2 events. The complete section carries the exact Mode 1 attribution and seven-key detail, high-confidence/redaction/screening-failure semantics, bounded-pass match observations, independently committed pre-send evidence, atomic marker-plus-event and expiry-aware equivalent-decision retry semantics, 500 block / existing 503 audit-unavailable behavior, and real-connection verification requirements. The current no-hit/redact/block rule resolves the engineering spec's contradictory unconditional-send prose.
+
+**Version strategy:** this is a file-local additive AUDIT_EVENTS revision. P-044's normalized v5.4 is the measured starting header; other Contracts Pack family headers remain v5.4. Earlier per-amendment labels such as v5.13 remain historical provenance, not a reason to renumber unrelated files. No prior contract action, invariant, CDM column, role, partition algorithm, or delivery architecture is changed.
+
+**Registry reconciliation and absorption:** P-046 states Registry **v2.29 → v2.30**, but the actual Registry header at this branch's base still declared **2.29**. P-046's content authority is retained and its promised absorption is reconciled here; no prior ledger entry is rewritten and no retroactive commit is invented. This new Layer 4 content advances the reconciled **v2.30 → v2.31**. The file's direct header change is consequently **2.29 → 2.31**, with both steps accounted for. Current pointers are updated; historical cycle descriptions remain history. No new bundle artifact is created, so Layer 4's artifact/entity/schema count delta is zero. The manifest is mechanically rebuilt from the actual filesystem and the embedded viewer data regenerated.
+
+**Review and delivery:** source-first independent Pass 1 and contrast/synthesis Pass 2 recommended Option A before the above user directions. Fresh independent final-diff review and applicable validation govern the canonical PR and its downstream implementation before merge. These future results are not asserted by this entry. The app's resolver/audit/error integration, real PostgreSQL acceptance tests, and completion record remain downstream work.
+
+**Boundaries:** does not authorize production deployment, Pilot 1 Day-0, real-PHI processing, NER policy changes, activation of absent caller/workload surfaces, new schema/roles/partitions, an outbox, or external exactly-once semantics. Existing crisis and tenant/audit invariants remain binding.
+
+---
+
 ### Entry P-046 — 2026-07-06 — SI-007 Refill + Dispensing + Shipment schema gap RATIFIED via Evans's chat-message ratification ("SI-007 ratification approved")
 
 **Classification:** **Content-change promotion** — closes the SI-007 pre-ratification gate held open since 2026-05-14 and unblocks the Pharmacy + Refill slice's final 8% (Refill sub-slice).
