@@ -15145,3 +15145,33 @@ PR #279 was represented through most of this cycle as "Sprint 1.2a". It was not:
 **Sprint 1 remaining:** 1.2b (Layer 4 AI-vendor sanitization; seam is `resolveClinicalProvider`) · 1.2c (Layer 5 backup redaction) · 1.3 phase B (env-purge + incident scripts + baseline-seed + CI suite; **also owes `createAccount` a real classification argument** — until then every app-created account is `unclassified` and the purge gate refuses) · 1.4 (adversarial suite)
 
 **Operator gates:** O-1 participant recruitment · O-2 Track 5 kickoff · O-5 VPS reachability · client-side screener decision (Track 4) · **NEW: NER remedy decision — blocks Day-0**
+
+---
+
+## Addendum 366 — 2026-09-06 — Streaming baseline prerequisite merged; Sprint 1.2b remains in progress
+
+**Merged:** `telecheck-app` [PR #282](https://github.com/arthurmenson/telecheck-app/pull/282) → `bbfbe534bdfb111b824de3aa409a03259fb5756d` (squash). Independent fresh-subagent adversarial review APPROVE on exact head `10dd8bdc34ca60b554cabd0452843fb631cee441`; all four CI workflows green before merge.
+
+### Baseline defect and fix
+
+The takeover's near-cap split-surrogate test writes 40,001 tiny chunks. The earlier environment timed out after roughly 197 seconds. On this host, the unchanged baseline passed (157 passed, 5 expected NER failures); the targeted regression took 12,828 ms. The stream searched the growing carry buffer for a newline after every write, repeatedly scanning and flattening the partial record.
+
+The one-file fix checks whether newly received text contains a newline before scanning the carry. The previous write already consumed every complete record, so the carry begins each write newline-free. Record caps, UTF-8 and surrogate byte accounting, overflow recovery, redaction, assertions, and timeouts are unchanged. The original targeted test took 52 ms after the fix; the full DB-free suite passed in 1.24 seconds (157 passed, 5 expected failures). These timings are observations on this host, not portable performance guarantees.
+
+### Independent review and validation
+
+The reviewer inspected the complete one-file diff in an isolated exact-commit worktree. Independent probes passed 1,246 base/head chunking comparisons, cap boundaries, overflow recovery, decoder edge cases, and validator-failure injection. Deterministic instrumentation over 10,000 partial writes showed 10,002 newline searches over 500,150,001 aggregate code units before the fix, versus 2 over 100,001 after it, with identical output. No actionable regressions were found.
+
+Local typecheck, lint, format:check, check:log-call-sites (207 files), and diff checks passed. [Full PostgreSQL CI](https://github.com/arthurmenson/telecheck-app/actions/runs/34029571261) passed on the reviewed head: 184 files; 2,826 tests passed, 6 documented expected failures, 3 skipped, and 30 TODOs (63.40 seconds). Performance benchmarks, Baseline refresh guard, and Dependency Review also passed. Review approval is recorded in the implementation task's independent-review artifact and PR body; it is not represented as a GitHub-account review submission.
+
+### Sprint 1.2b status
+
+[Draft PR #283](https://github.com/arthurmenson/telecheck-app/pull/283) contains local regex-screening and provider-wrapper components with 71 new tests. **Production enforcement is not active:** resolver installation, durable audit recording, HTTP mapping, and DB-backed acceptance proofs remain outstanding. The draft is not merged and this addendum does not declare Sprint 1.2b complete.
+
+The required `pii.screener.egress_block` and `pii.screener.egress_redact` actions are absent from the canonical audit catalog at the handoff baseline. The implementation task is preparing the required source-first independent consult and ratifier decision on event registration and transaction semantics. No canonical amendment or ratification is claimed here.
+
+**Cockpit:** rev 470 → 471.
+
+**Sprint 1 remaining:** 1.2b (Layer 4 vendor-boundary completion) · 1.2c (Layer 5 backup redaction) · 1.3 phase B (env-purge, incident scripts, baseline-seed, CI suite, and real account classification argument) · 1.4 (adversarial suite).
+
+**Operator gates unchanged:** O-1 participant recruitment · O-2 Track 5 kickoff · O-5 VPS reachability · client-side screener decision (Track 4) · NER remedy decision (blocks Pilot 1 Day-0). No deployment or pilot authorization occurred.
