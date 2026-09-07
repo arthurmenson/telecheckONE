@@ -223,6 +223,8 @@ The CMK key policy then adds an equality check (per §4.1) between the principal
 
 ---
 
+**Initial-key audit pointer (2026-09-06, P-048):** successful first tenant/class key installation uses `kms.dek_created`, defined in [AUDIT_EVENTS v5.6](Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md#initial-classified-kms-key-creation-p-048). It is not rotation or decrypt evidence. The action-specific envelope/detail and atomicity live in that catalog; this pointer does not revise the existing hierarchy, rotation, DR, break-glass or open operational questions below.
+
 ## 5. Decrypt-operation audit
 
 ### 5.1 Per-decrypt Cat A audit emission

@@ -37,6 +37,20 @@ Why both exist: in long-running projects with many sessions, the Registry can sh
 
 ## Promotion entries
 
+### Entry P-048 — 2026-09-06 — Initial classified-key audit event registration
+
+**Classification:** Content-change promotion. Registers one new action within the existing KMS key hierarchy; AUDIT_EVENTS v5.5 → v5.6, Registry v2.31 → v2.32. This is post-implementation canonical registration: app PR #290 already merged as `4ece5c5ab0338f3ceef71fc4146114644d7e33b8`. No earlier catalog entry or pre-merge canonicalization is fabricated.
+
+**Authority:** the user's continuing delegated execution directive, recorded verbatim in P-047, requires counsel review and continuation based on recommendation. The design counsel recommended a truthful initial creation event instead of mislabeling initial installation as rotation. Fresh complete R6 engineering review approved exact app head `27d1d9949687e8f9591e804e82615ed419779433` and expressly called for this canonical registration. Applying that recommendation here does not invent a separate clinical sign-off, human quorum, licensed legal opinion or operational AWS authorization. Fresh independent review of this canonical diff remains required before its merge.
+
+**Canonical content:** `kms.dek_created` is unsampled Category A / standard sensitivity, existing P2 tenant-governance routing, with verified initiating patient/clinician/operator actor. The exact ten-key detail records tenant, class, immutable CMK identity, context hash, requesting session/role, triggering field, new version, null prior version and false rewrap-complete status. Keyring creation, first active pointer and audit evidence commit atomically. An existing active version is reused without duplicate initial-creation evidence; replacing it uses the existing rotation-start action. The complete authoritative contract is the new AUDIT_EVENTS section; KMS Architecture receives a pointer only.
+
+**Version and preservation:** AUDIT_EVENTS alone advances to v5.6; the other 14 family headers remain v5.4. Registry advances to v2.32 and Index to v1.4. Manifest v3 is mechanically refreshed in its unchanged inventory format and the embedded viewer regenerated. Existing P-047 and all prior ledger content, original proposal/consult records and protected Index §4 remain unchanged. No new bundle artifact is created; this entry does not itself modify a database schema, role, invariant, earlier event or clinical permission.
+
+**Evidence and limits:** app R6 review independently passed 418 unit tests, 54 genuine PostgreSQL/role cases and 27 adversarial groups, and inspected all seven successful exact-head-associated workflows. Their merge context is explicitly distinguished from the candidate's local migration count in Addendum 374. Controlled transports are not live AWS policy proof. Resource/consent authorization remains a caller prerequisite; operational KMS, all 18 platform slices and the full patient/care journey remain active work. No deployment, real-PHI or Pilot 1 Day-0 authorization is conveyed.
+
+---
+
 ### Entry P-047 — 2026-09-06 — Layer 4 audit decisions adopted under user-delegated counsel-reviewed execution
 
 **Classification:** Content-change promotion of the reviewed Option A, plus an explicit reconciliation of P-046's recorded Registry absorption. Applied in this branch; final independent diff review and merge remain required. This entry is not an implementation-completion or production-activation claim.

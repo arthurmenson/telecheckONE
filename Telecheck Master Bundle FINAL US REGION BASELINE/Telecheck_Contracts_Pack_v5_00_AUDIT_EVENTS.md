@@ -1,6 +1,8 @@
 # 00 · Audit Events
 
-**Status:** canonical · **Version:** 5.5 · **Owner:** engineering lead + compliance officer · **Consumers:** all services, compliance, clinical safety, patient-access
+**Status:** canonical · **Version:** 5.6 · **Owner:** engineering lead + compliance officer · **Consumers:** all services, compliance, clinical safety, patient-access
+
+**v5.6 initial classified-key amendment (2026-09-06, P-048):** registers `kms.dek_created` as a truthful initial class-key installation event under the existing KMS architecture. The [initial key-creation section](#initial-classified-kms-key-creation-p-048) pins the actual reviewed emitter's actor, P2 routing, ten detail keys and atomicity. It is a file-local additive revision; the other 14 family headers remain v5.4. The implementation merged before this registration: P-048 records that ordering without implying earlier catalog coverage, clinical approval, live AWS verification or platform completion.
 
 **v5.5 Layer 4 amendment (2026-09-06, P-047):** registers two unsampled Category B local vendor-screening decisions under the existing tenant-governance P2 partition. The normative [Layer 4 section](#layer-4-vendor-boundary-decisions-p-047) below defines their exact detail, current Mode 1 attribution, pre-send durability, failure behavior, and retry unit. This is a file-local content revision from the P-044 family baseline v5.4; other Contracts Pack family headers remain v5.4. Historical amendment-cycle labels and existing action contracts are preserved. User-directed adoption of the independently reviewed Option A is recorded in [the decision packet](../Telecheck_v1_10_PRD_Update/Layer-4-Audit-Decision-2026-09-06/Layer-4-ratification-request.md#decision-record--2026-09-06). It does not claim implementation completion or production activation.
 
@@ -131,6 +133,7 @@ Like all Category A records, rejection events are tenant-scoped per `tenant_id`,
 
 | Action | Actor types | Detail payload |
 |---|---|---|
+| `kms.dek_created` | patient, clinician, operator | Initial classified-key installation only; exact ten-key detail and atomic creation semantics below. Category A, standard, unsampled, existing P2 tenant-governance chain. |
 | `prescribing.initiated` | clinician, **ai_workload (ai_workload_type=protocol_execution)** [v1.10+]; legacy alias `ai_mode_2` permitted only for pre-v1.10 backfill records | medication, patient, program_id, **autonomy_level (required for I-012 actions per §I-012 closure rule)**, ai_workload_type |
 | `prescribing.approved` | clinician (human signer per I-012 three-clause rule) | medication_request_id, medication, dosing, approval_pathway, interaction_signals[], overrides[], **ai_workload_type, autonomy_level (required for all I-012-scoped approvals per §I-012 closure rule — patch 2026-05-02 per Codex Round-6 Scope 1 MEDIUM-1; for clinician-only approvals where the upstream AI workload was `protocol_execution` at `action_with_confirm`, the envelope inherits the action_id's preceding workload/autonomy values; for purely human-driven approvals with no AI involvement, the fields are populated as `ai_workload_type = "n/a"` and `autonomy_level = "n/a"` — this prevents schema-driven implementations from omitting the fields and recreating the protocol_engine bypass)** |
 | `prescribing.declined` | clinician | medication_request_id, reason_code, reason_text, recommended_action, ai_workload_type, autonomy_level |
@@ -167,6 +170,35 @@ Like all Category A records, rejection events are tenant-scoped per `tenant_id`,
 | `ai_mode_2_physician_approve` | clinician | evaluation_id, clinician_id |
 | `ai_mode_2_physician_modify` | clinician | evaluation_id, clinician_id, modifications[], rationale |
 | `ai_mode_2_physician_decline` | clinician | evaluation_id, clinician_id, decline_reason |
+
+#### Initial classified KMS key creation (P-048)
+
+`kms.dek_created` attests that the first active data-encryption-key version for a real `(tenant_id, data_class)` pair was installed in the tenant/class keyring. It is **Category A, `audit_sensitivity_level: standard`, unsampled**, routed to the existing **P2 tenant-governance chain** with `target_patient_id: null`. It is an initial key-lifecycle fact, not a clinical decision or a rotation. Category A retention applies; P2 does not grant a patient access to tenant-wide key-governance records. Existing role- and tenant-scoped audit access continues to apply.
+
+This implements the initial-creation gap within [KMS Architecture §§2 and 6](Telecheck_KMS_Architecture_Spec_v1_0.md), using the existing partition extension in [the canonical amendment §3](Telecheck_Contracts_Pack_v5_2_to_v5_3_Amendment.md). The per-action P2 mapping governs this event over the older patient-only Hash chain summary in this file. Neither a caller-provided patient ID nor the resource triggering creation chooses the key's tenant/class identity.
+
+**Trusted envelope:** `tenant_id`, `actor_tenant_id` and `country_of_care` are read from the live bound authenticated actor context. `actor_id` is that account ID; the existing service role values map as `patient → patient`, `clinician → clinician`, `tenant_admin → operator` for `actor_type`. The event attributes the authenticated caller whose authorized operation triggered initial creation, not a fabricated system/clinical approver. `resource_type` and `resource_id` identify the server-authorized triggering resource. `delegate_context`, `ai_workload_type` and `autonomy_level` are null for this normal-service emitter. Other required envelope fields retain their existing meanings. Missing or expired authority fails closed; no sentinel account or tenant is invented. Delegates and cross-tenant platform-admin normal-service calls remain closed pending their separately reviewed integrations.
+
+**Exact detail surface:**
+
+| Key | Required value / meaning |
+|---|---|
+| `tenant_id` | Same real operating tenant as the envelope. |
+| `data_class` | One of the existing seven KMS classes: `pii_demographic`, `pii_clinical`, `pii_sensitive_clinical`, `pii_financial`, `pii_conversation`, `pii_audit_payload`, `pii_research_consented`. Selected by server authorization, never arbitrary client metadata. |
+| `cmk_arn` | Immutable, committed primary CMK ARN from that tenant's registered key binding; required and non-null for successful initial installation. No alias or caller-selected key. |
+| `encryption_context_hash` | SHA-256 hex of the UTF-8 JSON object serialized in the fixed field order `{tenant_id, data_class}` used for the class-key encryption context. It contains no patient, resource, nonce or key material. |
+| `requesting_session_id` | Verified authenticated session ID of the triggering caller. |
+| `requesting_role` | Verified current role: `patient`, `clinician` or `tenant_admin`. |
+| `field` | Server-authorized triggering resource field; a validated identifier, never field content. |
+| `dek_version_id` | The newly installed immutable tenant/class key-version identifier. |
+| `previous_dek_version_id` | Exactly null for initial creation. A prior active version means the existing rotation-start event applies instead. |
+| `rewrap_complete` | Exactly false. Initial installation does not attest historical rewrap, key retirement or completed rotation. |
+
+The original keyring INSERT, active-write-pointer installation and this audit event **commit atomically in the same independently owned tenant-bound transaction**. If the audit or final live-authority validation fails, installation and evidence roll back together and the operation does not return a usable result. Per-tenant/class serialization means a contender that discovers an already-installed active version reuses it and emits no duplicate creation event. Subsequent business rollback does not erase the committed key-lifecycle fact. Conversely, installation alone does not prove that later row encryption, persistence or provider delivery succeeded.
+
+Never include raw/wrapped key bytes, plaintext, row ciphertext, caller nonce, credentials or provider/database diagnostics in this event. Replacing an existing active version remains `kms.dek_rotation_started`; this registration neither changes its semantics nor authorizes `kms.dek_rotation_completed`. Referenced historical versions remain retained until separately verified rewrap/retirement/restore work is complete. Decrypt/lookup/failure actions retain their own existing contracts.
+
+**Reviewed implementation source:** `telecheck-app` PR #290, approved head `27d1d9949687e8f9591e804e82615ed419779433`, merged as `4ece5c5ab0338f3ceef71fc4146114644d7e33b8`; `src/lib/kms-classified-store.ts` installs the key and creates this exact envelope/detail, with actor/class types in `kms-classified-types.ts`. Controlled AWS transports plus real ordinary-role PostgreSQL tests establish implementation behavior. Actual AWS provisioning and IAM/key-policy enforcement, CloudTrail/SIEM delivery, DR/break-glass, historical rewrap/retirement and restore drills remain separate unverified work. This addition does not invent clinical approval, change patient consent/assignment requirements or close the full-platform goal.
 
 ### Category B — Governance and configuration actions
 
@@ -451,6 +483,8 @@ Records past retention are archived, not deleted. Archived records are retrievab
 ---
 
 ## Document control
+
+- **v5.6 (2026-09-06, P-048)** — Registers initial classified-key creation as unsampled A/standard with trusted human actor, deterministic P2, exact ten-key metadata and atomic keyring/active-pointer/audit commitment. File-local addition; existing events and other family headers unchanged.
 
 - **v5.5 (2026-09-06, P-047)** — File-local Layer 4 amendment: two unsampled B/system/standard actions, exact Mode 1/P2 attribution, bounded-pass match counts, pre-send independent durability, equivalent-decision retry semantics, and verification gate. Existing envelope/storage/roles/invariants unchanged; other family headers remain v5.4.
 

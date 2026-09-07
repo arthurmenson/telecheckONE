@@ -5,7 +5,7 @@
 **Date:** 2026-05-01 (refreshed at v1.10 PRD Update Cycle Phase 6 promotion ceremony per Evans's "authorized" instruction)
 **Status:** Canonical
 
-**Current affected pointers (2026-09-06, P-047):** Registry **v2.31**, Active Document Index **v1.3**, Manifest **v3**, AUDIT_EVENTS **v5.5** at its stable `Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md` filename; other 14 Contracts Pack family contracts retain **v5.4**. These pointers supersede earlier snapshot labels for these artifacts in this document. P-047 reconciles P-046's promised v2.30 header absorption before the new audit amendment. Older cycle-specific labels remain provenance; no unrelated canonical semantics are revised.
+**Current affected pointers (2026-09-06, P-048):** Registry **v2.32**, Active Document Index **v1.4**, Manifest **v3**, AUDIT_EVENTS **v5.6** at its stable `Telecheck_Contracts_Pack_v5_00_AUDIT_EVENTS.md` filename; other 14 family contracts retain **v5.4**. P-047 Layer 4 and P-048 initial classified-key audit contracts are the current additions. These pointers supersede older snapshot labels for affected artifacts; prior cycle history and unrelated semantics remain unchanged.
 
 ---
 
