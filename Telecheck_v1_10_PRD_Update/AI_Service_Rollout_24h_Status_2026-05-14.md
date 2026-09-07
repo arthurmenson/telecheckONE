@@ -15323,3 +15323,65 @@ All seven exact-head-associated workflows succeeded. [CI run 34061770727](https:
 Resource assignment/consent authorization remains a caller prerequisite. Actual AWS provisioning and IAM/key-policy enforcement, CloudTrail/SIEM delivery, regional canaries, historical rewrap/retirement, break-glass, DR and production restore drills remain unverified or separate work. Combined Identity/classified-KMS/care integration is continuing. Controlled transports and synthetic PostgreSQL evidence do not authorize production or real-PHI processing.
 
 **Cockpit:** rev 478 → 479. This change records three substantive package merges separately and does not recursively record its own bookkeeping merge. All 18 platform slices and 118 baseline screens plus required additions remain active; these foundation packages do not satisfy the full-platform definition of done.
+
+
+---
+
+## Addendum 375 — 2026-09-07 — Patient care foundations and account recovery merged; matching local authentication activated
+
+**Scope and checkpoint:** consolidated implementation continuity for backend PRs **291–301** and patient PRs **2–7**, verified against their primary Git histories at **2026-09-07 18:19 UTC**. Backend main is `665ca67ef820e6a0659adf609d4ce1441c46178a`; patient main is `0e2bb16244dab7e368530815619f1416501404c3`. These are bounded engineering merges. All **18 platform slices and 118 baseline screens plus required additions** remain in the active full-platform goal. This entry does not ratify new canonical schemas, contracts, clinical content or production policy; Promotion Ledger **P-048** and current contract/version pointers remain unchanged.
+
+### Merged backend packages
+
+| PR | Exact squash merge | Implemented increment and boundary |
+| --- | --- | --- |
+| [291](https://github.com/arthurmenson/telecheck-app/pull/291) | `58f4d6095ec151b451bdeb6a467ffa6091548a2d` | Owned consultation history and restricted medication reads with live authority rechecks; complete Pharmacy remains open. |
+| [292](https://github.com/arthurmenson/telecheck-app/pull/292) | `5bff214685d5187e7c86e03abd1bc40a19697722` | Verified consultation-payment prerequisite, classified financial protection and durable evidence; refunds, cancellation, reconciliation and live-provider activation remain open. |
+| [293](https://github.com/arthurmenson/telecheck-app/pull/293) | `1c5883571a2cddc55346d5d0abd0b4052677b8d0` | Independently published care terms, separate required/optional choices, private history and withdrawal; complete Consent/Delegation and production wording remain open. |
+| [294](https://github.com/arthurmenson/telecheck-app/pull/294) | `55278ae656980f7870c503875f520a2d818880d9` | Governed immutable intake publication and authenticated validation with publication-evidence gates; complete Forms authoring and launch approval remain open. |
+| [295](https://github.com/arthurmenson/telecheck-app/pull/295) | `eb3dd9eeb98332db42dcf4ff21e37ecf7afaf65a` | Durable patient crisis admission before ordinary care validation; a subsequently discovered COMMIT-time authority defect is pending correction in the unreleased clinical candidate below. |
+| [296](https://github.com/arthurmenson/telecheck-app/pull/296) | `f885e8efe311b835a90ba3e634fdeaf4029c37ba` | Server-encrypted intake tied to actual payment, current care consent and immutable form version; recoverable metadata-only care progress. |
+| [297](https://github.com/arthurmenson/telecheck-app/pull/297) | `e10b652e339f16308b8ce812f1d81de6aa357747` | Recover interrupted accepted consultation checkout using existing payment/provider/price identity; no fabricated payment success. |
+| [298](https://github.com/arthurmenson/telecheck-app/pull/298) | `2e70eace1bfcc87686e5fdc4ac68f988cc22ebd7` | Durable owned crisis history and active-event status after reopening care; no inference that an event was cleared because the page reloaded. |
+| [299](https://github.com/arthurmenson/telecheck-app/pull/299) | `94d34f465d64acde808bb4a89d6dc4c6b2113cac` | Governed pending clinician enrollment through Identity; enrollment does not confer a license, staff MFA or clinical authority. |
+| [300](https://github.com/arthurmenson/telecheck-app/pull/300) | `500b8381a5f161535a8dbba4915c1cddad354aad` | Patient PIN reset revokes existing sessions, checks code validity after waits and prevents dispatch after failed commit acknowledgement; durable email retry remains open. |
+| [301](https://github.com/arthurmenson/telecheck-app/pull/301) | `665ca67ef820e6a0659adf609d4ce1441c46178a` | Patient/delegate token rotation with original absolute session deadline, exact-request recovery and revoke-only logout; uncertain-successor recovery remains bounded to 900 seconds. |
+
+### Merged patient packages
+
+The patient repository is available at [arthurmenson/telecheck-patient-app](https://github.com/arthurmenson/telecheck-patient-app); earlier local-only handoff statements are historical.
+
+| PR | Exact squash merge | Implemented increment |
+| --- | --- | --- |
+| [2](https://github.com/arthurmenson/telecheck-patient-app/pull/2) | `d0e0431a73f35293105bf67a47bff2b67c16bc21` | Real persisted consultation metadata in Care, explicit loading/error/empty states and corrected small-text contrast. |
+| [3](https://github.com/arthurmenson/telecheck-patient-app/pull/3) | `00cc2b2de97e0f34f414580cebad0d60a129222c` | Versioned care consent, separate optional AI choice and private withdrawal/history integration. |
+| [4](https://github.com/arthurmenson/telecheck-patient-app/pull/4) | `a28166965acdb7b6bc0d01fbac924214596b7459` | Paid general-care initiation/recovery, protected intake, durable safety status and session-owned async results. |
+| [5](https://github.com/arthurmenson/telecheck-patient-app/pull/5) | `748e90428d7be9a8e5869c6566e92e7f578ffebb` | Actionable email-verification and PIN-recovery behavior with private-field cleanup. |
+| [6](https://github.com/arthurmenson/telecheck-patient-app/pull/6) | `aac98ca4885d2b299b7cf76b56f1b1b7b5a26fc0` | Clear existing-account reset versus new-account creation, separate code purposes and five-minute expiry guidance. |
+| [7](https://github.com/arthurmenson/telecheck-patient-app/pull/7) | `0e2bb16244dab7e368530815619f1416501404c3` | Atomic owner/access/refresh state, cross-tab refresh serialization, exact lost-response recovery and immediate logout/session-generation isolation. |
+
+### Review, integration and the actual local runtime
+
+Each recorded engineering package passed its required fresh independent complete review and applicable CI before merge; earlier failed/incomplete reviews remain preserved. For the final authentication composition, backend PR301's eight workflows passed on reviewed head `75f9cf5745aca42aadb00fe8d1e72c000a5c4404` ([main CI 34149224220](https://github.com/arthurmenson/telecheck-app/actions/runs/34149224220)); patient PR7 CI passed on `635673c70043ef4b2db421f4a3db61891c715155` ([CI 34148161986](https://github.com/arthurmenson/telecheck-patient-app/actions/runs/34148161986)). The backend's last delta corrects only stale HTTP test expectations; it does not change approved runtime bytes.
+
+Fresh independent actual-composition review passed **63 US/Ghana groups**, including naturally elapsed 15-minute JWT expiry, naturally elapsed five-minute signup-code expiry followed by explicit resend, actual protected writes, cross-tab account ownership, server revocation, lost replies, PIN reset and absent-account/purpose-separation checks. A separate fresh launcher review passed **15 groups**, independently verifying all **978 backend source files**, **55 export files**, old/new 097 baseline checksums, failure/port guards and the actual isolated preview. These evidence counts are separate from author executions and from native export success; no physical-device acceptance is claimed.
+
+At **18:18:40 UTC**, the matching hash-guarded frozen backend refresh v2 and patient export v3 were activated locally on **127.0.0.1:3106** and **http://localhost:4177/**. Health and the exact served web hash passed. Bundle `index-03190d2fb2aab4b41db959473bff0e93.js` has SHA256 `0a278a8c23b9aa46295459b982575e0aab9612e7fcf51322a736bb38eae5c566`. Backend manifest SHA256 is `1c1e0519605897e774b327e1a949bb4539b47418e0699e5465128d9ea72073b0`; composition/export evidence SHA256 is `07848818d49adc7a4b477be806d806358b3b7f56f25c118205ee2672f3396b27`.
+
+The retained local database **56522 / telecheck_care_intake** still has **96 migrations through 097**. It was not migrated, reseeded or given new roles for this activation. Backend main separately contains **97 migration files through 098**; source availability is not evidence that 098 ran in this retained database. Patient authentication/refresh works on the retained 097 baseline; staff enrollment is not thereby locally activated. Local payments and remote key wrapping remain explicit development fixtures. Existing Resend configuration uses the verified `em.heroshealth.com` sender domain with development-code echo disabled; no credential is included here.
+
+The user confirmed receipt of a recovery email, then identified the failure screen as **Reset your PIN**. The supplied email had no retained local account; a valid reset code cannot create one. Account creation uses its own code. The user was directed to **Create your account** and a fresh signup code; their open Chrome form was preserved without reading private input or forcing reload. **Successful creation/sign-in by that user remains unverified.** HTTP acceptance of a code request is not itself proof of delivery. An ambiguously committed challenge may remain undelivered until a fresh request because dispatch is still best effort; durable dispatch/retry remains required.
+
+Detailed evidence remains in the originating workspace's `outputs/`: `Patient-refresh-actual-composition-COMPLETE-review-r1.md`, `Patient-refresh-local-launchers-COMPLETE-review-r1.md`, `Patient-refresh-live-activation-v1.json`, `Patient-auth-delivery-status.md` and the package-specific independent reports. These are retained workspace artifacts, not files assumed present in a fresh specification clone. The linked PRs and immutable merge SHAs above are the repository continuity anchors.
+
+### Current unreleased frontier and remaining definition of done
+
+Clinical backend **099–103**, staff authentication, clinician-network authority, location/consent integration and manual admission/queue/claim/decrypt/advice/result work remain **uncommitted and unreleased** at this checkpoint. Frozen clinical backend v2 has 1,124 files; patient manual-care UI v2 has 122 and clinician UI v2 has 81. Author tests and actual US/Ghana browser journeys exist; fresh independent backend and combined UI complete reviews and the integrated full suite are running. None is counted as a merged feature in the tables above.
+
+The preserved clinical v1 review requested changes after reproducing crisis admission committed after nonce expiry and lint/format defects. V2 retains actor/tenant authority through actual COMMIT and passes author expiry/acknowledgement-loss checks; fresh complete review remains required. This known defect affects the earlier merged crisis path until the correction is reviewed and released. Do not infer clinical readiness from the separately approved authentication activation.
+
+Next: finish independent clinical reviews and integrated validation, correct findings with fresh reviews, then merge only approved revisions with green required checks and activate a matching reviewed clinical composition. Continue remaining medication-request/refill/Pharmacy, payment/refund/cancellation/reconciliation, AI preparation/follow-up, admin and other canonical slice workflows; complete patient/clinician/admin design parity, accessibility and physical-device acceptance; finish durable email delivery, logout-only authority beyond the 900-second uncertain-refresh window, credential-cache cleanup, production provider/AWS policy verification, monitoring, backup/restore/DR and operational handoff. Engineering counsel does not substitute for required clinical, legal or operational acceptance.
+
+**Review rule:** the user's current standing instruction requires fresh independent complete reviews for material iterations and counsel recommendations before proceeding. The July model-conditional review waiver is historical and is not the current gate. Autonomous work continues within the authorized scope; the full-platform goal is neither complete nor reduced to account access or manual care.
+
+**Cockpit:** rev **479 → 480**. This single consolidated continuity entry records the seventeen implementation merges listed above; it does not recursively record its own bookkeeping commit. All pre-375 Addendum bytes, superseded artifacts and Promotion Ledger entries remain unchanged. Existing status/progress fields are preserved as historical/specification indicators; no incomplete slice is newly marked done.
