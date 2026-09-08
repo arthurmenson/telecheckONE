@@ -15476,3 +15476,27 @@ Codex held the implementer seat 2026-09-02 → 09-07 and merged `telecheck-app` 
 **Ledger:** crisis ✅ #302 + #304 · async-consult ✅ #303 · consent ✅ this PR · forms-intake — PR open (shared `src/lib/commit-authority-transaction.ts` primitive + adapter; `PT503 → 503` in forms and admin-backend mappers) · identity (HIGH) — script ready, runs on top of forms.
 
 **progress.json:** revision 483 → 484.
+
+---
+
+## Addendum 380 — 2026-09-08 — PR #306 merged: forms-intake publication authority at the actual COMMIT via a shared `src/lib` COMMIT-authority primitive (site 5 of 5 in module terms; identity follows)
+
+**Merged:** `fix/forms-authority-through-commit` → main, squash SHA `6ed2a53`. Codex APPROVE at round 3 (head `a1025dc`); CI green.
+
+**Defect:** `recordFormsPublicationEvidence` forced `forms_publication_evidence` IMMEDIATE and re-DEFERRED it — re-DEFERRING does not re-queue a consumed event — while the publish paths ran under `withTransaction` with nested `withTenantContext`/`withActorContext`, so at the real COMMIT the tenant binding was cleared and `forms_live_actor('reviewer')` never re-ran.
+
+**Fix:** `src/lib/commit-authority-transaction.ts` — the shape approved across #302/#303/#304/#305 made generic (`CommitAuthority`: tenantId, nonce, assertLive, unconfirmed, discardEvent, afterBegin?, timeouts?; optional pool supplier). `formsGovernanceTransaction` is a one-call adapter consumed by forms-intake's two publish paths and admin-backend's two forms-template handlers; the IMMEDIATE/DEFERRED pair removed; `PT503 → 503` in the forms mappers and both admin-backend mappers. `externalTx` honoured as `withTransaction` honours it (guard-only), so the pre-existing `publication-evidence.test.ts` cases pass unchanged. Unit: 20 mocked cases incl. externalTx, timeouts, afterBegin ordering/failure; DB-free suite 509/509 with the hard gate.
+
+**Codex R1 HIGH (closed R2):** after COMMIT is issued, a FATAL/PANIC server error (`CommandComplete(COMMIT)` then `FATAL 57P01` before `ReadyForQuery`, reproduced on pg 8.20) proves termination, not rollback; the classifier rethrew it as a definite failure, so a committed publication could surface as a 500. Now only a severity-`ERROR` raise during COMMIT establishes rollback; everything else after COMMIT was issued routes through `unconfirmed()` (PT503). Secondary: timeouts are validated integers applied via parameterized `set_config`. **Inherited by the merged module copies** (crisis #302/#304 incl. the caller-side classifier, async-consult #303, consent #305) — recorded as an open item in the defect-class artifact; the consolidation refactor onto the primitive closes it.
+
+**Codex R2 MEDIUM (closed R3):** both forms handlers mapped `PT503` into the generic tenant-blind "operation unavailable" envelope, so a caller whose COMMIT succeeded but lost its acknowledgement had no signal to check status and could retry under a fresh idempotency key and duplicate a consult-template creation (the admin-backend mappers already preserved the uncertainty). Now a distinct 503 `forms.commit_unconfirmed` envelope with an explicit check-status-before-retrying message; both mappers exported for a DB-free envelope test on both routes (`commit-unconfirmed-envelope.test.ts`). Rounds: R1 HIGH + secondary → R2 MEDIUM → R3.
+
+**Stale base:** the branch was cut from a stale `origin/main` (merge-base `112f9aa`, before #304 and #305); the branch update merged both in with one conflict, `vitest.unit.config.ts` (both sides appended include entries at the same anchor), resolved as the union.
+
+**Process note (gate defect, fixed):** the local gate chains printed `TC_OK`/`LINT_OK` on the exit status of `cmd | tail`, i.e. `tail`'s, not the tool's. All earlier chains' outputs showed no errors before the marker, so their results stand; identity's first local commit exposed it (4 lint errors under a `LINT_OK`), and every chain now runs under `set -o pipefail`. Second lesson from the same commit: an import pruner that counts identifier mentions must strip doc comments first.
+
+**Incidents on this PR (all recovered, all recorded in memory):** (1) `git worktree remove --force` on a second worktree deleted *through* its directory junctions and emptied the main worktree's `node_modules` and `assets/pii-ner`; restored with `npm ci` (lockfile) and `npm run ner:setup` (pinned revision `79f7db2…`); rule now: `rmdir` the junction links first. (2) The R2 gate chain, running during that deletion, committed and pushed `eaa8b14` with only typecheck verified — a `;` after the captured unit run broke the `&&` chain and the `if … fi` returned 0; the commit was re-gated afterwards (typecheck, lint, format, DB-free suite) before merge. Chains now use `set -eo pipefail` and a gate function. (3) Codex's workspace held one branch not on origin, `codex/platform-clinical-authority` (63 commits beyond main); pushed to origin to close the loss-risk item reported to Evans.
+
+**Ledger:** crisis ✅ #302 + #304 · async-consult ✅ #303 · consent ✅ #305 · forms-intake ✅ this PR · identity — PR open (stacked on #306; retargets to main on merge). Then the consolidation refactor migrating the three module copies onto the primitive.
+
+**progress.json:** revision 484 → 485.
