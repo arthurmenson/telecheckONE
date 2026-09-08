@@ -15534,3 +15534,17 @@ Codex held the implementer seat 2026-09-02 → 09-07 and merged `telecheck-app` 
 **Follow-ups:** (1) identity-role PostgreSQL 15/16 regression in the shape of `crisis-admission-commit-authority.test.ts` (Codex recommendation on #308: expire the nonce after the final application check, require PT401 from the actual COMMIT, verify account/enrollment/evidence/idempotency rollback, live-authority positive control); (2) the async-consult and consent adapter-level test files duplicate the primitive's matrix and can be thinned to adapter-specific cases.
 
 **progress.json:** revision 486 → 487.
+
+---
+
+## Addendum 383 — 2026-09-08 — identity-role real-Postgres COMMIT-boundary regression merged (Codex follow-up on #308)
+
+**Merged:** `test/identity-staff-commit-authority-regression` → main, squash SHA `18c3b76`. Codex APPROVE at round 2 (head `91afdaa`); CI green on PostgreSQL 15/16.
+
+**What it proves:** on a connection logged in as `identity_service_role` — the role the staff-enrollment handler really runs under — the handler's exact authority (`staffAuthority(ctx)`, newly exported; `staffTransaction` unchanged) driven through the shared primitive's caller-owned client with an intercepted COMMIT: expiring the nonce after the last application-side check and before the deferred `identity_staff_enrollment_evidence` trigger runs yields `PT401` (severity `ERROR`) from the real COMMIT, with the clinician account, enrollment, audit and outbox rows all rolled back; a live nonce is the positive control (receipt + all four rows). Same shape as `crisis-admission-commit-authority.test.ts`.
+
+**Rounds:** R1 MEDIUM — the committed positive control landed in Telecheck-US, where audit-chain-walker.test.ts counts audit rows and Vitest may reorder files; closed by committing a uniquely named tenant (letters only, Telecheck-TI…) through the admin pool and using it for the operator seed, membership, session, nonce binding, authority context and every assertion. R2 APPROVE — tenant isolation, RLS/FK wiring, automatic audit genesis for a fresh tenant, deferred-trigger prerequisites confirmed. CI green on PostgreSQL 15/16 including the two new real-Postgres cases.
+
+**Ledger:** deferred-authority-trigger class closed (#302/#304, #303, #305, #306, #308, #309) and now proven at the COMMIT boundary on both a patient path (crisis) and an operator path on a dedicated pool (identity). Remaining follow-up: thin the async-consult / consent adapter-level test files to adapter-specific cases.
+
+**progress.json:** revision 487 → 488.
