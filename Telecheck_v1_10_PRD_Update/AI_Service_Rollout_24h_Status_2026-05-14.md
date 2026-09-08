@@ -15385,3 +15385,37 @@ Next: finish independent clinical reviews and integrated validation, correct fin
 **Review rule:** the user's current standing instruction requires fresh independent complete reviews for material iterations and counsel recommendations before proceeding. The July model-conditional review waiver is historical and is not the current gate. Autonomous work continues within the authorized scope; the full-platform goal is neither complete nor reduced to account access or manual care.
 
 **Cockpit:** rev **479 → 480**. This single consolidated continuity entry records the seventeen implementation merges listed above; it does not recursively record its own bookkeeping commit. All pre-375 Addendum bytes, superseded artifacts and Promotion Ledger entries remain unchanged. Existing status/progress fields are preserved as historical/specification indicators; no incomplete slice is newly marked done.
+
+---
+
+## Addendum 376 — 2026-09-08 — Implementer seat returned to Claude; crisis-admission COMMIT-time authority gate merged (PR #302 → `c17c727`); four discipline findings
+
+### Seat change and reconciliation
+
+Codex held the implementer seat 2026-09-02 → 09-07 and merged `telecheck-app` PRs #282–#301 (Layer 4 vendor screening, real local NER, KMS engineering boundary, migration runtime, Identity/Billing/care/crisis/session slices; migrations to **098**). On re-taking the seat 09-08, `main` (`665ca67`) was verified to reproduce green locally: typecheck, lint, format, `check:log-call-sites` (258 files), and `test:unit` **447/447** across 12 files — after running `npm run ner:setup` to fetch the pinned OpenMed ONNX assets, which the DB-free suite now requires.
+
+### Merged — PR #302 → `c17c727` (squash)
+
+**Defect (Addendum 375, clinical v1 review):** a patient crisis admission could be **COMMITTED after its actor nonce had expired** — live on `main` since #295, on the I-019 crisis path.
+
+**Root cause was nesting order, not the trigger.** `withTenantContext` DELETES the per-backend tenant binding in its cleanup, which ran *before* the outer `withTransaction` issued COMMIT. `kms_current_actor_context()` requires `current_tenant_id()`, so nothing could re-validate authority at COMMIT. The code worked around that by forcing the `DEFERRABLE` evidence trigger `crisis_care_evidence` **IMMEDIATE** while bindings were in scope — draining the trigger queue and leaving the actual COMMIT with **no authority check at all**. `kms_current_actor_context()` compares `expires_at` against `clock_timestamp()`, so a nonce expiring in that window was committed under expired authority.
+
+**Fix, as approved (six Codex rounds — R1 2 MED · R2 1 MED · R3 1 MED · R4 1 HIGH + 2 MED · R5 1 MED · R6 APPROVE):**
+- The module **owns its recording client** (`getPool().connect()`), sets the tenant binding itself, and runs `BEGIN…COMMIT` with both bindings live, so `crisis_care_require_evidence()` — which calls `crisis_care_live_patient()` first and last — is a genuine COMMIT-time authority gate. An expired nonce raises `PT401` from the COMMIT statement and rolls back. IMMEDIATE forcing removed on purpose.
+- **Outcome published the instant COMMIT settles.** ROLLBACK and `clear_tenant_context()` are consumed background work under a 2 s bound; the client is returned if they complete and **discarded** (`release(true)`, rate-limited log) if not — I-023 holds either way.
+- **COMMIT bounded client-side at 4 s.** PostgreSQL disables `statement_timeout` before running deferred triggers inside COMMIT, so the evidence scan is otherwise unbounded. On expiry the caller proceeds and reports `unconfirmed`; the module destroys **its own** socket. It never signals a backend by pid — under pool saturation a delayed `pg_cancel_backend` can land after the client was re-borrowed and abort another tenant's transaction (R4 HIGH).
+- **SQLSTATE classification made precise:** any server raise, including `23514` now arriving on COMMIT, is a known rollback → `not_recorded`; class 08 (incl. `08007 transaction_resolution_unknown`) and driver codes stay `unconfirmed`. A settled failure always beats the deadline.
+- No migration; no platform-primitive change. A test-only, `NODE_ENV`-gated `connection` field lets integration tests supply a real connection.
+
+**Evidence.** Unit: 472/472 DB-free, zero unhandled rejections (fake-timer cases for stalled COMMIT, hanging cleanup, hanging ROLLBACK after PT401/23514, class-08). Integration on real Postgres (CI, every head): expiry forced deterministically *at* the COMMIT boundary rejects with 401 and **zero** rows, with the raw COMMIT error asserted as `PT401`; a test-only 8 s deferred trigger cannot stall the response — `unconfirmed` inside the deadline, then the row lands (run 34198975406, 8170 ms). Final main job green on `aaff178` (run 34201026340, 6m57s).
+
+### Discipline findings surfaced on re-taking the seat
+
+1. **Real NER (Option 2) shipped without a recorded ratifier decision.** PR #286 / Addendum 371 replaced the inert classifier with pinned OpenMed ONNX inference and flipped the `it.fails` ratchet while `Decision-Request-Layer-1-NER-Capability-Gap-2026-09-01.md` was open; its ratifier section is still blank and the PR body cites code reviews only. Not reversed — it is the most conservative option and CI-verified — but recorded in the Decision Request (spec `8d55f2f`) for **retroactive ratification**, with the narrowed residual questions. Pilot 1 Day-0 remains blocked on that plus the Track 4 client-side screening gate.
+2. **Codex's clinical v2 is unpushed.** Addendum 375 describes migrations **099–103**, staff authentication, clinician-network authority and manual admission/queue/claim work (~1,124 files) as "uncommitted and unreleased" in its originating workspace. Verified: no remote branch carries a 099+ migration, and every `codex/*` branch has **0 files not on `main`**. That work exists nowhere the project controls. It needs to be pushed by Codex or accepted as re-authoring.
+3. **PR #267 closed as superseded.** The subscription module and migrations 075–077 are on `main`; the branch had been CONFLICTING and untouched since 07-09. Not queued work.
+4. **A defect class, not one bug.** The same `SET CONSTRAINTS … IMMEDIATE` forcing appears in **five** sibling modules (async-consult intake, consent ×2, forms publication, identity staff-enrollment); `forms-intake` even re-`DEFERRED`s after IMMEDIATE, which cannot re-arm a consumed trigger, and its comment states the misconception verbatim. Filed: `Defect-Class-Deferred-Authority-Trigger-Forced-Immediate-2026-09-08.md`.
+
+**Cockpit:** rev 480 → 481.
+
+**Next critical path:** the sibling-module defect class, `async-consult` care-intake first (same care path, migration 095 triggers re-validate authority), each module its own PR off `main`; then 1.2c Layer 5 and 1.3 phase B. **Operator gates:** NER retroactive ratification · clinical-v2 push decision · Track 4 client-side screening · O-1 / O-2 / O-5.
