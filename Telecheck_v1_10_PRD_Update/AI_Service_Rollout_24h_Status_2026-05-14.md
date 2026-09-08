@@ -15419,3 +15419,28 @@ Codex held the implementer seat 2026-09-02 → 09-07 and merged `telecheck-app` 
 **Cockpit:** rev 480 → 481.
 
 **Next critical path:** the sibling-module defect class, `async-consult` care-intake first (same care path, migration 095 triggers re-validate authority), each module its own PR off `main`; then 1.2c Layer 5 and 1.3 phase B. **Operator gates:** NER retroactive ratification · clinical-v2 push decision · Track 4 client-side screening · O-1 / O-2 / O-5.
+
+---
+
+## Addendum 377 — 2026-09-08 — PR #303 merged: care-intake authority enforced at the actual COMMIT (second site of the deferred-authority-trigger class)
+
+**Merged:** `fix/care-intake-authority-through-commit` → main, squash SHA `112f9aa`. Codex APPROVE at round 5 (head `c2f6aba`); CI green.
+
+**Defect (HIGH, same class as PR #302):** `clinical-intake-repository.ts` ran the care-intake write under `withTransaction → withTenantContext → withActorContext → SET CONSTRAINTS … IMMEDIATE`. Forcing the deferred evidence triggers IMMEDIATE consumed their trigger events, and `withTenantContext` cleared the per-backend tenant binding before the outer COMMIT — so the actual COMMIT ran with no authority check, and `kms_current_actor_context()` (which needs `current_tenant_id()` and compares `expires_at` to `clock_timestamp()`) was never consulted at the point that mattered.
+
+**Fix shape (as approved on #302, extended):** `careIntakeTransaction` owns its pool client; bindings live at COMMIT; deferred triggers fire at COMMIT; outcome published the instant COMMIT settles (`Settled<T>`); ROLLBACK + restore-or-clear of the previous tenant binding as bounded (2 s) background work with return-or-`release(true)`; 4 s client-side COMMIT deadline (Postgres disables `statement_timeout` inside COMMIT) → `PT503`; never `pg_cancel_backend`; SQLSTATE classification requires a 5-char code AND `severity`; class 08 / transport errors indeterminate.
+
+**Rounds 1–5 (what Codex caught, all closed):**
+1. Unconditional `clear_tenant_context` on a shared client broke the CI harness (`No active tenant binding`) → previous binding captured via exported `readCurrentTenantId` (sub-savepoint probe, after BEGIN) and restored.
+2. `EPIPE` matched the SQLSTATE regex → `severity` discriminator.
+3. pg-pool drops its idle `'error'` listener at checkout; an EPIPE emit with no listener exits the process → module owns the listener for the whole ownership window; retained on discard, detached only on return.
+4. Listener attached after `await pool.connect()` resumed — one microtask after pg-pool's listener was gone; a coalesced startup ReadyForQuery + FATAL 57P01 would emit into that gap → `checkoutRecordingClient()` uses pg-pool's callback-form `connect()` and attaches inside the callback, before the acquisition resolves; promise-only harness wrapper falls through.
+5. Verification — APPROVE.
+
+**Tests:** 27 mocked cases in `clinical-intake-repository.test.ts` (EventEmitter-backed client; callback-form pool mock; synchronous post-checkout emit; promise-only path; restore binding; class 08; ECONNRESET; PT503 deadline; hanging cleanup/ROLLBACK). DB-free suite 488/488, zero unhandled (hard gate). Real-Postgres regression for this path: recommended, not prerequisite (Codex) — #302's `crisis-admission-commit-authority.test.ts` proved the mechanism.
+
+**Defect-class ledger** (`Defect-Class-Deferred-Authority-Trigger-Forced-Immediate-2026-09-08.md`): crisis-response ✅ #302 · async-consult ✅ #303 · consent (`care-policies.ts:123`, `care-consent.ts:159`) ⏳ · forms-intake (`publication-evidence.ts:106–107`, IMMEDIATE then DEFERRED) ⏳ · identity (`staff-enrollment.ts:73`, timing only, 0 authority checks) — assess.
+
+**Next critical-path item:** crisis follow-up (restore-or-clear + severity discriminator + owned error listener via callback-form checkout — the three items #302 shipped without), then consent PR.
+
+**progress.json:** revision 481 → 482.
