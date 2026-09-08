@@ -15516,3 +15516,21 @@ Codex held the implementer seat 2026-09-02 → 09-07 and merged `telecheck-app` 
 **Ledger — class closed:** crisis ✅ #302 + #304 · async-consult ✅ #303 · consent ✅ #305 · forms-intake ✅ #306 · identity ✅ #307. **Open:** the three merged module copies inherit the FATAL/PANIC-after-COMMIT classifier flaw closed in the primitive on #306 → consolidation refactor next (migrate crisis/async-consult/consent onto `commitAuthorityTransaction`; crisis also drops its caller-side classifier). Then the identity real-Postgres regression.
 
 **progress.json:** revision 485 → 486.
+
+---
+
+## Addendum 382 — 2026-09-08 — consolidation refactor merged: one COMMIT-authority primitive; inherited FATAL/PANIC-after-COMMIT classifier flaw closed in crisis-response, async-consult and consent
+
+**Merged:** `refactor/commit-authority-consolidation` → main, squash SHA `ec4da00`. Codex APPROVE at round 4 (head `85c4f80`); CI green.
+
+**What changed:** the three module-internal copies of the owned-client lifecycle (crisis-response `patientTransaction` from #302/#304, async-consult `careIntakeTransaction` from #303, consent `consentAuthorityTransaction` from #305) are one-call adapters over `src/lib/commit-authority-transaction.ts` (#306); ~600 lines of copies removed. New primitive option `callerOwnedClient` preserves crisis-response's test-only caller-owned connection path (full BEGIN / actor bind / timeouts / work / COMMIT / deadline / classifier lifecycle on a caller-supplied, already tenant-bound client; ROLLBACK still runs on failure; no checkout, listener ownership, tenant probe/restore, or release) — distinct from `externalTx` (guard-only). Crisis's caller-side classifier (`definiteRollback` / `commitPossible` / `beforeCommit`) collapses to "PT503 means `unconfirmed`"; PT401 → 401 preserved.
+
+**Why it mattered:** the copies inherited the FATAL/PANIC-after-COMMIT misclassification (Codex R1 on #306): a committed write could surface as a definite failure. One lifecycle, one classifier, one place for the next finding to land.
+
+**Rounds:** R1 and R2 both reviewed a partial head (`c766735`, async-consult + consent only) because the crisis part of the script had asserted out twice — once on prettier-wrapped call sites, once on a span guard that read comment prose as code — while the `;`-joined tail of the chain still pushed and launched Codex; both rounds returned the same HIGH: complete the crisis consolidation and add FATAL/PANIC-after-COMMIT regressions. R3 on the complete head closed that HIGH and found a MEDIUM: `PT503` is not exclusive to an unknown COMMIT outcome (migration 094's isolation guard raises it pre-COMMIT), so the crisis caller had begun reporting a definite failure as `unconfirmed` — closed by stamping the primitive's own unknown-outcome errors with a symbol discriminator (`isCommitUnconfirmed`) and classifying on that; `PT503` stays for HTTP mapping. R4 APPROVE, no material findings; Codex confirmed no other adapter needs the discriminator. DB-free suite 545/545 with the hard gate; CI green including the real-Postgres crisis COMMIT-expiry and stalled-COMMIT regressions.
+
+**Deferred-authority-trigger class — CLOSED:** crisis ✅ #302 + #304 · async-consult ✅ #303 · consent ✅ #305 · forms-intake ✅ #306 · identity ✅ #308 · inherited-classifier open item ✅ this PR.
+
+**Follow-ups:** (1) identity-role PostgreSQL 15/16 regression in the shape of `crisis-admission-commit-authority.test.ts` (Codex recommendation on #308: expire the nonce after the final application check, require PT401 from the actual COMMIT, verify account/enrollment/evidence/idempotency rollback, live-authority positive control); (2) the async-consult and consent adapter-level test files duplicate the primitive's matrix and can be thinned to adapter-specific cases.
+
+**progress.json:** revision 486 → 487.
