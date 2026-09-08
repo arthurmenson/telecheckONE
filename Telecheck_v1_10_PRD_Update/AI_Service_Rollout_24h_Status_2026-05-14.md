@@ -15444,3 +15444,19 @@ Codex held the implementer seat 2026-09-02 → 09-07 and merged `telecheck-app` 
 **Next critical-path item:** crisis follow-up (restore-or-clear + severity discriminator + owned error listener via callback-form checkout — the three items #302 shipped without), then consent PR.
 
 **progress.json:** revision 481 → 482.
+
+---
+
+## Addendum 378 — 2026-09-08 — PR #304 merged: crisis-response parity with the #303 hardenings; defect-class artifact corrected (identity is HIGH)
+
+**Merged:** `fix/crisis-admission-binding-restore-and-listener` → main, squash SHA `0a969ab`. Codex APPROVE at round 1 (head `4d22a6d`, no material findings; pg-pool 3.13.0 synchronous callback handover confirmed on idle and fresh-client paths); CI green.
+
+**What changed in `patientTransaction` (PR #302's owned-client shape):** (1) previous tenant binding probed via exported `readCurrentTenantId` after BEGIN and restored after COMMIT instead of unconditionally cleared; (2) server raises classified by SQLSTATE only with a 5-char code AND `severity` — EPIPE/ECONNRESET stay indeterminate; (3) client `'error'` listener attached inside pg-pool's callback-form `connect()` before acquisition resolves, retained on discard, detached only on return; (4) an indeterminate COMMIT (no `severity`, or class 08, after COMMIT was issued) destroys the socket with the listener retained instead of ROLLBACK-and-return — the first chain run caught exactly the #303 R3 failure (listener detached on return, late EPIPE emit thrown unlistened, 1 unhandled error, hard gate refused the commit). Caller-owned test connection path unchanged. DB-free suite 494/494, zero unhandled.
+
+**Defect-class correction (spec `b069994`):** `identity_staff_enrollment_evidence` (migration 098) calls `identity_staff_operator(FALSE)` first and last, which reads `kms_current_actor_context()` — the artifact's "0 authority checks / timing-only" assessment was wrong. Identity is the fifth HIGH site; fix on the dedicated identity pool (`withIdentityTransaction` clears the tenant binding at start and end, so the owned-client version must bind inside BEGIN and hold through COMMIT).
+
+**Ledger:** crisis ✅ #302 + #304 · async-consult ✅ #303 · consent ×2 — PR open (`fix/consent-authority-through-commit`, module-internal `consentAuthorityTransaction`) · forms-intake ⏳ · identity ⏳ (HIGH).
+
+**Consolidation intent:** three modules now carry a copy of the approved shape. Forms adapts to a shared `src/lib` COMMIT-authority primitive; a later refactor PR migrates the three copies onto it once it has its own Codex approval.
+
+**progress.json:** revision 482 → 483.
