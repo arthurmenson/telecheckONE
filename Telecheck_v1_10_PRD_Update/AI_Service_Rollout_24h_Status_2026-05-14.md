@@ -15460,3 +15460,19 @@ Codex held the implementer seat 2026-09-02 → 09-07 and merged `telecheck-app` 
 **Consolidation intent:** three modules now carry a copy of the approved shape. Forms adapts to a shared `src/lib` COMMIT-authority primitive; a later refactor PR migrates the three copies onto it once it has its own Codex approval.
 
 **progress.json:** revision 482 → 483.
+
+---
+
+## Addendum 379 — 2026-09-08 — consent PR merged: care-consent and care-policy authority enforced at the actual COMMIT (sites 3 and 4 of 5)
+
+**Merged:** `fix/consent-authority-through-commit` → main, squash SHA `7b8d66c`. Codex APPROVE at round 1 (head `d5ea89f`); CI green.
+
+**Defect:** `careConsentTransaction` (`services/care-consent.ts`) and the care-policies `mutate()` runner (`handlers/care-policies.ts`) ran `withTransaction → withTenantContext → withActorContext → SET CONSTRAINTS consent_care_choice_evidence / consent_care_policy_evidence IMMEDIATE`. The IMMEDIATE consumed the trigger events and `withTenantContext` cleared the per-backend tenant binding before the outer COMMIT, so `consent_care_live_actor()` never ran at COMMIT.
+
+**Fix:** module-internal `consentAuthorityTransaction` (`services/authority-transaction.ts`), a port of the #303/#304-approved shape; both call sites are one-line adapters; both `SET CONSTRAINTS IMMEDIATE` statements removed; both handlers already mapped `PT503 → 503`. Unit: 17 mocked cases; DB-free suite 505/505 with the hard gate on unhandled errors.
+
+**Chain notes:** first run failed on environment only (a second git worktree lacked the untracked `assets/pii-ner/` NER assets — fixed with a directory junction); second run caught a bug in my test mock (the `cleanupHang` switch also hung the bind inside BEGIN, timing out under fake timers and cascading into every later `setImmediate` flush) — the same line was corrected in the shared-primitive test before the forms chain ran.
+
+**Ledger:** crisis ✅ #302 + #304 · async-consult ✅ #303 · consent ✅ this PR · forms-intake — PR open (shared `src/lib/commit-authority-transaction.ts` primitive + adapter; `PT503 → 503` in forms and admin-backend mappers) · identity (HIGH) — script ready, runs on top of forms.
+
+**progress.json:** revision 483 → 484.
