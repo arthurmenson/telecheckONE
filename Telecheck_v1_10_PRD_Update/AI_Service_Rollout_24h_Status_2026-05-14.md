@@ -15636,3 +15636,20 @@ PR #311 (`feat/pilot-1-2c-layer5-backup-redaction`), now titled `[RATIFIER-BLOCK
 **Next critical path:** Sprint 1.3 phase B part 3 — `incident-capture` (evidence capture with manifest + lock, age-encrypted artifacts, the single writer of `incident-logs`), `incident-clear` (consume + dispose), `incident-log-gc`, `pilot-1-close-wipe`; then Sprint 1.4 per-table canaries. **Operator gates unchanged:** Layer 5 contract decision · Design A ratification · NER retroactive ratification · O-1 / O-2 / O-5.
 
 **progress.json:** revision 490 → 491.
+
+
+## Addendum 389 — 2026-09-08 — INTERIM: Sprint 1.3 phase B part 3a (incident-clear / incident-log-gc / pilot-1-close-wipe) opened as PR #314; part 3b (incident-capture) rides on the Layer 5 decision
+
+**State:** PR #314 (`feat/pilot-1-3b-incident-lifecycle`, head `f3cb9d3`) open; Codex R1 + CI in flight. Local gates green (DB-free suite 10/10; unit 545/545; typecheck / lint / prettier clean).
+
+**Scope split (decision recorded here):** the runbook's four part-3 scripts split into 3a and 3b. `incident-capture.sh` sanitizes the DB snapshot with the dump-aware scrubber (`scripts/pii-scrub.mjs` + `src/lib/pii-screener/dump-scrub.ts`), which exists only on the Layer 5 branch (PR #311 — Codex R15 APPROVE, **blocked on Evans's Layer 5 backup-redaction contract decision**). Building capture against unmerged code, or shipping it without the DB-snapshot artifact the runbook lists, would both be defects; so capture is 3b and starts once the Layer 5 decision lands (the DB-snapshot artifact is gated on that scrubber; the app / Caddy / audit artifacts use `src/lib/pii-screener/log-redaction.ts` on main). No new operator decision is required — it is the same Layer 5 decision already owed.
+
+**What PR #314 contains:**
+- `scripts/lib/incident-writers.mjs` — the only writers of the incident directory besides capture: `consume` (atomic no-follow manifest rewrite adding disposition / clearedAt / clearedBy / purgeAttested / abandonReason; same-disposition re-run reported as an interrupted clearance, a different one refused), `removeLock` (regular file naming the id only), `gcPlan` / `gcExecute` (consumed AND unlocked AND ≥ min-age by both file mtime and capturedAt; artifacts then manifest; never the lock; never an unconsumed / malformed manifest; an uninspectable lock blocks every deletion), `closeWipeBlockers` / `closeWipe` (any lock, unconsumed or unreadable manifest, or non-regular entry blocks; regular files only, real-path contained).
+- `scripts/incident-clear.sh` — RESOLVED requires a committed `env.purge.executed` attestation for the id; ABANDONED emits one `env.incident.abandoned` row per tenant (Category B, platform_admin, actor_tenant_id = operator tenant, payload incidentId / reason / purgeAttested / clearedAt / actor) in one transaction under the purge advisory lock with a duplicate guard, BEFORE any file change; then consume + remove-lock; shares the Pilot 1 lifecycle flock with env-purge; exit 0 / 1 / 2 / 3.
+- `scripts/incident-log-gc.sh` (dry run / execute, `--min-age-days`, JSON or human) and `scripts/pilot-1-close-wipe.sh` (`--confirm`, refuses on any blocker, prints the close-report record), both under the lifecycle lock.
+- `scripts/incident-lifecycle.test.mjs` (DB-free, `test:scripts` + CI) and `tests/integration/incident-clear.test.ts` (real Postgres via the new shared `tests/integration/helpers/disposable-db.ts`, which the env-purge suite now imports).
+
+**Open operator gates (unchanged):** Layer 5 contract (PR #311; now also gates part 3b) · Design A ratification (account classification at provisioning) · NER retroactive ratification · AUDIT_EVENTS registration of `pilot_1.cohort_classification`, `env.purge.executed`, `env.incident.abandoned` (Spec Issue) · O-1 / O-2 / O-5.
+
+**Next:** Codex R1 on PR #314 → iterate → merge on APPROVE + green CI → Addendum 390 + progress.json 492 → part 3b when Layer 5 lands (else Sprint 1.4 per-table canaries).
