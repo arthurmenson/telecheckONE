@@ -15548,3 +15548,10 @@ Codex held the implementer seat 2026-09-02 → 09-07 and merged `telecheck-app` 
 **Ledger:** deferred-authority-trigger class closed (#302/#304, #303, #305, #306, #308, #309) and now proven at the COMMIT boundary on both a patient path (crisis) and an operator path on a dedicated pool (identity). Remaining follow-up: thin the async-consult / consent adapter-level test files to adapter-specific cases.
 
 **progress.json:** revision 487 → 488.
+
+---
+
+## Addendum 384 (interim) — 2026-09-08 — Sprint 1.2c Layer 5: hard-floor item 6 STOP at Codex R2; ERR authored
+
+PR #311 (`feat/pilot-1-2c-layer5-backup-redaction`). R1 (3 HIGH + 1 MEDIUM) established that a regex pass over serialized dump text both misses escaped PII and corrupts SQL; the branch was rebuilt as a dump-aware scrubber (decoded COPY fields, SQL literals, JSON-aware whole-library pass, typed numeric replacement, printable-bytea policy), an option guard and atomic publish on the wrapper, and a real `pg_dump → scrub → psql` round-trip test. R2 (head `7ac0238`, 6 HIGH + 1 MEDIUM) splits into in-scope defects being closed on the branch (bundled short options, quoted identifiers, E-literal doubled quotes, JSON scalar strings, Layer 3 numeric exemptions in backup mode, INSERT-producing options) and two findings that require a scope decision beyond the ratified §Layer 5 text — schema-aware, format- and uniqueness-preserving replacements so a redacted dump restores into the constrained schema, and bytea handling from column metadata. **STOP per hard-floor item 6.** ERR: `Engineering-Review-Request-Layer-5-Backup-Redaction-Restorability-2026-09-08.md` — Options A (spec as written + dump-derived column typing; restore diagnostic) / B (restorable pseudonymisation) / C (encrypt-only). Claude recommends A. Two-pass Codex consult in flight; no merge until the ratifier decides.
+
