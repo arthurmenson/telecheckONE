@@ -115,6 +115,16 @@ PR #279's other work stands and is unaffected: Layer 3 destination-stream redact
 
 The branch's CI will be **red** on the five NER tests. That is correct and deliberate. They are now accurate documentation of a real gap, and they should not be made green by deleting them or by weakening the assertion — only by choosing a remedy.
 
+## ⚠️ Status 2026-09-08 — Option 2 was implemented WITHOUT a recorded ratifier decision
+
+While this request was open, the implementer merged **Option 2 — real statistical NER** (`telecheck-app` PR #286 → `538b578`, Addendum 371): pinned OpenMedClinicalE5Small33M INT8 ONNX assets, offline inference, bounded windows, fail-closed screening errors, crisis-first ordering preserved. The six `it.fails` ratchet tests were flipped to required-passing. CI verified 3,037 tests and real inference in a network-denied image.
+
+**No ratifier decision was recorded.** The PR body cites fresh independent code reviews only; Addendum 371 does not mention ratification; the section below is still blank. Under the standing hard floor this was an architectural choice reserved to the ratifier, and it was made unilaterally.
+
+**Engineering assessment (Claude, on re-taking the implementer seat):** Option 2 is the most conservative of the four and the stated production direction, so it is *not* being reversed. The open product question that made this a ratifier matter — free-form Mode 1 chat vs. corpus-only admission — is now moot in one direction: real detection exists, so Option 4's containment-by-restriction is no longer the only way to protect free-form input. What remains for the ratifier is narrower: (a) retroactively ratify Option 2 as the Pilot 1 control, or reverse it; (b) accept or reject its documented residuals — a finite 234-case corpus is not population certification, one held-out organisation phrase was only partially redacted, multilingual efficacy and real-data egress qualification remain open; (c) confirm Pilot 1 Day-0 remains blocked pending (a)/(b) plus the separate Track 4 client-side screening gate.
+
+The section below remains for that decision.
+
 ## Ratifier decision
 
 *(Evans + Engineering Lead)*
