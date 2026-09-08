@@ -3,7 +3,7 @@
 **Filed:** 2026-09-08
 **Author:** Claude (implementer)
 **Origin:** PR #302 (`telecheck-app` → `c17c727`), which fixed one instance on the I-019 crisis-admission path
-**Severity:** HIGH where the trigger re-validates actor authority (four of five sites); TIMING-ONLY at the fifth
+**Severity:** HIGH at all five sites — every deferred evidence trigger re-validates actor authority (correction 2026-09-08: the identity assessment below was wrong; see the identity row)
 **Status:** OPEN — one PR per module, each off `main`, each with independent adversarial review
 
 ---
@@ -40,7 +40,7 @@ PR #302 reproduced this on real Postgres for the crisis path (nonce expired at t
 | consent | `src/modules/consent/internal/handlers/care-policies.ts:123` | `consent_care_policy_evidence` → `consent_care_require_policy_evidence` (093) | yes (5) | **HIGH** |
 | consent | `src/modules/consent/internal/services/care-consent.ts:159` | `consent_care_choice_evidence` → `consent_care_require_choice_evidence` (093) | yes (4) | **HIGH** |
 | forms-intake | `src/modules/forms-intake/internal/services/publication-evidence.ts:106–107` (IMMEDIATE then DEFERRED) | `forms_publication_evidence` → `forms_require_publication_evidence` (092) | yes (3) | **HIGH** |
-| identity | `src/modules/identity/internal/handlers/staff-enrollment.ts:73` | `identity_staff_enrollment_evidence` (098) | **no** (0) | timing only — assess; not an authority defect |
+| identity | `src/modules/identity/internal/handlers/staff-enrollment.ts:73` | `identity_staff_enrollment_evidence` (098) | **yes** (2 — `identity_staff_operator(FALSE)` first and last, which reads `kms_current_actor_context()`) | **HIGH** — corrected 2026-09-08 (was wrongly recorded as 0 checks / timing-only). Same fix shape, but on the dedicated identity pool via `withIdentityTransaction` (which `clear_tenant_context()`s at start and end — the owned-client version must set the tenant binding inside BEGIN and leave it live through COMMIT). |
 
 Counts are resolver-call occurrences found by scanning each trigger function body for `kms_current_actor_context` / `_live_` / `current_actor`. Each site must be confirmed by reading the function before the fix lands.
 
@@ -62,6 +62,10 @@ Whether to extract these into a shared helper in `src/lib` — rather than repea
 1. `async-consult` care intake first — same care path as #302; both 095 triggers re-validate authority; highest patient-facing exposure.
 2. `consent` (two sites, one PR).
 3. `forms-intake` (also delete the IMMEDIATE→DEFERRED pair and correct the comment).
-4. `identity` staff enrollment — confirm the trigger carries no authority check; if so, the IMMEDIATE is a timing choice, not a defect; document and leave.
+4. `identity` staff enrollment — **corrected 2026-09-08:** the trigger DOES carry authority checks (`identity_staff_operator(FALSE)` first and last). Fix required; same shape as the others, on the identity pool. Sequenced after forms-intake.
 
 Each PR: branch off `main`, independent adversarial review to APPROVE, green CI, Addendum.
+
+---
+
+**Status 2026-09-08 (developer seat):** crisis ✅ #302 (`c17c727`) + parity PR #304 (open, Codex R1); async-consult ✅ #303 (`112f9aa`); consent ×2 — PR open (`fix/consent-authority-through-commit`); forms-intake — next; identity — corrected to HIGH, after forms. A shared `src/lib` COMMIT-authority transaction primitive is the intended consolidation once the module copies converge under Codex review (crisis, async-consult and consent currently each carry a module-internal copy of the approved shape).
