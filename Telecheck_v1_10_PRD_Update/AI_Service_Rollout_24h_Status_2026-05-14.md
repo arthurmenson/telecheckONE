@@ -15500,3 +15500,19 @@ Codex held the implementer seat 2026-09-02 → 09-07 and merged `telecheck-app` 
 **Ledger:** crisis ✅ #302 + #304 · async-consult ✅ #303 · consent ✅ #305 · forms-intake ✅ this PR · identity — PR open (stacked on #306; retargets to main on merge). Then the consolidation refactor migrating the three module copies onto the primitive.
 
 **progress.json:** revision 484 → 485.
+
+---
+
+## Addendum 381 — 2026-09-08 — PR #308 merged: identity staff-enrollment operator authority at the actual COMMIT on the identity pool — deferred-authority-trigger class CLOSED at all five sites
+
+**Merged:** `fix/identity-staff-authority-through-commit` → main (as PR #308; #307 was closed by GitHub when its stacked base branch was deleted — the commit was rebased onto main content-identical to the one Codex approved), squash SHA `148d6ed`. Codex APPROVE at round 1 (head `818c9df`, diffed against the forms branch; migration 083 grants the identity role the tenant-context functions; bindings survive COMMIT; repeated membership share locks introduce no new ordering); CI green.
+
+**Defect (corrected assessment):** `identity_staff_enrollment_evidence` (098) calls `identity_staff_operator(FALSE)` first and last → `kms_current_actor_context()`. `staffTransaction` ran under `withIdentityTransaction` (clears the tenant binding at start and end on the dedicated pool) with nested `withTenantContext`/`withActorContext`, then forced the trigger IMMEDIATE — no operator re-validation at the real COMMIT.
+
+**Fix:** `staffTransaction` is an adapter over the shared primitive with the identity pool supplied: `assertIdentityConnection()` via `afterBegin`, bindings live through COMMIT, operator check (row share lock, idempotent) before/after the work and before disclosing an idempotency outcome, deferred trigger fires AT COMMIT; PT503 → 503 via the existing `staffFailure`. `database.ts` exports `assertIdentityConnection` and `identityPool`.
+
+**Process notes:** first local commit exposed the gate-chain `pipefail` defect (Addendum 380) and a comment-counting import pruner; both fixed before push. Codex recommends (follow-up, not prerequisite) an identity-role PostgreSQL 15/16 regression: expire the nonce after the final application check, require PT401 from the actual COMMIT, verify account/enrollment/evidence/idempotency rollback, with a live-authority positive control — same shape as #302's `crisis-admission-commit-authority.test.ts`.
+
+**Ledger — class closed:** crisis ✅ #302 + #304 · async-consult ✅ #303 · consent ✅ #305 · forms-intake ✅ #306 · identity ✅ #307. **Open:** the three merged module copies inherit the FATAL/PANIC-after-COMMIT classifier flaw closed in the primitive on #306 → consolidation refactor next (migrate crisis/async-consult/consent onto `commitAuthorityTransaction`; crisis also drops its caller-side classifier). Then the identity real-Postgres regression.
+
+**progress.json:** revision 485 → 486.
